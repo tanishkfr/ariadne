@@ -6,7 +6,7 @@ Builder OS v0.1.0 · built 2026-08-21 · `C:\Vibe Coding\Real Stuff\Builder OS`
 
 ## 1. What was created
 
-**70 markdown files.** Nothing else — no code, no dependencies, no scripts. The workspace was empty before this; no existing work was touched.
+**71 markdown files** (this report included). Nothing else — no code, no dependencies, no scripts. The workspace was empty before this; no existing work was touched.
 
 | Group | Count | Location |
 |---|---|---|

@@ -124,7 +124,7 @@ All 9 lenses present. Criteria, 1-5 scoring, severity, evidence requirements, fi
 | Every mode names its documents and skills | Read all 7 mode files | Pass |
 | Every gate is defined in one place and referenced elsewhere | G1-G5 defined in [WORKFLOW.md](../WORKFLOW.md), detailed in [AUTONOMY-POLICY.md](../AUTONOMY-POLICY.md) | Pass |
 | Every workflow stage has an owner and an output | [WORKFLOW.md](../WORKFLOW.md) stage table | Pass |
-| No document outside `adapters/` **depends on** a product | Grep for Cursor / Codex / Claude Code / ChatGPT across all 70 files | **Pass** — but see 4, the rule is narrower than it first appears |
+| No document outside `adapters/` **depends on** a product | Grep for Cursor / Codex / Claude Code / ChatGPT across all 71 files | **Pass** — but see 4, the rule is narrower than it first appears |
 | Every template section from the spec is present | Field-by-field read | Pass |
 | Terminology is consistent | Mode / Stage / Skill / Role / Runner / Gate used identically | Pass |
 
