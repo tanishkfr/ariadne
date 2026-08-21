@@ -52,7 +52,9 @@ ALLOW_REPEAT = re.compile(
 #   templates/AGENTS.md  copied to a project root where Builder OS is absent
 # Everything else must have one home. Do not add to this list to silence a
 # real duplication -- fix the duplication instead.
-DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
+#   validation/runs/*    every run record is a filled-in COPY of the run
+#                        template -- that is what a run record is
+DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md", "validation/runs/")
 
 
 def md_files():

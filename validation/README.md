@@ -90,6 +90,8 @@ A "quality score" would point the other way: it would reward a run that *looks* 
 
 Keep transcripts, screenshots and the project repo **outside** this repository — they contain project and client material ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)). Reference them by path in the run file. Run records here should carry findings, never client content.
 
+**Test A is the exception, and it is required.** Save the raw first reply to `runs/<id>/evidence/transcript.md`. `finish-test-a.py` reads the FRAME, the confidence, the question and the NEXT block straight out of that file, and checks them against the contract stated in `prompts/project-start.md`. Without the transcript there is no routing measurement. Test A uses a synthetic brief with no client material, so keeping it here is safe.
+
 ## When a run justifies changing Builder OS
 
 Through the loop in [templates/RETROSPECTIVE.md](../templates/RETROSPECTIVE.md), never directly. All four qualification tests must pass, then your approval, then `check.py` plus the router suite if routing was touched.

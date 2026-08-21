@@ -31,8 +31,12 @@
 
 > **Captured before running Builder OS.** Write this first, from the same brief, without
 > opening any Builder OS file. A baseline written afterwards is not a control — you will
-> have already seen the answer. The checker fails the run if this section does not say it
-> was captured before.
+> have already seen the answer.
+
+**Captured before opening Codex:** `<yes>`
+
+> Answer `yes` only if it is true. This is the one thing the harness cannot infer,
+> and the entire control rests on it. The checker fails the run until it says yes.
 
 **My unprompted first direction:**
 

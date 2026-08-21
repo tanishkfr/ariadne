@@ -59,11 +59,52 @@ def read(path):
         return f.read()
 
 
+# A markdown cell may contain an escaped pipe. Splitting on a bare "|" truncates
+# the value mid-placeholder, and the truncated text then gets reported as a
+# WRONG value rather than an UNFILLED one -- which is how a run record full of
+# placeholders produced "unknown mode".
+CELL_SPLIT = re.compile(r"(?<!\\)\|")
+
+
+def split_cells(line):
+    """Split one markdown table row, honouring backslash-escaped pipes."""
+    return [c.strip().replace("\\|", "|")
+            for c in CELL_SPLIT.split(line.strip().strip("|"))]
+
+
+def is_placeholder(value):
+    """`<fill this in>` is not a value. An unfilled template must never read as
+    a real run -- that is how a measuring instrument invents its own data."""
+    v = str(value).strip().strip("`").strip()
+    return v == "" or v.startswith("<")
+
+
+def prose(section):
+    """
+    A section stripped down to what the HUMAN actually wrote: no instructional
+    blockquotes, no `<placeholders>`, no table scaffolding, no headings. The
+    template ships ~160 words of guidance, so any word count taken over the raw
+    section passes on a completely blank record.
+    """
+    # Placeholders wrap across lines in the template, so strip them whole first.
+    section = re.sub(r"<[^<>]*>", "", section, flags=re.S)
+    keep = []
+    for line in section.split("\n"):
+        s = line.strip()
+        if not s or s.startswith(">") or s.startswith("#") or s.startswith("|"):
+            continue
+        s = re.sub(r"\*\*[^*]*:?\*\*", "", s)          # bold field labels
+        keep.append(s)
+    return re.sub(r"[`*_-]", " ", "\n".join(keep))
+
+
 def field(text, name):
     """Pull `| **Name** | value |` or `- **Name:** value` out of a run file."""
-    m = re.search(r"\|\s*\*\*" + re.escape(name) + r"\*\*\s*\|([^|\n]*)\|", text)
+    m = re.search(r"^\|\s*\*\*" + re.escape(name) + r"\*\*\s*\|.*$", text, re.M)
     if m:
-        return m.group(1).strip().strip("`")
+        cells = split_cells(m.group(0))
+        if len(cells) >= 2:
+            return cells[1].strip().strip("`").strip()
     m = re.search(r"\*\*" + re.escape(name) + r":?\*\*[:\s]*([^\n|]+)", text)
     return m.group(1).strip().strip("`") if m else ""
 
@@ -82,11 +123,16 @@ def parse_events(text):
         line = line.strip()
         if not line.startswith("|") or line.startswith("|--") or "---" in line:
             continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
+        cells = split_cells(line)
         if len(cells) < 4:
             continue
         etype = cells[0].strip("*` ").upper()
         if etype in ("TYPE", ""):
+            continue
+        # The template ships example rows so the format is obvious. Counting
+        # them as real events fabricates VALUE and B-class numbers for a run
+        # that has not happened -- the benchmark showed B=1 on an empty record.
+        if is_placeholder(cells[2]):
             continue
         ev = {
             "type": etype,
@@ -131,15 +177,18 @@ def check_run_file(text, path):
             problems.append(f"{name}: missing section {sec}")
 
     for f in RUN_FIELDS:
-        if not field(text, f):
+        v = field(text, f)
+        if not v:
             problems.append(f"{name}: field '{f}' is empty or missing")
+        elif is_placeholder(v):
+            problems.append(f"{name}: field '{f}' is still the template placeholder")
 
     result = field(text, "Result").upper()
-    if result and result not in VALID_RESULTS:
+    if result and not is_placeholder(result) and result not in VALID_RESULTS:
         problems.append(f"{name}: Result '{result}' not one of {VALID_RESULTS}")
 
     # An unfilled template must not be mistaken for a real run.
-    if "<" in field(text, "Run ID") or field(text, "Run ID").lower() == "id":
+    if field(text, "Run ID").lower() == "id":
         problems.append(f"{name}: Run ID is still a placeholder")
 
     events = parse_events(text)
@@ -158,13 +207,16 @@ def check_run_file(text, path):
     # it is contaminated by having seen the Builder OS output.
     if "## Baseline" in text:
         bl = re.search(r"##\s+Baseline(.*?)(?=\n##\s|\Z)", text, re.S)
-        body = bl.group(1) if bl else ""
-        if len(body.split()) < 20:
+        if len(prose(bl.group(1) if bl else "").split()) < 20:
             problems.append(f"{name}: Baseline section is empty -- "
                             f"without it the run cannot show what changed")
-        if "captured before" not in body.lower() and "before running" not in body.lower():
-            problems.append(f"{name}: Baseline does not state it was captured "
-                            f"BEFORE the run -- a baseline written afterwards is not a control")
+        # The old check searched the whole section, so the template's own
+        # instruction ("Captured before running Builder OS") satisfied it and
+        # an entirely blank baseline passed. The attestation has to be an act.
+        attest = field(text, "Captured before opening Codex").lower()
+        if attest not in ("yes", "y"):
+            problems.append(f"{name}: baseline not attested as captured BEFORE the run "
+                            f"-- a baseline written afterwards is not a control")
 
     return problems, events
 
@@ -178,6 +230,10 @@ def check_project(project, expected_mode, expected_stage):
     present = {f for f in os.listdir(project) if f.endswith(".md")}
     observations["documents_present"] = sorted(present)
 
+    if is_placeholder(expected_mode):
+        problems.append("Mode is still the template placeholder -- "
+                        "required documents cannot be checked without it")
+        return problems, observations
     required = REQUIRED_DOCS.get(expected_mode)
     if required is None:
         problems.append(f"unknown mode '{expected_mode}'")
@@ -356,17 +412,32 @@ def self_test():
         hit = any(needle.lower() in p.lower() for p in probs)
         cases.append((name, hit))
 
+    # The template's example rows are placeholders and are correctly ignored, so
+    # event guards must be tested against rows that look like real entries.
+    real = base.replace("`<example row — delete>`", "router refused to guess")
+    real = real.replace("`<build session asked X — class B>`", "asked X -- class B")
+
     expect("missing section", base.replace("## Events", "## Stuff"), "missing section")
     expect("bad result value", base.replace("| **Result** | `<PASS", "| **Result** | `BANANA"), "not one of")
     expect("unknown event type",
-           base.replace("| VALUE |", "| SPARKLE |", 1), "unknown event type")
+           real.replace("| VALUE |", "| SPARKLE |", 1), "unknown event type")
     expect("question without class",
-           base.replace("class B", "no class here", 1), "missing class")
-    expect("baseline not pre-captured",
-           re.sub(r"captured before", "written up later", base, flags=re.I), "captured")
+           real.replace("class B", "no class here", 1), "missing class")
+    expect("baseline not attested",
+           base, "not attested as captured BEFORE")
 
-    # placeholder run id must not pass as a real run
-    expect("placeholder run id", base, "placeholder")
+    # An unfilled template must never read as a real run
+    expect("placeholder run id", base, "run id' is still the template placeholder")
+    expect("placeholder mode", base, "mode' is still the template placeholder")
+    expect("empty baseline", base, "baseline section is empty")
+
+    # ...and its example rows must not be counted as evidence of anything
+    cases.append(("template example rows are not events", len(parse_events(base)) == 0))
+    cases.append(("a real event row still counts", len(parse_events(real)) == 2))
+
+    # escaped pipes must not truncate a value into a bogus "wrong" one
+    cases.append(("escaped pipe does not truncate a field",
+                  field("| **Mode** | `<a \\| b>` |", "Mode") == "<a | b>"))
 
     # project guards
     import tempfile

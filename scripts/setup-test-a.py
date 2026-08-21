@@ -186,6 +186,9 @@ def make_run_record(run_id, version, commit, project, prompt):
 
     os.makedirs(os.path.join(run_dir, "evidence"))
     t = read(TEMPLATE)
+    # The template lives in validation/; the record lives two levels deeper in
+    # validation/runs/<id>/, so its relative links need the extra hops.
+    t = t.replace("](../", "](../../../")
     now = datetime.datetime.now()
 
     def setfield(text, name, value):
@@ -410,10 +413,16 @@ def main():
             f.write(paste + "\n")
 
     say("WHILE YOU RUN IT")
-    say(f"  - Record the Routing Block before answering anything.")
-    say(f"  - Log events in the run record as they happen. You will not remember them.")
-    say(f"  - Save the transcript to {os.path.join(run_dir, 'evidence', 'transcript.md')}")
+    say("  - Log events in the run record as they happen. You will not remember them.")
     say("  - Do NOT modify Builder OS during the experiment.")
+    say()
+    say("  REQUIRED before you finish -- save the raw Codex reply to:")
+    say()
+    say(f"      {os.path.join(run_dir, 'evidence', 'transcript.md')}")
+    say()
+    say("  The routing frame, the confidence, the question and the NEXT block are")
+    say("  read out of that file automatically. Without it there is no routing")
+    say("  measurement and Test A has nothing to report.")
     say()
     say(BAR)
     say("WHEN CODEX HAS FINISHED")

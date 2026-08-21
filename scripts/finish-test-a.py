@@ -52,15 +52,187 @@ def capture(text, header):
 
 def filled(section):
     """A section still full of <placeholders> has not been filled in."""
-    stripped = re.sub(r"`?<[^>]*>`?", "", section)
-    return len(stripped.split()) > 8
+    return len(V.prose(section).split()) > 8
 
 
-def build_result(run_id, run_file, project, problems, events, observations, metrics):
+# ------------------------------------------------------- transcript extraction
+#
+# The Strategist prompt SPECIFIES the shape of the reply: a named FRAME, a Mode
+# line with a confidence, and a closing NEXT block. That contract is what makes
+# extraction honest rather than guesswork -- we are reading a format the frozen
+# prompt demanded, not pattern-matching hopefully.
+#
+# The contract is READ FROM prompts/project-start.md, never restated here, so it
+# cannot drift away from the prompt the user actually pasted.
+
+START_PROMPT = os.path.join(ROOT, "prompts", "project-start.md")
+
+
+def frame_keys():
+    """The FRAME field names, taken from the frozen prompt."""
+    text = V.read(START_PROMPT)
+    m = re.search(r"FRAME[^\n]*\n(.*?)\n\s*\n", text, re.S)
+    if not m:
+        return []
+    return re.findall(r"^\s{2,}([A-Z]{4,12})\s{2,}\S", m.group(1), re.M)
+
+
+def next_contract():
+    """The lines the prompt requires the reply to end with."""
+    text = V.read(START_PROMPT)
+    m = re.search(r"END YOUR RESPONSE WITH THIS[^\n]*\n(.*?)\n\s*\nNever end", text, re.S)
+    if not m:
+        return []
+    return [re.match(r"\s*([A-Za-z][^:]*):", l).group(1).strip()
+            for l in m.group(1).split("\n")
+            if re.match(r"\s*([A-Za-z][^:]*):", l)]
+
+
+def extract_routing(transcript):
+    """
+    Pull the routing decision out of the raw Codex reply. Returns
+    {key: (value, True)} for what was found; absent keys are simply absent --
+    nothing is inferred, and nothing is invented when the format was not met.
+    """
+    out = {}
+    for key in frame_keys():
+        m = re.search(r"^\s*" + key + r"\s*[:\-]\s*(.+)$", transcript, re.M)
+        if m:
+            out[key] = m.group(1).strip()
+
+    m = re.search(r"^\s*Mode\s*[:\-]\s*(.+)$", transcript, re.M)
+    if m:
+        out["MODE"] = m.group(1).strip()
+    m = re.search(r"confidence\s*[:=]?\s*(High|Medium|Low)", transcript, re.I)
+    if m:
+        out["CONFIDENCE"] = m.group(1).capitalize()
+
+    qs = re.findall(r"^\s*(?:Question|Questions)\s*[:\-]\s*(.*)$", transcript, re.M | re.I)
+    body = re.search(r"^\s*Questions?\s*[:\-]\s*(.*?)(?=\n\s*\n)", transcript, re.M | re.S | re.I)
+    if body:
+        qs = [q for q in [body.group(1).strip()] if q]
+    if qs:
+        out["QUESTION"] = qs[0].strip()
+
+    for label in next_contract():
+        m = re.search(r"^\s*" + re.escape(label) + r"\s*:\s*(.*)$", transcript, re.M)
+        if m:
+            out["NEXT::" + label] = m.group(1).strip()
+    return out
+
+
+def derive_deviations(r):
+    """
+    Compare the reply against the contract the prompt stated. Each item names
+    the rule it violates, so a finding can be traced rather than asserted.
+    Returns (deviations, confirmations).
+    """
+    dev, ok = [], []
+    if not r:
+        return dev, ok
+
+    obj = r.get("OBJECT", "")
+    conf = r.get("CONFIDENCE", "")
+    mode = r.get("MODE", "")
+
+    # R-DEST-1: OBJECT unresolved => confidence LOW, no matter how clear the rest.
+    if "UNRESOLVED" in obj.upper():
+        if conf and conf != "Low":
+            dev.append(f"R-DEST-1: OBJECT is UNRESOLVED but confidence is {conf}, not Low")
+        elif conf == "Low":
+            ok.append("R-DEST-1 held: OBJECT UNRESOLVED produced Low confidence")
+
+    # Low confidence => stop and ask, do not commit to a mode.
+    if conf == "Low":
+        committed = mode and not re.search(r"not assigned|none|unresolved|no mode",
+                                           mode, re.I)
+        if committed:
+            dev.append(f"confidence is Low but a mode was committed: '{mode}' "
+                       f"-- the prompt says STOP and ask before committing")
+        else:
+            ok.append("Low confidence did not commit to a mode")
+        if r.get("QUESTION"):
+            ok.append("a clarifying question was asked, as Low confidence requires")
+        else:
+            dev.append("confidence is Low but no clarifying question was found")
+
+    # The closing NEXT block is mandatory and has named fields.
+    for label in next_contract():
+        if "NEXT::" + label in r:
+            ok.append(f"NEXT block field present: '{label}'")
+        else:
+            dev.append(f"NEXT block is missing the required field '{label}'")
+    return dev, ok
+
+
+def routing_section(routing, dev, ok, transcript):
+    """The automatically-derived half of the report."""
+    if not transcript:
+        return ("### Routing — NOT EXTRACTED\n\n"
+                "_No transcript at `evidence/transcript.md`. Paste the Codex reply there and\n"
+                "re-run; routing is the primary measurement of Test A and everything below\n"
+                "falls back to whatever was typed in by hand._\n")
+    if not routing:
+        return ("### Routing — NOT EXTRACTED\n\n"
+                f"_A transcript exists (`{transcript}`) but none of the FRAME fields the prompt\n"
+                "specifies were found in it. **That is itself a finding**: either the reply did\n"
+                "not follow the required format, or the wrong text was pasted._\n")
+
+    def cell(v):
+        return v.splitlines()[0][:90].replace("|", "\\|")
+
+    rows = [f"| `{k}` | {cell(routing[k])} |" for k in frame_keys() if k in routing]
+    rows.append(f"| **Mode** | {cell(routing.get('MODE', '_not stated_'))} |")
+    rows.append(f"| **Confidence** | **{routing.get('CONFIDENCE', '_not stated_')}** |")
+    rows.append(f"| **Question asked** | {cell(routing.get('QUESTION', '_none found_'))} |")
+    out = ("### Routing — extracted from the transcript\n\n"
+           f"_Read mechanically from `{transcript.replace(os.sep, '/')}` using the format "
+           "`prompts/project-start.md` requires. Reproducible._\n\n"
+           "| Frame field | Value |\n|---|---|\n" + "\n".join(rows) + "\n\n")
+
+    out += "### Contract check\n\n"
+    out += ("_Each line names the rule it tests. Derived from the prompt, not judged._\n\n")
+    for o in ok:
+        out += f"- **held** — {o}\n"
+    for d in dev:
+        out += f"- **DEVIATION** — {d}\n"
+    if not dev:
+        out += "\nNo deviations from the stated contract. "
+        out += "Empty is a valid and good result.\n"
+    return out
+
+
+def learned(routing, dev, problems, events):
+    """
+    Facts only. This section must never editorialise -- the moment it starts
+    grading the run it becomes the composite score this harness refuses to have.
+    """
+    lines = []
+    if routing:
+        conf = routing.get("CONFIDENCE")
+        obj = routing.get("OBJECT", "")
+        if conf and "UNRESOLVED" in obj.upper():
+            lines.append(f"An unresolved OBJECT produced **{conf}** confidence and "
+                         f"{'a question instead of a mode' if routing.get('QUESTION') else 'no question'}. "
+                         f"This is the behaviour Test A exists to check.")
+        if routing.get("NEXT::NEXT"):
+            lines.append(f"The session chained forward: NEXT pointed at "
+                         f"`{routing['NEXT::NEXT']}`.")
+    lines.append(f"{len(dev)} contract deviation(s) and {len(problems)} structural "
+                 f"problem(s) were found mechanically.")
+    lines.append(f"{len(events)} event(s) were logged by hand during the run.")
+    if not events:
+        lines.append("**No events were logged.** Friction and value are invisible to the "
+                     "harness unless written down while they happen.")
+    return "\n".join(f"- {l}" for l in lines)
+
+
+def build_result(run_id, run_file, project, problems, events, observations, metrics,
+                 routing=None, dev=(), ok=(), transcript=None):
     text = V.read(run_file)
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    routing = capture(text, "Routing result")
+    routing_manual = capture(text, "Routing result")
     docs = capture(text, "Documents Builder OS created")
     state = capture(text, "Runtime state after the run")
     devs = capture(text, "Deviations from documented behaviour")
@@ -128,9 +300,11 @@ kinds of evidence and mixing them would hide which is which.
 
 *What actually happened. Real, but not reproducible.*
 
-### Routing
+{routing_section(routing, dev, ok, transcript)}
 
-{routing if filled(routing) else "_Not filled in. **This is the primary measurement of Test A** — without it the run cannot answer whether routing worked._"}
+### Routing, as recorded by hand
+
+{routing_manual if filled(routing_manual) else "_Not filled in — the extracted table above supersedes it._"}
 
 ### Documents
 
@@ -158,9 +332,25 @@ kinds of evidence and mixing them would hide which is which.
 
 ---
 
+## WHAT THIS RUN SHOWED
+
+*Facts restated, not graded. No conclusion is drawn here — that is the point.*
+
+{learned(routing, dev, problems, events)}
+
+---
+
 ## HUMAN JUDGEMENT
 
-*Yours alone. Never scored, never aggregated.*
+*Yours alone. Never scored, never aggregated. The harness deliberately does not
+attempt these — a generated answer here would be fabricated evidence.*
+
+| Still requires you | Why it cannot be automated |
+|---|---|
+| The baseline | It only exists if you wrote it before seeing the output |
+| Better than the baseline? | A comparison of two directions, not two strings |
+| Did Builder OS add value? | Requires knowing what you would otherwise have shipped |
+| Did anything feel like friction? | Only you were in the room |
 
 ### Baseline, captured before the run
 
@@ -242,9 +432,31 @@ def main():
 
     metrics = V.compute_metrics(events, observations)
 
+    # Everything derivable from the raw reply is derived, so the human is left
+    # only with what genuinely cannot be read off a file.
+    tpath = os.path.join(run_dir, "evidence", "transcript.md")
+    transcript = os.path.relpath(tpath, ROOT) if os.path.exists(tpath) else None
+    routing = extract_routing(V.read(tpath)) if transcript else {}
+    dev, ok = derive_deviations(routing)
+
     result_path = os.path.join(run_dir, "RESULT.md")
     with open(result_path, "w", encoding="utf-8") as f:
-        f.write(build_result(run_id, run_file, project, problems, events, observations, metrics))
+        f.write(build_result(run_id, run_file, project, problems, events, observations,
+                             metrics, routing, dev, ok, transcript))
+
+    if not transcript:
+        print("  ROUTING: not extracted -- no evidence/transcript.md.")
+        print("           Paste the Codex reply there and re-run. Routing is the")
+        print("           primary measurement of Test A.")
+    else:
+        print(f"  ROUTING: extracted from {transcript}")
+        print(f"           confidence={routing.get('CONFIDENCE', '?')}  "
+              f"object={routing.get('OBJECT', '?')[:32]}")
+        for o in ok:
+            print(f"    held      {o}")
+        for d in dev:
+            print(f"    DEVIATION {d}")
+    print()
 
     for k, v in metrics.items():
         print(f"  {k}: {v}")
@@ -278,9 +490,6 @@ def main():
     print(f"  {os.path.relpath(run_file, ROOT)}")
     print(f"  {os.path.relpath(os.path.join(run_dir, 'evidence'), ROOT)}/")
     if project:
-        print("")
-        print(f"  Conditional documents created: {extra}")
-        print("  Each should have been triggered by a stated rule, not by habit.")
         print(f"  {project}   (the project itself)")
     print()
     print("  RESULT.md separates PROVEN / OBSERVED / HUMAN JUDGEMENT / UNPROVEN.")
