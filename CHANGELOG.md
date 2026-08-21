@@ -10,6 +10,44 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.3.5 — 2026-08-21 · STANDALONE STAGE DELIVERY-CONTRACT REPAIR
+
+A3 exposed the first deterministic standalone-input defect at S1. The bounded
+S0-S6 delivery audit performed before resuming A3R1 found the same root cause at
+later boundaries: several pasted stage prompts named canonical Builder OS files
+that a fresh project session was never instructed or equipped to receive. Some
+blocked paths could also print the next stage, and S5 could proceed directly to
+G4 without first presenting the combined mechanical and independent evidence at
+human-only G3.
+
+The affected prompts now declare **REQUIRED INPUTS** and an in-fence **IF MISSING**
+contract. A missing input stops in the same stage, names the gap, forbids partial
+outputs, and emits a same-stage retry rather than a forward transition. Provider
+adapter matrices now deliver the existing canonical skill, policy, rubric, and
+template files transiently to the sessions that consume them. They are not copied
+into project repositories and their ownership is unchanged.
+
+S4A now explicitly hands off to S4B. S4B distinguishes an already-connected
+feature-branch preview from push, merge, connection, and production actions using
+the existing `WORKFLOW.md` rules. S5 emits a paste-ready independent judgement
+block for `QA.md`, presents G3 first, and permits a G4 request only after explicit
+human G3 approval. S6 consumes those persisted findings from `QA.md`. Content
+drafting and weekly review now declare voice, pillars, and current learnings as
+continuity inputs instead of relying on conversation history.
+
+`scripts/check.py` guards all eight affected prompt boundaries and both adapter
+matrices. Its self-test includes repository and harmless-change positive controls
+plus negative mutations for an out-of-fence manifest, missing blocked behaviour,
+forward transition while blocked, missing canonical QA delivery, reversed G3/G4
+order, missing QA judgement persistence, adapter omissions, and missing content
+continuity.
+
+**Scope:** no routing rule, workflow rule, mode, skill, canonical design/QA/
+research/evaluation policy, template, validation protocol, or validation run was
+changed. A3R1 was not resumed and A4 was not created.
+
+---
+
 ## 0.3.4 — 2026-08-21 · A3 DETERMINISTIC S1 INPUT-CONTRACT REPAIR
 
 A3 exposed a deterministic defect before S1 could write its first document. The

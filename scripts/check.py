@@ -10,7 +10,8 @@ Deterministic checks that caught real bugs during construction:
   5. Stage chain: every chained prompt emits NEXT inside its fenced block
   6. AGENTS template: state fields present, no canonical policy duplicated
   7. S1 AGENTS transport mirror: exact copy of the canonical template contract
-  8. Duplicated sentences (source-of-truth violations)
+  8. Standalone stage delivery: inputs, missing paths, transitions, adapters
+  9. Duplicated sentences (source-of-truth violations)
 
 Usage:  python scripts/check.py [--verbose | --self-test]
 Exit:   0 clean, 1 problems found.
@@ -322,6 +323,255 @@ def check_agents_template():
     return problems
 
 
+# Standalone delivery-contract guard. Each provider session receives only its
+# project repository, pasted stage prompt, and explicitly delivered stage inputs.
+# These checks protect that transport boundary without copying or interpreting
+# the canonical policies themselves.
+DELIVERY_CONTRACTS = [
+    {
+        "path": "prompts/project-start.md",
+        "block": 0,
+        "tokens": [
+            "REQUIRED INPUTS", "skills/intake.md",
+            "AGENTS template transport mirror", "IF MISSING",
+            "NEXT: S3 Design direction.",
+        ],
+        "inputs": ["skills/intake.md", "AGENTS template transport mirror"],
+        "retry": "NEXT: S1 Discovery resume.",
+        "forbidden_missing": ["NEXT: S3 Design direction."],
+    },
+    {
+        "path": "prompts/design-direction.md",
+        "block": 0,
+        "tokens": [
+            "REQUIRED INPUTS", "PROJECT.md", "DESIGN-TASTE.md",
+            "templates/DESIGN.md", "DESIGN-MOTION.md", "DESIGN-ASSETS.md",
+            "IF MISSING", "NEXT: S4 Build.",
+        ],
+        "inputs": [
+            "PROJECT.md", "DESIGN-TASTE.md", "templates/DESIGN.md",
+            "DESIGN-MOTION.md", "DESIGN-ASSETS.md",
+        ],
+        "retry": "NEXT: S3 Design direction retry.",
+        "forbidden_missing": ["NEXT: S4 Build."],
+    },
+    {
+        "path": "prompts/build-kickoff.md",
+        "block": 0,
+        "tokens": [
+            "REQUIRED INPUTS", "PROJECT.md", "DESIGN.md", "AGENTS.md",
+            "templates/HANDOFF.md", "IF MISSING", "NEXT: S4 Build.",
+        ],
+        "inputs": ["PROJECT.md", "DESIGN.md", "AGENTS.md", "templates/HANDOFF.md"],
+        "retry": "NEXT: S4 Handoff retry.",
+        "forbidden_missing": ["NEXT: S4 Build."],
+    },
+    {
+        "path": "prompts/build-kickoff.md",
+        "block": 1,
+        "tokens": [
+            "REQUIRED INPUTS", "HANDOFF.md", "DESIGN.md", "AGENTS.md",
+            "QA-POLICY.md", "templates/QA.md", "IF MISSING",
+            "feature-branch preview", "already connected",
+            "NEXT: S5 Review.",
+        ],
+        "inputs": [
+            "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
+            "templates/QA.md",
+        ],
+        "retry": "NEXT: S4 Build retry.",
+        "forbidden_missing": ["NEXT: S5 Review."],
+    },
+    {
+        "path": "prompts/project-review.md",
+        "block": 0,
+        "tokens": [
+            "REQUIRED INPUTS", "TARGET", "INTENT", "CRITERIA",
+            "ACCEPTED PATTERNS", "EVALUATION-RUBRICS.md", "IF MISSING",
+            "BEGIN QA JUDGEMENT", "END QA JUDGEMENT",
+            "After I grant G3:", "NEXT: G4 Ship request.",
+        ],
+        "inputs": [
+            "TARGET", "INTENT", "CRITERIA", "ACCEPTED PATTERNS",
+            "EVALUATION-RUBRICS.md",
+        ],
+        "retry": "NEXT: S5 Review retry.",
+        "forbidden_missing": ["NEXT: G4 Ship request."],
+    },
+    {
+        "path": "prompts/retrospective.md",
+        "block": 0,
+        "tokens": [
+            "REQUIRED INPUTS", "PROJECT.md", "QA.md", "AGENTS.md",
+            "independent S5 QA judgement block", "IF MISSING",
+        ],
+        "inputs": ["PROJECT.md", "QA.md", "AGENTS.md"],
+        "retry": "NEXT: S6 Retrospective retry.",
+        "forbidden_missing": [],
+    },
+    {
+        "path": "prompts/content-system.md",
+        "block": 1,
+        "tokens": [
+            "REQUIRED INPUTS", "voice-profile.md", "anti-voice",
+            "pillars list", "CONTENT-LEARNINGS.md", "RAW MATERIAL",
+            "PLATFORM", "PILLAR", "IF MISSING",
+        ],
+        "inputs": [
+            "voice-profile.md", "anti-voice", "pillars list",
+            "CONTENT-LEARNINGS.md", "RAW MATERIAL", "PLATFORM", "PILLAR",
+        ],
+        "retry": "NEXT: Content drafting retry.",
+        "forbidden_missing": ["G5: PUBLISH REQUEST"],
+    },
+    {
+        "path": "prompts/content-system.md",
+        "block": 2,
+        "tokens": [
+            "REQUIRED INPUTS", "current CONTENT-LEARNINGS.md",
+            "posts, numbers, and qualitative reply evidence", "IF MISSING",
+            "READ the current CONTENT-LEARNINGS.md",
+        ],
+        "inputs": [
+            "current CONTENT-LEARNINGS.md",
+            "posts, numbers, and qualitative reply evidence",
+        ],
+        "retry": "NEXT: Weekly content review retry.",
+        "forbidden_missing": [],
+    },
+]
+
+ADAPTER_DELIVERY = {
+    "adapters/codex.md": {
+        "begin": "**What to attach per stage:**",
+        "end": "If a required input is unavailable",
+        "tokens": [
+            "skills/intake.md", "RESEARCH-POLICY.md", "templates/RESEARCH.md",
+            "DESIGN-TASTE.md", "templates/DESIGN.md", "DESIGN-MOTION.md",
+            "DESIGN-ASSETS.md", "templates/HANDOFF.md",
+            "EVALUATION-RUBRICS.md", "completed `QA.md`",
+        ],
+    },
+    "adapters/cursor.md": {
+        "begin": "### Fresh-session input matrix",
+        "end": "If a required S4B input is unavailable",
+        "tokens": [
+            "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
+            "templates/QA.md", "explicit human G3 approval",
+        ],
+    },
+}
+
+
+def fenced_blocks(text):
+    return re.findall(r"(?ms)^```[^\r\n]*\r?\n(.*?)^```\s*$", text)
+
+
+def missing_contract(block):
+    match = re.search(r"(?ms)^IF MISSING\s*$\r?\n(.*?)^END IF MISSING\s*$", block)
+    return match.group(1) if match else None
+
+
+def required_inputs_contract(block):
+    match = re.search(r"(?ms)^REQUIRED INPUTS\s*$\r?\n(.*?)^IF MISSING\s*$", block)
+    return match.group(1) if match else None
+
+
+def check_delivery_contract_texts(texts):
+    problems = []
+    for spec in DELIVERY_CONTRACTS:
+        path = spec["path"]
+        text = texts.get(path)
+        if text is None:
+            problems.append(f"{path} missing from delivery-contract check")
+            continue
+        blocks = fenced_blocks(text)
+        if len(blocks) <= spec["block"]:
+            problems.append(
+                f"{path} missing fenced prompt block {spec['block'] + 1}"
+            )
+            continue
+        block = blocks[spec["block"]]
+        for token in spec["tokens"]:
+            if token not in block:
+                problems.append(
+                    f"{path} block {spec['block'] + 1} missing contract token: {token}"
+                )
+
+        inputs = required_inputs_contract(block)
+        if inputs is None:
+            problems.append(
+                f"{path} block {spec['block'] + 1} has no in-fence REQUIRED INPUTS manifest"
+            )
+        else:
+            for token in spec["inputs"]:
+                if token not in inputs:
+                    problems.append(
+                        f"{path} block {spec['block'] + 1} does not declare required input: "
+                        f"{token}"
+                    )
+
+        missing = missing_contract(block)
+        if missing is None:
+            problems.append(
+                f"{path} block {spec['block'] + 1} has no in-fence IF MISSING contract"
+            )
+            continue
+        if spec["retry"] not in missing:
+            problems.append(
+                f"{path} block {spec['block'] + 1} missing same-stage retry: "
+                f"{spec['retry']}"
+            )
+        for forbidden in spec["forbidden_missing"]:
+            if forbidden in missing:
+                problems.append(
+                    f"{path} block {spec['block'] + 1} advances while blocked: "
+                    f"{forbidden}"
+                )
+
+    review = texts.get("prompts/project-review.md", "")
+    review_blocks = fenced_blocks(review)
+    if review_blocks:
+        block = review_blocks[0]
+        g3 = block.find("After I grant G3:")
+        g4 = block.find("NEXT: G4 Ship request.")
+        if g3 < 0 or g4 < 0 or g3 >= g4:
+            problems.append(
+                "prompts/project-review.md must place explicit human G3 before G4"
+            )
+        if "- Ship  -> G4" in block:
+            problems.append(
+                "prompts/project-review.md still permits direct Ship -> G4 sequencing"
+            )
+
+    for path, spec in ADAPTER_DELIVERY.items():
+        text = texts.get(path)
+        if text is None:
+            problems.append(f"{path} missing from adapter delivery check")
+            continue
+        start = text.find(spec["begin"])
+        end = text.find(spec["end"], start + len(spec["begin"])) if start >= 0 else -1
+        if start < 0 or end < 0:
+            problems.append(f"{path} attachment matrix boundaries are missing")
+            continue
+        matrix = text[start:end]
+        for token in spec["tokens"]:
+            if token not in matrix:
+                problems.append(f"{path} does not deliver required input: {token}")
+
+    return problems
+
+
+def check_delivery_contracts():
+    paths = {spec["path"] for spec in DELIVERY_CONTRACTS} | set(ADAPTER_DELIVERY)
+    texts = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in paths
+        if os.path.exists(os.path.join(ROOT, path))
+    }
+    return check_delivery_contract_texts(texts)
+
+
 def agents_transport_form(template_text):
     """Encode nested Markdown fences without closing the outer S1 prompt fence."""
     return re.sub(r"(?m)^```", "~~~", template_text.strip())
@@ -431,9 +681,87 @@ pnpm install
     return 1 if failed else 0
 
 
+def self_test_delivery_contracts():
+    """Positive controls and mutations that must break standalone delivery."""
+    paths = {spec["path"] for spec in DELIVERY_CONTRACTS} | set(ADAPTER_DELIVERY)
+    actual = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in paths
+    }
+
+    def mutate(path, old, new):
+        texts = dict(actual)
+        if old not in texts[path]:
+            raise AssertionError(f"self-test mutation source missing: {path}: {old}")
+        texts[path] = texts[path].replace(old, new, 1)
+        return texts
+
+    outside = mutate(
+        "prompts/design-direction.md", "REQUIRED INPUTS", "DELIVERED INPUTS"
+    )
+    outside["prompts/design-direction.md"] += "\nREQUIRED INPUTS\n"
+
+    cases = [
+        ("repository delivery contracts pass (positive control)",
+         not check_delivery_contract_texts(actual)),
+        ("unrelated prose change passes (positive control)",
+         not check_delivery_contract_texts({
+             **actual,
+             "adapters/codex.md": actual["adapters/codex.md"] + "\n",
+         })),
+        ("required-input marker outside prompt fence fails",
+         bool(check_delivery_contract_texts(outside))),
+        ("missing IF MISSING contract fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/retrospective.md", "IF MISSING", "WHEN INPUT IS MISSING"
+         )))),
+        ("blocked S3 advancing to S4 fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/design-direction.md",
+             "NEXT: S3 Design direction retry.", "NEXT: S4 Build."
+         )))),
+        ("missing S4B canonical QA policy fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/build-kickoff.md", "- QA-POLICY.md.", "- QA rules."
+         )))),
+        ("S5 G4 before explicit G3 fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/project-review.md", "After I grant G3:", "After I grant G4:"
+         )))),
+        ("missing paste-ready QA judgement boundary fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/project-review.md", "BEGIN QA JUDGEMENT", "BEGIN REVIEW OUTPUT"
+         )))),
+        ("Codex adapter missing evaluation rubric fails",
+         bool(check_delivery_contract_texts(mutate(
+             "adapters/codex.md", "`EVALUATION-RUBRICS.md`", "the evaluation rubric"
+         )))),
+        ("Cursor adapter missing QA template fails",
+         bool(check_delivery_contract_texts(mutate(
+             "adapters/cursor.md", "`templates/QA.md`", "the QA template"
+         )))),
+        ("content drafting without voice continuity fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/content-system.md",
+             "- voice-profile.md, including the current anti-voice list.",
+             "- The current writing voice."
+         )))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def main():
     if SELF_TEST:
-        return self_test_agents_prompt_mirror()
+        print("AGENTS transport mirror self-test")
+        agents_failed = self_test_agents_prompt_mirror()
+        print("\nStandalone delivery-contract self-test")
+        delivery_failed = self_test_delivery_contracts()
+        print("\nSELF-TEST FAILED" if agents_failed or delivery_failed else "\nSELF-TEST PASS")
+        return 1 if agents_failed or delivery_failed else 0
 
     failed = False
 
@@ -486,6 +814,18 @@ def main():
             print(f"        {problem}")
     else:
         print("ok    AGENTS prompt mirror: exact canonical transport copy inside S1 fence")
+
+    delivery_problems = check_delivery_contracts()
+    if delivery_problems:
+        failed = True
+        print(f"FAIL  standalone delivery: {len(delivery_problems)} problem(s)")
+        for problem in delivery_problems:
+            print(f"        {problem}")
+    else:
+        print(
+            f"ok    standalone delivery: {len(DELIVERY_CONTRACTS)} prompt contracts, "
+            f"{len(ADAPTER_DELIVERY)} adapter matrices"
+        )
 
     chain_problems = check_stage_chain()
     if chain_problems:

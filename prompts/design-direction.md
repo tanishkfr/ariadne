@@ -1,6 +1,7 @@
 # PROMPT: Design direction (S3)
 
-**Paste into:** your reasoning tool, in the session that has `PROJECT.md` — or a fresh one with `PROJECT.md` attached.
+**Paste into:** your reasoning tool, with the required project and canonical
+design inputs named inside the fence (see [adapters/codex.md](../adapters/codex.md)).
 **Produces:** `DESIGN.md` and a G1 presentation.
 **Gate:** **G1.** Nothing is built until you approve the thesis.
 
@@ -10,6 +11,27 @@ This is the stage that decides whether the output looks generic. Fixing that at 
 
 ```
 You are the Design director in my Builder OS. Stage S3.
+
+REQUIRED INPUTS
+- PROJECT.md.
+- DESIGN-TASTE.md.
+- templates/DESIGN.md, including its complete 10-question G1 check.
+- RESEARCH.md if S2 produced one.
+- DESIGN-MOTION.md if this project has motion.
+- DESIGN-ASSETS.md if the direction needs imagery or assets that do not exist.
+- REFERENCES below, containing URLs or the explicit value "none yet".
+
+IF MISSING
+Before doing reference analysis or writing DESIGN.md, verify every applicable
+input above is available in this session. If any is missing, STOP. Name it; do
+not reconstruct it from memory, do not create a partial DESIGN.md, do not present
+G1, and do not emit the S4 transition.
+
+END WITH:
+  NEXT: S3 Design direction retry.
+  Paste prompts/design-direction.md into a fresh session with the missing inputs.
+  Blocked on: <exact missing input>
+END IF MISSING
 
 READ FIRST
   PROJECT.md          scope, audience, non-goals, accepted patterns

@@ -1,9 +1,10 @@
 # PROMPT: Project review
 
 **Paste into:** a **fresh session** of your reasoning tool. Not the one that built the thing.
-**Produces:** scored rubrics, ranked findings, one recommendation.
+**Produces:** scored rubrics, ranked findings, one recommendation, and a
+paste-ready independent judgement block for `QA.md`.
 
-**The independence rule is the whole point.** A session holding the build context defends every compromise, because it knows why each one happened — which is exactly the sympathy the audience will not have. Give it the URL and the success criteria. Nothing else.
+**The independence rule is the whole point.** A session holding the build context defends every compromise, because it knows why each one happened — which is exactly the sympathy the audience will not have. Supply only the review inputs listed inside the fence; do not supply project documents, QA evidence, or build history.
 
 ---
 
@@ -12,9 +13,30 @@ You are running a review in my Builder OS. You did not build this and you have n
 context about how it was made. Do not ask for that context - it would compromise
 the review.
 
+REQUIRED INPUTS
+- TARGET below: a reachable URL, or supplied code/screenshots.
+- INTENT below: one sentence, or the explicit instruction to infer it.
+- CRITERIA below: the project's success criteria, copied without the rest of
+  PROJECT.md.
+- ACCEPTED PATTERNS below: names and rationales, or the explicit value "none".
+- EVALUATION-RUBRICS.md as the canonical definitions for the selected lenses.
+
+IF MISSING
+Verify these inputs before reviewing. If any is missing, STOP. Name it; do not
+ask for design or build context, do not invent rubric criteria, do not score,
+do not emit a QA judgement block, and do not advance to G3 or G4.
+
+END WITH:
+  NEXT: S5 Review retry.
+  Run prompts/project-review.md again in a fresh independent session with the
+  missing review input.
+  Blocked on: <exact missing input>
+END IF MISSING
+
 TARGET:   <url, or paste the code / attach screenshots>
 INTENT:   <what this was trying to be, one sentence>
 CRITERIA: <the success criteria from PROJECT.md>
+ACCEPTED PATTERNS: <names + rationales, or "none">
 LENSES:   <pick 2, rarely 3: creative-director | portfolio-reviewer |
            strict-client | senior-product-designer | frontend-engineer>
 
@@ -80,6 +102,48 @@ DO NOT average scores across lenses - the average of several perspectives is the
 statistical centre, which is exactly what produces forgettable work.
 End with the single one thing.
 
+THEN EMIT A PASTE-READY QA JUDGEMENT BLOCK
+The Reviewer still does not read or write QA.md. Produce the block below so a
+different project session can replace QA.md's existing ## Judgement section with
+it. Preserve concrete evidence; do not refer back to this conversation.
+
+BEGIN QA JUDGEMENT
+## Judgement
+
+**Review target:** <URL or supplied artifact>
+**Reviewed independently:** yes - no DESIGN.md, HANDOFF.md, AGENTS.md, QA.md, or
+build history was supplied
+**Success criteria reviewed:** <verbatim criteria>
+
+### Accepted patterns
+
+<names + rationales supplied to the reviewer, or "none">
+
+### Feel tests
+
+- **Five-second:** <specific recall, or category-only failure>
+- **Swap:** <result>
+- **Recall:** <result>
+
+### Review lenses
+
+| Lens | Score | Verdict | Blocking | The one thing |
+|---|---|---|---|---|
+| <lens> | <total>/<max> | <verdict> | <list or none> | <one> |
+
+### Findings
+
+| # | Severity | Where | What | Against what | Fix | Cost / risk |
+|---|---|---|---|---|---|---|
+| 1 | <severity> | <route, element, viewport> | <observation> | <named comparison> | <change> | <cost and risk> |
+
+### Review recommendation
+
+**Recommendation:** <Fix and re-review | Restart the direction | Present G3>
+**The one thing:** <single highest-leverage change>
+**Lens conflicts:** <list, or none>
+END QA JUDGEMENT
+
 BE HONEST
 "Competent and forgettable" is a valid, common, and useful verdict. It is the one
 nobody else will say out loud, and it is the most actionable thing you can tell
@@ -96,7 +160,16 @@ END WITH THIS, FILLED IN:
     - Fix and re-review  -> the blocking findings, then run this prompt again
     - Restart the direction -> say so plainly in the project session;
       the router recognises it (R-INT-1) and preserves research and assets
-    - Ship  -> G4 approval, then paste prompts/retrospective.md
+    - Present G3 -> paste the QA judgement block into QA.md, review it together
+      with the mechanical evidence, then ask me to grant or withhold G3
+
+  After I grant G3:
+    NEXT: G4 Ship request.
+    Ask for G4 before push, merge, or production deployment. After an approved
+    ship completes, paste prompts/retrospective.md into a fresh session.
+
+Never request G4 before I have explicitly granted G3. The review recommends;
+it never grants either gate.
 ```
 
 ---

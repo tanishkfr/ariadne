@@ -69,15 +69,22 @@ Attached: <the documents this stage needs>
 Do: <the stage's job>
 ```
 
-**What to attach per stage:**
+**What to attach per stage:** the pasted stage prompt is always included. These
+are its additional inputs; canonical policy and template files are transported
+for that session only and are never copied into the project repository.
 
 | Stage | Attach | Do not attach |
 |---|---|---|
-| S1 | Nothing — just the request | Anything |
-| S2 | `PROJECT.md` open questions | The whole `PROJECT.md` |
-| S3 | `PROJECT.md`, `RESEARCH.md` | Any code |
-| S5 evaluation | The URL and success criteria **only** | `DESIGN.md`, the build story, the constraints |
-| S6 | `QA.md`, `PROJECT.md` | The build |
+| S1 | The request; `skills/intake.md` unless the mode is already known to be game-experiment | Other Builder OS files |
+| S2 | The blocking open questions from `PROJECT.md`; `RESEARCH-POLICY.md`; `templates/RESEARCH.md` | Unrelated parts of `PROJECT.md`; the whole system |
+| S3 | `PROJECT.md`; `RESEARCH.md` if it exists; `DESIGN-TASTE.md`; `templates/DESIGN.md`; `DESIGN-MOTION.md` when motion applies; `DESIGN-ASSETS.md` when unresolved imagery/assets apply; reference URLs or `none yet` | Any code or build history |
+| S4A handoff | `PROJECT.md`; approved `DESIGN.md`; project-root `AGENTS.md`; `templates/HANDOFF.md` | Code or earlier chat history |
+| S5 evaluation | The URL/artifact, intent, success criteria, accepted patterns or `none`, and `EVALUATION-RUBRICS.md` | `PROJECT.md`, `DESIGN.md`, `HANDOFF.md`, `AGENTS.md`, `QA.md`, the build story, the constraints |
+| S6 | `PROJECT.md`; project-root `AGENTS.md`; completed `QA.md` containing the pasted independent judgement block | The build or old conversations |
+
+If a required input is unavailable, use the stage prompt's **IF MISSING** path.
+Do not replace the missing canonical file from memory and do not emit the next
+stage's transition.
 
 The S5 row is the important one. **A reviewer given the design document defends the design.** Independence is the whole point of the lens ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
 
