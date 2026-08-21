@@ -167,9 +167,31 @@ def check_mode_drift():
     return problems
 
 
+def check_run_links(text, path):
+    """
+    Relative links inside a run record, resolved from where the record actually
+    sits. check.py deliberately does not walk validation/runs/ -- a generated
+    artifact must never be able to fail the repository check and thereby block
+    the next run -- so the links are validated here instead, as a finding about
+    this run.
+    """
+    problems = []
+    if not os.path.exists(path):
+        return problems          # an in-memory probe has no location to resolve from
+    base = os.path.dirname(os.path.abspath(path))
+    for target in re.findall(r"\]\(([^)#][^)]*)\)", text):
+        if re.match(r"^(https?:|mailto:|#)", target):
+            continue
+        resolved = os.path.normpath(os.path.join(base, target.split("#")[0]))
+        if not os.path.exists(resolved):
+            problems.append(f"{os.path.basename(path)}: broken link '{target}' "
+                            f"-- does not resolve from {os.path.relpath(base, ROOT)}")
+    return problems
+
+
 def check_run_file(text, path):
     """Structure of the run record itself."""
-    problems = []
+    problems = check_run_links(text, path)
     name = os.path.basename(path)
 
     for sec in RUN_SECTIONS:
@@ -438,6 +460,32 @@ def self_test():
     # escaped pipes must not truncate a value into a bogus "wrong" one
     cases.append(("escaped pipe does not truncate a field",
                   field("| **Mode** | `<a \\| b>` |", "Mode") == "<a | b>"))
+
+    # Run-record links are checked HERE, at the record's real nested depth,
+    # because check.py no longer walks validation/runs/.
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        nested = os.path.join(d, "validation", "runs", "A9")
+        os.makedirs(nested)
+        probe = os.path.join(nested, "run.md")
+
+        # a link written for the template's depth is broken at the record's depth
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("[p](../tests/validation-protocol.md)\n")
+        cases.append(("broken link in a run record is caught",
+                      any("broken link" in p for p in check_run_links(read(probe), probe))))
+
+        # ...and a correctly-relative link is not flagged (positive control)
+        depth = os.path.relpath(ROOT, nested).replace(os.sep, "/")
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write(f"[p]({depth}/tests/validation-protocol.md)\n")
+        cases.append(("a valid link in a run record passes",
+                      check_run_links(read(probe), probe) == []))
+
+    # the shipped template's own links must resolve from where the template sits
+    tpl = os.path.join(ROOT, "validation", "run-template.md")
+    cases.append(("template's own links resolve (positive control)",
+                  check_run_links(read(tpl), tpl) == []))
 
     # project guards
     import tempfile

@@ -52,17 +52,33 @@ ALLOW_REPEAT = re.compile(
 #   templates/AGENTS.md  copied to a project root where Builder OS is absent
 # Everything else must have one home. Do not add to this list to silence a
 # real duplication -- fix the duplication instead.
-#   validation/runs/*    every run record is a filled-in COPY of the run
-#                        template -- that is what a run record is
-DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md", "validation/runs/")
+DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
+
+# This script verifies BUILDER OS. validation/runs/ holds the OUTPUT of
+# experiments run with it -- generated artifacts, not canonical documentation.
+#
+# They are excluded here for a structural reason, not for convenience: while
+# they were included, a stale record left by an OLD run failed check.py, and
+# setup-test-a.py refuses to start when check.py fails. A finished experiment
+# could therefore permanently block every future experiment, and the more runs
+# you did the likelier that became.
+#
+# Their links are still checked -- by validate.py, where a broken link is a
+# finding about THAT RUN rather than a repository-wide failure. check.py owns
+# the repository; validate.py owns a run. Do not merge the two.
+GENERATED = ("validation/runs/",)
 
 
 def md_files():
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames if d not in (".git", "node_modules")]
         for name in sorted(filenames):
-            if name.endswith(".md"):
-                yield os.path.join(dirpath, name)
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(dirpath, name)
+            if rel(path).startswith(GENERATED):
+                continue
+            yield path
 
 
 def rel(path):
