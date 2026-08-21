@@ -246,7 +246,18 @@ def compute_metrics(events, observations):
 
 # ---------------------------------------------------------------- modes
 
+def resolve_run(path):
+    """--run accepts either a flat file or a run directory containing run.md."""
+    if os.path.isdir(path):
+        inner = os.path.join(path, "run.md")
+        if os.path.exists(inner):
+            return inner
+        raise SystemExit(f"run directory has no run.md: {path}")
+    return path
+
+
 def run_check(run_path, project, expected_stage):
+    run_path = resolve_run(run_path)
     print(f"RUN  {run_path}")
     text = read(run_path)
     problems, events = check_run_file(text, run_path)
@@ -290,6 +301,7 @@ def run_check(run_path, project, expected_stage):
 
 def benchmark():
     files = sorted(glob.glob(os.path.join(RUNS_DIR, "*.md")))
+    files += sorted(glob.glob(os.path.join(RUNS_DIR, "*", "run.md")))
     files = [f for f in files if not os.path.basename(f).startswith("_")]
     if not files:
         print("No runs yet. Copy validation/run-template.md into validation/runs/ "
@@ -317,9 +329,13 @@ def benchmark():
     hdr = f"{'RUN':<8}{'TEST':<8}{'VER':<9}{'PROVIDER':<10}{'MODEL':<12}{'RESULT':<10}{'B':>3}{'FAIL':>5}{'DEV':>5}{'INT':>5}{'VAL':>5}{'FRIC':>6}"
     print(hdr)
     print("-" * len(hdr))
+    def fit(s, w):
+        s = str(s)
+        return (s[:w - 2] + "..") if len(s) >= w else s
     for r in rows:
-        print(f"{r['run']:<8}{r['test']:<8}{r['ver']:<9}{r['prov']:<10}{r['model']:<12}"
-              f"{r['result']:<10}{r['B']:>3}{r['fail']:>5}{r['dev']:>5}{r['int']:>5}"
+        print(f"{fit(r['run'],8):<8}{fit(r['test'],8):<8}{fit(r['ver'],9):<9}"
+              f"{fit(r['prov'],10):<10}{fit(r['model'],12):<12}{fit(r['result'],10):<10}"
+              f"{r['B']:>3}{r['fail']:>5}{r['dev']:>5}{r['int']:>5}"
               f"{r['val']:>5}{r['fric']:>6}")
     print(f"\n{len(rows)} run(s). B = handoff re-derivations (target <=2).")
     print("VAL/FRIC are human-judged counts -- compare them as narrative, never as a score.")

@@ -8,3 +8,5 @@ build/
 .next/
 private/
 client-assets/
+__pycache__/
+*.pyc
