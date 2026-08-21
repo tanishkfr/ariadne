@@ -10,6 +10,34 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.3.4 — 2026-08-21 · A3 DETERMINISTIC S1 INPUT-CONTRACT REPAIR
+
+A3 exposed a deterministic defect before S1 could write its first document. The
+standalone test project correctly contained only `.git` and `.gitignore`, while
+`prompts/project-start.md` required the session to generate root `AGENTS.md` from
+`templates/AGENTS.md`. The pasted prompt neither contained that template nor gave
+the standalone session a path or mechanism to reach the Builder OS repository.
+Codex stopped rather than inventing the missing contract; no project document was
+created and S3 was not started.
+
+The S1 fenced prompt now carries an exact **non-canonical transport mirror** of
+`templates/AGENTS.md`. The template remains the sole canonical owner. The mirror's
+nested Markdown code fences use tildes so they cannot close the outer pasted prompt;
+otherwise the transported contract is exact. This preserves the standalone-project
+model without adding an initializer, attachment step, or test-only exception.
+
+`scripts/check.py` now compares the mirror against the canonical template's
+deterministic transport form. Its self-test includes three positive controls and
+four negative cases: canonical-only drift, prompt-only drift, a mirror outside the
+S1 fence, and a missing mirror. A paired canonical-and-mirror update must pass, so
+the guard cannot succeed by discarding its inputs or hard-coding today's content.
+
+**Scope:** `templates/AGENTS.md`, routing, stages, setup scripts, and every unrelated
+frozen-core file are unchanged. A3 remains stopped at S1; this repair has not been
+used to resume it or start A4.
+
+---
+
 ## 0.3.3 — 2026-08-21 · V1 CANDIDATE · CORE FROZEN
 
 The three runtime items from the certification audit. **No core changes.** No new modes, skills, roles, policies, or documents.

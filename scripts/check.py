@@ -9,9 +9,10 @@ Deterministic checks that caught real bugs during construction:
   4. Router suite structure: categories, rules, modes, run history
   5. Stage chain: every chained prompt emits NEXT inside its fenced block
   6. AGENTS template: state fields present, no canonical policy duplicated
-  7. Duplicated sentences (source-of-truth violations)
+  7. S1 AGENTS transport mirror: exact copy of the canonical template contract
+  8. Duplicated sentences (source-of-truth violations)
 
-Usage:  python scripts/check.py [--verbose]
+Usage:  python scripts/check.py [--verbose | --self-test]
 Exit:   0 clean, 1 problems found.
 
 Everything here is deterministic. Anything requiring judgement is deliberately
@@ -25,6 +26,7 @@ import collections
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERBOSE = "--verbose" in sys.argv
+SELF_TEST = "--self-test" in sys.argv
 
 REQUIRED = [
     "README.md", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md",
@@ -260,6 +262,12 @@ def check_stage_chain():
 #      policy system that will silently drift from the real one
 # Whether a reminder has drifted in MEANING is not checkable here. Only reading is.
 AGENTS_TEMPLATE = "templates/AGENTS.md"
+AGENTS_PROMPT = "prompts/project-start.md"
+AGENTS_MIRROR_BEGIN = (
+    "BEGIN AGENTS TEMPLATE TRANSPORT MIRROR "
+    "(non-canonical; canonical owner: templates/AGENTS.md)"
+)
+AGENTS_MIRROR_END = "END AGENTS TEMPLATE TRANSPORT MIRROR"
 AGENTS_REQUIRED_FIELDS = [
     "**Stage**", "**Last gate passed**", "**Next stage**",
     "**Next prompt**", "**Updated**",
@@ -314,7 +322,119 @@ def check_agents_template():
     return problems
 
 
+def agents_transport_form(template_text):
+    """Encode nested Markdown fences without closing the outer S1 prompt fence."""
+    return re.sub(r"(?m)^```", "~~~", template_text.strip())
+
+
+def first_fenced_block(text):
+    match = re.search(r"(?ms)^```[^\r\n]*\r?\n(.*?)^```\s*$", text)
+    return match.group(1) if match else None
+
+
+def check_agents_prompt_mirror_text(template_text, prompt_text):
+    """The S1 fence must carry an exact, explicitly non-canonical template mirror."""
+    fenced = first_fenced_block(prompt_text)
+    if fenced is None:
+        return [f"{AGENTS_PROMPT} has no fenced S1 prompt"]
+
+    if fenced.count(AGENTS_MIRROR_BEGIN) != 1 or fenced.count(AGENTS_MIRROR_END) != 1:
+        return [
+            f"{AGENTS_PROMPT} must contain exactly one AGENTS transport mirror "
+            "inside its S1 fence"
+        ]
+
+    pattern = (
+        r"(?ms)^" + re.escape(AGENTS_MIRROR_BEGIN) + r"\r?\n"
+        r"(.*?)\r?\n^" + re.escape(AGENTS_MIRROR_END) + r"$"
+    )
+    match = re.search(pattern, fenced)
+    if not match:
+        return [f"{AGENTS_PROMPT} AGENTS transport mirror markers are malformed"]
+
+    expected = agents_transport_form(template_text)
+    actual = match.group(1).strip()
+    if actual == expected:
+        return []
+
+    expected_lines = expected.splitlines()
+    actual_lines = actual.splitlines()
+    for index in range(max(len(expected_lines), len(actual_lines))):
+        want = expected_lines[index] if index < len(expected_lines) else "<end>"
+        got = actual_lines[index] if index < len(actual_lines) else "<end>"
+        if want != got:
+            return [
+                f"{AGENTS_PROMPT} AGENTS transport mirror drift at line {index + 1}: "
+                f"expected {want!r}, found {got!r}"
+            ]
+    return [f"{AGENTS_PROMPT} AGENTS transport mirror differs from {AGENTS_TEMPLATE}"]
+
+
+def check_agents_prompt_mirror():
+    template = open(os.path.join(ROOT, AGENTS_TEMPLATE), encoding="utf-8").read()
+    prompt = open(os.path.join(ROOT, AGENTS_PROMPT), encoding="utf-8").read()
+    return check_agents_prompt_mirror_text(template, prompt)
+
+
+def self_test_agents_prompt_mirror():
+    """Negative tests plus positive controls for the exact mirror comparison."""
+    template = """# AGENTS: <project>
+
+## Current state
+
+```bash
+pnpm install
+```
+
+## Do not change
+"""
+
+    def prompt_for(source):
+        mirror = agents_transport_form(source)
+        return (
+            "# Prompt\n\n```\nS1\n"
+            + AGENTS_MIRROR_BEGIN + "\n"
+            + mirror + "\n"
+            + AGENTS_MIRROR_END + "\nNEXT: S3\n```\n"
+        )
+
+    changed = template.replace("pnpm install", "pnpm install --frozen")
+    actual_template = open(os.path.join(ROOT, AGENTS_TEMPLATE), encoding="utf-8").read()
+    actual_prompt = open(os.path.join(ROOT, AGENTS_PROMPT), encoding="utf-8").read()
+    outside = (
+        "# Prompt\n\n```\nS1 only\n```\n"
+        + AGENTS_MIRROR_BEGIN + "\n"
+        + agents_transport_form(template) + "\n"
+        + AGENTS_MIRROR_END + "\n"
+    )
+
+    cases = [
+        ("repository mirror matches canonical (positive control)",
+         not check_agents_prompt_mirror_text(actual_template, actual_prompt)),
+        ("synthetic exact mirror passes (positive control)",
+         not check_agents_prompt_mirror_text(template, prompt_for(template))),
+        ("paired canonical and mirror update passes (positive control)",
+         not check_agents_prompt_mirror_text(changed, prompt_for(changed))),
+        ("canonical-only drift fails",
+         bool(check_agents_prompt_mirror_text(changed, prompt_for(template)))),
+        ("prompt-only drift fails",
+         bool(check_agents_prompt_mirror_text(template, prompt_for(changed)))),
+        ("mirror outside S1 fence fails",
+         bool(check_agents_prompt_mirror_text(template, outside))),
+        ("missing mirror fails",
+         bool(check_agents_prompt_mirror_text(template, "# Prompt\n\n```\nS1\n```\n"))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def main():
+    if SELF_TEST:
+        return self_test_agents_prompt_mirror()
+
     failed = False
 
     total, broken = check_links()
@@ -357,6 +477,15 @@ def main():
             print(f"        {a}")
     else:
         print(f"ok    AGENTS template: {len(AGENTS_REQUIRED_FIELDS)} state fields, no canonical policy copied")
+
+    mirror_problems = check_agents_prompt_mirror()
+    if mirror_problems:
+        failed = True
+        print(f"FAIL  AGENTS prompt mirror: {len(mirror_problems)} problem(s)")
+        for problem in mirror_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    AGENTS prompt mirror: exact canonical transport copy inside S1 fence")
 
     chain_problems = check_stage_chain()
     if chain_problems:
