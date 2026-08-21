@@ -183,6 +183,8 @@ You copy the text and post it yourself. The system never touches an account, nev
 
 **You** export or paste the numbers. The system has no account access.
 
+*Reading analytics you paste in is Green. Adding analytics instrumentation to a project is Amber — a different action that happens to share a word.*
+
 Per post, record: date, platform, pillar, hook score, format, impressions, engagements, profile visits, follows, and any qualitative signal — who replied, what they said, whether anyone useful saw it. Weekly is enough; per-post-per-day is noise.
 
 **Qualitative beats quantitative here.** One reply from someone whose work you respect is worth more than 5,000 impressions. Record it, because impression counts will not.

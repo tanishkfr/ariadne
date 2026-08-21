@@ -83,7 +83,9 @@ Do not read the rest of the documentation first. Run something small and real.
 1. Copy [prompts/project-start.md](prompts/project-start.md).
 2. Paste it into your reasoning tool. Replace the last line with your idea.
 3. Answer the questions.
-4. Follow the Routing Block's **First action**.
+4. The session ends by naming the next prompt. **Paste [prompts/design-direction.md](prompts/design-direction.md).**
+
+Every stage hands you the next one. You should never finish a stage and have to browse this repository to work out what happens next — if you do, that is a bug worth recording.
 
 When you reach **G1**, the system will present a design direction and stop. **This is the moment that matters.** Read it. If it says "clean, modern, minimal", reject it — that is a mood, not a direction, and the system is meant to catch that. Ask for a thesis specific enough that a template would fail it.
 

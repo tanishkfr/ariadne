@@ -134,6 +134,16 @@ After I answer, write PROJECT.md with: Problem, Audience, Goal, Non-goals
 (minimum 3), Scope, Constraints, Accepted patterns (if any), Success criteria
 (each falsifiable), References, Assumptions, Open questions, Contradictions.
 
+END YOUR RESPONSE WITH THIS, FILLED IN:
+
+  NEXT: S3 Design direction.
+  Paste prompts/design-direction.md into this session.
+  References to bring: <the 3+ you need, or "none identified - I will ask">
+  Blocked on: <what you need from me first, or "nothing">
+
+Never end with "let me know how you'd like to proceed". The user should not
+have to work out what happens next.
+
 Then STOP. Do not design. Do not architect. Do not write code.
 
 MY REQUEST: <describe what you want to build, in one or two sentences>

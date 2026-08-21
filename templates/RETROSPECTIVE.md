@@ -46,13 +46,50 @@
 
 ### 4. What changes in the Builder OS as a result?
 
-> **Answer this by editing the file, then logging it.** An unedited answer is an intention, not a change.
+> **A retrospective does not edit Builder OS.** It produces *proposals*; Tanishk approves them.
+> Direct mutation is how a system grows back to seventy files.
 
-| Change | File | Section | Done |
+#### 4a. Qualification — all four must hold
+
+> A candidate failing any one is **project-specific**. Record it above and stop. Most observations
+> are project-specific; a retrospective that promotes everything is not being honest.
+
+| # | Candidate | Recurs? | Evidence (2x, or 1x with named cost) | Names a specific rule? | Survives deletion test? | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | <> | | | | | promote / project-only |
+
+> **Deletion test:** if this rule existed and someone deleted it a year from now, would something
+> break? If no, it is a note, not a rule.
+
+#### 4b. Change proposals
+
+> One file per proposal. A proposal touching three files is three proposals, or it is too big.
+> **Propose deletions too** — a rule that never fired, or always got waived, is evidence against
+> itself, and removing it is usually the more valuable change.
+
+```
+CHANGE PROPOSAL <n>
+Observation:  <what happened>
+Evidence:     <when, how often, what it cost>
+Why systemic: <why this is not just this project>
+File:         <the ONE Builder OS file that changes>
+Change:       <exact edit - quote current text and replacement>
+Prevents:     <the specific behaviour this stops next time>
+Replaces:     <rule superseded, or "nothing - additive">
+Regression:   <check.py always; tests/router-cases.md if routing is touched>
+Complexity:   <+N words, +N files>
+```
+
+> **If `Prevents` cannot be filled in concretely, the proposal is a preference. Withdraw it.**
+
+| # | Proposal | Status | Decided |
 |---|---|---|---|
-| | | | [ ] |
+| 1 | <one line> | pending / approved / deferred / rejected | <date> |
 
-**Logged in [CHANGELOG.md](../CHANGELOG.md):** <yes / nothing changed and here is why>
+> A deferred proposal stays here. **The same lesson deferred three times is itself the evidence** —
+> promote it on the third.
+
+**Candidates found:** <n> · **Promoted to proposals:** <n> · **Approved by Tanishk:** <n>
 
 ---
 

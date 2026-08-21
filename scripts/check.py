@@ -2,10 +2,12 @@
 """
 Builder OS consistency check.
 
-Three deterministic checks that caught real bugs during construction:
+Deterministic checks that caught real bugs during construction:
   1. Broken internal links
-  2. Duplicated sentences (source-of-truth violations)
-  3. Required files present
+  2. Required files present (incl. one entry point per stage)
+  3. Canonical rule IDs defined, no dangling references
+  4. Router suite structure: categories, rules, modes, run history
+  5. Duplicated sentences (source-of-truth violations)
 
 Usage:  python scripts/check.py [--verbose]
 Exit:   0 clean, 1 problems found.
@@ -28,7 +30,11 @@ REQUIRED = [
     "CHANGELOG.md",
     "templates/PROJECT.md", "templates/DESIGN.md",
     "templates/HANDOFF.md", "templates/QA.md",
-    "prompts/project-start.md", "prompts/project-review.md",
+    # one entry point per active stage -- the v0.3 gap this closes
+    "prompts/project-start.md", "prompts/design-direction.md",
+    "prompts/build-kickoff.md", "prompts/project-review.md",
+    "prompts/retrospective.md",
+    "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
 ]
 
@@ -132,11 +138,65 @@ def check_rule_ids():
     referenced = collections.defaultdict(set)
     for path in md_files():
         text = open(path, encoding="utf-8").read()
-        for rid in set(re.findall(r"\bR-[A-Z]{3,4}-\d\b", text)):
+        for rid in set(re.findall(r"\bR-[A-Z]{2,8}-\d+\b", text)):
             referenced[rid].add(rel(path))
 
     dangling = {r: f for r, f in referenced.items() if r not in RULE_IDS}
     return missing, dangling
+
+
+# Router suite guard. Structure only -- whether a case still PASSES needs a
+# reasoning agent, not a script. This catches the cheap failures: the suite
+# vanishing, a category being dropped, or a case citing a rule/mode that no
+# longer exists.
+ROUTER_SUITE = "tests/router-cases.md"
+REQUIRED_CATEGORIES = [
+    "Core cases", "CREATE with a reference", "ANALYZE",
+    "Portfolio wording", "TRANSFORM", "RESTART",
+    "Anti-generic intent", "Constraint preservation",
+]
+MODES = [
+    "client-or-portfolio", "product-app", "game-experiment",
+    "content-system", "audit-review",
+]
+
+
+def check_router_suite():
+    problems = []
+    path = os.path.join(ROOT, ROUTER_SUITE)
+    if not os.path.exists(path):
+        return [f"{ROUTER_SUITE} is missing -- the router cannot be safely changed without it"]
+
+    text = open(path, encoding="utf-8").read()
+
+    # Must appear in a real "## Category N -- Name" heading. A plain substring
+    # search over the whole file was vacuous: category words also occur in the
+    # Expect column, so a renamed heading still passed. Caught by negative test.
+    heading_re = r"(?m)^##\s+Category\s+\d+[^\r\n]*"
+    headings = " | ".join(re.findall(heading_re, text))
+    for cat in REQUIRED_CATEGORIES:
+        if cat not in headings:
+            problems.append(f"missing required category heading: {cat}")
+
+    # every rule ID cited by a test must be canonical
+    for rid in sorted(set(re.findall(r"\bR-[A-Z]{2,8}-\d+\b", text))):
+        if rid not in RULE_IDS:
+            problems.append(f"cites non-canonical rule {rid}")
+
+    # every mode named must still exist as a mode file
+    for mode in sorted(set(re.findall(r"\b(?:" + "|".join(MODES) + r")\b", text))):
+        if not os.path.exists(os.path.join(ROOT, "modes", mode + ".md")):
+            problems.append(f"references deleted mode: {mode}")
+
+    # guard against a mode being removed from the repo but left in the suite
+    for f in os.listdir(os.path.join(ROOT, "modes")):
+        if f.endswith(".md") and f[:-3] not in MODES:
+            problems.append(f"mode {f[:-3]} exists but is not in the suite's MODES list")
+
+    if "## Result log" not in text:
+        problems.append("no Result log section -- regressions are invisible without run history")
+
+    return problems
 
 
 def main():
@@ -173,6 +233,15 @@ def main():
                 print(f"        {f}")
     else:
         print(f"ok    rule IDs: {len(RULE_IDS)} defined, no dangling references")
+
+    suite_problems = check_router_suite()
+    if suite_problems:
+        failed = True
+        print(f"FAIL  router suite: {len(suite_problems)} problem(s)")
+        for p in suite_problems:
+            print(f"        {p}")
+    else:
+        print(f"ok    router suite: {len(REQUIRED_CATEGORIES)} categories, rules and modes valid")
 
     dupes = check_duplicates()
     if dupes:

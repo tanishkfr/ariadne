@@ -10,6 +10,50 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.3.1 — 2026-08-21 · READY FOR V1 VALIDATION
+
+Four structural blockers from the V1 readiness review, closed. **No redesign.** No new modes, skills, roles, or frameworks.
+
+### P0.1 — Stage entry gap closed
+
+v0.3 had entry points for **2 of 7 stages**. S3 — design direction, the stage the whole system exists to protect — had none. You were expected to know to open `skills/design-direction.md`, read `templates/DESIGN.md`, and compose your own prompt.
+
+Added [prompts/design-direction.md](prompts/design-direction.md), [prompts/build-kickoff.md](prompts/build-kickoff.md), [prompts/retrospective.md](prompts/retrospective.md). Each stage now **ends by naming the next entry point**, and [WORKFLOW.md](WORKFLOW.md) carries an entry-point column so a future gap is visible in the stage table itself.
+
+*Cause: the readiness review traced the first 30 minutes literally and found design thinking beginning at minute 30 with no support. The predicted failure was pasting DESIGN-TASTE into a chat and skipping reference analysis, the thesis test, and G1 — the three mechanisms that prevent generic output.*
+
+### P0.2 — Router regression suite restored
+
+[tests/router-cases.md](tests/router-cases.md): **42 cases across 8 categories**, each citing the rule that justifies it, with an append-only result log.
+
+`check.py` now guards its structure — categories present as headings, rules canonical, modes not deleted, run history intact.
+
+**The guard was vacuous on first write and a negative test caught it.** The category check matched substrings anywhere in the file, so a renamed heading passed; and the rule-ID regex was too narrow to match a deliberately malformed ID, so a fabricated rule reference was reported valid. Both fixed, then re-tested: the guard now fails on both.
+
+*Cause: v0.2 deleted `validation/` for having no consumer. Right about dry-run narratives, wrong about executable test cases — their consumer is every future router change.*
+
+### P0.3 — Learning loop closed
+
+**A retrospective no longer edits Builder OS.** It produces proposals; you approve them.
+
+Four qualification tests (recurs · evidence · names a specific rule · survives the deletion test) and a change-proposal format in [templates/RETROSPECTIVE.md](templates/RETROSPECTIVE.md); approval, regression and freeze thresholds in this file. Deletions are proposable and explicitly encouraged. **No new document.**
+
+*Cause: the loop was "edit the file and log it" — an instruction, not a loop. Nothing distinguished a system-level lesson from a project annoyance, which is the mechanism that produced 71 files.*
+
+### P0.4 — Three safety ambiguities resolved
+
+Worktrees: creation Green, **two agents on one branch Amber**. Preview deploys: Green once connected, **connecting the repo is itself Amber** — an external-account action. Analytics: **instrumentation is Amber, pasted numbers are Green** — one word, two actions, now named separately.
+
+### Not done, deliberately
+
+No visual regression · no project-level automation script · no product-app validation · no adapter verification beyond one provider · no template trimming. Each is deferred pending evidence, per the thresholds above.
+
+### Status
+
+**READY FOR V1 VALIDATION.** Structural work is complete and mechanically verified. **Zero real projects have run through this system.** The three tests in [tests/validation-protocol.md](tests/validation-protocol.md) are what earn v1.0.0 — nothing before them is evidence about real work.
+
+---
+
 ## 0.3.0 — 2026-08-21
 
 **The router now routes on intent, not keywords.** The v0.2.1 stress test failed 4 of 8; the failures were not eight bugs but four structural causes, and patching phrases would have produced a longer keyword table with the same defect.
@@ -143,55 +187,53 @@ Superseded the same day, after an audit found: **49 verbatim duplicated sentence
 
 ---
 
-## The 30-day check
+## Validation status
 
-Find out whether this helps, using real projects. **Do not run synthetic benchmarks** — run the work you were going to run anyway and record what happens.
+**READY FOR V1 VALIDATION** — not v1.0.0.
 
-### Before day 1
+Three real-world tests are defined in [tests/validation-protocol.md](tests/validation-protocol.md).
+**None have been run.** Builder OS does not earn the v1.0.0 tag until at least Test A and Test B
+are complete, because nothing before that point is evidence about real work.
 
-- [ ] `corepack enable` — pnpm is not installed and every default assumes it
-- [ ] Confirm the ₹650 Cursor India plan and your real ChatGPT charge **at checkout**; write both into [BUDGET-POLICY.md](BUDGET-POLICY.md) with the date
-- [ ] Record your baseline honestly: how long did your last project take, and what would it score?
+Before day 1: `corepack enable` (pnpm is not installed) · confirm the Cursor India and ChatGPT
+prices **at checkout** and date them in [BUDGET-POLICY.md](BUDGET-POLICY.md) · record your baseline
+honestly — how long did your last comparable project take, and what would you have shipped?
 
-### Week 1 — one small project, full process
+---
 
-[game-experiment](modes/game-experiment.md) mode end to end. Record time per stage · which gates fired · where the router asked a wrong question.
+## The change process
 
-**The test:** does the light S3 produce something less generic than your usual first attempt? That is the system's core claim and the cheapest place to falsify it.
+**A retrospective proposes. Tanishk approves. Only then does a file change.** Nothing else may
+mutate Builder OS — not a build session, not a review, not a good idea mid-project.
 
-### Week 2 — one real project
+| Step | Who | Output |
+|---|---|---|
+| Observation | Anyone, during work | A line in the project's `RETROSPECTIVE.md` |
+| Lesson candidate | Strategist at S6 | Passes all four qualification tests, or is dropped |
+| Change proposal | Strategist | The block in [templates/RETROSPECTIVE.md](templates/RETROSPECTIVE.md) 4b |
+| **Approval** | **Tanishk. Always.** | approve · defer · reject |
+| Change | Strategist | One file, exactly as the proposal quoted it |
+| **Regression** | Deterministic | `python scripts/check.py` · plus [tests/router-cases.md](tests/router-cases.md) if routing was touched |
+| Log | Strategist | An entry below, naming the **cause** |
 
-[client-or-portfolio](modes/client-or-portfolio.md). Record whether G1 caught anything before building · whether `HANDOFF.md` was sufficient or context got re-derived · which stage consumed the most usage.
+**If a regression check fails, revert.** The system is text; rollback is free and should be used
+rather than debated.
 
-**The test:** did separating deciding from building save usage, or just add ceremony?
+**Rejected and deferred proposals are not logged here** — they stay in the project's retrospective.
+This file records what changed, not what was considered.
 
-### Week 3 — stress the weak points
+### Additions require evidence
 
-Pick two:
+After V1 the burden inverts: the default answer to any addition is no.
 
-- **Router accuracy** — five deliberately ambiguous requests: *"build me something for my studio"* · *"a tool for tracking my reading"* · *"make my site better"* · *"I don't know what I want, just something memorable"* · *"make this an interactive installation"*. Each should return **Low confidence and one question**, not a confident guess.
-- **Tool portability** — hand the same `HANDOFF.md` to two runners.
-- **Audit honesty** — review your own week-2 output in a fresh session.
-- **Anchored scoring** — does requiring a cited comparison actually stop the score clustering at 4?
-
-### Week 4 — decide
-
-| Question | Evidence |
+| To add | Evidence required |
 |---|---|
-| Is the output measurably less generic? | Scores vs baseline |
-| Did the process cost more than it returned? | Time per stage |
-| Which documents did you actually read? | Honest recall |
-| Which were written and never opened? | **Delete them.** |
-| Which gates were useful, and which always got waived? | The gate log |
-| Is ₹2,649 the right configuration? | [BUDGET-POLICY.md](BUDGET-POLICY.md) |
-
-**If it is not working, it is more likely too heavy than too light. Cut first, add second.**
-
-### The success criterion, set now
-
-> **After 30 days, at least one piece of work exists that would not have been as good without this system — and you can name the specific rule that made the difference.**
-
-If you cannot name the rule, the system did not do it. Anything else is confirmation bias, which is what a benchmark exists to prevent.
+| A new **mode** | Multiple real projects routed badly, *and* a genuinely distinct workflow — different documents, questions, gates, QA. Not just different subject matter. |
+| A new **skill** | A method you could not derive from an existing policy, needed on two projects. A checklist belongs in a policy. |
+| A new **policy** | The same decision made badly twice for lack of a stated rule. |
+| A new **script** | The manual version ran three times and caught something at least once. |
+| A new **role** | **Unique authority** — something it can approve or reject that no existing role can. A review lens is not a role. |
+| A new **document** | A named consumer, a stage, and a decision it changes. If it cannot answer all three, it is a section of an existing file. |
 
 ---
 

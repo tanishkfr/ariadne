@@ -22,13 +22,27 @@ Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](WORKFLOW.
 
 ---
 
+## The stage map
+
+| Stage | Paste this | Into |
+|---|---|---|
+| Start anything | [prompts/project-start.md](prompts/project-start.md) | Reasoning tool |
+| Design direction (**G1**) | [prompts/design-direction.md](prompts/design-direction.md) | Reasoning tool |
+| Build | [prompts/build-kickoff.md](prompts/build-kickoff.md) | Build tool, fresh session |
+| Review (**G3**) | [prompts/project-review.md](prompts/project-review.md) | **Fresh session** |
+| Retrospective | [prompts/retrospective.md](prompts/retrospective.md) | Reasoning tool |
+| A post | [prompts/content-system.md](prompts/content-system.md) | Reasoning tool |
+| Portfolio feedback | [prompts/portfolio-evaluation.md](prompts/portfolio-evaluation.md) | **Fresh session** |
+
+Each one ends by naming the next. Follow the chain rather than this table.
+
 ## By situation
 
 ### "I have an idea"
 
 1. Paste [prompts/project-start.md](prompts/project-start.md) into the reasoning tool.
 2. Answer up to 5 questions.
-3. Follow the Routing Block's **First action**.
+3. Paste [prompts/design-direction.md](prompts/design-direction.md) when it hands it to you.
 
 Do not open an editor. Do not pick a framework. Do not start a repo.
 

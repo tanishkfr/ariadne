@@ -85,6 +85,14 @@ BE HONEST
 nobody else will say out loud, and it is the most actionable thing you can tell
 me, because it points at the direction rather than at polish. Do not soften a
 verdict to be encouraging.
+
+END WITH THIS, FILLED IN:
+
+  NEXT: <one of>
+    - Fix and re-review  -> the blocking findings, then run this prompt again
+    - Restart the direction -> say so plainly in the project session;
+      the router recognises it (R-INT-1) and preserves research and assets
+    - Ship  -> G4 approval, then paste prompts/retrospective.md
 ```
 
 ---

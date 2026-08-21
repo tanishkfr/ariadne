@@ -74,8 +74,11 @@ Builder OS/
 ├─ modes/        5
 ├─ adapters/     3   codex / cursor / claude-code
 ├─ references/   2   visual references, UI libraries
-├─ prompts/      4   start, review, portfolio, content
-└─ scripts/          check.py — links, required files, rule IDs, duplicates
+├─ prompts/      6   start, direction, build, review, portfolio, content,
+│                    retrospective — one entry point per stage
+├─ tests/            router-cases.md (regression suite),
+│                    validation-protocol.md (3 real-world tests, unrun)
+└─ scripts/          check.py — links, files, rule IDs, suite, duplicates
 ```
 
 ## Principles
@@ -108,4 +111,8 @@ Builder OS/
 
 Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
-**Still not validated by a real project.** Run `python scripts/check.py` after any edit. The 30-day check in [CHANGELOG.md](CHANGELOG.md) is how this stops being a guess.
+**Status: READY FOR V1 VALIDATION — not v1.0.0.** Every stage now has an entry point and the router
+suite is back in the repo, but **no real project has been through it.** The three tests in
+[tests/validation-protocol.md](tests/validation-protocol.md) are what earn the v1.0.0 tag.
+
+Run `python scripts/check.py` after any edit.

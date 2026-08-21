@@ -2,15 +2,16 @@
 
 Stages, gates, roles, and what an agent may do without asking. One file, because in practice you need all four at once.
 
-| Stage | Name | Role | Produces | Ends at |
-|---|---|---|---|---|
-| **S0** | Route | Strategist | Routing Block | Mode agreed |
-| **S1** | Discover | Strategist | `PROJECT.md` | Scope agreed |
-| **S2** | Research | Strategist | `RESEARCH.md` *(conditional)* | Facts dated |
-| **S3** | Direct | Design director + Architect | `DESIGN.md` (+`ARCHITECTURE.md`) | **G1** |
-| **S4** | Build | Implementer | Working code | Build passes |
-| **S5** | Verify | Implementer, then Reviewer | `QA.md` | **G3** |
-| **S6** | Ship & Learn | Implementer + Strategist | Deploy, `RETROSPECTIVE.md` | **G4** |
+| Stage | Name | Entry point | Role | Produces | Ends at |
+|---|---|---|---|---|---|
+| **S0-S1** | Route + Discover | [prompts/project-start.md](prompts/project-start.md) | Strategist | Routing Block, `PROJECT.md` | Scope agreed |
+| **S2** | Research | *(inside S1/S3, on trigger)* | Strategist | `RESEARCH.md` *(conditional)* | Facts dated |
+| **S3** | Direct | [prompts/design-direction.md](prompts/design-direction.md) | Design director + Architect | `DESIGN.md` (+`ARCHITECTURE.md`) | **G1** |
+| **S4** | Build | [prompts/build-kickoff.md](prompts/build-kickoff.md) | Architect, then Implementer | `HANDOFF.md`, working code | Build passes |
+| **S5** | Verify | *(mechanical: in build-kickoff)* → [prompts/project-review.md](prompts/project-review.md) | Implementer, then Reviewer | `QA.md` | **G3** |
+| **S6** | Ship & Learn | [prompts/retrospective.md](prompts/retrospective.md) | Implementer + Strategist | Deploy, `RETROSPECTIVE.md` | **G4** |
+
+**Every stage ends by naming the next entry point.** You should never finish a stage and have to browse this repository to work out what happens next. A stage that ends in "let me know how you would like to proceed" has failed.
 
 Routing: [ROUTER.md](ROUTER.md). Tools: [MODEL-ROUTING.md](MODEL-ROUTING.md).
 
@@ -126,7 +127,7 @@ Agents move fast on reversible things and stop dead on irreversible ones. The te
 
 ### Green — proceed, report after
 
-Read any project file · create and edit files it made this session · branch and worktree · run dev server, production build, typecheck, lint, formatter · run tests, Playwright, Lighthouse · drive a browser against localhost or a preview · generate documentation and screenshots · refactor within the current task · commit locally to a non-default branch · search the web.
+Read any project file · create and edit files it made this session · branch and worktree *(one branch per worktree — two agents on one branch is Amber)* · run dev server, production build, typecheck, lint, formatter · run tests, Playwright, Lighthouse · drive a browser against localhost or a preview · generate documentation and screenshots · refactor within the current task · commit locally to a non-default branch · search the web.
 
 Autonomy is not silence. Green work still reports what it did.
 
@@ -143,11 +144,11 @@ Autonomy is not silence. Green work still reports what it did.
 | Deleting or overwriting files the agent did not create | — |
 | `git reset --hard`, force push, history rewrite, branch deletion | — |
 | Modifying files outside the project directory | — |
-| Adding auth, a database, a CMS, an admin panel, or analytics | Scope change |
+| Adding auth, a database, a CMS, an admin panel, or **analytics instrumentation** | Scope change |
 | Uploading client material to a third-party service | [PRIVACY-POLICY.md](PRIVACY-POLICY.md) |
 | Changing `PROJECT.md` non-goals | Scope change |
 
-Preview deploys on a feature branch are Green if the repo is already connected. Production is always Amber.
+Preview deploys on a feature branch are Green **once the repo is already connected**. **Connecting the repo to a deployment platform is itself Amber** — it is an external-account action, and an agent may prepare it but not complete it. Production is always Amber.
 
 ```
 SHIP REQUEST
