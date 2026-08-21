@@ -10,6 +10,27 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.2.1 — 2026-08-21
+
+Router stress test run against the eight cases in section "Week 3" below. **3 PASS, 4 FAIL, 1 FRICTION.** Fixes applied to what was authorised; the routing failures are recorded here undecided.
+
+### Fixed
+
+- **game-experiment input/display defaults.** Question 2 had a default of "keyboard and mouse, desktop-first" and the assumptions table said "desktop-first". For an installation or a phone piece every one of those is wrong, and the router batches questions *with defaults* so "all defaults" silently produced a desktop build. Question 2 now has **no default**, and installations route here explicitly rather than needing a sixth mode.
+  *Cause: stress case 6, "make this into an interactive installation". Confirmed by inspection — the three physical projects in this workspace are all web tech (Capacitor, kiosk browser), so the gap was the defaults, not a missing mode.*
+- **Secret protection documented as portable and manual** ([QA-POLICY.md](QA-POLICY.md) section 9). Hooks in `.git/hooks` do not survive a clone, so the hook lives in a committed `.githooks/` directory and `core.hooksPath` is set per clone. `templates/AGENTS.md` now carries a **status line stating whether it is installed**, because nothing installs it automatically and an agent must not assume a net exists.
+- **Scorecard leftovers from 0.2.0.** `skills/design-direction.md` still instructed a self-scored G1 with a "below 35" threshold, directly contradicting the 0.2.0 change; `templates/DESIGN.md` still carried a `Scorecard: <n>/50` field directly above a section reading "not scored". Also a stale section reference.
+  *Cause: found while trimming DESIGN.md. The duplicate-sentence checker cannot catch a contradiction between two differently-worded rules — only a human reading can.*
+
+### Known failures, not yet fixed
+
+1. **Tie-break 1 is too aggressive** ([ROUTER.md](ROUTER.md) 3.2). "An existing artifact is supplied → Audit/review, unless the request says rebuild or redesign." The exception list is missing `like`, `inspired by`, `in the style of`, `into`, and `based on`. Causes 2 of 8 failures: "build something like Burocratik" and "make this into an installation" both route to critique instead of build.
+2. **Accepted-pattern counting is undefined** ([ROUTER.md](ROUTER.md) 10). "SaaS dashboard with 17 cards and glassmorphism" is either 3 acceptances (proceeds) or 4 (router halts) depending on how rows are counted. At the boundary the escape hatch re-creates the fight it was built to end.
+3. **"portfolio" does not distinguish container from contents.** "Something cool for my portfolio" scores one clean signal → High confidence → builds a website, when it probably meant a piece to put in one.
+4. **Nothing routes to the restart procedure.** Section 11 is complete but no signal fires on "scrap the direction"; you only reach it by knowing it exists.
+
+---
+
 ## 0.2.0 — 2026-08-21
 
 Restructured after an independent audit of v0.1.0. **71 files to 49.** No rule was lost; several got one home instead of four.

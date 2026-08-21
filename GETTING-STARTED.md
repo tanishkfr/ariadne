@@ -123,7 +123,7 @@ If you remember nothing else:
 2. **The tool that decides is not the tool that builds.** `HANDOFF.md` is how they talk. It exists so decisions are never re-derived — which is what burns your usage limits.
 3. **Every value comes from the token system.** Hardcoded colours and sizes are how a locked direction drifts back to default.
 4. **Reviews run in a fresh session.** Independence is the whole point.
-5. **Score honestly.** A scorecard that always returns 44 measures nothing and its only effect is to make you feel finished.
+5. **The direction is checked by you at G1, and scored later by a session that did not write it.** Scoring your own direction clusters at 4 and measures nothing.
 
 ---
 

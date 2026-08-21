@@ -89,6 +89,13 @@ Then wait for a decision. **Silent substitution is how art-directed work degrade
 - **Do not push or deploy without explicit approval** (G4).
 - Commit messages: what changed and why, not "updates".
 
+**Secret protection status for this repo:** `<not set up | .githooks installed on DATE>`
+
+> A pre-commit hook may or may not exist here. **Do not assume it does.** If that line says
+> "not set up", `git status` before `git add` is the only thing protecting this repository.
+> Setup is manual and per-clone — see [QA-POLICY.md](../QA-POLICY.md) section 9.
+> An agent must never treat the hook's presence as a reason to skip checking what is staged.
+
 ## Approval required
 
 Ask before: installing any dependency (G2), pushing or deploying (G4), using a secret or environment variable, deleting files you did not create, `git reset --hard` or force push, adding auth / a database / a CMS / analytics, or any paid service.

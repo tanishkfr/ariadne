@@ -3,15 +3,15 @@
 > Template. Owner: Design director · Stage: S3 · Skill: [design-direction](../skills/design-direction.md)
 > Rules: [DESIGN-TASTE.md](../DESIGN-TASTE.md). **Approved at G1 before anything is built.**
 
-**Status:** <draft | locked at G1 on (date)> · **Scorecard:** <n>/50
+**Status:** <draft | locked at G1 on (date)>
 
 ---
 
 ## Design thesis
 
 > One sentence naming the organising idea.
-> Test: does it tell you what to do when someone asks for a hero image? If not, it is a mood.
-> Banned words: clean, modern, minimal, premium, sleek, elegant.
+> **Test: does it tell you what to do when someone asks for a hero image?** If not, it is a mood.
+> Banned: clean, modern, minimal, premium, sleek, elegant.
 
 **<the sentence>**
 
@@ -19,20 +19,19 @@
 
 ## Emotional target
 
-> What someone should feel in the first five seconds, and what they should remember a day later.
-
 - **First five seconds:** <>
 - **Remembered a day later:** <>
 
 ## Visual references
 
-| Reference | Mechanism taken | Max 2 per reference |
-|---|---|---|
-| <url> | <mechanism, not surface> | |
-
-> A mechanism transfers to a different subject. A surface does not.
+> Mechanisms, not surfaces — a mechanism transfers to a different subject.
 > Surface: "black background with big white serif type."
-> Mechanism: "a single achromatic field so type scale alone carries hierarchy."
+> Mechanism: "a single achromatic field, so type scale alone carries hierarchy."
+> Method: [reference-analysis](../skills/reference-analysis.md).
+
+| Reference | Mechanism taken (max 2 each) |
+|---|---|
+| <url> | <> |
 
 ## What to borrow
 
@@ -58,15 +57,13 @@
 | Display face | <> | <> |
 | Text face | <> | <> |
 | Scale ratio | <> | <> |
-| Size range | <smallest> to <largest> | Ratio: <n>x — [DESIGN-TASTE.md](../DESIGN-TASTE.md) 2.3 wants extreme |
+| Size range | <smallest> to <largest> | Ratio: <n>x — **4x minimum** |
 | Display leading | <> | Tight: 0.9-1.05 |
 | Body leading | <> | Generous: 1.5-1.7 |
 | Tracking | <by size> | Negative at large, positive at small |
-| Licence | <> | See [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) 9 |
+| Licence | <> | [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) 9 |
 
 ## Palette
-
-> Achromatic base first. One accent. Colour has a source.
 
 | Token | Value | Role |
 |---|---|---|
@@ -74,7 +71,7 @@
 | `--fg` | <> | |
 | `--accent` | <> | |
 
-**Source of the palette:** <where it came from — brand, subject, era, material. "It looked nice" is not a source.>
+**Source of the palette:** <brand, subject, era, material. "It looked nice" is not a source.>
 
 **Dark mode:** <yes / no / N-A> — <why>
 
@@ -82,18 +79,19 @@
 
 - **Grid:** <columns, gutters, margins>
 - **Where it breaks, and why:** <>
-- **Edge behaviour:** <full-bleed / hard margins / elements running off-canvas>
+- **Edge behaviour:** <full-bleed / hard margins / off-canvas>
 - **Density:** <sparse / dense — and why the subject demands it>
-- **Vertical rhythm:** <how section spacing varies, and what varies it>
+- **Vertical rhythm:** <what varies section spacing>
 
 ## Interaction principles
 
-> How the interface responds. Hover, focus, active, drag, scroll.
-> Every hover-dependent behaviour needs a touch equivalent — record it here, not at S5.
+> **Every hover-dependent behaviour needs a touch equivalent — recorded here, not discovered at S5.**
+
+<hover, focus, active, drag, scroll>
 
 ## Motion principles
 
-> What motion is FOR in this project. See [DESIGN-MOTION.md](../DESIGN-MOTION.md).
+> [DESIGN-MOTION.md](../DESIGN-MOTION.md).
 
 - **Purpose of motion here:** <orientation / feedback / continuity / hierarchy / character>
 - **Timing set:** response <ms>, transition <ms>, narrative <ms>
@@ -104,24 +102,22 @@
 
 > [DESIGN-TASTE.md](../DESIGN-TASTE.md) 1.4. Built FIRST at S4.
 
-- **What:** <>
-- **Where:** <>
+- **What / where:** <>
 - **Why memorable:** <>
 - **Mobile equivalent:** <mandatory — a hover-based moment does not exist on a phone>
 
 ## Asset direction
 
-> Resolved at S3, never at S4. See [DESIGN-ASSETS.md](../DESIGN-ASSETS.md).
+> [DESIGN-ASSETS.md](../DESIGN-ASSETS.md). **If the direction depends on assets that cannot be made, change the direction.**
 
 | Asset | Exists? | Plan | Blocking? |
 |---|---|---|---|
 | <> | yes/no | <real / generate / typographic substitute / cut> | |
 
-**If the direction depends on assets that do not exist and cannot be made, change the direction.**
-
 ## Responsive behaviour
 
 > How the direction *changes* at each size — not how it shrinks.
+> Sizes here should match the real display target, which for an installation or a phone piece is not this list.
 
 | Width | Composition |
 |---|---|
@@ -132,21 +128,29 @@
 
 ## Anti-patterns for this project
 
-> This project's specific rejection list, beyond the global table in [DESIGN-TASTE.md](../DESIGN-TASTE.md) 8.
+> Beyond the global table in [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6.
 > Minimum three. "Avoid generic design" is not one.
 
 1. <>
 2. <>
 3. <>
 
+## Accepted patterns
+
+> Blocking patterns chosen deliberately, carried over from `PROJECT.md`. Maximum three.
+> If this section has entries, the direction must still work *because* of them, not despite them.
+
+| Pattern | Because |
+|---|---|
+
 ---
 
 ## G1 direction check
 
-> Qualitative, not scored. **Numeric scoring happens at S5 by a reviewer who did not write this** —
-> see [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) for why.
+> Qualitative, **not scored.** Numeric scoring happens at S5, by a reviewer who did not write this
+> ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
 >
-> **Any "no" is a blocker.** Full list: [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6.
+> **Any "no" is a blocker.**
 
 | # | Check | Y/N | If no, why not |
 |---|---|---|---|

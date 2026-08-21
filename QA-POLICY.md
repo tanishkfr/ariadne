@@ -143,6 +143,35 @@ pnpm build && pnpm start   # verify the production build locally
 git status                 # BEFORE git add. Every time.
 ```
 
+### Secret protection — set up once per repository, by you
+
+**Nothing in the Builder OS installs this.** It is a manual step, it is not automatic, and if you skip it there is no safety net — `git status` discipline is all that stands between you and a committed key.
+
+`.git/hooks/` is not committed, so a hook placed there does not travel with the repo and does not survive a fresh clone. The portable form keeps the hook **inside** the repository and points git at it:
+
+```bash
+mkdir -p .githooks
+cat > .githooks/pre-commit <<'HOOK'
+#!/bin/sh
+# Blocks committing env files and obvious credentials. Not exhaustive.
+if git diff --cached --name-only | grep -Eq '(^|/)\.env($|\.)|(^|/)(id_rsa|\.pem|credentials\.json)$'; then
+  echo "BLOCKED: an env or credential file is staged."
+  echo "Check 'git status'. If this is intentional, commit with --no-verify."
+  exit 1
+fi
+if git diff --cached -U0 | grep -Eq '(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})'; then
+  echo "BLOCKED: staged changes look like they contain an API key."
+  exit 1
+fi
+HOOK
+chmod +x .githooks/pre-commit
+git config core.hooksPath .githooks
+```
+
+The hook file is committed and travels with the repo. **The `git config` line is per-clone and per-machine** — anyone cloning the repo, including you on another machine, must run it again or the hook silently does nothing.
+
+**What this does not do:** catch secrets already in history · catch a key pasted into a chat · catch formats it does not know · protect a clone where `core.hooksPath` was never set. It is a backstop for one common mistake, not a security control. `--no-verify` bypasses it entirely, which is the point — it must not block legitimate work.
+
 The most common secret leak is a `.env` committed before `.gitignore` existed. Confirm `.gitignore` covers `.env*`, credentials, build output, and any private asset directory.
 
 Push the branch (**G4**), then **verify on the preview, not localhost** — this is where you find missing environment variables, broken image optimisation, real font loading, and anything that depended on a local file. Re-run section 7 there.

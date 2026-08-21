@@ -8,9 +8,11 @@ Compressed, not skipped. The compression is the point: heavy process on a two-da
 
 ## Detection
 
-**Signals:** "game", "experiment", "class", "assignment", "playable", "sketch", "toy", "try", "prototype".
+**Signals:** "game", "experiment", "class", "assignment", "playable", "sketch", "toy", "try", "prototype", "installation", "interactive piece", "tangible".
 
-**Not this mode if:** it is going in the portfolio as a finished piece (personal portfolio), or it has accounts and persistence (product app).
+**Not this mode if:** it has accounts and persistence ([product app](product-app.md)), or the deliverable is a site rather than a piece ([client or portfolio](client-or-portfolio.md)).
+
+**Installations and physical pieces route here.** They are not a separate mode — they are this mode with a different input and display target, which question 2 establishes. Web tech usually still applies: a Capacitor build on a tablet, a kiosk browser, a projected canvas. What changes is the composition, not the stack.
 
 **Mode switch warning:** experiments that grow login screens have become product apps. Re-fire the router ([ROUTER.md](../ROUTER.md) 3.4) rather than quietly upgrading.
 
@@ -21,7 +23,7 @@ Compressed, not skipped. The compression is the point: heavy process on a two-da
 Three, not five. This mode is about starting.
 
 1. **What is the core mechanic, in one sentence?** — no default
-2. **Input device — keyboard, mouse, touch, gamepad?** — default: keyboard and mouse, desktop-first
+2. **What is the input, and what is it displayed on?** — **no default.** Keyboard on a laptop, touch on a phone, a sensor, a controller, a projector, a physical object. This question decides the rendering target, the interaction model, and half the design direction. Do not assume a desktop browser.
 3. **Is this graded, and against what rubric?** — default: not graded
 
 If graded, **the rubric replaces the quality bar below.** Ask for it and follow it; a marking scheme is a client brief.
@@ -34,9 +36,9 @@ If graded, **the rubric replaces the quality bar below.** Ask for it and follow 
 |---|---|
 | Scope | One mechanic, done well. Not a game with menus, levels, and progression. |
 | Persistence | None. Refresh resets. |
-| Rendering | DOM/CSS if it can be; Canvas when it must be; WebGL only if 3D is the point |
-| Audio | None unless the mechanic needs it |
-| Mobile | Desktop-first; mobile only if touch is the input |
+| Rendering | DOM/CSS if it can be; Canvas when it must be; WebGL only if 3D is the point. Web tech still applies when the output is physical — Capacitor, a kiosk browser, or a projector all run the same build. |
+| Audio | None unless the mechanic needs it. For an installation, assume it does. |
+| Display target | **Whatever question 2 said.** A phone, a projection, a kiosk, an installation screen, and a laptop are five different compositions, not one design at five widths. |
 | Menus | Skip. Start in the game. |
 
 ---

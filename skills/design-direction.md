@@ -39,7 +39,7 @@ A decision without a reason traceable to the thesis is a decision that will drif
 
 **7. Resolve the asset question now** ([DESIGN-ASSETS.md](../DESIGN-ASSETS.md)). Does the direction depend on assets that do not exist? Either commission them, generate them ([DESIGN-ASSETS.md](../DESIGN-ASSETS.md)), or **change the direction so it does not need them.** A type-led direction eliminates the dependency entirely and is usually the better answer.
 
-**8. Score it.** The ten-criterion scorecard, [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md), scored against the *direction*. Below 35 means the direction is not ready — do not present it.
+**8. Run the G1 check.** The ten Y/N questions in [templates/DESIGN.md](../templates/DESIGN.md). **Any N is a blocker — do not present it.** Numeric scoring happens at S5, by a reviewer who did not write the direction ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
 
 ---
 
@@ -56,7 +56,7 @@ Motion:      <what motion is for here>
 Signature:   <the memorable moment + its mobile form>
 Rejects:     <this project's specific anti-patterns, 3+>
 Assets:      <resolved how>
-Scorecard:   <n>/50, lowest criterion named
+G1 check:    <the 10 checks from templates/DESIGN.md, each Y/N>
 Risks:       <what could make this fail>
 ```
 
@@ -66,7 +66,7 @@ Nothing is built until this is approved. If you cannot state what the direction 
 
 ## Done when
 
-Thesis written and testable · every choice traceable to it · signature moment named with a mobile equivalent · rejection list has 3+ specific entries · assets resolved · scorecard ≥35 · G1 approved.
+Thesis written and testable · every choice traceable to it · signature moment named with a mobile equivalent · rejection list has 3+ specific entries · assets resolved · **all ten G1 checks answered Y** · G1 approved.
 
 ---
 
@@ -79,5 +79,5 @@ Thesis written and testable · every choice traceable to it · signature moment 
 | Harmonious mechanisms producing a genre copy | Step 2 requires conflict |
 | Direction that only works at 1440px | Step 4 designs 375 as a composition, not a squash |
 | Signature moment deferred to S4 | Named at S3, built first |
-| Scoring the direction generously to move on | A scorecard that always returns 44 measures nothing |
+| Marking a G1 check Y to move on | Check 10 forces you to name the generic thing this is closest to |
 | Building before G1 because the deadline is tight | Waiting is cheaper than rebuilding. Always. |

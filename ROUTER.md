@@ -197,7 +197,7 @@ The Design director may argue against an acceptance. It may not override one.
 2. **Survives:** `PROJECT.md` (unless scope was the problem), `RESEARCH.md`, the token *system* (not its values), the architecture, anything mechanical.
 3. **Dies:** the thesis, the rejection list, the signature moment, and **every component whose form came from the old thesis.** Keeping "the good bits" is what produces incoherence — the bits were good *relative to a direction that no longer exists*.
 4. **Write down why it failed** before writing the new thesis. Put it in the new `DESIGN.md` under "What NOT to copy" — your own failed direction is a reference you must not repeat. This is the step that prevents restarting into the same place.
-5. **G1 re-fires.** Full presentation, new scorecard.
+5. **G1 re-fires.** Full presentation, all ten checks answered again.
 6. **Log it** in `RETROSPECTIVE.md`. Two restarts on one project means S1 was under-specified, not that the direction was unlucky.
 
 **Restarting is cheap at S3 and expensive at S5.** That asymmetry is the entire argument for G1.
