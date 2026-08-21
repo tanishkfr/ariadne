@@ -29,7 +29,7 @@
 
 ## Findings raised
 
-> From [frontend-build](../skills/frontend-build.md) step 7. Design could not be built as specified.
+> From [WORKFLOW.md](../WORKFLOW.md) step 7. Design could not be built as specified.
 > **Never resolved by silent substitution.**
 
 | # | Task | Specified | Problem | Options | Decision |

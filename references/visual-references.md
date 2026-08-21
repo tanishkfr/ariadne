@@ -37,24 +37,15 @@ Analysing them all now, out of context, would produce generic notes — which is
 
 **Three minimum, per [reference-analysis](../skills/reference-analysis.md).** One produces imitation. Two produce a blend. Three force synthesis, because three sources cannot all be satisfied at once — and the resolution is where originality comes from.
 
-**Two mechanisms maximum per reference.** Three or more means you are rebuilding that site.
-
 **Load the live site.** A screenshot shows composition and hides motion, pacing, and behaviour — which is usually where the quality actually is.
 
 ---
 
-## The six questions
+## Method
 
-For each reference ([DESIGN-TASTE.md](../DESIGN-TASTE.md) section 9):
-
-1. What is the **organising principle**? (grid, sequence, material, metaphor, constraint)
-2. What does the **type** do that a default would not?
-3. What is the **colour strategy**, and where did it come from?
-4. What does **motion** do structurally?
-5. What is **deliberately absent**?
-6. **Why does it feel expensive?**
-
-Then rewrite every answer as a mechanism. Test: could this apply to a completely different subject? If not, it is still a surface, and surfaces do not transfer.
+The six extraction questions, the mechanism test, and the two-per-reference cap are in
+[skills/reference-analysis.md](../skills/reference-analysis.md). Synthesis into a direction is
+[DESIGN-TASTE.md](../DESIGN-TASTE.md) section 7.
 
 ---
 

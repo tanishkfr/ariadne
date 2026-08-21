@@ -1,23 +1,15 @@
 # RESEARCH: <name>
 
-> Template. Owner: Researcher · Stage: S2 · Skill: [live-research](../skills/live-research.md)
+> Template. Owner: Researcher · Stage: S2 · Skill: [RESEARCH-POLICY.md](../RESEARCH-POLICY.md)
 > Policy: [RESEARCH-POLICY.md](../RESEARCH-POLICY.md)
-> **Every claim carries a date, a URL, and a confidence level. Anything missing one is not research — it is memory.**
+> **Every claim carries a date, a URL, and a confidence level.** Definitions, freshness windows, source
+> ranking, and how to handle disagreement all live in [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) — this is just the register.
 
 **Last updated:** <date>
 
 ---
 
-## Confidence
-
-| Level | Means |
-|---|---|
-| **Verified** | Seen on an official primary source, on the date shown |
-| **Reported** | Consistent across two or more independent secondary sources |
-| **Unverified** | Single weak source, user-reported, or verification was blocked |
-| **Contradicted** | Sources disagree — all versions recorded below |
-
-**Freshness:** pricing and limits go stale after **30 days**; library status after **90**. Re-verify before relying on an old row. Do not delete superseded rows — date them and keep the history.
+Confidence: **Verified** · **Reported** · **Unverified** · **Contradicted** — see [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 4.
 
 ---
 
@@ -36,7 +28,7 @@
 |---|---|---|---|---|
 | | <source, date> | <source, date> | <which> | <> |
 
-> Never average two numbers into a third that no source supports.
+
 
 ## Could not verify
 
@@ -44,7 +36,7 @@
 |---|---|---|
 | | <paywall / 403 / region lock / login> | <> |
 
-> **"I could not verify this" is a complete, valid research output.** A missing number is a small problem; a fabricated one is a decision made on fiction.
+> **"I could not verify this" is a complete, valid output.**
 
 ## Component and technique research
 
@@ -83,4 +75,4 @@
 |---|---|---|---|
 | | <1-2 / 5-8 / 10-15 lookups> | | resolved / reported unresolved |
 
-> Unbounded research is one of the main ways subscription usage disappears with nothing to show. Set the budget before searching, and stop when it is spent.
+> Set the budget before searching, and stop when it is spent ([RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 2).

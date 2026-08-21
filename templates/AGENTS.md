@@ -93,7 +93,7 @@ Then wait for a decision. **Silent substitution is how art-directed work degrade
 
 Ask before: installing any dependency (G2), pushing or deploying (G4), using a secret or environment variable, deleting files you did not create, `git reset --hard` or force push, adding auth / a database / a CMS / analytics, or any paid service.
 
-Full policy: [AUTONOMY-POLICY.md](../AUTONOMY-POLICY.md).
+Full policy: [WORKFLOW.md](../WORKFLOW.md).
 
 ## Out of scope
 

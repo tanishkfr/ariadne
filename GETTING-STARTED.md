@@ -58,7 +58,7 @@ This is the tool that **decides**. It does not write your code.
 2. Paste the setup instructions from [adapters/codex.md](adapters/codex.md).
 3. Upload two files to its knowledge: **[ROUTER.md](ROUTER.md)** and **[DESIGN-TASTE.md](DESIGN-TASTE.md)**.
 
-Those two carry most of the system's value. Do not upload all sixty files — you will pay for that context on every message, and it will not read them all anyway.
+Those two carry most of the system's value. Do not upload the whole system — you will pay for that context on every message, and it will not read them all anyway.
 
 ---
 
@@ -78,7 +78,7 @@ Claude Code works identically as a fallback — see [adapters/claude-code.md](ad
 
 Do not read the rest of the documentation first. Run something small and real.
 
-**Pick a [game-experiment](modes/game-experiment.md).** It is the lightest mode: three questions, four documents, and it finishes in a day.
+**Pick a [game-experiment](modes/game-experiment.md).** It is the lightest mode: three questions, two documents, and it finishes in a day.
 
 1. Copy [prompts/project-start.md](prompts/project-start.md).
 2. Paste it into your reasoning tool. Replace the last line with your idea.
@@ -109,9 +109,9 @@ Do not read all of it now. Read each file the first time you hit its stage.
 | First time an agent wants to install something | [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |
 | First time you run QA | [QA-POLICY.md](QA-POLICY.md) |
 | First review | [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md) |
-| First client project | [modes/premium-client-website.md](modes/premium-client-website.md), [PRIVACY-POLICY.md](PRIVACY-POLICY.md) |
+| First client project | [modes/client-or-portfolio.md](modes/client-or-portfolio.md), [PRIVACY-POLICY.md](PRIVACY-POLICY.md) |
 | Starting content | [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md) |
-| After 30 days | [modes/benchmark.md](modes/benchmark.md) section 2 |
+| After 30 days | [CHANGELOG.md](CHANGELOG.md) "30-day check" |
 
 ---
 
@@ -136,7 +136,7 @@ If you remember nothing else:
 | Using the reasoning tool to write code | Limits gone by mid-month | It writes `HANDOFF.md`, not components |
 | Pasting the codebase to ask one question | Same | Paste the interface and the error |
 | Approving a weak direction to start building | The thing you were trying to avoid | Reject moods; demand a thesis |
-| Filling in every template on a small project | Documentation nobody reads | Modes compress. Game mode gets 4 documents. |
+| Filling in every template on a small project | Documentation nobody reads | Modes compress. Game mode needs two documents. |
 
 ---
 
@@ -144,6 +144,6 @@ If you remember nothing else:
 
 It might be. **The honest fix is to cut, not to push through.**
 
-After 30 days, run the review in [modes/benchmark.md](modes/benchmark.md) section 2. Any document you wrote and never opened again should be deleted — a document nobody reads is worse than no document, because it creates the illusion of process.
+After 30 days, run the review in [CHANGELOG.md](CHANGELOG.md) "30-day check". Any document you wrote and never opened again should be deleted — a document nobody reads is worse than no document, because it creates the illusion of process.
 
-The success criterion is deliberately narrow: **one piece of work exists that would not have been as good without this system, and you can name the specific rule that made the difference.** If you cannot name the rule, the system did not do it.
+The success criterion is deliberately narrow, and it is in [CHANGELOG.md](CHANGELOG.md) under "The 30-day check".

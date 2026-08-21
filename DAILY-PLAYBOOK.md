@@ -123,12 +123,12 @@ The five that matter most ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 8):
 
 | Out of | Do |
 |---|---|
-| Reasoning (`R1`) | Stop deciding. Do specified `TASKS.md` work. **Never let the build tool invent direction.** |
+| Reasoning (`R1`) | Stop deciding. Do already-specified build work. **Never let the build tool invent direction.** |
 | Build (`R2`) | Tests, build fixes, cleanup, docs — or hand the same `HANDOFF.md` to the fallback runner |
 | Both | Mechanical QA, retrospectives, reference research. All human-doable. |
 | At S3 with no approved thesis | **Wait.** Waiting is cheaper than rebuilding. |
 
-**The rule:** when a class is unavailable, do work from a *different class* — never the same work at a lower class. Downgrading direction work to a fast model is how projects go generic without anyone noticing.
+**The rule:** when a class is unavailable, do work from a *different class* — never the same work at a lower class ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 9).
 
 ---
 
@@ -144,7 +144,7 @@ The five that matter most ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 8):
 - Re-verify anything in [BUDGET-POLICY.md](BUDGET-POLICY.md) older than 30 days.
 - Which subscription earned its cost this month?
 - Which Builder OS documents did you actually open? **Delete the ones you did not.**
-- At 30 days: [modes/benchmark.md](modes/benchmark.md) section 2.
+- At 30 days: [CHANGELOG.md](CHANGELOG.md) "30-day check".
 
 ---
 

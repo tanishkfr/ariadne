@@ -1,212 +1,184 @@
 # QA POLICY
 
-What must be true before work is shown to a human, and what evidence proves it.
+The mechanical half of S5: what must be true, and what evidence proves it. Run by the Implementer.
 
-Two halves, both mandatory: **mechanical** (does it work) and **judgement** (is it good). A build that passes every mechanical check and looks generic has failed QA. That rule is the reason this system exists.
+The judgement half — is it any good — runs in a **separate session** by a Reviewer who has not seen this file or the build context. That separation is deliberate: [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md).
 
-Owned by the QA engineer ([AGENT-ROLES.md](AGENT-ROLES.md)). Output: [templates/QA.md](templates/QA.md).
+**A build that passes everything here and scores 2/5 on creative direction has failed S5.** Both halves are pass/fail.
+
+Output: [templates/QA.md](templates/QA.md).
 
 ---
 
-## 1. The evidence rule
-
-Every check records one of three states:
+## The evidence rule
 
 | State | Requires |
 |---|---|
 | **Pass** | Command output, a measured number, or a screenshot |
-| **Fail** | The same evidence, plus severity and a proposed fix |
+| **Fail** | The same, plus severity and a proposed fix |
 | **Not run** | A reason |
 
-**"Looks fine" is not a QA result.** A check that was not run is recorded as *not run* — never as passed, never left blank. An honest gap is useful; a false pass is worse than no QA at all.
+**"Looks fine" is not a QA result.** A check that was not run is recorded as *not run* — never as passed, never blank. An honest gap is useful; a false pass is worse than no QA.
+
+## Severity
+
+**Blocking** (G3 cannot be granted) · **Major** (fix, or waive in writing) · **Minor** (polish) · **Note**
+
+Blocking by default: build failure · type error · console error · keyboard trap · missing focus states · contrast failure on body text · motion ignoring `prefers-reduced-motion` · broken layout at any tested width · a missing signature moment · any anti-generic row present.
+
+**Exception:** patterns declared as accepted in `PROJECT.md` ([ROUTER.md](ROUTER.md) section 10) drop from Blocking to Note. They still appear in the report.
 
 ---
 
-## 2. Severity
+## The escalation ladder
 
-| Level | Meaning | Effect |
-|---|---|---|
-| **Blocking** | Broken, inaccessible, or violates the design thesis | G3 cannot be granted |
-| **Major** | Noticeably wrong; a reviewer would comment | Fix before ship, or you waive it in writing |
-| **Minor** | Polish | Log it; fix if time allows |
-| **Note** | Observation, not a defect | Record only |
+Cheapest first. **Never skip a rung upward** — each catches what the next would spend far longer finding.
 
-Blocking by default: build failure, type error, console error, keyboard trap, missing focus states, contrast failure on body text, motion that ignores `prefers-reduced-motion`, broken layout at any tested width, a visual-quality criterion scored 1, and a missing signature moment.
+```
+1. Production build      free, seconds, catches the most
+2. Typecheck + lint      free, seconds
+3. Playwright script     free, repeatable, runs again tomorrow
+4. Browser agent         slow, but sees what a human sees
+5. Your own eyes         the only thing that catches "this feels wrong"
+```
+
+Rung 4 is where usage disappears. **Anything you will check twice becomes a Playwright script** — it costs about one browser-agent pass, then costs nothing forever.
 
 ---
 
-## 3. Mechanical checks
-
-Run in this order. Cheap and local first — every failure caught here is one a browser agent or a human did not have to find. See the escalation ladder in [MODEL-ROUTING.md](MODEL-ROUTING.md) section 6.
-
-### 3.1 Build
+## 1. Build, types, lint
 
 ```bash
-pnpm build
-```
-
-The **production** build, not the dev server. Dev-only passes are not evidence. Record: pass/fail, warnings, build time.
-
-### 3.2 Types
-
-```bash
-pnpm tsc --noEmit
-```
-
-Zero errors. `any` introduced during the task is a Major finding. `@ts-ignore` requires a comment explaining why, or it is Blocking.
-
-### 3.3 Lint and format
-
-```bash
+pnpm build          # PRODUCTION build, not the dev server
+pnpm tsc --noEmit   # zero errors
 pnpm lint
-pnpm format --check
 ```
 
-Zero errors. Warnings are triaged, not ignored wholesale. A rule disabled inline needs a reason on the same line.
+The dev server hides hydration errors, build-time failures, and font loading problems — precisely the bugs that surface first on a deployed preview. `any` introduced during the task is Major. `@ts-ignore` without a reason on the same line is Blocking.
 
-### 3.4 Console
+## 2. Console
 
-Load every route. Zero errors, zero React warnings (keys, hydration, invalid nesting). Hydration mismatches are **Blocking** — they indicate a real correctness problem, not noise.
+Load every route. Zero errors, zero React warnings. **Hydration mismatches are Blocking** — a real correctness bug, not noise. Record route, message, source.
 
-Record: route, message, source.
+## 3. Routes and states
 
-### 3.5 Routes and states
+Every route loads. Every interactive element responds. **Empty, loading, error, and success states exist and are designed.** Forms validate with real messages.
 
-Every route loads. Every interactive element responds. Empty, loading, and error states exist and are designed, not default. Forms validate and show real messages. External links have correct targets.
+This is where AI-assisted builds are consistently thin, because the happy path is what gets built and demoed.
 
-### 3.6 Responsive
+## 4. Responsive
 
-Test at **375, 768, 900, 1280, 1920**. The 900-1100 range breaks more layouts than any other and is the one people skip.
+Test at **375, 768, 900, 1280, 1920.** The 900-1100 range breaks more layouts than any other and is the one people skip.
 
-Per width: no horizontal scroll, no overlap, no clipped text, touch targets ≥44px, and — the one that matters — **the signature moment still works or has a designed equivalent.**
+Per width: no horizontal scroll · no overlap · no clipped text · touch targets ≥44px · **the signature moment still works or has a designed equivalent.** Screenshot each.
 
-Evidence: a screenshot per width.
+## 5. Accessibility
 
-### 3.7 Accessibility
+Automated tools (axe, Lighthouse) catch roughly a third of real problems. Run one, fix what it finds, then treat it as finished — a clean automated report says almost nothing about whether the site is usable. The manual passes are the ones that count, and take about twenty minutes on a small site.
 
-Automated (axe or equivalent) catches roughly a third of real problems. The manual passes are the ones that count:
+**Keyboard.** Unplug the mouse. Tab every flow. Every action completable · **focus visible at every stop** · logical order matching visual order · no traps · Escape closes overlays and returns focus · custom controls operable by Enter and Space.
 
-- **Keyboard:** tab through every flow. Visible focus at every stop. No traps. Logical order. Escape closes overlays.
-- **Contrast:** measured on rendered pixels, not on the token values. 4.5:1 body, 3:1 large text and UI boundaries.
-- **Structure:** one `h1`, no skipped heading levels, landmarks present, images have `alt` (empty `alt` for decorative), inputs have labels.
-- **Reduced motion:** enable `prefers-reduced-motion` and reload. Content must appear. A reduced *design*, not just disabled animation.
-- **Zoom:** 200% without loss of content or function.
+Removed focus outlines are the most common failure in art-directed work. A *designed* focus state looks better than the default anyway — never remove without replacing.
 
-Contrast failures caused by a deliberately low-contrast direction route to the Design director, not to the Implementer. See [AGENT-ROLES.md](AGENT-ROLES.md) role 9.
+**Contrast**, measured on rendered pixels, not token values — including text over images, over gradients, and in every state. 4.5:1 body, 3:1 large text and UI boundaries.
 
-### 3.8 Motion
+When a deliberately low-contrast direction fails, that is a **Design director decision**. Route it up. Quietly darkening the palette to pass breaks the direction.
 
-- Every animation has a stated purpose ([DESIGN-TASTE.md](DESIGN-TASTE.md) section 6.1).
-- 60fps on a mid-range machine — check for dropped frames, not just smoothness.
-- `transform` and `opacity` only for anything animating continuously.
-- Reduced-motion path verified.
-- No animation blocks interaction or delays content past ~1s.
-- Scroll-triggered work behaves on fast scroll, on refresh mid-page, and on back-navigation.
+**Structure.** One `h1` · no skipped heading levels · landmarks · `alt` on images (empty `alt=""` for decorative is a real answer) · lists are lists · buttons are buttons.
 
-### 3.9 Performance
+**Reduced motion.** Enable the OS preference, reload, confirm **content still appears**. Anything revealed by an animation must exist without it.
 
-Measured on the **production build**, ideally the Vercel preview rather than localhost.
+**Forms.** Real labels · errors tied programmatically to inputs · errors stated in text, not colour alone.
+
+**Independence.** Nothing conveyed by colour, hover, or motion alone. Hover-only content does not exist on touch — this catches signature moments built around hover.
+
+**Zoom 200%** without loss of content or function.
+
+### The genuine tensions
+
+| Tension | Resolution |
+|---|---|
+| Low-contrast palette | Design director decides. Often solved by raising body-text contrast only. |
+| Custom cursors, hover interactions | Needs keyboard and touch equivalents — **decided at S3** |
+| Heavy scroll choreography | Reduced-motion state designed at S3, not retrofitted |
+| Text over imagery | A scrim, a treatment, or move the text |
+
+**Decide these at S3.** Accessibility discovered at QA is a rebuild; accessibility designed into the direction costs nothing.
+
+## 6. Motion
+
+Every animation has a stated purpose ([DESIGN-MOTION.md](DESIGN-MOTION.md)) · 60fps on a mid-range machine · `transform` and `opacity` only for anything continuous · reduced-motion path verified · nothing essential delayed past ~1s · behaves on fast scroll, refresh mid-page, and back-navigation.
+
+## 7. Performance
+
+**Measure on the deployed preview, not localhost.** Localhost numbers are optimistic to the point of being meaningless — no real network, no cold start, warm caches. Measure before optimising.
 
 | Metric | Target | Blocking above |
 |---|---|---|
 | LCP | < 2.5s | 4.0s |
 | CLS | < 0.1 | 0.25 |
 | INP | < 200ms | 500ms |
-| Total JS (gzip) | < 200KB | project budget in `ARCHITECTURE.md` |
+| JS (gzip) | < 200KB | project budget |
 | Largest image | < 300KB | 1MB |
-| Fonts | ≤ 3 files, `font-display: swap` or a designed fallback | — |
+| Fonts | ≤ 3 files | — |
 
-Measure before optimising. Record the number, not an impression. Removing a designed feature to gain a metric requires a Design director decision.
+Causes, in order of frequency: images (usually the biggest win) · fonts · a heavy dependency or client components that should be server components · third-party scripts · unsized images causing shift.
 
----
+**Fix the biggest thing, then re-measure.** One change at a time — bundled optimisations make it impossible to know what worked, and half usually did nothing.
 
-## 4. Judgement checks
+**Never silently cut a designed feature to gain a metric.** If the signature moment is expensive, that goes to the Design director and then to you. Lazy-load it, degrade it on slow connections, reduce its scope — deletion is the last option. A portfolio piece with a 3.2s LCP and a memorable interaction may be the right call; a generic site at 1.1s that nobody remembers is not.
 
-Mechanical QA cannot detect generic. This half can.
+## 8. Screenshots
 
-### 4.1 Visual quality scorecard
+Required for G3, from the production build or preview: each route at 375 and 1280 · the signature moment · every non-happy-path state · the reduced-motion rendering.
 
-Score all ten criteria in [DESIGN-TASTE.md](DESIGN-TASTE.md) section 11. Record the score **and one sentence of evidence per criterion.** Thresholds and blocking rules are in that file.
-
-### 4.2 Anti-generic sweep
-
-Walk the fifteen-row table in [DESIGN-TASTE.md](DESIGN-TASTE.md) section 8 and mark each present/absent. Any present is Blocking.
-
-### 4.3 Review lenses
-
-At minimum: **creative director** plus one mode-appropriate lens from [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md).
-
-| Mode | Required lenses |
-|---|---|
-| Premium client website | Creative director, strict client, accessibility, performance |
-| Personal portfolio | Creative director, portfolio reviewer, design-school reviewer |
-| Product app | Senior product designer, frontend engineer, accessibility |
-| Game / experiment | Creative director (light) |
-| Audit / review | Whichever lens the request named |
-
-**Independence:** judgement checks run in a session that did not build the thing. A reviewer holding the build context defends the build instead of assessing it.
-
-### 4.4 The two tests
-
-- **Five-second test** — can someone describe something specific, or only the category?
-- **Swap test** — replace logo and copy with a different company's. Does it still work perfectly? Then it is a template.
-
-Both from [DESIGN-TASTE.md](DESIGN-TASTE.md) section 8.
+**Look at them yourself.** Capturing evidence and checking it are different acts.
 
 ---
 
-## 5. Screenshot review
+## 9. Deployment (S6)
 
-Required for G3. Capture from the production build or preview:
+```bash
+pnpm build && pnpm start   # verify the production build locally
+git status                 # BEFORE git add. Every time.
+```
 
-- Each route at 375 and 1280.
-- The signature moment, mid-motion if it is a motion piece.
-- Every state that is not the happy path: empty, loading, error, form validation.
-- The reduced-motion rendering.
+The most common secret leak is a `.env` committed before `.gitignore` existed. Confirm `.gitignore` covers `.env*`, credentials, build output, and any private asset directory.
 
-Look at them yourself before presenting them. An agent that captures screenshots without inspecting them has automated the *taking* of evidence, not the *checking* of it.
+Push the branch (**G4**), then **verify on the preview, not localhost** — this is where you find missing environment variables, broken image optimisation, real font loading, and anything that depended on a local file. Re-run section 7 there.
 
----
+**Environment variables are set by you, in the platform's UI.** Never by an agent, never in a file, never in a commit. An agent may say which variables are needed; it may not read or echo a value.
 
-## 6. Preview review
+**Production deploy is a separate G4.** Know the rollback before deploying — promoting the previous deployment, or reverting the merge commit. **If you cannot state how to undo it, do not do it.**
 
-Deploy previews are Green for feature branches on an already-connected repo; production is G4.
-
-On the preview, verify what localhost cannot tell you: real network conditions, real font loading, real image optimisation, correct environment variables, and that nothing depended on a local file. Then re-run section 3.9 there — localhost performance numbers are optimistic and largely meaningless.
+Vercel: preview per branch is the default and is why this workflow is cheap. Hobby is free for non-commercial; **client work needs a paid plan** — verify current terms rather than trusting this line, and bill it to the project.
 
 ---
 
-## 7. Human gates
-
-| Gate | Presented by | You decide |
-|---|---|---|
-| **G1** Direction Lock | Design director | Is this direction right, before anything is built |
-| **G3** Build Complete | QA engineer | Is this ready for the world |
-| **G4** Ship | Implementer | Does this leave the machine |
-
-**G3 presentation format:**
+## G3 presentation
 
 ```
 G3: BUILD COMPLETE
-Mechanical:  <n passed / n failed / n not run>
+Mechanical:  <n> passed / <n> failed / <n> not run
 Blocking:    <list, or none>
 Major:       <list>
-Scorecard:   <total>/50  (lowest criterion: <name> at <n>)
-Lenses:      <lens: recommendation> ...
+Accepted:    <patterns declared in PROJECT.md, now Notes>
 Screenshots: <paths>
 Preview:     <url>
 Known gaps:  <what was not tested, and why>
 Recommend:   ship | fix first | return to S3
 ```
 
-The **Known gaps** field is mandatory and may not be empty. Something is always untested; naming it is what makes the rest of the report trustworthy.
+**Known gaps may not be empty.** Something is always untested; naming it is what makes the rest of the report trustworthy.
+
+The Reviewer's rubric scores arrive separately, from a session that did not see this document.
 
 ---
 
-## 8. QA on non-build modes
+## Other modes
 
-**Audit / review** — QA *is* the deliverable. Run sections 3.6-3.9 and all of section 4 against the target. Findings go in `QA.md` with severity and evidence.
+**Audit / review** — this checklist plus the rubrics run against someone else's build. Findings only.
 
-**Content system** — different checks entirely: originality, voice match, hook quality, factual accuracy, no fabricated metrics or experiences. See [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md). G5 replaces G3/G4.
+**Content** — different checks entirely: originality, voice, hook quality, no fabricated metrics. [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md). G5 replaces G3/G4.
 
-**Game / experiment** — compressed: build, console, one responsive pass, the core mechanic works, reduced-motion. Skip the performance budget unless performance is the point.
+**Game / experiment** — compressed: build, console, one responsive pass, the mechanic is legible without instructions, reduced-motion. Skip the performance budget unless performance is the point.

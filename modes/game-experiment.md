@@ -43,13 +43,13 @@ If graded, **the rubric replaces the quality bar below.** Ask for it and follow 
 
 ## Documents
 
-Four only: `PROJECT.md` (short) → `DESIGN.md` (short) → `TASKS.md` → `HANDOFF.md`, plus a compressed `QA.md`.
+**Required: `PROJECT.md` (short) and `DESIGN.md` (short). Two.**
 
-No `ARCHITECTURE.md`, no `RESEARCH.md`, no `AGENTS.md` unless the project outgrows the mode.
+Add `HANDOFF.md` only if a different tool builds it, `TASKS.md` only past ~5 tasks, and a compressed `QA.md` before you show anyone. Never `ARCHITECTURE.md`, `RESEARCH.md`, or `ASSETS.md` unless the project outgrows the mode.
 
 ## Skills
 
-discovery (light), design-direction (light), asset-generation, frontend-build, motion-design, browser-qa
+[intake](../skills/intake.md) (light, challenge pass skipped) · [design-direction](../skills/design-direction.md) (light)
 
 **Grilling is skipped.** The cost of a wrong assumption here is a wasted afternoon, which is an acceptable price for moving quickly.
 
@@ -88,7 +88,7 @@ Ten minutes of this is the difference between a distinctive experiment and the d
 - No console errors, production build passes
 - Reduced-motion respected — games are the worst offenders and the easiest to fix
 
-**If it turns out well and belongs in the portfolio**, it re-enters as [personal-portfolio](personal-portfolio.md) mode and has to clear a 43+ bar. That is a separate decision, made after it exists.
+**If it turns out well and belongs in the portfolio**, it re-enters as [client-or-portfolio](client-or-portfolio.md) mode and has to clear a 43+ bar. That is a separate decision, made after it exists.
 
 ---
 

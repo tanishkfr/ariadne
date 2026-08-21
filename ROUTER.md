@@ -1,269 +1,247 @@
 # ROUTER
 
-The entry point of the Builder OS. Every project starts here.
+Turn a vague request into a mode, a question set, a document set, and an owner. The router dispatches; it does not design, code, or research.
 
-The router does one job: **turn a vague request into a mode, a question set, a document set, and an owner.** It does not design, code, or research. It dispatches.
-
-Related: [WORKFLOW.md](WORKFLOW.md) (what happens after routing) · [AGENT-ROLES.md](AGENT-ROLES.md) (who does it) · [MODEL-ROUTING.md](MODEL-ROUTING.md) (which tool)
+Then: [WORKFLOW.md](WORKFLOW.md) for stages, gates, roles, and autonomy.
 
 ---
 
 ## 1. Vocabulary
 
-Used identically in every file of this system.
-
 | Term | Meaning |
 |---|---|
-| **Mode** | The kind of project. One of 7. Determines documents, skills, and quality bar. |
-| **Stage** | A phase of work. S0-S6. See [WORKFLOW.md](WORKFLOW.md). |
-| **Skill** | A reusable capability module in [skills/](skills/). Provider-neutral. |
-| **Role** | A responsibility with defined inputs/outputs. See [AGENT-ROLES.md](AGENT-ROLES.md). |
-| **Runner** | The actual tool doing the work (Codex, Cursor, Claude Code). See [adapters/](adapters/). |
-| **Gate** | A named approval checkpoint. Work stops until a human says yes. See [AUTONOMY-POLICY.md](AUTONOMY-POLICY.md). |
-| **Routing Block** | The router's output. Section 9. |
+| **Mode** | The kind of project. One of 5. |
+| **Stage** | S0-S6. [WORKFLOW.md](WORKFLOW.md). |
+| **Skill** | A method in [skills/](skills/). |
+| **Role** | One of 5 jobs. [WORKFLOW.md](WORKFLOW.md). |
+| **Runner** | The tool doing the work. [adapters/](adapters/). |
+| **Gate** | A named human approval. G1-G5. |
+
+## 2. The five modes
+
+| Mode | Use when |
+|---|---|
+| [Client or portfolio](modes/client-or-portfolio.md) | A site whose job is reputation — yours or someone else's |
+| [Product app](modes/product-app.md) | Sustained interaction, state, returning users |
+| [Game / experiment](modes/game-experiment.md) | Play, mechanics, class work, throwaway probes |
+| [Content system](modes/content-system.md) | X/LinkedIn writing with a learning loop |
+| [Audit / review](modes/audit-review.md) | Critique something that already exists |
 
 ---
 
-## 2. The seven modes
-
-| Mode | File | Use when |
-|---|---|---|
-| Premium client website | [modes/premium-client-website.md](modes/premium-client-website.md) | Paid or reputation-critical site for someone else |
-| Personal portfolio | [modes/personal-portfolio.md](modes/personal-portfolio.md) | Your own work, your own reputation |
-| Product app | [modes/product-app.md](modes/product-app.md) | Sustained interaction, state, real users |
-| Game / experiment | [modes/game-experiment.md](modes/game-experiment.md) | Play, mechanics, class work, throwaway probes |
-| Content system | [modes/content-system.md](modes/content-system.md) | X/LinkedIn writing, analytics, learning loop |
-| Audit / review | [modes/audit-review.md](modes/audit-review.md) | Critique something that already exists |
-| Benchmark | [modes/benchmark.md](modes/benchmark.md) | Measure the Builder OS itself |
-
----
-
-## 3. Mode detection
+## 3. Detection
 
 ### 3.1 Signals
 
-Score each mode. Highest score wins. Signals are cumulative.
-
-| Signal in the request | Points to |
+| In the request | Points to |
 |---|---|
-| "client", "for a company", "they want", a real brand name, money mentioned | Premium client website |
-| "my portfolio", "my site", "about me", "my work" | Personal portfolio |
+| "portfolio", "my site", "client", "for a company", a brand name, money | Client or portfolio |
 | "app", "tool", "dashboard", "users can", "log in", "save", "track" | Product app |
-| "game", "experiment", "class", "assignment", "playable", "sketch", "toy" | Game / experiment |
-| "post", "tweet", "LinkedIn", "content", "audience", "engagement", "voice" | Content system |
-| "review", "critique", "audit", "roast", "feedback on", a URL to an existing thing | Audit / review |
-| "test the system", "compare", "measure", "benchmark", "which is better" | Benchmark |
+| "game", "experiment", "class", "assignment", "playable", "sketch", "installation" | Game / experiment |
+| "post", "tweet", "LinkedIn", "content", "audience", "voice" | Content system |
+| "review", "critique", "audit", "roast", a URL to an existing thing | Audit / review |
 
-### 3.2 Tie-breaks
+### 3.2 Tie-breaks, in order
 
-Applied in order:
-
-1. **An existing artifact is supplied** (URL, repo, screenshot of a live thing) then route to Audit / review, unless the request says "rebuild" or "redesign".
-2. **Someone else's reputation is at stake** then route to Premium client website. It has the strictest gates; over-applying it is safe, under-applying it is not.
-3. **State outlives the session** (accounts, saved data, returning users) then route to Product app, even if it looks like a site.
-4. **Still tied** then ask. One question, offering the two candidates.
+1. **An existing artifact is supplied** → Audit / review, unless the request says "rebuild" or "redesign".
+2. **State outlives the session** (accounts, saved data, returning users) → Product app, even when it looks like a site or a game.
+3. **Still tied** → ask. One question, offering the two candidates.
 
 ### 3.3 Confidence
 
-| Confidence | Meaning | Router behaviour |
-|---|---|---|
-| **High** | One mode scored, no competing signal | Proceed. State the mode in the Routing Block. |
-| **Medium** | One mode leads, another is plausible | Proceed, but name the runner-up and the assumption in the Routing Block. |
-| **Low** | Two modes tied after 3.2, or the request is one sentence with no object | Stop. Ask one disambiguating question. |
+| Level | Behaviour |
+|---|---|
+| **High** | One mode, no competing signal. Proceed. |
+| **Medium** | One leads, another is plausible. Proceed, but **name the runner-up** in the Routing Block. |
+| **Low** | Tied after 3.2, or the request is one sentence with no object. **Stop. Ask one question.** |
 
-**Never silently pick between two plausible modes.** Naming the runner-up costs one line and prevents a whole wasted build.
+**Never silently pick between two plausible modes.** Naming the runner-up costs one line and prevents a wasted build.
 
-### 3.4 Mode switching mid-project
+### 3.4 Switching mode mid-project
 
-Modes are not locked. If evidence contradicts the mode (a "small experiment" grows a login screen), the router re-fires:
+If evidence contradicts the mode — an experiment grows a login screen — the router re-fires: say the mode changed and why · list which documents survive · re-run the gate schedule.
 
-1. Say the mode changed and why.
-2. List which already-generated documents survive, which need revision.
-3. Re-run the gate schedule for the new mode.
-
-Do not quietly upgrade quality bars. A mode change is a scope change and the user decides.
+Do not quietly upgrade quality bars. A mode change is a scope change and you decide.
 
 ---
 
 ## 4. Questions
 
-### 4.1 The rule
+**Maximum 5. Only questions whose answer changes the work.**
 
-**Maximum 5 questions. Only questions whose answer changes the work.**
+Before asking: *if the answer were A instead of B, would a different file get written?* If no, assume it, log it, move on.
 
-Before asking, apply this test:
+Never ask: which framework · whether it should be responsive or accessible · whether quality matters · anything already stated.
 
-> If the user answered A instead of B, would a *different file get written*?
+**Ask in one batch**, numbered, each with a proposed default, so the reply can be "all defaults" or "2: X, rest default".
 
-If no, do not ask it. Assume it, log the assumption, move on.
+Per-mode question sets live in each [mode file](modes/).
 
-Never ask for: preferred framework (default stack applies), whether they want it "responsive" or "accessible" (always yes), whether quality matters, or anything already answered in the request.
+## 5. Default assumptions
 
-### 4.2 Per-mode question sets
+Assume freely, log everything in `PROJECT.md` phrased so it can be contradicted in one line.
 
-The full sets live in each mode file. Summary of what is always worth asking:
-
-| Mode | The questions that actually change output |
+| Area | Default |
 |---|---|
-| Premium client website | Who is the client and what do they sell? What must a visitor *do* or *feel*? What assets exist (logo, photos, copy)? Hard deadline? Any brand rules that cannot be broken? |
-| Personal portfolio | Which 3-5 projects, and what should each prove? Who is the reader: recruiter, studio, client, awards jury? What is the one thing you want remembered? Do you have process artifacts or only finals? |
-| Product app | What is the single core loop? What must persist between sessions? Who else touches the data? What is explicitly out of scope for v1? |
-| Game / experiment | What is the core mechanic in one sentence? Input device? Win/lose or endless? Is this graded, and against what rubric? |
-| Content system | Which platforms? What are you actually known for? What do you refuse to post? Do you have access to past post analytics? |
-| Audit / review | Which lens ([EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md))? Is this yours or someone else's? Do you want fixes or only findings? |
-| Benchmark | What is the hypothesis? What counts as a win? |
-
-### 4.3 Ask in one batch
-
-All questions at once, numbered, each with the router's proposed default so the user can reply "all defaults" or "1: X, rest default". Never interrogate one question at a time.
-
----
-
-## 5. When the router may assume
-
-Assume freely, and log it. **Every assumption goes in `PROJECT.md` under Assumptions**, phrased so it can be contradicted in one line.
-
-| Area | Default assumption |
-|---|---|
-| Stack | Next.js + TypeScript (strict) + pnpm. See [templates/ARCHITECTURE.md](templates/ARCHITECTURE.md). |
+| Stack | Next.js + TypeScript strict + pnpm |
 | Hosting | Vercel, preview per branch |
-| Backend | None until a requirement forces one |
-| CMS | None until a non-developer must edit copy |
-| Auth | None. See [AUTONOMY-POLICY.md](AUTONOMY-POLICY.md). |
-| Styling | CSS variables + custom tokens. Tailwind only if the project has many one-off utility needs. |
-| Motion | Motion.dev for component/state motion, GSAP when a timeline or scroll choreography is central |
-| Testing | Playwright for flows, production build must pass |
-| Language | English, Indian-English spellings where they differ |
-| Budget | Subscription tools only, no pay-per-token. See [BUDGET-POLICY.md](BUDGET-POLICY.md). |
+| Backend / CMS / auth / database / analytics | **None** until a requirement forces one |
+| Styling | CSS custom properties. Tailwind only for genuine utility churn. |
+| Motion | Motion.dev for component motion; GSAP when a timeline is central |
+| Testing | Playwright; production build must pass |
+| Budget | Subscriptions only, no pay-per-token |
 
-**The router must never assume**: the design thesis, the client's brand rules, what content is true about the user, whether something may be published, or what a real deadline is.
+**Never assume:** the design thesis · brand rules · what is true about you · whether something may be published · a real deadline.
 
 ---
 
-## 6. Stop-and-ask triggers
+## 6. Documents
 
-The router halts, regardless of mode, when any of these appear. These are not style preferences. They are the difference between a reversible mistake and an expensive one.
+**Required in every build mode: `PROJECT.md`, `DESIGN.md`, `HANDOFF.md`, `QA.md`.** Four.
+
+Everything else is conditional. Creating a document nobody will read is worse than not creating it — it manufactures the appearance of process.
+
+| Document | Create when |
+|---|---|
+| `ARCHITECTURE.md` | More than ~10 components, or any data model |
+| `TASKS.md` | More than ~5 tasks, or more than one work session |
+| `ASSETS.md` | The design depends on assets that do not yet exist |
+| `RESEARCH.md` | A fact about the world blocks a decision |
+| `AGENTS.md` | An AI tool will build it (almost always) |
+| `RETROSPECTIVE.md` | The project shipped, or taught you something |
+| `CONTENT-LEARNINGS.md` | Content mode only |
+
+| Mode | Required | Usually also |
+|---|---|---|
+| Client or portfolio | the four | AGENTS, ASSETS, RETROSPECTIVE |
+| Product app | the four + **ARCHITECTURE** | TASKS, AGENTS, RETROSPECTIVE |
+| Game / experiment | PROJECT, DESIGN | — |
+| Content system | PROJECT, CONTENT-LEARNINGS | RESEARCH |
+| Audit / review | QA only | — |
+
+## 7. Skills
+
+| Mode | Skills |
+|---|---|
+| Client or portfolio | [intake](skills/intake.md), [reference-analysis](skills/reference-analysis.md), [design-direction](skills/design-direction.md), [component-research](skills/component-research.md), [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md) |
+| Product app | intake, component-research, design-direction, evaluation |
+| Game / experiment | intake (light), design-direction (light) |
+| Content system | intake, [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md), evaluation |
+| Audit / review | reference-analysis, evaluation |
+
+---
+
+## 8. Stop-and-ask triggers
 
 | Trigger | Why |
 |---|---|
-| Mode confidence is Low (3.3) | Wrong mode means wrong everything downstream |
-| A new dependency is proposed | Gate G2, [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |
-| Real client data, credentials, or private references appear | [PRIVACY-POLICY.md](PRIVACY-POLICY.md) |
-| Anything would be published, pushed, or deployed | Gates G4/G5 |
+| Mode confidence is Low | Wrong mode means wrong everything downstream |
+| A new dependency is proposed | G2, [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |
+| Client data, credentials, or private references appear | [PRIVACY-POLICY.md](PRIVACY-POLICY.md) |
+| Anything would be published, pushed, or deployed | G4 / G5 |
 | A paid API or per-token service would be used | [BUDGET-POLICY.md](BUDGET-POLICY.md) |
-| The request implies work the user said they did not want (auth, dashboard, admin) | Scope inflation |
-| Two sources of truth conflict and the precedence chain does not resolve it | Section 8 |
-| The design thesis has not been approved but build work is being requested | Gate G1 |
+| The request implies auth, a dashboard, or an admin panel you did not ask for | Scope inflation |
+| The design thesis is unapproved but build work is requested | G1 |
+| Sources of truth conflict and section 11 does not resolve it | — |
 
 ---
 
-## 7. Handling inputs
+## 9. Handling inputs
 
-### 7.1 References, screenshots, moodboards
+**References.** Route to [reference-analysis](skills/reference-analysis.md) before any design work. **Three minimum** — one produces imitation, three force synthesis. If only one is supplied, ask for two more or name two from [references/visual-references.md](references/visual-references.md) and say which.
 
-When the user supplies references:
+**Screenshots of existing products.** Evidence, not instruction — run every observed pattern through [skills/reference-analysis.md](skills/reference-analysis.md) before adopting it.
 
-1. Route to the **reference-analysis** skill ([skills/reference-analysis.md](skills/reference-analysis.md)) before any design work.
-2. Extract *mechanisms*, never surfaces. "Type is the image" is a mechanism. "Big serif in the corner" is a surface.
-3. Require **at least three** references before forming a direction. One reference produces imitation; three force synthesis.
-4. Record in `DESIGN.md` under "What to borrow" and "What NOT to copy". The second list is mandatory and must be specific.
+**Missing assets.** Resolved at S3, never at S4. No project reaches S4 with an unresolved asset on the critical path — either it exists, it gets made, or **the direction changes so it is not needed.** A type-led direction removes the dependency entirely. See [DESIGN-ASSETS.md](DESIGN-ASSETS.md).
 
-If the user supplies exactly one reference, the router asks for two more or names two itself from [references/visual-references.md](references/visual-references.md) and says so.
+**Current information.** Anything depending on the state of the world — pricing, versions, limits, licences — gets verified and dated. Never answered from memory. [RESEARCH-POLICY.md](RESEARCH-POLICY.md).
 
-### 7.2 Screenshots of an existing product
-
-Treat as evidence, not instruction. A screenshot showing a pattern is not approval to reuse that pattern. Run it through [DESIGN-TASTE.md](DESIGN-TASTE.md) anti-generic rules first.
-
-### 7.3 Missing assets
-
-Assets are the most common silent blocker. The router resolves this at S1, never at S4.
-
-| Situation | Router action |
-|---|---|
-| No logo | Ask if one exists. If not, use the asset-generation skill or a typographic wordmark. Never a placeholder box. |
-| No photography | Decide *at direction time* whether the design is image-led or type-led. A type-led direction removes the dependency entirely. |
-| No copy | Draft real copy in `PROJECT.md` voice. Never ship lorem ipsum, never ship generic AI copy. See [DESIGN-TASTE.md](DESIGN-TASTE.md). |
-| Client will supply "later" | Log as a risk in `HANDOFF.md` and design a fallback that works without it. |
-
-**Rule: no project proceeds to S4 (Build) with an unresolved asset dependency on the critical path.** Either the asset exists, is generated, or the design no longer needs it.
-
-### 7.4 Current information
-
-Route to the **live-research** skill ([skills/live-research.md](skills/live-research.md)) whenever the answer depends on the state of the world: pricing, library versions, whether a tool still exists, platform limits, API availability. Never answer these from memory. See [RESEARCH-POLICY.md](RESEARCH-POLICY.md).
-
-### 7.5 Budget constraints
-
-Any suggestion with a recurring cost goes through [BUDGET-POLICY.md](BUDGET-POLICY.md) before it reaches the user. The router presents cost in INR/month, states what it displaces, and defaults to the free or already-owned option.
+**Budget.** Any recurring cost goes through [BUDGET-POLICY.md](BUDGET-POLICY.md) first, presented in INR/month with what it displaces.
 
 ---
 
-## 8. Precedence
+## 10. Accepted patterns — the deliberate-choice escape hatch
 
-When documents conflict:
+[DESIGN-TASTE.md](DESIGN-TASTE.md) lists patterns that are **Blocking** at QA. Those rules exist because a model with no constraint produces the statistical average.
+
+**But you are allowed to choose one of them on purpose.** A dashboard with cards is right for some products. A gradient can be correct. The rules assume genericness came from the tool; sometimes it is your decision, and the system must not fight you.
+
+To accept a pattern deliberately, declare it in `PROJECT.md`:
 
 ```
-Project AGENTS.md
-  then Project DESIGN.md
-  then Project PROJECT.md
-  then Builder OS mode file
-  then Builder OS core docs
-  then global CLAUDE.md
+ACCEPTED PATTERNS
+<pattern>  — because <reason specific to this project>
 ```
 
-If a conflict survives this chain, **stop and ask**. Do not average two instructions into a compromise neither party wanted.
+Effect: that row drops from **Blocking to Note** in [QA-POLICY.md](QA-POLICY.md). It still appears in the report, so it stays visible, but it no longer stops G3.
+
+**Three constraints, or this becomes a way to disable the quality bar:**
+
+1. **Declared at S1 or S3, before it is built.** Accepting a pattern at S5 to make a failing build pass is a waiver, not a decision — it gets recorded as a waiver with your name on it.
+2. **A reason, not a preference.** "The user monitors six live data streams, so a card grid is the correct density" is a reason. "I like cards" is not, and the router should push back once.
+3. **Maximum three per project.** Four or more means the direction is generic and the acceptances are papering over it. At four, the router stops and says so.
+
+The Design director may argue against an acceptance. It may not override one.
 
 ---
 
-## 9. Router output: the Routing Block
+## 11. Restarting a direction
 
-Every routing decision produces exactly this. It is short on purpose; it is a dispatch slip, not a document.
+"Scrap it and start over" is the most common creative event and needs a defined procedure, because the default — quietly patching the old direction — produces incoherent work.
+
+**When it fires:** you reject the thesis at G1 · the work is built and the Reviewer returns "rebuild the direction" · you look at it and it is wrong.
+
+**Procedure:**
+
+1. **Say which layer is being restarted.** Direction only, or scope too? If `PROJECT.md` was wrong, this is an S1 restart and the direction was a symptom.
+2. **Survives:** `PROJECT.md` (unless scope was the problem), `RESEARCH.md`, the token *system* (not its values), the architecture, anything mechanical.
+3. **Dies:** the thesis, the rejection list, the signature moment, and **every component whose form came from the old thesis.** Keeping "the good bits" is what produces incoherence — the bits were good *relative to a direction that no longer exists*.
+4. **Write down why it failed** before writing the new thesis. Put it in the new `DESIGN.md` under "What NOT to copy" — your own failed direction is a reference you must not repeat. This is the step that prevents restarting into the same place.
+5. **G1 re-fires.** Full presentation, new scorecard.
+6. **Log it** in `RETROSPECTIVE.md`. Two restarts on one project means S1 was under-specified, not that the direction was unlucky.
+
+**Restarting is cheap at S3 and expensive at S5.** That asymmetry is the entire argument for G1.
+
+---
+
+## 12. Precedence
+
+```
+Project AGENTS.md → Project DESIGN.md → Project PROJECT.md
+  → mode file → Builder OS core → global CLAUDE.md
+```
+
+If a conflict survives this chain, **stop and ask.** Do not average two instructions into a compromise neither party wanted.
+
+---
+
+## 13. Output — the Routing Block
 
 ```
 ROUTING BLOCK
 Mode:         <mode>  (confidence: High | Medium | Low)
-Runner-up:    <mode or none> and why not chosen
-Stage:        S0 -> S1
+Runner-up:    <mode or none> and why not
 Questions:    <n, batched below>
-Assumptions:  <the 3-5 that matter; full list goes to PROJECT.md>
-Documents:    <files to create, in order>
-Skills:       <skills to activate>
-Owner:        <role> on <runner>
-Gates ahead:  <G1 ... G5 relevant to this mode>
-Budget:       <INR impact, or "none, existing subscriptions">
+Assumptions:  <the 3-5 that matter>
+Documents:    <required, plus any conditional ones and why>
+Skills:       <which>
+Gates ahead:  <G1 ... G5>
+Budget:       <INR impact, or "none">
 First action: <the single next thing>
 ```
 
-The **First action** line is mandatory and must be a single concrete step. A Routing Block that ends in "let me know how you'd like to proceed" has failed.
+**First action is mandatory and must be one concrete step.** A Routing Block ending in "let me know how you'd like to proceed" has failed.
 
 ---
 
-## 10. Documents and skills per mode
-
-Authoritative per-mode detail is in each mode file. This is the index.
-
-| Mode | Documents (in order) | Skills |
-|---|---|---|
-| Premium client website | PROJECT, RESEARCH, DESIGN, ARCHITECTURE, ASSETS, TASKS, AGENTS, HANDOFF, QA, RETROSPECTIVE | discovery, grilling, live-research, reference-analysis, design-direction, component-research, frontend-build, motion-design, asset-generation, browser-qa, accessibility, performance, deployment, evaluation |
-| Personal portfolio | PROJECT, DESIGN, ARCHITECTURE, TASKS, AGENTS, HANDOFF, QA, RETROSPECTIVE | discovery, grilling, reference-analysis, design-direction, frontend-build, motion-design, asset-generation, browser-qa, accessibility, performance, deployment, evaluation |
-| Product app | PROJECT, ARCHITECTURE, DESIGN, TASKS, AGENTS, HANDOFF, QA, RETROSPECTIVE | discovery, grilling, live-research, design-direction, component-research, frontend-build, browser-qa, accessibility, performance, deployment, evaluation |
-| Game / experiment | PROJECT, DESIGN (short), TASKS, HANDOFF, QA (short) | discovery, design-direction, frontend-build, motion-design, asset-generation, browser-qa |
-| Content system | PROJECT, RESEARCH, CONTENT-LEARNINGS, TASKS, AGENTS | discovery, grilling, live-research, content-strategy, evaluation |
-| Audit / review | QA, RETROSPECTIVE (findings live in QA.md) | reference-analysis, evaluation, browser-qa, accessibility, performance |
-| Benchmark | PROJECT (hypothesis), RETROSPECTIVE (result) | live-research, evaluation |
-
-Templates for all of these: [templates/](templates/).
-
----
-
-## 11. Router failure modes
-
-Known ways this router degrades, and the countermeasure. Reviewed at every retrospective.
+## 14. Known failure modes
 
 | Failure | Countermeasure |
 |---|---|
-| Asking 12 questions and exhausting the user | Hard cap of 5, the 4.1 test, batched |
-| Picking the comfortable mode instead of the right one | 3.2 tie-break 2 biases toward the stricter mode |
-| Routing straight to Build because the request sounded simple | S3 Direction cannot be skipped for any visual mode; G1 blocks it |
-| Producing documents nobody reads | Section 10 sets are minimal per mode; game mode gets 4 documents, not 10 |
-| Treating references as things to copy | 7.1 requires 3+ references and a "do not copy" list |
-| Silent scope growth | 3.4 mode-switch procedure surfaces it as a user decision |
+| Twelve questions, exhausted user | Cap of 5, batched, with defaults |
+| Routing straight to Build because it sounded simple | S3 cannot be skipped for visual modes; G1 blocks it |
+| Producing documents nobody reads | Four required; the rest conditional (section 6) |
+| Treating references as things to copy | Three minimum, plus a mandatory "do not copy" list |
+| Silent scope growth | 3.4 makes a mode change your decision |
+| Fighting a deliberate design choice | Section 10 |
+| Restarting into the same weak direction | Section 11 step 4 |

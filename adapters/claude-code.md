@@ -34,19 +34,19 @@ Verified present at `C:\Users\User\.claude\skills` on 2026-08-21. **Their existe
 
 | Builder OS skill | Candidate local skill | Notes |
 |---|---|---|
-| [grilling](../skills/grilling.md) | `grill-me` | Closest direct match in the set |
+| [intake](../skills/intake.md) | `grill-me` | Closest direct match in the set |
 | [design-direction](../skills/design-direction.md) | `design-taste-frontend`, `high-end-visual-design`, `impeccable` | Three overlapping options — pick one and stay with it, or they will fight each other |
-| [motion-design](../skills/motion-design.md) | `design-motion-principles` | Has an audit mode for catching generic motion |
-| [browser-qa](../skills/browser-qa.md) | `webapp-testing` | Playwright-based |
-| [asset-generation](../skills/asset-generation.md) | `banana`, `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile` | **Check whether any bills per token** before use ([BUDGET-POLICY.md](../BUDGET-POLICY.md)) |
+| [DESIGN-MOTION.md](../DESIGN-MOTION.md) | `design-motion-principles` | Has an audit mode for catching generic motion |
+| [QA-POLICY.md](../QA-POLICY.md) | `webapp-testing` | Playwright-based |
+| [DESIGN-ASSETS.md](../DESIGN-ASSETS.md) | `banana`, `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile` | **Check whether any bills per token** before use ([BUDGET-POLICY.md](../BUDGET-POLICY.md)) |
 | [component-research](../skills/component-research.md) | `ui-ux-pro-max` | Local database of patterns |
-| [content-strategy](../skills/content-strategy.md) | `humanizer` | Useful for the anti-AI-tell sweep specifically |
-| [evaluation](../skills/evaluation.md) | `claude-mem:design-is`, `design-motion-principles` (audit mode) | Neither replaces the rubrics in [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) |
+| [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) | `humanizer` | Useful for the anti-AI-tell sweep specifically |
+| [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) | `claude-mem:design-is`, `design-motion-principles` (audit mode) | Neither replaces the rubrics in [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) |
 | [reference-analysis](../skills/reference-analysis.md) | **none** | Use the skill file's method |
-| [accessibility](../skills/accessibility.md) | **none directly** | Use the skill file's method |
-| [performance](../skills/performance.md) | **none directly** | Use the skill file's method |
-| [live-research](../skills/live-research.md) | built-in web search | |
-| [deployment](../skills/deployment.md) | built-in bash | |
+| [QA-POLICY.md](../QA-POLICY.md) | **none directly** | Use the skill file's method |
+| [QA-POLICY.md](../QA-POLICY.md) | **none directly** | Use the skill file's method |
+| [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) | built-in web search | |
+| [QA-POLICY.md](../QA-POLICY.md) | built-in bash | |
 
 Built-in commands worth knowing: `/code-review` (diff review, user-triggered), `/security-review`, `/init`, `/run`.
 
@@ -79,7 +79,7 @@ You are moving toward Codex + Cursor. During that period:
 | Codex is exhausted, direction work is pending | **Wait.** Do not let an implementation tool invent direction. |
 | Cursor is exhausted, tasks are specified | Claude Code, same `HANDOFF.md` |
 | Long agentic multi-file work in a terminal | Claude Code — genuinely better at this |
-| You want to compare the two | [modes/benchmark.md](../modes/benchmark.md), same handoff, one variable |
+| You want to compare the two | [CHANGELOG.md](../CHANGELOG.md), same handoff, one variable |
 
 Full sequence: [MIGRATION-CHECKLIST.md](../MIGRATION-CHECKLIST.md).
 

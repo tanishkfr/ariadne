@@ -3,7 +3,7 @@
 **Paste into:** a **fresh session**. Not one that has seen your work before.
 **Produces:** a brutal read of your portfolio as an actual reviewer would give it.
 
-This is deliberately harsher than [project-review.md](project-review.md). It assumes 60 seconds of attention and a hundred other portfolios in the queue — which is the real condition.
+Harsher than [project-review.md](project-review.md). It assumes 60 seconds of attention and a hundred other portfolios in the queue — which is the real condition.
 
 ---
 
@@ -13,40 +13,36 @@ You are reviewing my portfolio the way an elite reviewer actually would: with
 knowledge of how hard any of it was to build.
 
 You did not make this. Do not ask me for context about my process, my
-constraints, or my intentions — a reviewer would not have that, and having it
+constraints, or my intentions - a reviewer would not have that, and having it
 would make you sympathetic in a way the real audience will not be.
 
 PORTFOLIO: <url>
-I WANT:    <what this portfolio is for — a studio job, freelance clients,
-            an awards submission, a specific opportunity>
+I WANT:    <what this is for - a studio job, freelance clients, an awards
+            submission, a specific opportunity>
 
-RUN THREE LENSES, IN SEPARATE PASSES
+RUN TWO LENSES, IN SEPARATE PASSES
 
-1. PORTFOLIO REVIEWER — does this help or hurt the person who made it?
-   Memorability · Positioning · Depth of proof · Curation · Craft ·
-   Range vs focus · Writing · Signal above template
-   Test: would I remember this tomorrow, among a hundred others?
+1. PORTFOLIO REVIEWER (max 40) - does this help or hurt the person who made it,
+   and do their decisions hold up?
+   Memorability | Positioning | Curation | Depth of proof | Writing |
+   Conceptual rigour | Justification | Risk
+   Test: would I shortlist this, among a hundred others?
+   Below 24: rework before sending anywhere.
+   24-31: usable, not competitive.  32+: competitive.
 
-2. DESIGN-SCHOOL REVIEWER — defend your decisions. The hardest lens. It ignores
-   polish and interrogates reasoning.
-   Conceptual rigour · Research evidence · Process visible · Justification ·
-   Self-awareness · Reference literacy · Risk taken · Resolution
-   Test: if I asked "why?" three times about any decision, would the answers hold?
-
-3. CREATIVE DIRECTOR — is there an idea here, and is it executed?
-   Concept · Execution consistency · Typography · Composition · Colour and
-   material · Motion · Signature moment · Originality
+2. CREATIVE DIRECTOR (max 50) - is there an idea here, and is it executed?
+   Concept | Typography | Composition | Colour | Material | Motion |
+   Signature moment | Anti-generic | Craft | Originality
    Test: would I put this in the studio's showreel?
+   Below 30: rebuild the direction.  30-39: ship with fixes.  40+: ship.
 
-SCORING — 1-5, max 40 per lens
+SCORING - 1 to 5 per criterion
 3 means competent, nothing wrong, nothing memorable. MOST PORTFOLIOS ARE A 3.
 Scoring a 3 as a 4 to be kind is the single way to make this exercise worthless.
 
-Below 24: rework before sending anywhere.
-24-31: usable, not competitive.
-32+: competitive.
-
-EVIDENCE — required for every score below 4. Where, what, why.
+ANCHORED EVIDENCE - required for every score below 4.
+WHERE + WHAT + AGAINST WHAT: name a specific site or portfolio that does this
+better, and say how. A score with no comparison is a feeling, not a score.
 
 ALSO ANSWER, DIRECTLY
 
@@ -54,10 +50,10 @@ ALSO ANSWER, DIRECTLY
   only a category ("a designer's site"), say so plainly.
 - THE WEAKEST PIECE: name it. The weakest piece sets the perceived level, and a
   reviewer with 60 seconds will find it. Should it be cut?
-- CURATION: is there anything here that is making the rest look worse?
+- CURATION: is anything here making the rest look worse?
 - POSITIONING: after two minutes, what am I good at? If you cannot say, that is
   the finding.
-- CASE STUDIES: do they explain DECISIONS, or list FEATURES? Reviewers hire for
+- CASE STUDIES: do they explain DECISIONS or list FEATURES? Reviewers hire for
   decisions. Quote an example of each if both exist.
 - PROCESS: can you see how this person thinks, or only what they shipped?
 - THE SWAP TEST: replace the name and work with someone else's. Does the site
@@ -75,7 +71,7 @@ WOULD YOU SHORTLIST ME? Yes or no, and the actual reason.
 
 Do not soften this to be encouraging. A "no" with a real reason is the most
 useful thing you can give me. "Competent and forgettable" is a valid verdict and
-if it applies, say it — it points at the direction, not at polish, and it is the
+if it applies, say it - it points at the direction, not at polish, and it is the
 thing nobody else will tell me.
 ```
 
@@ -92,8 +88,8 @@ Expect it to hurt. That is the point of the lens.
 Then be careful about what you act on:
 
 1. **The one thing** — do this.
-2. **Findings raised by two or more lenses** — real, act on them.
+2. **Findings raised by both lenses** — real, act on them.
 3. **The weakest piece** — cutting is almost always right. Fewer, stronger.
-4. **Single-lens findings you disagree with** — a reviewer with 60 seconds and no context is *exactly* your audience. Disagreeing is allowed, but record why in `RETROSPECTIVE.md`; if the same finding comes back next time, it was not wrong.
+4. **Single-lens findings you disagree with** — a reviewer with 60 seconds and no context *is* your audience. Disagreeing is allowed, but record why in `RETROSPECTIVE.md`; if the same finding comes back next time, it was not wrong.
 
-If the verdict is "rebuild the direction", that is an **S3 problem surfacing at S5**. Re-running [design-direction](../skills/design-direction.md) is the honest response. Polishing will not fix a direction that was never there.
+If the verdict is **"rebuild the direction"**, that is an S3 problem surfacing at S5. Use the restart procedure in [ROUTER.md](../ROUTER.md) section 11 — it makes you write down why the old direction failed *before* writing the new one, which is what stops you restarting into the same place.

@@ -75,7 +75,7 @@ Do not uninstall it. It stays useful:
 | Long agentic multi-file work in a terminal | Genuinely better at this |
 | When Cursor hits its limit | Same `HANDOFF.md`, no rework |
 | Worktree-based parallel tasks | Handles them cleanly |
-| Benchmarking against Cursor | [modes/benchmark.md](modes/benchmark.md), same handoff, one variable |
+| Benchmarking against Cursor | [CHANGELOG.md](CHANGELOG.md), same handoff, one variable |
 
 - [ ] Copy [templates/AGENTS.md](templates/AGENTS.md) into projects so both tools read the same rules
 - [ ] Read the cautions in [adapters/claude-code.md](adapters/claude-code.md) — particularly that several installed design skills carry their own house style that can override `DESIGN.md`
@@ -100,7 +100,7 @@ Each "yes" points at a specific fix: tighten the adapter instructions, improve t
 
 - **Do not** rebuild existing projects to fit this system. Apply it to new work.
 - **Do not** move private material into the Builder OS repo ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
-- **Do not** encode design judgement into a plugin or a skill. The thesis is per-project. A reusable "make it look good" rule produces the same output every time, which is the definition of generic.
+- **Do not** encode design judgement into a plugin or a skill — the thesis is per-project ([adapters/cursor.md](adapters/cursor.md)).
 - **Do not** subscribe to anything until Phase 0 is done.
 
 ---

@@ -2,9 +2,9 @@
 
 A system for writing posts that sound like a person, for X and LinkedIn, that gets better because it looks at what actually happened.
 
-**The hard constraint:** nothing publishes automatically. Ever. G5 is per-post, every post, no standing approval. See [AUTONOMY-POLICY.md](AUTONOMY-POLICY.md).
+**The hard constraint:** nothing publishes automatically. Ever. G5 is per-post, every post, no standing approval. See [WORKFLOW.md](WORKFLOW.md).
 
-Owned by the Content strategist ([AGENT-ROLES.md](AGENT-ROLES.md) role 12). Skill: [skills/content-strategy.md](skills/content-strategy.md). Mode: [modes/content-system.md](modes/content-system.md).
+Owned by the Content strategist ([WORKFLOW.md](WORKFLOW.md)). Mode: [modes/content-system.md](modes/content-system.md).
 
 ---
 
@@ -96,7 +96,7 @@ Keep a running idea list with the source instance attached. An idea without a sp
 
 - Say the thing plainly. If it is a strong opinion, own it without the "unpopular opinion" framing.
 - Admit uncertainty where it exists. "I'm not sure this generalises" is a credibility signal.
-- Never claim experience you do not have. Never invent a client, a result, or a metric. This is not a style rule — it is [AUTONOMY-POLICY.md](AUTONOMY-POLICY.md) Red tier.
+- Never claim experience you do not have. Never invent a client, a result, or a metric. This is not a style rule — it is [WORKFLOW.md](WORKFLOW.md) Red tier.
 
 **The read-aloud test.** Read it out loud. Anywhere you would not say it that way to a person, rewrite it. This one test catches most of it.
 

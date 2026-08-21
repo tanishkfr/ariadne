@@ -1,7 +1,7 @@
 # SKILL: design-direction
 
 **Trigger** — discovery is complete, references are analysed, nothing has been designed yet. S3.
-**Owner** — Design director · **Class** — `R1` (thesis) + `R5` (moodboards)
+**Owner** — Design director
 **Inputs** — `PROJECT.md`, `RESEARCH.md`, pooled mechanisms from [reference-analysis](reference-analysis.md)
 **Output** — [`DESIGN.md`](../templates/DESIGN.md) and the G1 presentation
 
@@ -28,18 +28,18 @@ Test it: does it tell you what to do when someone asks for a hero image? If not,
 - **Colour** — achromatic base first, one accent with a stated source. Section 3.
 - **Layout** — grid, where it breaks and why, edge behaviour, density. Section 4.
 - **Material** — texture, image treatment, elevation. Section 5.
-- **Motion** — what motion is *for* in this project. Section 6, and [motion-design](motion-design.md).
+- **Motion** — what motion is *for* in this project. Section 6, and [DESIGN-MOTION.md](../DESIGN-MOTION.md).
 - **Responsive** — how the direction changes at 375, not how it shrinks. Section 7.
 
 A decision without a reason traceable to the thesis is a decision that will drift at S4.
 
-**5. Name the signature moment.** The one thing a person would describe to someone else. Where it lives, what happens, why it is memorable, and what its mobile equivalent is. Build it first at S4 — anything left to the end gets cut.
+**5. Name the signature moment** ([DESIGN-TASTE.md](../DESIGN-TASTE.md) 1.4). Where it lives, what happens, why it is memorable, and its mobile equivalent. Build it first at S4 — anything left to the end gets cut.
 
 **6. Write the project's rejection list.** Minimum three, specific to this project, beyond the global anti-generic table. "No scroll-triggered fade-ups anywhere" is a real constraint. "Avoid generic design" is not.
 
-**7. Resolve the asset question now.** Does the direction depend on assets that do not exist? Either commission them, generate them ([asset-generation](asset-generation.md)), or **change the direction so it does not need them.** A type-led direction eliminates the dependency entirely and is usually the better answer. No project reaches S4 with an unresolved asset on the critical path.
+**7. Resolve the asset question now** ([DESIGN-ASSETS.md](../DESIGN-ASSETS.md)). Does the direction depend on assets that do not exist? Either commission them, generate them ([DESIGN-ASSETS.md](../DESIGN-ASSETS.md)), or **change the direction so it does not need them.** A type-led direction eliminates the dependency entirely and is usually the better answer.
 
-**8. Score it.** The ten-criterion scorecard, [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 11, scored against the *direction*. Below 35 means the direction is not ready — do not present it.
+**8. Score it.** The ten-criterion scorecard, [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md), scored against the *direction*. Below 35 means the direction is not ready — do not present it.
 
 ---
 

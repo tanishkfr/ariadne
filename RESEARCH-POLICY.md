@@ -1,126 +1,113 @@
 # RESEARCH POLICY
 
-How the system tells the difference between a fact and a memory.
+How the system tells a fact from a memory.
 
-Core rule: **a model's training data is a snapshot of the past presented with the confidence of the present.** Anything that changes over time must be looked up, dated, and sourced — or explicitly marked unverified.
+**A model's training data is a snapshot of the past presented with the confidence of the present.** Anything that changes over time gets looked up, dated, and sourced — or explicitly marked unverified.
 
-Owned by the Researcher ([AGENT-ROLES.md](AGENT-ROLES.md)). Skill: [skills/live-research.md](skills/live-research.md).
+S2 is **conditional**. Run it only when a fact about the world blocks a decision. Output: [templates/RESEARCH.md](templates/RESEARCH.md).
 
 ---
 
-## 1. What requires live verification
+## 1. What requires verification
 
-**Always verify. Never answer from memory:**
+**Always. Never answer from memory:**
 
-| Category | Examples |
+pricing, plans, regional tiers, limits · which models exist and their capabilities · library versions, last release, maintenance, framework compatibility · breaking changes and deprecations · platform rules (deploy limits, build minutes, social character limits) · licences (font EULAs, package licences, asset terms) · "best current" anything · **whether a thing still exists** — products get discontinued, renamed, and acquired, and models will confidently describe dead tools.
+
+**Safe from memory:** language and CSS fundamentals · design principles, typography, colour theory · algorithms · anything in this repository · **anything a command answers** — run the command instead, it is cheaper and definitive.
+
+**The trigger question:** *could this have changed since training, and would being wrong cost anything?* Both yes means verify.
+
+---
+
+## 2. Procedure
+
+**1. Write the question as a falsifiable claim.** "What does Cursor cost?" is a query. "Cursor's India individual plan is ₹650/month" is a claim that can be checked and dated. Claims are what go in `RESEARCH.md`.
+
+**2. Check existing research first.** Previous `RESEARCH.md` files may already answer it. A six-week-old dated fact often beats a fresh search, and checking costs nothing.
+
+**3. Set the lookup budget before searching.**
+
+| Question | Budget |
 |---|---|
-| Pricing and plans | Subscription costs, tiers, regional pricing, limits, free-tier terms |
-| Model and tool capability | Which models exist, context sizes, rate limits, feature availability |
-| Library status | Current major version, last release, maintenance, framework compatibility |
-| Breaking changes | Migration requirements, deprecated APIs |
-| Platform rules | Deployment limits, build minutes, bandwidth, social platform character limits and policies |
-| Licences | Font EULAs, package licences, asset terms |
-| "Best current" anything | Best library for X, current best practice, what people use now |
-| Whether a thing still exists | Products get discontinued, renamed, acquired |
+| A single fact | 1-2 lookups |
+| A three-way comparison | 5-8 |
+| A landscape survey | 10-15, then stop and report |
 
-**Safe from memory** (stable, or verifiable by running something):
+Unbounded research is one of the main ways subscription usage disappears with nothing to show ([MODEL-ROUTING.md](MODEL-ROUTING.md)).
 
-| Category | Why |
-|---|---|
-| Language and CSS fundamentals | Stable |
-| Design principles, typography, colour theory | Not versioned |
-| Algorithms, data structures | Stable |
-| Anything in this repository | You wrote it |
-| Anything a command answers | Run the command instead — cheaper and definitive |
+**4. Go to the primary source.** Search engines are for *finding* it, not for being it.
 
-**The trigger question:** *could this have changed since the model was trained, and would being wrong cost me anything?* Both yes means verify.
+**5. Record immediately**, with all four fields. A fact held in conversation and written down later loses its source.
+
+**6. When sources disagree, record all of them.** Mark the row Contradicted, state which you would act on and why. **Never average two numbers into a third that no source supports.**
+
+**7. Report what you could not verify.** Paywalls, 403s, region locks. Record the attempt and the blocker. **"I could not verify this" is a complete, valid output** and is always better than a confident guess.
 
 ---
 
-## 2. Source preference
+## 3. Source ranking
 
-In order. Prefer a lower number when sources disagree.
+Prefer a lower number when sources disagree.
 
-1. **Official primary** — the vendor's own pricing page, the package's repository, the framework's docs, the actual `LICENSE` file.
-2. **Machine-readable registry** — npm registry data, GitHub API, `bundlephobia`.
-3. **Official secondary** — vendor changelog, release notes, status page, official blog.
-4. **Reputable independent** — well-known technical publications, maintainer posts, conference talks.
-5. **Community** — Stack Overflow, Reddit, Discord. Useful for *whether a problem exists*, not for *what is true*.
-6. **SEO content farms and "Top 10 X in 2026" blog posts** — treat as a pointer to a primary source, never as evidence. These are frequently generated, frequently wrong, and frequently stale despite a current date in the title.
-
-**Regional pricing warning.** Pricing pages often localise by IP. A price seen from one country may not be what you are charged in India, and third-party summaries almost never get INR right. Verify at checkout, and mark anything not seen at checkout as unverified.
-
----
-
-## 3. Recording
-
-Every researched claim carries four things: **claim, date, source URL, confidence.** Anything missing one of these is not research.
-
-| Confidence | Means | Use |
+| # | Tier | Trust |
 |---|---|---|
-| **Verified** | Seen on an official primary source today | Safe to act on |
-| **Reported** | Consistent across two or more independent secondary sources | Act on it, flag it |
-| **Unverified** | Single weak source, or user-reported, or blocked | Do not build a decision on it without a check |
-| **Contradicted** | Sources disagree | Record all versions, do not average |
+| 1 | **Official primary** — the vendor's own page, the repository, the actual `LICENSE` file | Verified |
+| 2 | **Machine-readable registry** — npm, GitHub API, bundlephobia | Verified |
+| 3 | **Official secondary** — changelog, release notes, status page | Verified / Reported |
+| 4 | **Reputable independent** — established publications, maintainer posts | Reported |
+| 5 | **Community** — Stack Overflow, Reddit, issues | Useful for *whether a problem exists*, not for what is true |
+| 6 | **SEO content** — "Top 10 X in 2026" listicles | **Pointer only. Never evidence.** |
 
-**Freshness.** A fact older than **30 days** for pricing/limits, or **90 days** for library status, is re-verified before it is relied on again. Old research is not deleted — it is dated, and superseded rows stay for the history.
-
-Format and worked example: [templates/RESEARCH.md](templates/RESEARCH.md).
-
----
-
-## 4. Handling failure and disagreement
-
-**When sources conflict:** record every version with its source and date, state which you would act on and why, and mark the row Contradicted. Never silently pick one, and never average two numbers into a third that no source supports.
-
-**When verification is blocked** (paywall, 403, login required, region lock): say so explicitly. Record the attempt, the blocker, and what would resolve it. "I could not verify this" is a valid, complete research output and is always better than a confident guess.
-
-**When a source is undated:** treat it as Unverified regardless of how authoritative it looks. An undated technical page is usually stale.
-
-**When the user supplies a fact** (as with a regional price they can see and you cannot): record it as **Unverified — user-reported**, with the date they said it and a note to confirm at checkout. The user is a good source about their own account, not a citable one.
-
-**Never** fabricate a URL, a version number, a date, or a price. If a specific number is not available, write "not verified" and move on. A missing number is a small problem; a fabricated one is a decision made on fiction.
+Tier 6 deserves naming: frequently generated, frequently wrong, and carrying a current-looking date over stale content. Use one only to find something primary.
 
 ---
 
-## 5. Checking pricing and limits
+## 4. Recording
 
-For each tool in the stack:
+Four fields, always: **claim · date · source URL · confidence.** Missing one means it is not research.
 
-1. Open the official pricing page **from India**, in a normal browser session.
-2. Record: plan name verbatim, price as displayed, currency, billing period, whether tax is included.
-3. Record the usage limits in the tool's own words. Vague limits ("generous usage") are recorded as vague — do not convert them into numbers.
-4. Note regional plans. India-specific tiers exist and are frequently absent from international pages and from third-party summaries.
-5. Confirm at checkout before committing. The checkout price is the only Verified price.
+| Confidence | Means |
+|---|---|
+| **Verified** | Seen on an official primary source today |
+| **Reported** | Consistent across two or more independent secondary sources |
+| **Unverified** | Single weak source, user-reported, or verification blocked |
+| **Contradicted** | Sources disagree; all versions recorded |
 
-Output goes to [BUDGET-POLICY.md](BUDGET-POLICY.md) section 3, with dates.
+**Freshness:** pricing and limits go stale after **30 days**; library status after **90**. Re-verify before relying on an old row. Do not delete superseded rows — date them and keep the history, because knowing a number changed is itself useful.
+
+**An undated source is Unverified** regardless of how authoritative it looks.
+
+**A user-supplied fact** (a regional price they can see and you cannot) is **Unverified — user-reported**, with the date, and a note to confirm at checkout. The user is a good source about their own account, not a citable one.
+
+**Never fabricate** a URL, a version number, a date, or a price. A missing number is a small problem; a fabricated one is a decision made on fiction.
 
 ---
 
-## 6. Checking library freshness
+## 5. Specific procedures
 
-Before proposing any package ([LIBRARY-POLICY.md](LIBRARY-POLICY.md)):
+**Pricing.** Open the official page **from your own region**, in a normal browser. Record the plan name verbatim, the displayed price, currency, period, and whether tax is included. Pages localise by IP and regional tiers frequently never appear on international pages. **Only a checkout page is Verified.** Third-party pricing summaries are Reported at best and almost never get INR right.
+
+**Library status.**
 
 ```bash
 npm view <package> version time.modified license
 ```
 
-Then check on the repository: last commit, open issues referencing your framework's current major, whether maintainers reply, and whether a successor exists (`x` superseded by `x-next` is a common and easy-to-miss pattern).
+Then the repository: last commit · open issues naming your framework's current major · whether maintainers reply · whether a successor exists (`x` superseded by `x-next` is common and easy to miss).
 
-Record in `RESEARCH.md` with the date. Re-verify after 90 days.
+**Platform limits.** The vendor's own docs, in their exact words. Vague limits ("generous usage") get recorded as vague — do not convert them into numbers.
+
+**Whether a thing still exists.** Site loads · repo not archived · a release or commit this year.
 
 ---
 
-## 7. Research budget
+## 6. Design and visual research
 
-Research is a real cost. Bound it.
+Different rules — this is inspiration, not fact, so mechanism matters more than freshness.
 
-| Question type | Budget |
-|---|---|
-| A single fact (a price, a version) | 1-2 lookups |
-| A comparison (3 options) | 5-8 lookups |
-| A landscape survey | 10-15 lookups, then stop and report |
+Studio and designer sites **live, not screenshot galleries**. Print, editorial, packaging, signage, and film titles are **often better sources than other websites**, because the mechanism has to survive translation to a different medium — which is exactly the test that separates a mechanism from a surface.
 
-If a question is unresolved after its budget: report what is known, what is not, and what you would need. Do not keep searching. Unbounded research is one of the main ways subscription usage disappears with nothing to show. See [MODEL-ROUTING.md](MODEL-ROUTING.md) section 8.
+Standing set: [references/visual-references.md](references/visual-references.md). Method: [skills/reference-analysis.md](skills/reference-analysis.md).
 
-**Reuse before researching.** Check existing `RESEARCH.md` files from previous projects first. A dated fact from six weeks ago may be good enough, and knowing it exists costs nothing.
+**Warning:** inspiration galleries homogenise. Everything on them looks like everything else on them, because one taste curated it. If every reference comes from the same gallery, you will produce that gallery's house style.

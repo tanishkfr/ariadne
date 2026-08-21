@@ -4,56 +4,115 @@ How this system has changed, and why.
 
 **Every retrospective that changes a Builder OS file logs it here.** A retrospective that changes nothing was not a retrospective ([WORKFLOW.md](WORKFLOW.md) S6).
 
-Format: what changed, which file, what caused it. **The cause matters more than the change** — it is what tells you later whether the rule is still earning its place.
+**Name the cause, not just the change.** "Added a check for X" is useless in six months. "Added a check for X because a font licence was discovered at S5 and cost a day" tells you whether the rule still earns its place.
+
+Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
-## Unreleased
+## 0.2.0 — 2026-08-21
 
-Nothing yet.
+Restructured after an independent audit of v0.1.0. **71 files to 49.** No rule was lost; several got one home instead of four.
+
+### Behaviour changes
+
+- **Scorecard moved out of the author's session.** Self-scoring a direction you just wrote clusters at 4 and measures nothing. Scoring now happens at S5 by a Reviewer with no build context, and **every score below 4 must cite a specific comparison** that does it better. G1 uses a qualitative 10-question check instead.
+  *Cause: the audit could find no mechanism preventing a generous 44/50 every time, which invalidated the primary quality claim.*
+- **Added accepted patterns** ([ROUTER.md](ROUTER.md) §10). A blocking anti-generic pattern can be chosen deliberately — declared in `PROJECT.md` before it is built, with a reason, maximum three. It drops to a Note and stays visible.
+  *Cause: stress-testing "build a SaaS dashboard with 17 cards and glassmorphism" showed the system would block a build the user explicitly asked for. The rules assumed genericness always came from the tool.*
+- **Added direction restart** ([ROUTER.md](ROUTER.md) §11): what survives, what dies, and a requirement to write down why the old direction failed before writing the new one.
+  *Cause: the most common creative event had no defined path, so the default was quietly patching a dead direction.*
+- **Required document set cut to four** — `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. Everything else is conditional with a stated trigger.
+  *Cause: `TASKS.md` and `ASSETS.md` on a two-day experiment are ceremony.*
+
+### Structural changes
+
+| Change | From | To | Cause |
+|---|---|---|---|
+| Roles | 12 | 5 | Accessibility, performance, and portfolio "roles" were already review lenses. **A lens is not an agent.** |
+| Review lenses | 9 | 5 | Conversion pulled toward the SaaS patterns the system rejects; accessibility and performance moved to mechanical QA |
+| Modes | 7 | 5 | `benchmark` had no routing behaviour — it is a maintenance activity, now in this file. Client and portfolio differed by a flag, not a mode. |
+| Skills | 16 | 5 | Nine were checklists or restatements wearing a skill header. Kept only files containing a method you could not derive from a policy. |
+| Reference files | 4 | 2 | Two had zero inbound links |
+| Automation | none | `scripts/check.py` | The link checker had already caught 7 real bugs during construction — demonstrated benefit, not speculative |
+
+### Deleted
+
+`examples/` (4) and `validation/` (4) — 8,871 words consumed by no workflow stage. `AGENT-ROLES.md` and `AUTONOMY-POLICY.md` folded into `WORKFLOW.md`. Nine skills folded into the policy documents that already owned their rules. `modes/benchmark.md` folded into this file.
+
+### Split
+
+`DESIGN-TASTE.md` into three, so a motion task loads ~900 words instead of 2,652: [DESIGN-TASTE.md](DESIGN-TASTE.md), [DESIGN-MOTION.md](DESIGN-MOTION.md), [DESIGN-ASSETS.md](DESIGN-ASSETS.md).
+
+### Known weaknesses carried forward
+
+1. **Never used on a real project.** Every claim about whether this helps is untested.
+2. **Anchored scoring is better, not proven.** Requiring a cited comparison should stop score inflation; whether it does is unmeasured.
+3. **Four budget rows are unverified**, including both prices the recommended ₹2,649 configuration depends on.
+4. **The Low-confidence router path is still untested** — the v0.1.0 dry runs were all clear cases.
+5. **No mode covers installations or physical computing.** `game-experiment` is the least-wrong fit and its defaults (DOM-first, desktop, keyboard) are all wrong for one.
 
 ---
 
 ## 0.1.0 — 2026-08-21
 
-Initial system. Built in one session; **validated by dry run only, not by a real project.**
+Initial system. 71 files. Validated by dry run only.
 
-### Added
+Superseded the same day, after an audit found: **49 verbatim duplicated sentences** across files, 2 orphan files, 8,871 words with no consumer, and a self-scored quality mechanism with no anchor.
 
-**Core** — [ROUTER.md](ROUTER.md), [WORKFLOW.md](WORKFLOW.md), [MODEL-ROUTING.md](MODEL-ROUTING.md), [AGENT-ROLES.md](AGENT-ROLES.md), [DESIGN-TASTE.md](DESIGN-TASTE.md), [AUTONOMY-POLICY.md](AUTONOMY-POLICY.md), [LIBRARY-POLICY.md](LIBRARY-POLICY.md), [RESEARCH-POLICY.md](RESEARCH-POLICY.md), [QA-POLICY.md](QA-POLICY.md), [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md), [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md), [PRIVACY-POLICY.md](PRIVACY-POLICY.md), [BUDGET-POLICY.md](BUDGET-POLICY.md)
+**The lesson worth keeping:** building to a file-count specification produced scaffolding that served the specification rather than the user. The audit's most useful question was not "is this correct?" but **"who reads this, and what decision does it change?"** Eleven files could not answer it.
 
-**Onboarding** — [README.md](README.md), [GETTING-STARTED.md](GETTING-STARTED.md), [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md), [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md)
+---
 
-**Modules** — 15 skills + manifest, 11 templates, 7 modes, 3 adapters, 4 reference files, 4 prompts, 4 examples, 4 validation files
+## The 30-day check
 
-### Structural decisions
+Find out whether this helps, using real projects. **Do not run synthetic benchmarks** — run the work you were going to run anyway and record what happens.
 
-| Decision | Reason | Tradeoff |
-|---|---|---|
-| Repo root is `Builder OS/`, not a nested `builder-os/` | The folder was already named that; nesting is redundant | Diverges from the original spec |
-| Added `prompts/` (not in the spec) | Four copy-paste prompts are artifacts, not documents; burying them in README makes them unfindable | One more directory |
-| Added `validation/final-report.md` | The spec asked for a final report and gave it no home | One more file |
-| Capability classes `R1`-`R6` instead of product names | Provider-neutrality — one table to edit when tooling changes | An extra layer of indirection to learn |
-| Skills are methods, not tool integrations | They must run without special tooling | Some duplicate tool-native skills |
-| Scorecard is human-scored | Taste is not mechanisable | A dishonest score defeats the mechanism entirely |
-| No scripts | Nothing had a clear enough benefit to justify the maintenance | Everything is manual by default |
+### Before day 1
 
-### Verified during construction
+- [ ] `corepack enable` — pnpm is not installed and every default assumes it
+- [ ] Confirm the ₹650 Cursor India plan and your real ChatGPT charge **at checkout**; write both into [BUDGET-POLICY.md](BUDGET-POLICY.md) with the date
+- [ ] Record your baseline honestly: how long did your last project take, and what would it score?
 
-- pnpm **not installed** on this machine (corepack is available). Flagged in [GETTING-STARTED.md](GETTING-STARTED.md) and [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
-- gh CLI authenticated as `tanishkfr`.
-- 20 Claude Code skills present at `~/.claude/skills` — **existence verified, quality and behaviour not tested.** Mapped in [adapters/claude-code.md](adapters/claude-code.md) as candidates, not recommendations.
-- Cursor official pricing page: Hobby free, Individual $20/mo, Teams $40/user/mo. **No plan named "Start"** on the international page.
-- ChatGPT official pricing page returned **HTTP 403** — no ChatGPT price in this system is verified.
-- Cursor India ₹650/mo — **user-reported, unverified.** Not visible on the international page.
+### Week 1 — one small project, full process
 
-### Known weaknesses at release
+[game-experiment](modes/game-experiment.md) mode end to end. Record time per stage · which gates fired · where the router asked a wrong question.
 
-Full list with severity: [validation/final-report.md](validation/final-report.md). The three that matter most:
+**The test:** does the light S3 produce something less generic than your usual first attempt? That is the system's core claim and the cheapest place to falsify it.
 
-1. **Never used on a real project.** Every claim about whether this helps is untested.
-2. **The scorecard depends on honest self-scoring.** There is no mechanism preventing a generous 44 every time, and a generous score defeats the entire anti-generic apparatus.
-3. **Four budget rows are unverified**, including both prices the recommended configuration depends on.
+### Week 2 — one real project
+
+[client-or-portfolio](modes/client-or-portfolio.md). Record whether G1 caught anything before building · whether `HANDOFF.md` was sufficient or context got re-derived · which stage consumed the most usage.
+
+**The test:** did separating deciding from building save usage, or just add ceremony?
+
+### Week 3 — stress the weak points
+
+Pick two:
+
+- **Router accuracy** — five deliberately ambiguous requests: *"build me something for my studio"* · *"a tool for tracking my reading"* · *"make my site better"* · *"I don't know what I want, just something memorable"* · *"make this an interactive installation"*. Each should return **Low confidence and one question**, not a confident guess.
+- **Tool portability** — hand the same `HANDOFF.md` to two runners.
+- **Audit honesty** — review your own week-2 output in a fresh session.
+- **Anchored scoring** — does requiring a cited comparison actually stop the score clustering at 4?
+
+### Week 4 — decide
+
+| Question | Evidence |
+|---|---|
+| Is the output measurably less generic? | Scores vs baseline |
+| Did the process cost more than it returned? | Time per stage |
+| Which documents did you actually read? | Honest recall |
+| Which were written and never opened? | **Delete them.** |
+| Which gates were useful, and which always got waived? | The gate log |
+| Is ₹2,649 the right configuration? | [BUDGET-POLICY.md](BUDGET-POLICY.md) |
+
+**If it is not working, it is more likely too heavy than too light. Cut first, add second.**
+
+### The success criterion, set now
+
+> **After 30 days, at least one piece of work exists that would not have been as good without this system — and you can name the specific rule that made the difference.**
+
+If you cannot name the rule, the system did not do it. Anything else is confirmation bias, which is what a benchmark exists to prevent.
 
 ---
 
@@ -63,12 +122,7 @@ Full list with severity: [validation/final-report.md](validation/final-report.md
 ## 0.x.y — YYYY-MM-DD
 
 ### Changed
-- <what> in <file> — because <what happened on which project>
+- <what> in <file> — because <what happened, on which project>
 ```
 
-Rules:
-
-- **Name the cause, not just the change.** "Added a check for X" is not useful in six months. "Added a check for X because a font licence was discovered at S5 and cost a day" is.
-- **Log removals too.** A deleted rule is as informative as an added one.
-- **Anonymise.** Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md) section 1).
-- **If a retrospective changed nothing, write that** — with the reason. A run of "nothing changed" entries means either the system is stable or the retrospectives are not honest, and it is worth knowing which.
+Log removals too — a deleted rule is as informative as an added one. If a retrospective changed nothing, write that with the reason: a run of "nothing changed" entries means either the system is stable or the retrospectives are not honest, and it is worth knowing which.

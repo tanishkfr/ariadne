@@ -1,8 +1,7 @@
 # ASSETS: <name>
 
-> Template. Owner: Asset specialist · Stages S3-S4 · Skill: [asset-generation](../skills/asset-generation.md)
-> **No project reaches S4 with an unresolved asset on the critical path.**
-> Either it exists, it gets made, or the direction changes so it is not needed.
+> Template. Owner: Asset specialist · Stages S3-S4 · Skill: [DESIGN-ASSETS.md](../DESIGN-ASSETS.md)
+> Nothing on the critical path may be unresolved at S4 — see [DESIGN-ASSETS.md](../DESIGN-ASSETS.md).
 
 **Last updated:** <date>
 
@@ -23,12 +22,8 @@
 | | S<n> | real / generate / typographic substitute / cut | yes/no |
 
 > Resolution order, best first:
-> 1. A real existing asset
-> 2. **A typographic, CSS, or SVG solution** — usually better and always lighter
-> 3. A generated asset
-> 4. Stock — last, because it is the fastest route to generic
->
-> Most asset requests dissolve at option 2.
+> Real asset → typographic/CSS/SVG solution → generated → stock.
+> Reasoning and procedure: [DESIGN-ASSETS.md](../DESIGN-ASSETS.md).
 
 ## Fonts
 
@@ -38,8 +33,7 @@
 |---|---|---|---|---|---|---|
 | | | <open / commercial / free-personal> | | yes/no | | <where it lives> |
 
-> **Free-for-personal-use fonts are forbidden on client work** without a purchased licence. This is the most common licensing mistake in portfolio-quality work.
-> Unlicensed or trial fonts must never reach production. If a licence is pending at G4, the deploy waits.
+> Licensing rules: [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 9.
 
 ## Treatment
 
@@ -59,10 +53,7 @@
 |---|---|---|---|---|---|---|
 | | | | | | | |
 
-## Rules
+## Before filling this in
 
-- **Never ship a grey box or a placeholder.** A QA failure at S5.
-- **Never ship generated photography of people** on anything representing a real organisation.
-- **Never ship a raster logo** — generate concepts, rebuild as vector.
-- Client material does not go to a third-party generator without approval ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md) section 3).
-- Per-token generation services are Amber ([BUDGET-POLICY.md](../BUDGET-POLICY.md)) — estimate in INR and ask first.
+Read [DESIGN-ASSETS.md](../DESIGN-ASSETS.md) — it carries the hard rules (no placeholders, no generated
+people, no raster logos, no client material to third parties without approval).

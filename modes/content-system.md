@@ -38,13 +38,13 @@ Three artifacts, built at S1-S2, living **in the content project, never in the B
 
 ## Documents
 
-`PROJECT.md` → `RESEARCH.md` (platform specifics, verified live) → `CONTENT-LEARNINGS.md` → `TASKS.md` → `AGENTS.md`
+**Required: `PROJECT.md` and `CONTENT-LEARNINGS.md`. Two.**
 
-No `DESIGN.md`, no `ARCHITECTURE.md`, no `HANDOFF.md`.
+Add `RESEARCH.md` when a platform specific needs verifying. No `DESIGN.md`, no `ARCHITECTURE.md`, no `HANDOFF.md`, no `QA.md` — per-post checks replace it.
 
 ## Skills
 
-discovery, **grilling (mandatory)**, live-research, content-strategy, evaluation
+[intake](../skills/intake.md) — **challenge pass mandatory** · [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) · this file
 
 Grilling is mandatory because question 2 — what you are actually known for — collapses under the first push almost every time, and an unresolved answer produces generic posts forever.
 
@@ -85,7 +85,7 @@ Per post, all of these:
 - **Nothing publishes automatically.** Ever.
 - No account connections, no scheduling, no bulk posting.
 - Analytics come from you, pasted in. The system has no account access and must not imply otherwise.
-- Never invent a number, a client, or an experience. [AUTONOMY-POLICY.md](../AUTONOMY-POLICY.md) Red tier.
+- Never invent a number, a client, or an experience. [WORKFLOW.md](../WORKFLOW.md) Red tier.
 
 ---
 

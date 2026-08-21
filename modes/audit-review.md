@@ -16,11 +16,11 @@ Critique something that already exists. **QA *is* the deliverable** — there is
 
 Three, and question 1 is the one that matters.
 
-1. **Which lens?** — the nine in [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md). Default: creative director + one more matched to the artifact.
+1. **Which lens?** — the five in [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md). Default: creative director + one more matched to the artifact.
 2. **Yours or someone else's?** — changes how blunt to be, and whether privacy rules apply
 3. **Findings only, or fixes too?** — default: findings with fixes attached, but no code written
 
-If the request is "roast this", the honest reading is design-school reviewer plus creative director, and the user has pre-authorised bluntness. Take it.
+If the request is "roast this", the honest reading is portfolio reviewer plus creative director, and the user has pre-authorised bluntness. Take it.
 
 ---
 
@@ -32,7 +32,7 @@ Nothing else. No `PROJECT.md`, no `DESIGN.md`.
 
 ## Skills
 
-reference-analysis (to judge against a stated intent), browser-qa, accessibility, performance, evaluation
+[reference-analysis](../skills/reference-analysis.md) (to judge against a stated intent), [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)
 
 ## Stages
 
@@ -54,7 +54,7 @@ If the intent is not stated, infer it, **say you inferred it**, and score agains
 
 **2. Use it properly.** Load it. Scroll it. Phone. Keyboard. Try the primary task. Five minutes of real use beats any amount of reasoning about a description or a screenshot.
 
-**3. Run the lenses in separate sessions.** They contaminate each other ([skills/evaluation.md](../skills/evaluation.md)).
+**3. Run the lenses in separate sessions.** They contaminate each other ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
 
 **4. Evidence for every finding.** Where (route, element, viewport), what (the observation), why (which criterion). A finding without evidence is an opinion.
 
@@ -62,7 +62,7 @@ If the intent is not stated, infer it, **say you inferred it**, and score agains
 
 **6. Name the one thing.** Mandatory. Twelve equal findings get ignored; one clear priority gets acted on.
 
-**7. Run the three feel tests** — five-second, swap, recall ([skills/evaluation.md](../skills/evaluation.md)).
+**7. Run the three feel tests** — five-second, swap, recall ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
 
 ---
 

@@ -14,9 +14,8 @@ These catalogues are genuinely good, and that is the problem. Three specific ris
 2. **Most are copy-paste catalogues by design.** Taking the technique *is* the intended use. There is often nothing to install.
 3. **A component you wrote can be art-directed. A component you installed resists it** — it has its own tokens, its own assumptions, usually its own Tailwind setup.
 
-**Approved use:** open it, understand the technique, close it, implement your version against your tokens. Record what you learned in `RESEARCH.md` with the source URL.
-
-**To actually install one:** full G2 with a statement of why building it yourself is the wrong call ([LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 6).
+Approved use and the install-vs-build decision: [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 4 and
+[component-research](../skills/component-research.md).
 
 ---
 
@@ -37,9 +36,8 @@ These catalogues are genuinely good, and that is the problem. Three specific ris
 
 **Before taking anything from any of these:**
 
-- Keyboard-test the actual demo. Many showcase components are mouse-only and unfixable without a rewrite.
-- Check what it animates. Compositor-only (`transform`, `opacity`), or `width`/`filter`/`box-shadow`?
-- Check the Tailwind assumption. Most assume it; if your project does not use it, the technique still transfers but the code does not.
+Run the adoption checks in [component-research](../skills/component-research.md) — keyboard, animated
+properties, and the Tailwind assumption.
 
 ---
 
@@ -47,9 +45,7 @@ These catalogues are genuinely good, and that is the problem. Three specific ris
 
 **Radix UI** (`@radix-ui/*`) is Conditional rather than research-only ([LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 3), because it is unstyled. It solves focus management, ARIA, and collision detection — correctness problems that are genuinely hard and have real accessibility consequences when done badly — without imposing any visual identity.
 
-**The dividing line: install for correctness, build for expression.**
-
-A dialog's focus trap is correctness. Use a library. A hover interaction that is part of your signature moment is expression. Build it, or it will look like everyone else's.
+It is the one exception to research-only, for the reason in [component-research](../skills/component-research.md): unstyled primitives solve correctness without touching art direction.
 
 ---
 
@@ -65,6 +61,6 @@ Using one is the difference between art direction and template assembly.
 
 ## The real risk
 
-**Component-library soup**: five libraries, five visual languages, none of them yours. It is on the anti-generic list ([DESIGN-TASTE.md](../DESIGN-TASTE.md) section 8) and it happens gradually, one reasonable-seeming install at a time.
+**Component-library soup**: five libraries, five visual languages, none of them yours. It is on the anti-generic list ([DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6) and it happens gradually, one reasonable-seeming install at a time.
 
 The countermeasure is structural: one token system, and G2 on every package. Not discipline — a gate.

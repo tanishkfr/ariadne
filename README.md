@@ -2,128 +2,108 @@
 
 A project router and operating system for building websites, apps, games, experiments and content — with a design quality bar that is written down and enforced, and a clear separation between which tool thinks and which tool builds.
 
-It is not a framework, an app, or a dependency. It is a set of documents you point an AI tool at.
+Not a framework, an app, or a dependency. A set of documents you point an AI tool at.
 
 ---
 
 ## The problem it solves
 
-| Problem | Where it is handled |
+| Problem | Where |
 |---|---|
-| AI-generated UI feels generic | [DESIGN-TASTE.md](DESIGN-TASTE.md) — anti-generic rules, scorecard, reference synthesis |
-| One agent doing planning, design, coding and review | [AGENT-ROLES.md](AGENT-ROLES.md) — 12 roles with inputs, outputs, approval boundaries |
-| Wasting usage limits on context-heavy work | [MODEL-ROUTING.md](MODEL-ROUTING.md) — capability classes and conservation rules |
-| No reliable design process | [WORKFLOW.md](WORKFLOW.md) — S3 Direction cannot be skipped; G1 blocks building without a thesis |
-| No document or handoff structure | [templates/](templates/) — 11 documents with a defined handoff format |
-| Not knowing which tool handles which task | [MODEL-ROUTING.md](MODEL-ROUTING.md) + [adapters/](adapters/) |
-| Reinventing prompts every project | [prompts/](prompts/) — four copy-paste prompts |
-
----
+| AI-generated UI feels generic | [DESIGN-TASTE.md](DESIGN-TASTE.md) — anti-generic rules, the G1 check, reference synthesis |
+| One agent planning, designing, coding and reviewing | [WORKFLOW.md](WORKFLOW.md) — 5 roles, 5 gates, an independence rule |
+| Wasting usage limits on context | [MODEL-ROUTING.md](MODEL-ROUTING.md) |
+| No reliable design process | S3 cannot be skipped; **G1 blocks building without a thesis** |
+| No document or handoff structure | [templates/](templates/) — four required documents, the rest conditional |
+| Not knowing which tool does what | [MODEL-ROUTING.md](MODEL-ROUTING.md) + [adapters/](adapters/) |
+| Reinventing prompts every project | [prompts/](prompts/) |
 
 ## How it works
 
-You paste one prompt. The router figures out the rest.
-
 ```
 Your request
-   -> ROUTER.md         detects the mode, asks up to 5 questions
-   -> WORKFLOW.md       runs stages S0-S6
-   -> AGENT-ROLES.md    assigns a role per stage
-   -> MODEL-ROUTING.md  assigns a tool per role
-   -> templates/        produces the documents
-   -> QA-POLICY.md      verifies mechanically and by judgement
-   -> RETROSPECTIVE     updates this system
+  -> ROUTER.md              detects the mode, asks up to 5 questions
+  -> WORKFLOW.md            runs S0-S6, assigns a role, enforces the gates
+  -> templates/             produces PROJECT, DESIGN, HANDOFF, QA
+  -> QA-POLICY.md           mechanical checks (the builder)
+  -> EVALUATION-RUBRICS.md  judgement checks (a fresh session)
+  -> RETROSPECTIVE          edits this system, logged in CHANGELOG
 ```
 
-Five human gates interrupt it: **G1** direction, **G2** dependencies, **G3** build complete, **G4** ship, **G5** publish. Nothing irreversible happens without you.
-
----
+Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build complete · **G4** ship · **G5** publish. Nothing irreversible happens without you.
 
 ## Start here
 
-**Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — 15 minutes, sets up the tools and runs one real project.
-
-**Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md) — what to open, in what order, for each kind of work.
-
+**Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — 30 minutes, then one real project.
+**Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
+**Starting now:** paste [prompts/project-start.md](prompts/project-start.md) into your reasoning tool.
 
-**Starting a project right now:** paste [prompts/project-start.md](prompts/project-start.md) into your reasoning tool.
-
----
-
-## The seven modes
+## The five modes
 
 | Mode | For |
 |---|---|
-| [Premium client website](modes/premium-client-website.md) | Paid or reputation-critical work for someone else |
-| [Personal portfolio](modes/personal-portfolio.md) | Your own work and reputation |
+| [Client or portfolio](modes/client-or-portfolio.md) | A site whose job is reputation — yours or a client's |
 | [Product app](modes/product-app.md) | Real users, real state |
 | [Game / experiment](modes/game-experiment.md) | Play, mechanics, class projects |
 | [Content system](modes/content-system.md) | X and LinkedIn, with a learning loop |
 | [Audit / review](modes/audit-review.md) | Critique something that exists |
-| [Benchmark](modes/benchmark.md) | Measure the system itself |
 
----
-
-## Repository map
+## Map
 
 ```
 Builder OS/
-├─ ROUTER.md                  Mode detection, questions, dispatch      <- start here
-├─ WORKFLOW.md                7 stages, 5 gates
-├─ MODEL-ROUTING.md           Which tool does what, usage conservation
-├─ AGENT-ROLES.md             12 roles with approval boundaries
-├─ DESIGN-TASTE.md            Quality bar, anti-generic rules, scorecard
-├─ AUTONOMY-POLICY.md         Green / Amber / Red actions
-├─ LIBRARY-POLICY.md          How a package gets approved
-├─ RESEARCH-POLICY.md         What must be verified, how it is recorded
-├─ QA-POLICY.md               Mechanical + judgement checks
-├─ EVALUATION-RUBRICS.md      9 review lenses
-├─ CONTENT-SYSTEM.md          Writing, analytics, learning loop
-├─ PRIVACY-POLICY.md          Secrets, client data, instruction boundary
-├─ BUDGET-POLICY.md           INR budget, dated cost snapshot
-├─ GETTING-STARTED.md         First-time setup
-├─ DAILY-PLAYBOOK.md          Everyday use
-├─ MIGRATION-CHECKLIST.md     Claude Code -> Codex + Cursor
-├─ CHANGELOG.md               How this system has changed
-├─ skills/                    15 capability modules + manifest
-├─ templates/                 11 project documents
-├─ modes/                     7 mode definitions
-├─ adapters/                  codex / cursor / claude-code
-├─ references/                Visual refs, UI + motion libraries, sources
-├─ prompts/                   4 copy-paste prompts
-├─ examples/                  4 worked examples
-└─ validation/                Router tests, consistency checks, dry runs
+├─ ROUTER.md               Modes, questions, accepted patterns, restarts   <- start
+├─ WORKFLOW.md             Stages, gates, 5 roles, what agents may do
+├─ DESIGN-TASTE.md         The quality bar and anti-generic rules
+├─ DESIGN-MOTION.md        Motion principles and procedure
+├─ DESIGN-ASSETS.md        Imagery, texture, licensing
+├─ QA-POLICY.md            Mechanical checks + deployment
+├─ EVALUATION-RUBRICS.md   5 review lenses, anchored scoring
+├─ LIBRARY-POLICY.md       How a package gets approved
+├─ RESEARCH-POLICY.md      What must be verified, and how
+├─ PRIVACY-POLICY.md       Secrets, client data, instruction boundary
+├─ MODEL-ROUTING.md        Which tool does what, usage conservation
+├─ BUDGET-POLICY.md        INR budget, dated cost snapshot
+├─ CONTENT-SYSTEM.md       Writing, analytics, learning loop
+├─ CHANGELOG.md            How this system changed + the 30-day check
+├─ GETTING-STARTED.md · DAILY-PLAYBOOK.md · MIGRATION-CHECKLIST.md
+├─ skills/       5   intake, reference-analysis, design-direction,
+│                    component-research, evaluation
+├─ templates/   11   4 required, 7 conditional
+├─ modes/        5
+├─ adapters/     3   codex / cursor / claude-code
+├─ references/   2   visual references, UI libraries
+├─ prompts/      4   start, review, portfolio, content
+└─ scripts/          check.py — links, required files, duplicate rules
 ```
-
----
 
 ## Principles
 
-**Provider-neutral.** No document outside [adapters/](adapters/) names a product. Tools are referred to by capability class (`R1`-`R6`). If one tool disappears, you write one adapter file and nothing else changes.
+**Provider-neutral.** Product-specific *instructions* live only in [adapters/](adapters/). Swapping a tool means rewriting one adapter and one table row.
 
-**Design decisions are not library decisions.** Component libraries are research, not dependencies. See [LIBRARY-POLICY.md](LIBRARY-POLICY.md) section 4.
+**Design decisions are not library decisions.** Component libraries are research, not dependencies ([LIBRARY-POLICY.md](LIBRARY-POLICY.md)).
 
-**Reversible by default, irreversible by approval.** One task per branch. Five gates. Nothing publishes or deploys itself.
+**Reversible by default, irreversible by approval.** One task per branch. Five gates.
 
-**Verified, not remembered.** Anything that changes over time gets looked up and dated, or is marked unverified. See [RESEARCH-POLICY.md](RESEARCH-POLICY.md).
+**Verified, not remembered.** Anything that changes over time is looked up and dated, or marked unverified.
 
-**The system improves itself.** Every retrospective edits a Builder OS file and logs it in [CHANGELOG.md](CHANGELOG.md). A retrospective that changes nothing was not one.
+**Four documents, not eleven.** `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. The rest exist when they earn it — a document nobody reads is worse than none, because it manufactures the appearance of process.
 
----
+**The system improves itself.** Every retrospective edits a file here and logs it in [CHANGELOG.md](CHANGELOG.md).
 
-## What this system will not do
+## What it will not do
 
-Stated plainly so it is not a surprise:
-
-- It will not publish content, push code, or deploy without you.
-- It will not install packages without a justification you approve.
-- It will not add auth, a database, a CMS, or a dashboard to a project that does not need one.
-- It will not guarantee good design. It makes generic design harder to ship accidentally, and it makes the failure visible when it happens.
-- It does not automate taste. The scorecard is scored by a judgement call, and a dishonest score defeats the whole mechanism.
+- Publish, push, or deploy without you.
+- Install packages without a justification you approve.
+- Add auth, a database, a CMS, or a dashboard to a project that does not need one.
+- **Fight a deliberate design choice.** The anti-generic rules assume genericness came from the tool. When it is your decision, declare it ([ROUTER.md](ROUTER.md) section 10).
+- Guarantee good design. It makes generic design harder to ship accidentally, and makes the failure visible when it happens.
 
 ---
 
 ## Status
 
-Version 0.1.0. Built and validated by dry run across five requests ([validation/dry-run-results.md](validation/dry-run-results.md)); **not yet validated by a real project.** Known weaknesses are listed in [validation/final-report.md](validation/final-report.md) — read that before trusting any part of this system further than you can check it.
+**v0.2.0.** Restructured after an independent audit of v0.1.0 — 71 files to 49, 12 roles to 5, 9 review lenses to 5, and the scorecard moved out of the author's session because self-scoring clusters at 4 and measures nothing.
+
+**Still not validated by a real project.** Run `python scripts/check.py` after any edit. The 30-day check in [CHANGELOG.md](CHANGELOG.md) is how this stops being a guess.

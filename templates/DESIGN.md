@@ -93,7 +93,7 @@
 
 ## Motion principles
 
-> What motion is FOR in this project. See [motion-design](../skills/motion-design.md).
+> What motion is FOR in this project. See [DESIGN-MOTION.md](../DESIGN-MOTION.md).
 
 - **Purpose of motion here:** <orientation / feedback / continuity / hierarchy / character>
 - **Timing set:** response <ms>, transition <ms>, narrative <ms>
@@ -102,7 +102,7 @@
 
 ## Signature moment
 
-> The one thing a person would describe to someone else. Built FIRST at S4.
+> [DESIGN-TASTE.md](../DESIGN-TASTE.md) 1.4. Built FIRST at S4.
 
 - **What:** <>
 - **Where:** <>
@@ -111,7 +111,7 @@
 
 ## Asset direction
 
-> Resolved at S3, never at S4. See [asset-generation](../skills/asset-generation.md).
+> Resolved at S3, never at S4. See [DESIGN-ASSETS.md](../DESIGN-ASSETS.md).
 
 | Asset | Exists? | Plan | Blocking? |
 |---|---|---|---|
@@ -141,23 +141,26 @@
 
 ---
 
-## Scorecard (G1)
+## G1 direction check
 
-> [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 11. Score the *direction*. Below 35 is not ready to present.
+> Qualitative, not scored. **Numeric scoring happens at S5 by a reviewer who did not write this** —
+> see [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) for why.
+>
+> **Any "no" is a blocker.** Full list: [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6.
 
-| # | Criterion | Score | Evidence |
+| # | Check | Y/N | If no, why not |
 |---|---|---|---|
-| 1 | Concept clarity | /5 | |
-| 2 | Typographic quality | /5 | |
-| 3 | Compositional strength | /5 | |
-| 4 | Colour discipline | /5 | |
-| 5 | Material quality | /5 | |
-| 6 | Motion purpose | /5 | |
-| 7 | Signature moment | /5 | |
-| 8 | Anti-generic compliance | /5 | |
-| 9 | Craft | /5 | |
-| 10 | Originality | /5 | |
+| 1 | Thesis tells you what to do about a hero image | | |
+| 2 | No "clean / modern / minimal / premium / sleek / elegant" | | |
+| 3 | Type ratio at least 4x | | |
+| 4 | Palette has a stated source | | |
+| 5 | Motion has one of the five purposes | | |
+| 6 | Signature moment named, with a mobile equivalent | | |
+| 7 | Three or more specific rejections | | |
+| 8 | All asset dependencies resolved | | |
+| 9 | Survives the swap test | | |
+| 10 | **Which anti-generic row is this closest to, and why is it not that?** | | |
 
-**Total: <n>/50** · Lowest criterion: <name>
+> Question 10 catches self-deception. Every direction is near something generic; naming which one forces you to articulate the difference.
 
 **Risks:** <what could make this direction fail>

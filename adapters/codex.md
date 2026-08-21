@@ -79,7 +79,7 @@ Do: <the stage's job>
 | S5 evaluation | The URL and success criteria **only** | `DESIGN.md`, the build story, the constraints |
 | S6 | `QA.md`, `PROJECT.md` | The build |
 
-The S5 row is the important one. **A reviewer given the design document defends the design.** Independence is the whole point of the lens ([skills/evaluation.md](../skills/evaluation.md)).
+The S5 row is the important one. **A reviewer given the design document defends the design.** Independence is the whole point of the lens ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
 
 ---
 
@@ -93,17 +93,17 @@ Test before handing off: **could a tool that has never seen this project start w
 
 ## Browsing
 
-Where browsing is available, use it for [live-research](../skills/live-research.md): primary sources, dated, with URLs.
+Where browsing is available, use it for [RESEARCH-POLICY.md](../RESEARCH-POLICY.md): primary sources, dated, with URLs.
 
-Set the lookup budget before searching (1-2 for a fact, 5-8 for a comparison, 10-15 for a survey), then stop and report. Unbounded research is one of the main ways subscription usage disappears with nothing to show.
+Set the lookup budget before searching, then stop and report ([RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 2).
 
 ---
 
 ## Limits
 
-When Codex is exhausted mid-project: **stop deciding.** Switch to `R2` work already specified in `TASKS.md`.
+When Codex is exhausted mid-project: **stop deciding**, and do already-specified build work instead. Never let the implementation tool invent direction — see the recovery rule in [MODEL-ROUTING.md](../MODEL-ROUTING.md) section 9.
 
-**Never let the implementation tool invent direction because the reasoning tool is unavailable.** Downgrading direction work to a fast model is how projects go generic without anyone noticing. If you are at S3 without an approved thesis and Codex is out, wait. Waiting is cheaper than rebuilding.
+If you are at S3 without an approved thesis and Codex is out, wait. Waiting is cheaper than rebuilding.
 
 ---
 

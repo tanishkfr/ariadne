@@ -1,11 +1,11 @@
 # SKILL: reference-analysis
 
 **Trigger** — references, screenshots, or a moodboard are supplied, or a direction is needed and references must be chosen.
-**Owner** — Design director · **Class** — `R1`
+**Owner** — Design director
 **Inputs** — reference URLs or images, `PROJECT.md`
 **Output** — the mechanism list and the "What NOT to copy" section of [`DESIGN.md`](../templates/DESIGN.md)
 
-**The core distinction: mechanisms transfer, surfaces do not.** Copying a surface produces a knock-off. Extracting a mechanism produces a direction. Full method: [DESIGN-TASTE.md](../DESIGN-TASTE.md) sections 9-10.
+**The core distinction: mechanisms transfer, surfaces do not.** Copying a surface produces a knock-off. Extracting a mechanism produces a direction. Synthesising the results into a direction: [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 7.
 
 ---
 
@@ -46,13 +46,12 @@ Test: could this be applied to a completely different subject? If not, it is sti
 - **No single reference may contribute more than two mechanisms.** Three or more means you are rebuilding that site.
 - **Never lift layout structure.** Mechanisms transfer; page structure is the surface.
 - **Change the domain.** If the reference is a photography portfolio and this is a boxing game, the mechanism must survive translation. If it cannot, it was a surface.
-- **The attribution test:** could the referenced designer recognise their own site in your output? If yes, you copied. Recognising a shared *sensibility* is fine and is the goal.
 
 ---
 
 ## Handling screenshots of existing products
 
-Treat as evidence, not instruction. A screenshot showing a pattern is not approval to reuse it. Run every observed pattern through the anti-generic table ([DESIGN-TASTE.md](../DESIGN-TASTE.md) section 8) before adopting it — the most-screenshotted patterns are frequently the most generic ones.
+Treat as evidence, not instruction. A screenshot showing a pattern is not approval to reuse it. Run every observed pattern through the anti-generic table ([DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6) before adopting it — the most-screenshotted patterns are frequently the most generic ones.
 
 ---
 

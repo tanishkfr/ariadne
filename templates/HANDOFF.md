@@ -113,4 +113,4 @@
 
 ## If the design cannot be built as specified
 
-Raise a `BUILD FINDING` ([frontend-build](../skills/frontend-build.md) step 7) and wait for a decision. **Never substitute silently.**
+Raise a `BUILD FINDING` ([WORKFLOW.md](../WORKFLOW.md) step 7) and wait for a decision. **Never substitute silently.**

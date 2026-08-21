@@ -1,92 +1,136 @@
 # EVALUATION RUBRICS
 
-Nine lenses for looking at finished work. Each is a different person with different priorities, and they disagree with each other on purpose.
+The judgement half of S5. Five lenses, each a different person with different priorities, who disagree on purpose.
 
-Used at S5 ([WORKFLOW.md](WORKFLOW.md)) and as the whole deliverable in audit/review mode ([modes/audit-review.md](modes/audit-review.md)).
-
-**Independence rule:** a lens runs in a session that did not build the work. A reviewer with build context defends the build. Give the reviewer the URL and the success criteria from `PROJECT.md` — nothing else.
+Also the whole deliverable in [audit / review](modes/audit-review.md) mode.
 
 ---
 
-## Shared mechanics
+## Two rules that make this work
 
-These apply to every lens. They are stated once here rather than repeated nine times.
+**1. Independence.** A lens runs in a session that **did not build the work and has not read [QA-POLICY.md](QA-POLICY.md)**. Give it the deployed URL and the success criteria from `PROJECT.md`. Nothing else — not the design document, not the constraints, not the story.
 
-### Scoring
+A reviewer holding build context defends the build: it knows why every compromise happened. That sympathy is exactly what the audience will not have.
 
-| Score | Meaning |
-|---|---|
-| **1** | Absent or actively harmful |
-| **2** | Present but weak; a reviewer would raise it unprompted |
-| **3** | Competent. Nothing wrong, nothing memorable. **This is the AI default and the score to fear.** |
-| **4** | Strong. Clearly considered. |
-| **5** | Exceptional. Would be cited as an example. |
+**2. Anchored scoring.** Every score below 4 must cite **a specific comparison** — a named reference, a competitor, or a prior version — that does this better, and say how.
 
-Most AI-assisted work scores 3 across the board. A rubric that returns straight 3s is telling you the work is forgettable, not that it is fine.
+This is the fix for the failure mode that destroys rubrics: a model scoring its own work clusters at 4, and a scorecard that always returns 44/50 measures nothing except your willingness to feel finished. **A score with no comparison is not a score.**
+
+---
+
+## Scoring
+
+| Score | Meaning | What it looks like |
+|---|---|---|
+| **1** | Absent or harmful | The criterion was not considered. Default framework output. |
+| **2** | Weak; a reviewer raises it unprompted | Considered once, then abandoned. Inconsistent application. |
+| **3** | **Competent. Nothing wrong, nothing memorable.** | Correct choices, no argument. **This is the AI default and the score to fear.** |
+| **4** | Strong; clearly considered | A decision was made and held throughout. You can name the reason. |
+| **5** | Exceptional; would be cited as an example | Someone would screenshot this and send it to a colleague. |
+
+**Most AI-assisted work is a 3 across the board.** A rubric returning straight 3s is telling you the work is forgettable, not that it is fine.
+
+### Evidence, required below 4
+
+Three parts: **where** (route, element, viewport) · **what** (the observation) · **against what** (the comparison).
+
+- Useless: "Typography could be stronger."
+- Usable: "Home hero, 1280px: 48px display against 16px body is a 3.0x ratio. [DESIGN-TASTE.md](DESIGN-TASTE.md) 2.3 requires 4x minimum. Burocratik runs roughly 10x on its index. Reads as a template. **Score 2.**"
+
+### Fix, required on every finding
+
+What to change · roughly what it costs · what it risks. A finding without a fix is a complaint.
 
 ### Severity
 
-**Blocking** (cannot ship) · **Major** (fix or waive in writing) · **Minor** (polish) · **Note** (observation). Same definitions as [QA-POLICY.md](QA-POLICY.md) section 2.
+**Blocking** · **Major** · **Minor** · **Note** — same definitions as [QA-POLICY.md](QA-POLICY.md).
 
-### Evidence requirement
-
-Every score below 4 requires: **where** (route, element, viewport), **what** (the specific observation), **why** (which criterion it fails). 
-
-- Useless: "Typography could be stronger."
-- Usable: "Home hero, 1280px: display type at 48px against 16px body is a 3x ratio; [DESIGN-TASTE.md](DESIGN-TASTE.md) 2.3 requires extreme contrast. Reads as a template."
-
-A score without evidence is an opinion, and opinions do not survive disagreement.
-
-### Fix format
-
-Every finding carries a fix: what to change, roughly what it costs, and what it risks. A finding without a fix is a complaint.
-
-### Final recommendation
-
-Every lens ends with exactly this:
+### Output, per lens
 
 ```
 LENS: <name>
-Score:    <total>/<max>  (<n> criteria)
+Score:    <total>/<max>
 Verdict:  Ship | Ship with fixes | Do not ship | Rebuild the direction
 Blocking: <list, or none>
 The one thing: <the single highest-leverage change>
-Would I <lens-specific test>? <yes/no + one sentence>
+Would I <the lens's test question>? <yes/no + one sentence>
 ```
 
-**The one thing** is mandatory. If everything is important, nothing is, and a list of twelve equal findings gets ignored.
+**The one thing is mandatory.** If everything is important, nothing is — a list of twelve equal findings gets ignored.
 
 ---
 
 ## 1. Creative director
 
-*Is there an idea here, and is it executed?* The default lens. Run it on everything with a visual surface.
+*Is there an idea here, and is it executed?* **The default lens.** Run it on everything with a visual surface. This is also the visual-quality scorecard — there is not a separate one.
 
-| # | Criterion | Looking for |
-|---|---|---|
-| 1 | Concept | A thesis visible in the work, not just in the document |
-| 2 | Execution consistency | The idea applied everywhere, not in one hero section |
-| 3 | Typography | Distinctive face, real scale, extreme contrast |
-| 4 | Composition | Asymmetry, deliberate grid breaks, hierarchy |
-| 5 | Colour and material | Motivated palette, consistent treatment |
-| 6 | Motion | Choreographed and characterful, not decorative |
-| 7 | Signature moment | Something a person would describe to someone else |
-| 8 | Originality | Not recognisably a reference or a genre |
+| # | Criterion | 2 | 4 |
+|---|---|---|---|
+| 1 | **Concept clarity** | A thesis exists in the document, not in the work | Visible in every decision |
+| 2 | **Typography** | Considered face, safe 2-3x scale | Distinctive face, 4x+ contrast, real scale |
+| 3 | **Composition** | Grid present, some hierarchy | Asymmetric, deliberate breaks, strong hierarchy |
+| 4 | **Colour discipline** | One accent, safe neutrals | Motivated palette with a stated source |
+| 5 | **Material quality** | Some texture or treatment | Consistent material logic throughout |
+| 6 | **Motion purpose** | Functional but generic | Choreographed, characterful, reduced-motion designed |
+| 7 | **Signature moment** | Present but quiet | Genuinely memorable, survives mobile |
+| 8 | **Anti-generic** | 1-2 undeclared violations | Zero, or all declared as accepted patterns |
+| 9 | **Craft** | Mostly consistent | Every value from the system |
+| 10 | **Originality** | Recognisably a genre | Recognisably its own |
 
-Max 40. **Below 24: rebuild the direction. 24-31: ship with fixes. 32+: ship.**
+**Max 50.** Below 30: rebuild the direction. 30-39: ship with fixes. 40+: ship.
+
+**Any criterion at 1 is Blocking regardless of total.** A 45 with no signature moment is a failure, not a pass.
 
 Test: *Would I put this in the studio's showreel?*
 
----
+## 2. Portfolio reviewer
 
-## 2. Senior product designer
+*Does this help or hurt the person who made it, and do their decisions hold up?* Assumes 60 seconds of attention and a hundred other portfolios.
+
+| # | Criterion | Looking for |
+|---|---|---|
+| 1 | Memorability | Recallable a day later |
+| 2 | Positioning | Clear what this person is good at |
+| 3 | Curation | Fewer, stronger. **The weakest piece sets the perceived level.** |
+| 4 | Depth of proof | Process and thinking visible, not just finished screens |
+| 5 | Writing | Case studies explain **decisions**, not features |
+| 6 | Conceptual rigour | The idea holds up when pushed |
+| 7 | Justification | Every major decision survives three "why?"s |
+| 8 | Risk | Attempted something that could have failed |
+
+**Max 40.** Below 24: rework before sending anywhere. 24-31: usable, not competitive. 32+: competitive.
+
+Test: *Would I shortlist this, among a hundred others?*
+
+This lens is entitled to say the work is **competent and pointless.** That verdict is the most useful thing it produces, because it points at S3 rather than at polish — and it is the one no other lens will say out loud.
+
+## 3. Strict client
+
+*Did I get what I paid for?* Deliberately unsympathetic.
+
+| # | Criterion | Looking for |
+|---|---|---|
+| 1 | Brief satisfaction | Every stated requirement met |
+| 2 | Business communication | A visitor understands the offer and why it matters |
+| 3 | Credibility | Looks like a real, serious organisation |
+| 4 | Differentiation | Does not look like the competitor's site |
+| 5 | Content quality | Real copy, real specifics, no filler |
+| 6 | Completeness | No placeholders, no dead links, no "coming soon" |
+| 7 | Cross-device | Works on the client's own phone |
+| 8 | Handover | The client can maintain or hand off what they own |
+
+**Max 40.** Below 28: do not present. 28-34: fix first. 35+: present.
+
+Test: *Would I pay the second invoice?*
+
+## 4. Senior product designer
 
 *Does it work for a person trying to do something?* Primary lens for product app mode.
 
 | # | Criterion | Looking for |
 |---|---|---|
 | 1 | Task clarity | The primary action is obvious within seconds |
-| 2 | Information architecture | Grouping matches user mental models, not database tables |
+| 2 | Information architecture | Grouping matches mental models, not database tables |
 | 3 | State design | Empty, loading, error, success all designed |
 | 4 | Feedback | Every action visibly acknowledged |
 | 5 | Error recovery | Mistakes are cheap and reversible |
@@ -94,165 +138,52 @@ Test: *Would I put this in the studio's showreel?*
 | 7 | Consistency | The same thing behaves the same way everywhere |
 | 8 | Progressive disclosure | Complexity revealed on demand |
 
-Max 40. **Below 24: not usable. 24-31: fix before real users. 32+: ship.**
+**Max 40.** Below 24: not usable. 24-31: fix before real users. 32+: ship.
 
 Test: *Could someone complete the core task without being told how?*
 
----
-
-## 3. Strict client
-
-*Did I get what I paid for?* Deliberately unsympathetic. Primary lens for premium client website mode.
-
-| # | Criterion | Looking for |
-|---|---|---|
-| 1 | Brief satisfaction | Every stated requirement met |
-| 2 | Business communication | A visitor understands what is offered and why it matters |
-| 3 | Credibility | Looks like a real, serious organisation |
-| 4 | Differentiation | Does not look like the competitor's site |
-| 5 | Content quality | Real copy, real specifics, no filler |
-| 6 | Completeness | No placeholders, no dead links, no "coming soon" |
-| 7 | Cross-device | Works on the client's own phone |
-| 8 | Handover readiness | The client can maintain or hand off what they own |
-
-Max 40. **Below 28: do not present to the client. 28-34: fix first. 35+: present.**
-
-Test: *Would I pay the second invoice?*
-
----
-
-## 4. Accessibility reviewer
-
-*Who has been excluded?* Findings here are frequently Blocking. See [skills/accessibility.md](skills/accessibility.md).
-
-| # | Criterion | Looking for |
-|---|---|---|
-| 1 | Keyboard | Every flow completable; visible focus; no traps |
-| 2 | Screen reader | Meaningful structure, labels, announcements |
-| 3 | Contrast | Measured on rendered pixels; 4.5:1 body, 3:1 large/UI |
-| 4 | Motion | Reduced-motion is a designed state, not disabled animation |
-| 5 | Structure | One `h1`, no skipped levels, landmarks, alt text |
-| 6 | Forms | Labels, errors tied to inputs, errors not colour-only |
-| 7 | Targets and zoom | 44px minimum; 200% zoom without loss |
-| 8 | Independence | No information conveyed by colour, hover, or motion alone |
-
-Max 40. **Any criterion at 1 is Blocking regardless of total. Below 28: do not ship.**
-
-Test: *Could someone using only a keyboard and a screen reader complete the primary task?*
-
----
-
 ## 5. Frontend engineer
 
-*Would I want to maintain this?*
+*Would I want to maintain this?* The judgement part — the checkable parts are in [QA-POLICY.md](QA-POLICY.md).
 
 | # | Criterion | Looking for |
 |---|---|---|
-| 1 | Type safety | Strict mode honoured; no unexplained `any` |
-| 2 | Component design | Sensible boundaries; no 600-line components |
-| 3 | Token discipline | Values from the system, not hardcoded one-offs |
-| 4 | Dependencies | Justified, documented, minimal ([LIBRARY-POLICY.md](LIBRARY-POLICY.md)) |
-| 5 | Correctness | No hydration mismatches, no console errors, no race conditions |
-| 6 | Reusability | Repeated patterns extracted; single-use abstractions not invented |
-| 7 | Readability | A stranger can follow it in ten minutes |
-| 8 | Build health | Production build clean, fast, no ignored warnings |
+| 1 | Component boundaries | Sensible; no 600-line components |
+| 2 | Token discipline | Values from the system, not hardcoded one-offs |
+| 3 | Dependency justification | Minimal, documented ([LIBRARY-POLICY.md](LIBRARY-POLICY.md)) |
+| 4 | Reusability | Repeated patterns extracted; single-use abstractions not invented |
+| 5 | Readability | A stranger follows it in ten minutes |
+| 6 | Correctness under change | Adding a feature would not require rewriting |
 
-Max 40. **Below 24: refactor before extending. 24-31: acceptable. 32+: good.**
+**Max 30.** Below 18: refactor before extending. 18-23: acceptable. 24+: good.
 
 Test: *Could I add a feature to this in six months without rereading everything?*
 
 ---
 
-## 6. Performance reviewer
+## Which lenses per mode
 
-*What does this cost the person loading it?* Numbers only — no impressions. See [skills/performance.md](skills/performance.md).
+| Mode | Lenses |
+|---|---|
+| Client site | Creative director, **Strict client** |
+| Portfolio | Creative director, **Portfolio reviewer** |
+| Product app | **Senior product designer**, Frontend engineer |
+| Game / experiment | Creative director (light) |
+| Audit / review | Whichever the request named |
 
-| # | Criterion | Looking for |
-|---|---|---|
-| 1 | LCP | < 2.5s on the preview |
-| 2 | CLS | < 0.1 |
-| 3 | INP | < 200ms |
-| 4 | JS weight | Within the `ARCHITECTURE.md` budget |
-| 5 | Images | Sized, modern format, lazy where appropriate |
-| 6 | Fonts | Minimal files, no invisible-text flash |
-| 7 | Animation cost | 60fps, compositor-only properties |
-| 8 | Network | No waterfall, no blocking third parties |
+**Two lenses is right. Four is a lot.** Beyond that the output gets long and nothing gets acted on.
 
-Max 40. **Below 24: Blocking. 24-31: ship with a plan. 32+: ship.**
+## Consolidating
 
-Test: *Would this be usable on a mid-range Android on 4G?*
+1. **Blocking findings first** — every one stops G3.
+2. **Majors ranked by how many lenses raised them.** Something two lenses independently noticed is real.
+3. **Name conflicts** rather than resolving them silently. The mode decides.
+4. **Do not average across lenses.** The average of several perspectives is the statistical centre — precisely what this system exists to avoid producing.
 
----
+## Evaluating "feel"
 
-## 7. Conversion reviewer
+Run the **five-second** and **swap** tests from [DESIGN-TASTE.md](DESIGN-TASTE.md) section 6, plus a third:
 
-*Does it cause the intended action?* Only for work with a business goal. Skip for experiments and most portfolios.
+- **Recall test** — describe it tomorrow without looking. What survives? Usually one thing. Sometimes none.
 
-| # | Criterion | Looking for |
-|---|---|---|
-| 1 | Value clarity | Offer understood within one screen |
-| 2 | Primary action | One obvious next step per page |
-| 3 | Friction | Nothing unnecessary between intent and action |
-| 4 | Trust | Evidence, specifics, real proof rather than claims |
-| 5 | Objection handling | The obvious hesitation is addressed |
-| 6 | Copy | Specific and concrete, not aspirational filler |
-
-Max 30. **Below 18: reconsider the structure. 18-23: fix. 24+: ship.**
-
-Test: *Would a qualified visitor know what to do next?*
-
-Caution: this lens pulls toward conventional SaaS patterns, which is exactly what [DESIGN-TASTE.md](DESIGN-TASTE.md) rejects. When it conflicts with the creative director lens, the mode decides — premium client work weights conversion, portfolio work weights creative direction.
-
----
-
-## 8. Portfolio reviewer
-
-*Does this help or hurt the person who made it?* Primary lens for personal portfolio mode. Assumes 60 seconds of attention and a hundred other portfolios.
-
-| # | Criterion | Looking for |
-|---|---|---|
-| 1 | Memorability | Recallable a day later |
-| 2 | Positioning | Clear what this person is good at |
-| 3 | Depth of proof | Process and thinking visible, not just finished screens |
-| 4 | Curation | Fewer, stronger pieces; the weakest piece sets the perceived level |
-| 5 | Craft | Execution quality signals professional standard |
-| 6 | Range vs focus | Deliberate, not accidental |
-| 7 | Writing | Case studies explain decisions, not features |
-| 8 | Signal | Distinguishable from a template portfolio |
-
-Max 40. **Below 24: rework before sending anywhere. 24-31: usable, not competitive. 32+: competitive.**
-
-Test: *Would I remember this tomorrow, among a hundred others?*
-
----
-
-## 9. Design-school reviewer
-
-*Defend your decisions.* The hardest lens. It ignores polish and interrogates reasoning. Use when you want to be told the uncomfortable thing.
-
-| # | Criterion | Looking for |
-|---|---|---|
-| 1 | Conceptual rigour | The idea holds up when pushed |
-| 2 | Research evidence | The direction came from somewhere, not from taste alone |
-| 3 | Process | Iteration and rejected alternatives visible |
-| 4 | Justification | Every major decision has a reason beyond preference |
-| 5 | Self-awareness | Knows its own weaknesses |
-| 6 | Reference literacy | Understands what it borrowed and why |
-| 7 | Risk | Attempted something that could have failed |
-| 8 | Resolution | Finished, not abandoned at 80% |
-
-Max 40. **Below 24: the concept is not there. 24-31: sound, not distinctive. 32+: strong.**
-
-Test: *If I asked "why?" three times about any decision, would the answers hold?*
-
-This lens is entitled to say the work is competent and pointless. That verdict is the most useful thing it produces — it is the one no other lens will say out loud.
-
----
-
-## Running a multi-lens review
-
-1. Pick lenses per [QA-POLICY.md](QA-POLICY.md) section 4.3.
-2. Run each in a **separate session**. Lenses contaminate each other — a reviewer that just scored accessibility will unconsciously weight it.
-3. Collect the recommendation blocks.
-4. Consolidate: every Blocking finding, then Majors ranked by how many lenses raised them. A Major flagged by three lenses outranks a Blocking flagged by one in *practice* — but it does not unblock G3.
-5. Where lenses conflict, name the conflict and let the mode decide. Do not average scores across lenses; the average of nine perspectives is the statistical centre, which is what this whole system is built to avoid.
+**If all three fail, the work is competent and forgettable, and polish will not fix it.** That is an S3 problem surfacing at S5, and the honest recommendation is to restart the direction ([ROUTER.md](ROUTER.md) section 11).

@@ -30,7 +30,7 @@ Question 2 is the highest-leverage question in this mode. "It saves your work" m
 
 | Area | Default |
 |---|---|
-| Auth | **None.** Requires an explicit requirement, and it is a scope change ([AUTONOMY-POLICY.md](../AUTONOMY-POLICY.md)). |
+| Auth | **None.** Requires an explicit requirement, and it is a scope change ([WORKFLOW.md](../WORKFLOW.md)). |
 | Database | **None** until persistence across devices is genuinely required |
 | Persistence | localStorage or URL state first |
 | Admin panel | **Never** by default |
@@ -44,19 +44,21 @@ Question 2 is the highest-leverage question in this mode. "It saves your work" m
 
 ## Documents
 
-`PROJECT.md` → **`ARCHITECTURE.md`** → `DESIGN.md` → `TASKS.md` → `AGENTS.md` → `HANDOFF.md` → `QA.md` → `RETROSPECTIVE.md`
+**Required: `PROJECT.md` → **`ARCHITECTURE.md`** → `DESIGN.md` → `HANDOFF.md` → `QA.md`.**
+
+Usually also `TASKS.md`, `AGENTS.md`, `RETROSPECTIVE.md`.
 
 **Architecture comes before design here** — the only mode where it does. The data and state model constrain what the interface can be, and discovering that after the direction is locked is expensive.
 
 ## Skills
 
-discovery, grilling, live-research, component-research, design-direction, frontend-build, browser-qa, accessibility, performance, evaluation, deployment
+[intake](../skills/intake.md) — **challenge pass mandatory** · [component-research](../skills/component-research.md) · [design-direction](../skills/design-direction.md) · [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)
 
 Motion is lighter than in visual modes: feedback and continuity, rarely character.
 
 ## Stages
 
-S3 is **light on visual direction, full on architecture**. When design and architecture conflict in this mode, **architecture wins** and design adapts ([AGENT-ROLES.md](../AGENT-ROLES.md) role conflicts).
+S3 is **light on visual direction, full on architecture**. When design and architecture conflict in this mode, **architecture wins** and design adapts ([WORKFLOW.md](../WORKFLOW.md) role conflicts).
 
 ## Gates
 

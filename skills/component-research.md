@@ -1,7 +1,7 @@
 # SKILL: component-research
 
 **Trigger** — a non-trivial interaction needs building and it is unclear how.
-**Owner** — Researcher · **Class** — `R1` + `R4`
+**Owner** — Researcher
 **Inputs** — the interaction requirement from `DESIGN.md`
 **Output** — a technique writeup in [`RESEARCH.md`](../templates/RESEARCH.md), and possibly a G2 dependency request
 

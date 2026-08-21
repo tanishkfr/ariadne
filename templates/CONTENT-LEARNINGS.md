@@ -64,8 +64,8 @@
 |---|---|---|---|---|---|
 | 1 | <specific and falsifiable> | <the single thing changing> | <n> | <dates> | supported / contradicted / **inconclusive** |
 
-> One experiment at a time. One variable.
-> **Inconclusive is the most common correct result.** Record it as such rather than forcing a conclusion.
+> One experiment at a time. One variable. **Inconclusive is the most common correct result**
+> ([CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) section 12).
 
 ## Voice drift
 

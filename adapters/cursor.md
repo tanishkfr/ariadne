@@ -20,7 +20,7 @@ Roles: Implementer, Motion specialist, QA engineer, and the mechanical half of t
 
 ## Does not own
 
-The design thesis. Architecture decisions. Whether a package may be installed. Judgement-half QA — a tool that built the thing cannot review it ([skills/evaluation.md](../skills/evaluation.md)).
+The design thesis. Architecture decisions. Whether a package may be installed. Judgement-half QA — a tool that built the thing cannot review it ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
 
 ---
 
@@ -67,7 +67,7 @@ Acceptance criterion: <paste it>
 Branch: s4/<slug>
 ```
 
-**One task, one branch.** Never on `main`. This is what makes almost all agent work reversible with `git checkout`, and it is why the Green tier in [AUTONOMY-POLICY.md](../AUTONOMY-POLICY.md) can be as permissive as it is.
+**One task, one branch.** Never on `main`. This is what makes almost all agent work reversible with `git checkout`, and it is why the Green tier in [WORKFLOW.md](../WORKFLOW.md) can be as permissive as it is.
 
 **Let it read the codebase; do not paste the codebase.** Cursor's indexing is `R3` — that is what it is for. Pasting files into a reasoning tool is the expensive alternative.
 
@@ -81,9 +81,9 @@ Branch: s4/<slug>
 
 Use the browser tooling for `R4` work: loading routes, reading the console, checking responsive widths, capturing screenshots.
 
-**Anything you will check twice becomes a Playwright test.** Writing the script costs about the same as one browser pass and then costs nothing forever. Browser-agent passes are where usage disappears; scripts are free.
+Browser-agent passes are where usage disappears; scripts are free. Turn repeat checks into Playwright tests ([QA-POLICY.md](../QA-POLICY.md)).
 
-Escalation ladder, cheapest first: production build → typecheck → Playwright → browser agent → your own eyes. Do not skip rungs upward ([skills/browser-qa.md](../skills/browser-qa.md)).
+Escalation ladder, cheapest first: production build → typecheck → Playwright → browser agent → your own eyes. Do not skip rungs upward ([QA-POLICY.md](../QA-POLICY.md)).
 
 ---
 

@@ -51,7 +51,7 @@ Before any client-owned material goes to a third-party service — a model, an i
 2. Is it necessary, or is a description enough?
 3. Can it be redacted first?
 
-**Ask before uploading.** Amber under [AUTONOMY-POLICY.md](AUTONOMY-POLICY.md).
+**Ask before uploading.** Amber under [WORKFLOW.md](WORKFLOW.md).
 
 Usually safe: public brand assets, published copy, live site URLs.
 Usually not: unreleased products, internal documents, customer data, anything under NDA, pre-launch designs.

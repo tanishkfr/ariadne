@@ -1,10 +1,10 @@
 # PROJECT: <name>
 
 > Template. Copy into the project, delete these quoted lines as you fill it in.
-> Owner: Strategist · Stage: S1 · Skills: [discovery](../skills/discovery.md), [grilling](../skills/grilling.md)
+> Owner: Strategist · Stage: S1 · Skills: [intake](../skills/intake.md)
 > **This is the document that prevents generic output.** Vague scope produces average design.
 
-**Mode:** <one of seven> · **Created:** <date> · **Status:** <draft | locked | superseded>
+**Mode:** <one of five> · **Created:** <date> · **Status:** <draft | locked | superseded>
 
 ---
 
@@ -58,10 +58,23 @@
 | Technical | <> |
 | Approval | <who else signs off> |
 
+## Accepted patterns
+
+> Optional. Patterns from the [DESIGN-TASTE.md](../DESIGN-TASTE.md) blocking list that you are choosing **on purpose**.
+> Declaring one here drops it from Blocking to Note at QA — it stays visible in the report but no longer stops G3.
+>
+> Rules ([ROUTER.md](../ROUTER.md) section 10): declared **before** it is built, never at S5 to rescue a failing build ·
+> a reason specific to this project, not a preference · **maximum three.**
+> Four or more means the direction is generic and these are papering over it.
+
+| Pattern | Because |
+|---|---|
+| <e.g. repetitive card grid> | <e.g. the user monitors six live data streams; card density is correct here> |
+
 ## Success criteria
 
 > **Each must be falsifiable.** If it cannot fail, rewrite it.
-> "Looks good" cannot fail. "A studio would show it in a review without apologising" can.
+> "Looks good" cannot fail. "Three of the five studios I sent it to replied" can.
 
 1. <>
 2. <>
@@ -93,7 +106,7 @@
 
 ## Contradictions
 
-> Surfaced by [grilling](../skills/grilling.md). Every brief has at least one.
+> Surfaced by [intake](../skills/intake.md). Every brief has at least one.
 > Unresolved contradictions get resolved implicitly at S4, usually in the cheapest direction.
 
 | Contradiction | Resolution |

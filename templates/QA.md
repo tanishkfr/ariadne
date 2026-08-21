@@ -48,47 +48,32 @@
 
 ## Judgement
 
-### Visual quality scorecard
-
-> [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 11, scored against the **build** this time.
-> Below 35 is not shippable. Any single criterion at 1 is Blocking regardless of total.
-
-| # | Criterion | Score | Evidence (one sentence) |
-|---|---|---|---|
-| 1 | Concept clarity | /5 | |
-| 2 | Typographic quality | /5 | |
-| 3 | Compositional strength | /5 | |
-| 4 | Colour discipline | /5 | |
-| 5 | Material quality | /5 | |
-| 6 | Motion purpose | /5 | |
-| 7 | Signature moment | /5 | |
-| 8 | Anti-generic compliance | /5 | |
-| 9 | Craft | /5 | |
-| 10 | Originality | /5 | |
-
-**Total: <n>/50**
+> **Filled in from a different session.** The Reviewer does not read the mechanical half above and has not
+> seen `DESIGN.md` — it gets the deployed URL and the success criteria, nothing else
+> ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)). Paste its output here when it comes back.
 
 ### Anti-generic sweep
 
-> [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 8. **Any present is Blocking.**
+> [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6. **Any present is Blocking**, unless declared as an
+> accepted pattern in `PROJECT.md` — those drop to Note and are marked `accepted` below.
 
-| Pattern | Present? | Where |
-|---|---|---|
-| Generic SaaS layout | | |
-| Random gradients | | |
-| Default glassmorphism | | |
-| Repetitive card grids | | |
-| Empty hero | | |
-| Generic AI copy | | |
-| Arbitrary animation | | |
-| Component-library soup | | |
-| Placeholder imagery | | |
-| Predictable typography | | |
-| Unmotivated bento | | |
-| Overuse of rounded cards | | |
-| Overuse of shadows | | |
-| Unnecessary dashboard | | |
-| Decorative motion | | |
+| Pattern | Present? | Accepted? | Where |
+|---|---|---|---|
+| Generic SaaS layout | | | |
+| Random gradients | | | |
+| Default glassmorphism | | | |
+| Repetitive card grids | | | |
+| Empty hero | | | |
+| Generic AI copy | | | |
+| Arbitrary animation | | | |
+| Component-library soup | | | |
+| Placeholder imagery | | | |
+| Predictable typography | | | |
+| Unmotivated bento | | | |
+| Overuse of rounded cards | | | |
+| Overuse of shadows | | | |
+| Unnecessary dashboard | | | |
+| Decorative motion | | | |
 
 ### The two tests
 
@@ -101,7 +86,8 @@
 
 | Lens | Score | Verdict | The one thing |
 |---|---|---|---|
-| | /40 | | |
+| Creative director | /50 | | |
+| <mode lens> | /40 | | |
 
 ---
 
@@ -139,8 +125,7 @@ G3: BUILD COMPLETE
 Mechanical:  <n> passed / <n> failed / <n> not run
 Blocking:    <list, or none>
 Major:       <list>
-Scorecard:   <n>/50  (lowest: <criterion> at <n>)
-Lenses:      <lens: verdict> ...
+Accepted:    <patterns declared in PROJECT.md, now Notes>
 Screenshots: <paths>
 Preview:     <url>
 Known gaps:  <what was not tested, and why>
@@ -148,3 +133,4 @@ Recommend:   ship | fix first | return to S3
 ```
 
 > **Known gaps may not be empty.** Something is always untested. Naming it is what makes the rest of the report trustworthy.
+> The Reviewer's scores arrive separately, from a session that did not see this document.
