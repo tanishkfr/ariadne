@@ -103,6 +103,19 @@ Do NOT score this out of 50. Numeric scoring happens at S5 by a reviewer who
 did not write the direction; scoring your own work clusters at 4 and measures
 nothing.
 
+END YOUR RESPONSE WITH THIS, FILLED IN:
+
+  NEXT: S4 Build.
+  On approval, paste prompts/build-kickoff.md into the BUILD tool,
+  in a fresh session - not this one.
+  Carry forward: PROJECT.md, DESIGN.md
+  Blocked on: <G1 approval, or what else you need from me>
+
+  If the direction is rejected, say nothing about restart procedure -
+  I will tell you in my own words and the router will recognise it.
+
+Never end with "let me know how you'd like to proceed".
+
 Then STOP. Do not write components. Do not pick packages. Do not start
 building. Wait for my approval.
 ```

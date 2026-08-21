@@ -96,6 +96,16 @@ reloaded, performance on the PREVIEW not localhost.
 
 Record every check with evidence - a command output, a number, or a screenshot.
 A check you did not run is recorded as NOT RUN, never as passed.
+
+END YOUR RESPONSE WITH THIS, FILLED IN:
+
+  NEXT: S5 Review.
+  Paste prompts/project-review.md into a FRESH session - one that did not
+  build this. Give it only the deployed URL and the success criteria.
+  QA evidence: <where QA.md is>
+  Blocked on: <G3, or what else you need from me>
+
+Never end with "let me know how you'd like to proceed".
 ```
 
 ---

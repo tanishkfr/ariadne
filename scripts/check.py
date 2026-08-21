@@ -7,7 +7,8 @@ Deterministic checks that caught real bugs during construction:
   2. Required files present (incl. one entry point per stage)
   3. Canonical rule IDs defined, no dangling references
   4. Router suite structure: categories, rules, modes, run history
-  5. Duplicated sentences (source-of-truth violations)
+  5. Stage chain: every chained prompt emits NEXT inside its fenced block
+  6. Duplicated sentences (source-of-truth violations)
 
 Usage:  python scripts/check.py [--verbose]
 Exit:   0 clean, 1 problems found.
@@ -199,6 +200,36 @@ def check_router_suite():
     return problems
 
 
+# Stage chain guard. B1 (v0.3.2) was: the NEXT instruction sat in prose OUTSIDE
+# the fenced block, so the agent receiving the pasted prompt never saw it and
+# the workflow chain silently broke at S3 and S4. Prose around a fence is
+# documentation for the human; only the fence reaches the agent.
+CHAINED_PROMPTS = [
+    "prompts/project-start.md",
+    "prompts/design-direction.md",
+    "prompts/build-kickoff.md",
+    "prompts/project-review.md",
+]
+
+
+def check_stage_chain():
+    problems = []
+    for rel_path in CHAINED_PROMPTS:
+        full = os.path.join(ROOT, rel_path)
+        if not os.path.exists(full):
+            problems.append(f"{rel_path} missing")
+            continue
+        text = open(full, encoding="utf-8").read()
+        fenced = " ".join(re.findall(r"```(.*?)```", text, re.S))
+        if "NEXT:" not in fenced:
+            where = "in prose only" if "NEXT" in text else "absent"
+            problems.append(
+                f"{rel_path}: NEXT instruction {where} -- must be INSIDE the "
+                f"fenced block or the agent never receives it"
+            )
+    return problems
+
+
 def main():
     failed = False
 
@@ -233,6 +264,15 @@ def main():
                 print(f"        {f}")
     else:
         print(f"ok    rule IDs: {len(RULE_IDS)} defined, no dangling references")
+
+    chain_problems = check_stage_chain()
+    if chain_problems:
+        failed = True
+        print(f"FAIL  stage chain: {len(chain_problems)} broken transition(s)")
+        for c in chain_problems:
+            print(f"        {c}")
+    else:
+        print(f"ok    stage chain: {len(CHAINED_PROMPTS)} prompts emit NEXT inside the fence")
 
     suite_problems = check_router_suite()
     if suite_problems:
