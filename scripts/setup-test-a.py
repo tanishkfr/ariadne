@@ -192,8 +192,11 @@ def make_run_record(run_id, version, commit, project, prompt):
     now = datetime.datetime.now()
 
     def setfield(text, name, value):
-        return re.sub(r"(\|\s*\*\*" + re.escape(name) + r"\*\*\s*\|)[^|\n]*\|",
-                      lambda m: f"{m.group(1)} `{value}` |", text, count=1)
+        # Replace the WHOLE row. The old version stopped at the first "|", but
+        # the template's placeholders contain escaped pipes, so it left the
+        # tail behind: "| **Run ID** | `A2` | B1 \| B2 …>` |".
+        return re.sub(r"^(\|\s*\*\*" + re.escape(name) + r"\*\*\s*\|).*$",
+                      lambda m: f"{m.group(1)} `{value}` |", text, count=1, flags=re.M)
 
     t = setfield(t, "Run ID", run_id)
     t = setfield(t, "Date", now.strftime("%Y-%m-%d"))

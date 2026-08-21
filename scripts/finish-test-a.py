@@ -46,8 +46,18 @@ def project_from_run(text):
 
 
 def capture(text, header):
-    m = re.search(r"###\s+" + re.escape(header) + r"(.*?)(?=\n###\s|\n##\s|\Z)", text, re.S)
+    m = re.search(r"###\s+" + re.escape(header) + r"(.*?)(?=\n###\s|\n##\s|\n>\s*Project:|\Z)",
+                  text, re.S)
     return m.group(1).strip() if m else ""
+
+
+def strip_guidance(section):
+    """
+    Drop instructional blockquotes so the report shows what the human wrote
+    rather than replaying the template's own advice back at them.
+    """
+    return "\n".join(l for l in section.split("\n")
+                     if not l.lstrip().startswith(">")).strip()
 
 
 def filled(section):
@@ -77,6 +87,22 @@ def frame_keys():
     return re.findall(r"^\s{2,}([A-Z]{4,12})\s{2,}\S", m.group(1), re.M)
 
 
+def block_keys():
+    """
+    The ROUTING BLOCK field names, from the frozen prompt.
+
+    This matters more than the FRAME. The prompt says "FRAME - fill these
+    before deciding anything" -- that is internal reasoning, and a session is
+    free not to print it. STEP 3 is what it must actually EMIT. So `Unresolved`
+    is the reliable ambiguity signal; OBJECT is a bonus when it appears.
+    """
+    text = V.read(START_PROMPT)
+    m = re.search(r"^ROUTING BLOCK\n(.*?)\n\s*\n", text, re.S | re.M)
+    if not m:
+        return []
+    return [l.split(":")[0].strip() for l in m.group(1).split("\n") if ":" in l]
+
+
 def next_contract():
     """The lines the prompt requires the reply to end with."""
     text = V.read(START_PROMPT)
@@ -88,6 +114,22 @@ def next_contract():
             if re.match(r"\s*([A-Za-z][^:]*):", l)]
 
 
+# A reply is prose, and the label may arrive wearing markdown: a bullet, bold,
+# a table cell, or the prompt's own indented FRAME layout. All of these are the
+# same contract, so all of them must read. Anything genuinely absent stays
+# absent -- tolerance here is about formatting, never about guessing content.
+LABEL = (r"^[ \t]*(?:[-*+][ \t]*)?"        # optional bullet
+         r"(?:\|[ \t]*)?"                  # optional leading table pipe
+         r"\*{0,2}`?%s`?\*{0,2}"           # the label, optionally bold/code
+         r"[ \t]*(?:[:\-\|]|[ \t]{2,})[ \t]*"   # : - | or column whitespace
+         r"(.+?)[ \t]*\|?[ \t]*$")         # value, optional trailing pipe
+
+
+def clean(v):
+    """Strip markdown decoration from an extracted value."""
+    return re.sub(r"^[\*`_ ]+|[\*`_ ]+$", "", v.strip()).strip()
+
+
 def extract_routing(transcript):
     """
     Pull the routing decision out of the raw Codex reply. Returns
@@ -96,13 +138,18 @@ def extract_routing(transcript):
     """
     out = {}
     for key in frame_keys():
-        m = re.search(r"^\s*" + key + r"\s*[:\-]\s*(.+)$", transcript, re.M)
+        m = re.search(LABEL % key, transcript, re.M)
         if m:
-            out[key] = m.group(1).strip()
+            out[key] = clean(m.group(1))
 
-    m = re.search(r"^\s*Mode\s*[:\-]\s*(.+)$", transcript, re.M)
+    for key in block_keys():
+        m = re.search(LABEL % re.escape(key), transcript, re.M)
+        if m:
+            out["BLOCK::" + key] = clean(m.group(1))
+
+    m = re.search(LABEL % "Mode", transcript, re.M)
     if m:
-        out["MODE"] = m.group(1).strip()
+        out["MODE"] = clean(m.group(1))
     m = re.search(r"confidence\s*[:=]?\s*(High|Medium|Low)", transcript, re.I)
     if m:
         out["CONFIDENCE"] = m.group(1).capitalize()
@@ -121,7 +168,7 @@ def extract_routing(transcript):
     return out
 
 
-def derive_deviations(r):
+def derive_deviations(r, docs=None):
     """
     Compare the reply against the contract the prompt stated. Each item names
     the rule it violates, so a finding can be traced rather than asserted.
@@ -132,29 +179,41 @@ def derive_deviations(r):
         return dev, ok
 
     obj = r.get("OBJECT", "")
+    unres = r.get("BLOCK::Unresolved", "")
     conf = r.get("CONFIDENCE", "")
-    mode = r.get("MODE", "")
 
-    # R-DEST-1: OBJECT unresolved => confidence LOW, no matter how clear the rest.
-    if "UNRESOLVED" in obj.upper():
+    # Ambiguity can be signalled two ways: the FRAME's OBJECT (printed only if
+    # the session chose to show its reasoning) or the ROUTING BLOCK's
+    # Unresolved field (mandatory output). Either counts.
+    ambiguous = ("UNRESOLVED" in obj.upper()
+                 or bool(unres and not re.match(r"none|nothing|n/?a\b", unres, re.I)))
+
+    # R-DEST-1: an unresolved object means LOW, however clear everything else is.
+    if ambiguous:
         if conf and conf != "Low":
-            dev.append(f"R-DEST-1: OBJECT is UNRESOLVED but confidence is {conf}, not Low")
+            dev.append(f"R-DEST-1: the object is unresolved but confidence is "
+                       f"{conf}, not Low")
         elif conf == "Low":
-            ok.append("R-DEST-1 held: OBJECT UNRESOLVED produced Low confidence")
+            ok.append("R-DEST-1 held: an unresolved object produced Low confidence")
 
-    # Low confidence => stop and ask, do not commit to a mode.
+    # Low confidence => STOP and ask. "Stop" is about not PROCEEDING, not about
+    # refusing to name a mode: STEP 3 requires the line "Mode: <mode>
+    # (confidence: ...)", and the prompt explicitly says to pick the closest
+    # workflow and say so. Naming a closest fit while flagging Low and asking is
+    # compliance, so it is measured by what the session DID, not what it called
+    # the mode.
     if conf == "Low":
-        committed = mode and not re.search(r"not assigned|none|unresolved|no mode",
-                                           mode, re.I)
-        if committed:
-            dev.append(f"confidence is Low but a mode was committed: '{mode}' "
-                       f"-- the prompt says STOP and ask before committing")
-        else:
-            ok.append("Low confidence did not commit to a mode")
-        if r.get("QUESTION"):
+        if r.get("QUESTION") or r.get("BLOCK::Questions"):
             ok.append("a clarifying question was asked, as Low confidence requires")
         else:
             dev.append("confidence is Low but no clarifying question was found")
+
+        wrote = [d for d in (docs or []) if d != "AGENTS.md"]
+        if wrote:
+            dev.append(f"confidence is Low but documents were written anyway: "
+                       f"{wrote} -- the prompt says STOP and ask before committing")
+        elif docs is not None:
+            ok.append("Low confidence stopped before writing documents")
 
     # The closing NEXT block is mandatory and has named fields.
     for label in next_contract():
@@ -181,14 +240,29 @@ def routing_section(routing, dev, ok, transcript):
     def cell(v):
         return v.splitlines()[0][:90].replace("|", "\\|")
 
-    rows = [f"| `{k}` | {cell(routing[k])} |" for k in frame_keys() if k in routing]
+    frame = [k for k in frame_keys() if k in routing]
+    rows = [f"| `{k}` | {cell(routing[k])} |" for k in frame]
+    rows += [f"| `{k}` | {cell(routing['BLOCK::' + k])} |"
+             for k in block_keys() if "BLOCK::" + k in routing and k != "Mode"]
     rows.append(f"| **Mode** | {cell(routing.get('MODE', '_not stated_'))} |")
     rows.append(f"| **Confidence** | **{routing.get('CONFIDENCE', '_not stated_')}** |")
     rows.append(f"| **Question asked** | {cell(routing.get('QUESTION', '_none found_'))} |")
     out = ("### Routing — extracted from the transcript\n\n"
            f"_Read mechanically from `{transcript.replace(os.sep, '/')}` using the format "
            "`prompts/project-start.md` requires. Reproducible._\n\n"
-           "| Frame field | Value |\n|---|---|\n" + "\n".join(rows) + "\n\n")
+           "| Field | Value |\n|---|---|\n" + "\n".join(rows) + "\n\n")
+
+    # An absent FRAME must be stated, not silently omitted -- a shorter table
+    # looked identical to a complete one in the A2 report, and R-DEST-1 had in
+    # fact gone unchecked.
+    if not frame:
+        out += ("> **The FRAME was not printed.** The prompt treats it as internal "
+                "(\"fill these before deciding\"), so this is not a deviation — but it "
+                "means `OBJECT` could not be read directly, and the ambiguity check "
+                "fell back to the ROUTING BLOCK's `Unresolved` field"
+                + ("." if "BLOCK::Unresolved" in routing else
+                   ", **which is also absent — so R-DEST-1 could not be checked at all.**")
+                + "\n\n")
 
     out += "### Contract check\n\n"
     out += ("_Each line names the rule it tests. Derived from the prompt, not judged._\n\n")
@@ -237,8 +311,10 @@ def build_result(run_id, run_file, project, problems, events, observations, metr
     state = capture(text, "Runtime state after the run")
     devs = capture(text, "Deviations from documented behaviour")
     comp = capture(text, "The comparison")
-    baseline = re.search(r"##\s+Baseline(.*?)(?=\n##\s|\Z)", text, re.S)
-    baseline = baseline.group(1).strip() if baseline else ""
+    # Stop at the "After the run" subsection: that is the comparison, not the
+    # baseline, and including it made the report print the same empty table twice.
+    baseline = re.search(r"##\s+Baseline(.*?)(?=\n###\s|\n##\s|\Z)", text, re.S)
+    baseline = strip_guidance(baseline.group(1)) if baseline else ""
 
     def evs(kind):
         rows = [e for e in events if e["type"] == kind]
@@ -437,7 +513,7 @@ def main():
     tpath = os.path.join(run_dir, "evidence", "transcript.md")
     transcript = os.path.relpath(tpath, ROOT) if os.path.exists(tpath) else None
     routing = extract_routing(V.read(tpath)) if transcript else {}
-    dev, ok = derive_deviations(routing)
+    dev, ok = derive_deviations(routing, observations.get('documents_present'))
 
     result_path = os.path.join(run_dir, "RESULT.md")
     with open(result_path, "w", encoding="utf-8") as f:
