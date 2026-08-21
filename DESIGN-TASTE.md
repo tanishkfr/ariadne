@@ -99,7 +99,7 @@ Carries more of the "expensive" signal than any other variable, and is where gen
 
 ## 6. Anti-generic rules
 
-**Blocking at QA** — a finding, not a preference. Unless declared as an accepted pattern ([ROUTER.md](ROUTER.md) section 10), in which case it drops to a Note and stays visible in the report.
+**Blocking at QA** — a finding, not a preference. Unless declared as an accepted pattern (**R-PAT-1**, [ROUTER.md](ROUTER.md) section 10), in which case it drops to a Note and stays visible in the report. **There is no limit on how many** — the test is intentionality, not quantity.
 
 | Rejected | Why | Do instead |
 |---|---|---|

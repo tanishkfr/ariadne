@@ -60,16 +60,21 @@
 
 ## Accepted patterns
 
-> Optional. Patterns from the [DESIGN-TASTE.md](../DESIGN-TASTE.md) blocking list that you are choosing **on purpose**.
-> Declaring one here drops it from Blocking to Note at QA — it stays visible in the report but no longer stops G3.
+> Optional, and **there is no limit on how many.** Patterns from the [DESIGN-TASTE.md](../DESIGN-TASTE.md) blocking
+> list that you are choosing **on purpose**. Declaring one here drops it from Blocking to Note at QA — it stays
+> visible in the report but no longer stops G3.
 >
-> Rules ([ROUTER.md](../ROUTER.md) section 10): declared **before** it is built, never at S5 to rescue a failing build ·
-> a reason specific to this project, not a preference · **maximum three.**
-> Four or more means the direction is generic and these are papering over it.
+> **R-PAT-1** ([ROUTER.md](../ROUTER.md) section 10): declared **before** it is built, never at S5 to rescue a
+> failing build · the reason must be conceptual, narrative, functional, historical, medium-specific, or
+> interaction-based — not "I like this style" · the *pattern* is accepted, the *execution* is still reviewable.
 
-| Pattern | Because |
-|---|---|
-| <e.g. repetitive card grid> | <e.g. the user monitors six live data streams; card density is correct here> |
+| Pattern | Because | Rationale type |
+|---|---|---|
+| <e.g. translucent glass panels> | <e.g. the interface is a fictional 2008 OS; the material language is the narrative> | narrative |
+| <e.g. repetitive card grid> | <e.g. the user monitors six live data streams; card density is correct> | functional |
+
+> If a row's rationale is "I like it", write **preference** in the third column rather than inventing a reason.
+> It still counts as accepted — it is your project — but the reviewer will know the rationale was never conceptual.
 
 ## Success criteria
 

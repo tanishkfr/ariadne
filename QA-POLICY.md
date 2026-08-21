@@ -26,7 +26,9 @@ Output: [templates/QA.md](templates/QA.md).
 
 Blocking by default: build failure · type error · console error · keyboard trap · missing focus states · contrast failure on body text · motion ignoring `prefers-reduced-motion` · broken layout at any tested width · a missing signature moment · any anti-generic row present.
 
-**Exception:** patterns declared as accepted in `PROJECT.md` ([ROUTER.md](ROUTER.md) section 10) drop from Blocking to Note. They still appear in the report.
+**Exception:** patterns declared as accepted in `PROJECT.md` (**R-PAT-1**, [ROUTER.md](ROUTER.md) section 10) drop from Blocking to Note. They still appear in the report.
+
+If the stated rationale is not visible in the result, the reviewer rejects it and the row returns to Blocking — the declaration covers the choice, not the craft.
 
 ---
 

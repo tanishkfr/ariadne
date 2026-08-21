@@ -186,4 +186,4 @@ Run the **five-second** and **swap** tests from [DESIGN-TASTE.md](DESIGN-TASTE.m
 
 - **Recall test** — describe it tomorrow without looking. What survives? Usually one thing. Sometimes none.
 
-**If all three fail, the work is competent and forgettable, and polish will not fix it.** That is an S3 problem surfacing at S5, and the honest recommendation is to restart the direction ([ROUTER.md](ROUTER.md) section 11).
+**If all three fail, the work is competent and forgettable, and polish will not fix it.** That is an S3 problem surfacing at S5, and the honest recommendation is to restart the direction (**R-INT-1**, [ROUTER.md](ROUTER.md) section 11).

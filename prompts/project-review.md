@@ -107,4 +107,4 @@ Full definitions: [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md). Accessibili
 
 **The one thing gets done first.** Anything you choose not to fix gets recorded as a waiver in `QA.md` with the reason — an undocumented decision to ignore a finding becomes an unexplained flaw six months later.
 
-If the verdict is **"rebuild the direction"**, that is an S3 problem surfacing at S5. Use the restart procedure in [ROUTER.md](../ROUTER.md) section 11 — it makes you write down why the old direction failed *before* writing the new one, which is what stops you restarting into the same place.
+If the verdict is **"rebuild the direction"**, that is an S3 problem surfacing at S5. Say so plainly — the router recognises it as a restart (**R-INT-1**) and freezes the direction without deleting research or assets. It makes you write down why the old direction failed *before* writing the new one, which is what stops you restarting into the same place.

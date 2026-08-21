@@ -101,6 +101,44 @@ def check_required():
     return [f for f in REQUIRED if not os.path.exists(os.path.join(ROOT, f))]
 
 
+# Canonical routing rules. Defined once in ROUTER.md's rule index; referenced by
+# ID elsewhere so a rule has one home instead of four paraphrases.
+RULE_IDS = [
+    "R-ACT-1", "R-REF-1", "R-REF-2", "R-XFM-1", "R-DEST-1",
+    "R-INT-1", "R-PAT-1", "R-CONF-1", "R-ASK-1",
+]
+RULE_SOURCE = "ROUTER.md"
+
+
+def check_rule_ids():
+    """
+    Two failure modes, both cheap to detect:
+      - a rule ID is referenced somewhere but never defined (dangling reference)
+      - a canonical rule ID vanished from ROUTER.md (silent deletion)
+    This deliberately does NOT check that the rule still says what the
+    referencing file assumes. No semantic engine -- only a human read catches that.
+    """
+    src = os.path.join(ROOT, RULE_SOURCE)
+    defined = set()
+    if os.path.exists(src):
+        text = open(src, encoding="utf-8").read()
+        for rid in RULE_IDS:
+            # "defined" means it appears in the rule index table
+            if re.search(r"\*\*" + re.escape(rid) + r"\*\*\s*\|", text):
+                defined.add(rid)
+
+    missing = [r for r in RULE_IDS if r not in defined]
+
+    referenced = collections.defaultdict(set)
+    for path in md_files():
+        text = open(path, encoding="utf-8").read()
+        for rid in set(re.findall(r"\bR-[A-Z]{3,4}-\d\b", text)):
+            referenced[rid].add(rel(path))
+
+    dangling = {r: f for r, f in referenced.items() if r not in RULE_IDS}
+    return missing, dangling
+
+
 def main():
     failed = False
 
@@ -121,6 +159,20 @@ def main():
             print(f"        {f}")
     else:
         print(f"ok    required files: {len(REQUIRED)} present")
+
+    missing_rules, dangling = check_rule_ids()
+    if missing_rules or dangling:
+        failed = True
+        if missing_rules:
+            print(f"FAIL  rule IDs: {len(missing_rules)} not defined in {RULE_SOURCE}")
+            for r in missing_rules:
+                print(f"        {r}")
+        for rid, files in sorted(dangling.items()):
+            print(f"FAIL  rule IDs: {rid} referenced but not canonical")
+            for f in sorted(files):
+                print(f"        {f}")
+    else:
+        print(f"ok    rule IDs: {len(RULE_IDS)} defined, no dangling references")
 
     dupes = check_duplicates()
     if dupes:

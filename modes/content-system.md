@@ -8,7 +8,7 @@ Full method: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). This file is the routing
 
 ## Detection
 
-**Signals:** "post", "tweet", "LinkedIn", "content", "audience", "engagement", "voice", "personal brand".
+**Reached when the `OBJECT` is writing for an audience** — posts, threads, a publishing practice.
 
 **Not this mode if:** it is copy for a website (that is part of the site's mode), or a blog as a built artifact (personal portfolio).
 

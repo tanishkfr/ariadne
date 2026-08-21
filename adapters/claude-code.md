@@ -22,7 +22,7 @@ Same as [cursor.md](cursor.md): S4 implementation, S5 mechanical QA, S6 git and 
 
 **1. `AGENTS.md` at the project root** ([templates/AGENTS.md](../templates/AGENTS.md)) — Claude Code reads it. A project `CLAUDE.md` works too; do not maintain both, since two rule files drift apart.
 
-**2. Precedence.** Your global `~/.claude/CLAUDE.md` already carries rules that align closely with this system — think before coding, simplicity first, surgical changes, one task at a time. Project `AGENTS.md` outranks it ([ROUTER.md](../ROUTER.md) section 8).
+**2. Precedence.** Your global `~/.claude/CLAUDE.md` already carries rules that align closely with this system — think before coding, simplicity first, surgical changes, one task at a time. Project `AGENTS.md` outranks it ([ROUTER.md](../ROUTER.md) section 12, precedence).
 
 **3. Permissions.** Approve build, typecheck, lint, test, and git read commands so Green-tier work does not prompt constantly. **Do not** blanket-approve installs, pushes, or deploys — those are G2 and G4 and the prompt is the gate.
 

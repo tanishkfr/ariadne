@@ -92,4 +92,4 @@ Then be careful about what you act on:
 3. **The weakest piece** — cutting is almost always right. Fewer, stronger.
 4. **Single-lens findings you disagree with** — a reviewer with 60 seconds and no context *is* your audience. Disagreeing is allowed, but record why in `RETROSPECTIVE.md`; if the same finding comes back next time, it was not wrong.
 
-If the verdict is **"rebuild the direction"**, that is an S3 problem surfacing at S5. Use the restart procedure in [ROUTER.md](../ROUTER.md) section 11 — it makes you write down why the old direction failed *before* writing the new one, which is what stops you restarting into the same place.
+If the verdict is **"rebuild the direction"**, that is an S3 problem surfacing at S5. Say so plainly — the router recognises it as a restart (**R-INT-1**) and freezes the direction without deleting research or assets. It makes you write down why the old direction failed *before* writing the new one, which is what stops you restarting into the same place.

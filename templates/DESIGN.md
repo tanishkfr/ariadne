@@ -137,11 +137,12 @@
 
 ## Accepted patterns
 
-> Blocking patterns chosen deliberately, carried over from `PROJECT.md`. Maximum three.
-> If this section has entries, the direction must still work *because* of them, not despite them.
+> Blocking patterns chosen deliberately, carried over from `PROJECT.md` (**R-PAT-1**, no limit).
+> If this section has entries, the direction must work *because* of them, not despite them —
+> the reviewer checks whether the stated rationale is visible in the result.
 
-| Pattern | Because |
-|---|---|
+| Pattern | Because | Rationale type |
+|---|---|---|
 
 ---
 

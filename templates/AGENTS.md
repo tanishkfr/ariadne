@@ -2,7 +2,7 @@
 
 > Template. Project-specific rules for any AI tool working in this repository.
 > Place at the repository root. Cursor, Claude Code, and Codex all read a file like this.
-> **This file is the highest authority in the precedence chain** — see [ROUTER.md](../ROUTER.md) section 8.
+> **This file is the highest authority in the precedence chain** — see [ROUTER.md](../ROUTER.md) section 12.
 > Keep it short. A long rules file gets skimmed.
 
 ---

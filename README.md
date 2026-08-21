@@ -53,7 +53,7 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 ```
 Builder OS/
-├─ ROUTER.md               Modes, questions, accepted patterns, restarts   <- start
+├─ ROUTER.md               Interpretation frame, routing rules, restarts   <- start
 ├─ WORKFLOW.md             Stages, gates, 5 roles, what agents may do
 ├─ DESIGN-TASTE.md         The quality bar and anti-generic rules
 ├─ DESIGN-MOTION.md        Motion principles and procedure
@@ -75,7 +75,7 @@ Builder OS/
 ├─ adapters/     3   codex / cursor / claude-code
 ├─ references/   2   visual references, UI libraries
 ├─ prompts/      4   start, review, portfolio, content
-└─ scripts/          check.py — links, required files, duplicate rules
+└─ scripts/          check.py — links, required files, rule IDs, duplicates
 ```
 
 ## Principles
@@ -97,13 +97,15 @@ Builder OS/
 - Publish, push, or deploy without you.
 - Install packages without a justification you approve.
 - Add auth, a database, a CMS, or a dashboard to a project that does not need one.
-- **Fight a deliberate design choice.** The anti-generic rules assume genericness came from the tool. When it is your decision, declare it ([ROUTER.md](ROUTER.md) section 10).
+- **Fight a deliberate design choice.** The anti-generic rules assume genericness came from the tool. When it is your decision, declare it — no limit, but the reason has to be a reason (**R-PAT-1**).
 - Guarantee good design. It makes generic design harder to ship accidentally, and makes the failure visible when it happens.
 
 ---
 
 ## Status
 
-**v0.2.0.** Restructured after an independent audit of v0.1.0 — 71 files to 49, 12 roles to 5, 9 review lenses to 5, and the scorecard moved out of the author's session because self-scoring clusters at 4 and measures nothing.
+**v0.3.0.** The router now routes on **intent**, not keywords. It builds a ten-slot interpretation of your request — action, object, artifact role, constraints — and routes from that. Keyword matching confidently produced the wrong workflow whenever intent differed from literal wording; an unresolved object now forces a question instead of a guess.
+
+Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
 **Still not validated by a real project.** Run `python scripts/check.py` after any edit. The 30-day check in [CHANGELOG.md](CHANGELOG.md) is how this stops being a guess.

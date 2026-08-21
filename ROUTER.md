@@ -1,8 +1,28 @@
 # ROUTER
 
-Turn a vague request into a mode, a question set, a document set, and an owner. The router dispatches; it does not design, code, or research.
+Turn a request into an interpretation, and an interpretation into a mode. The router dispatches; it does not design, code, or research.
 
 Then: [WORKFLOW.md](WORKFLOW.md) for stages, gates, roles, and autonomy.
+
+**The router does not match keywords.** It builds a small interpretation of what you asked for, then routes from that. Keyword matching confidently produces the wrong workflow whenever your intent differs from your literal words, which is most of the time.
+
+---
+
+## Rule index
+
+Referenced by ID from everywhere else in the system. Change the rule here, not the copies.
+
+| ID | Rule | Section |
+|---|---|---|
+| **R-ACT-1** | Action priority — the stated action outranks every other signal | 3.3 |
+| **R-REF-1** | A reference modifies the work; it never selects the mode | 3.3 |
+| **R-REF-2** | A replication request routes to CREATE; originality is a design conversation, not a refusal | 3.3 |
+| **R-XFM-1** | Transformation is a creation action; route by the target | 3.3 |
+| **R-DEST-1** | Destination is not the object; an unresolved object forces LOW | 3.3 |
+| **R-INT-1** | Restart is an interrupt, not a mode | 11 |
+| **R-PAT-1** | Accepted patterns are judged by intentionality, not quantity | 10 |
+| **R-CONF-1** | Confidence is derived from what is unresolved | 3.5 |
+| **R-ASK-1** | Ask the fewest highest-impact questions | 4 |
 
 ---
 
@@ -10,72 +30,167 @@ Then: [WORKFLOW.md](WORKFLOW.md) for stages, gates, roles, and autonomy.
 
 | Term | Meaning |
 |---|---|
+| **Frame** | The router's interpretation of a request. Ten slots, section 3.1. |
 | **Mode** | The kind of project. One of 5. |
 | **Stage** | S0-S6. [WORKFLOW.md](WORKFLOW.md). |
 | **Skill** | A method in [skills/](skills/). |
 | **Role** | One of 5 jobs. [WORKFLOW.md](WORKFLOW.md). |
-| **Runner** | The tool doing the work. [adapters/](adapters/). |
 | **Gate** | A named human approval. G1-G5. |
 
 ## 2. The five modes
 
-| Mode | Use when |
+| Mode | The work is |
 |---|---|
 | [Client or portfolio](modes/client-or-portfolio.md) | A site whose job is reputation — yours or someone else's |
-| [Product app](modes/product-app.md) | Sustained interaction, state, returning users |
-| [Game / experiment](modes/game-experiment.md) | Play, mechanics, class work, throwaway probes |
-| [Content system](modes/content-system.md) | X/LinkedIn writing with a learning loop |
-| [Audit / review](modes/audit-review.md) | Critique something that already exists |
+| [Product app](modes/product-app.md) | Something with state that outlives the session |
+| [Game / experiment](modes/game-experiment.md) | A playable or experimental piece, any medium |
+| [Content system](modes/content-system.md) | Writing for an audience, with a learning loop |
+| [Audit / review](modes/audit-review.md) | Judgement of something that already exists |
+
+Modes are **workflows**, not subject matter. "A dashboard" is not a mode; *building a stateful thing* is.
 
 ---
 
-## 3. Detection
+## 3. Interpretation
 
-### 3.1 Signals
+### 3.1 The frame
 
-| In the request | Points to |
+Fill these ten slots before deciding anything. Slots may be `UNRESOLVED` — that is information, not a failure.
+
+| Slot | Values / meaning |
 |---|---|
-| "portfolio", "my site", "client", "for a company", a brand name, money | Client or portfolio |
-| "app", "tool", "dashboard", "users can", "log in", "save", "track" | Product app |
-| "game", "experiment", "class", "assignment", "playable", "sketch", "installation" | Game / experiment |
-| "post", "tweet", "LinkedIn", "content", "audience", "voice" | Content system |
-| "review", "critique", "audit", "roast", a URL to an existing thing | Audit / review |
+| `ACTION` | CREATE · TRANSFORM · ANALYZE · RESTART · EXTEND |
+| `OBJECT` | What is produced or examined. **May be UNRESOLVED.** |
+| `OUTCOME` | What should be true when it is done |
+| `DESTINATION` | Where the output lives, or who sees it |
+| `ARTIFACT` | none · **subject** · **source** · **reference** |
+| `REFERENCE` | none · inspiration · analysis-target · replication-request |
+| `TRANSFORM` | none · medium · platform · direction · scope |
+| `CONSTRAINTS` | Stated limits — budget, stack, time, tools |
+| `UNRESOLVED` | What is unknown, and whether it changes the workflow |
+| `CONFIDENCE` | Derived from `UNRESOLVED`. **Never from how many words matched.** |
 
-### 3.2 Tie-breaks, in order
+### 3.2 Filling the slots
 
-1. **An existing artifact is supplied** → Audit / review, unless the request says "rebuild" or "redesign".
-2. **State outlives the session** (accounts, saved data, returning users) → Product app, even when it looks like a site or a game.
-3. **Still tied** → ask. One question, offering the two candidates.
+**ACTION** — what does the user want done? These are calibration samples, **not a lookup table.**
 
-### 3.3 Confidence
-
-| Level | Behaviour |
+| Action | Reads like |
 |---|---|
-| **High** | One mode, no competing signal. Proceed. |
-| **Medium** | One leads, another is plausible. Proceed, but **name the runner-up** in the Routing Block. |
-| **Low** | Tied after 3.2, or the request is one sentence with no object. **Stop. Ask one question.** |
+| `CREATE` | build, make, design, write, start, "I want a…" |
+| `TRANSFORM` | turn into, convert, adapt, port, remake, reinterpret, translate into, redesign, rebuild, restyle |
+| `ANALYZE` | review, critique, audit, roast, break down, "what should I learn from", "why does X work" |
+| `RESTART` | scrap, start over, rethink, abandon, forget this direction, "isn't working", "new direction" |
+| `EXTEND` | add, fix, finish, continue — on work already in this project |
 
-**Never silently pick between two plausible modes.** Naming the runner-up costs one line and prevents a wasted build.
+**If the verb is not listed, do not guess from nouns. Ask: what would the user do with the output?** A thing to use is CREATE. A judgement to read is ANALYZE. An existing thing becoming a different thing is TRANSFORM. That question resolves verbs no list will ever contain.
 
-### 3.4 Switching mode mid-project
+**OBJECT** — what is the thing? Mark it `UNRESOLVED` when the request names a category but not a thing: *"something"*, *"a piece"*, *"an idea"*, *"this"* with no antecedent. **This is the slot to be most honest about.**
 
-If evidence contradicts the mode — an experiment grows a login screen — the router re-fires: say the mode changed and why · list which documents survive · re-run the gate schedule.
+**ARTIFACT** — if something already exists, which role does it play?
 
-Do not quietly upgrade quality bars. A mode change is a scope change and you decide.
+| Role | Meaning | Example |
+|---|---|---|
+| `subject` | The thing being judged | "review this site" |
+| `source` | The input being transformed | "turn this into an installation" |
+| `reference` | An exemplar to learn from | "build something like this" |
+
+**Presence of an artifact tells you nothing on its own.** Its role is what matters, and the role comes from the action.
+
+### 3.3 Routing rules
+
+**R-ACT-1 — Action priority.** The stated action determines the workflow. No other slot may override it. **Only `ANALYZE` routes to audit-review.**
+
+A request to *create* never becomes a review because a reference was mentioned. A request to *review* never becomes a build because the subject happens to be buildable.
+
+**R-REF-1 — Reference handling.** A reference is a **modifier of the work, never a selector of the mode.** It flows to [reference-analysis](skills/reference-analysis.md) at S2/S3 and changes the design direction. It does not change what is being built.
+
+| Request | ACTION | ARTIFACT | Routes to |
+|---|---|---|---|
+| "Build something like Burocratik" | CREATE | reference | build workflow + reference analysis |
+| "Analyze Burocratik" | ANALYZE | subject | audit-review |
+| "What should I learn from Burocratik?" | ANALYZE | subject | audit-review |
+| "Use Burocratik as a reference for a new site" | CREATE | reference | build workflow + reference analysis |
+
+**R-REF-2 — Replication requests.** If the request is to copy a reference outright, route to CREATE and do not refuse. Surface the originality constraint at S3, where [DESIGN-TASTE.md](DESIGN-TASTE.md) section 7 handles it. Refusing at the router is a mode error; this is a design conversation.
+
+**R-XFM-1 — Transformation.** `TRANSFORM` is a creation action. **Route by the target, never by the source.**
+
+"Turn this website into an installation" is an installation project that happens to start from a website. The source is an input; the target is the work.
+
+**R-DEST-1 — Destination is not the object.** `DESTINATION` says where the output lives. `OBJECT` says what it is. **Mode comes from OBJECT.**
+
+If `OBJECT` is `UNRESOLVED`, confidence is **LOW regardless of how clear DESTINATION is.** This is mechanical and cannot be overridden.
+
+| Request | ACTION | OBJECT | DESTINATION | Result |
+|---|---|---|---|---|
+| "Create my portfolio" | CREATE | portfolio site | self | client-or-portfolio, HIGH |
+| "Create something for my portfolio" | CREATE | **UNRESOLVED** | portfolio | **LOW — ask what the thing is** |
+| "Create a game for my portfolio" | CREATE | game | portfolio | game-experiment, HIGH |
+| "Review my portfolio" | ANALYZE | portfolio site | — | audit-review, HIGH |
+| "Redesign my portfolio" | TRANSFORM (direction) | portfolio site | self | client-or-portfolio, HIGH |
+
+Same noun in all five. Action and object separate them; no keyword exception is involved.
+
+### 3.4 Mode from OBJECT
+
+Reached only once `ACTION` is CREATE or TRANSFORM **and** `OBJECT` is resolved.
+
+**Two actions never reach this table:**
+
+- **`EXTEND` inherits the current project's mode.** Adding a leaderboard to a game does not make it a product app; adding a contact page does not re-derive a mode. An extension only re-routes if it triggers 3.6 — and that is a scope change you decide, not a silent reclassification.
+- **`ANALYZE` with no `subject`** is a research question, not a project. "Which CMS should I use?" routes to [RESEARCH-POLICY.md](RESEARCH-POLICY.md) and gets answered — it does not become audit-review and does not open a project. Audit-review needs something concrete to judge.
+
+| The object is | Mode |
+|---|---|
+| A site whose job is reputation — yours or a client's | client-or-portfolio |
+| Something whose **state outlives the session** — accounts, saved data, returning users | product-app |
+| A playable, experimental, or exhibited piece — **any medium, any input device** | game-experiment |
+| Writing for an audience | content-system |
+
+**State outliving the session wins over appearance.** A "game" where you log in to save a high score is a product-app. That is a property of the object, not a keyword.
+
+**If nothing fits cleanly, pick the mode whose workflow is closest and say so.** An interactive installation built in web tech uses game-experiment because that is the closest workflow — the mode does not assume a desktop browser, and its input/display question establishes the real target. Do not invent a mode.
+
+### 3.5 Confidence — R-CONF-1
+
+Derived from `UNRESOLVED`. **Never a function of how many words matched.**
+
+| Level | Means | Behaviour |
+|---|---|---|
+| **HIGH** | Action clear · object clear · mode clear · nothing material unresolved | Proceed |
+| **MEDIUM** | Mode is clear, but one interpretation is unresolved and it changes the workflow | Proceed, name the assumption, ask **one** targeted question |
+| **LOW** | Action or object ambiguous, or two materially different workflows are plausible | **Stop. Ask before committing.** |
+
+**The rule that governs the others:**
+
+> **A confidently wrong interpretation is worse than a low-confidence clarification.**
+
+Do not optimise for asking fewer questions. Optimise for asking only questions whose answer changes the work. An `UNRESOLVED` object is always material — it decides the mode.
+
+### 3.6 Changing mode mid-project
+
+If evidence contradicts the mode — an experiment grows accounts — re-fire the router: say the mode changed and why · list which documents survive · re-run the gate schedule.
+
+A mode change is a scope change and you decide. Do not quietly upgrade quality bars.
 
 ---
 
-## 4. Questions
+## 4. Questions — R-ASK-1
 
-**Maximum 5. Only questions whose answer changes the work.**
+**Ask the smallest number of highest-impact questions needed to resolve the ambiguity.**
 
-Before asking: *if the answer were A instead of B, would a different file get written?* If no, assume it, log it, move on.
+Before asking: *if the answer were A instead of B, would a different file get written?* If no — assume, log, move on.
+
+- Prefer **one question with a useful set of choices** over several open ones.
+- Prefer an **explicit assumption** when the decision is low-impact.
+- Prefer **proceeding** when the ambiguity does not affect the workflow.
+- **Never ask a question just because the router could.**
+
+Cap: five. Batched, numbered, each with a proposed default so the reply can be "all defaults".
 
 Never ask: which framework · whether it should be responsive or accessible · whether quality matters · anything already stated.
 
-**Ask in one batch**, numbered, each with a proposed default, so the reply can be "all defaults" or "2: X, rest default".
-
-Per-mode question sets live in each [mode file](modes/).
+**When the object is UNRESOLVED**, the one question that matters is *what kind of thing is this?* — offered as concrete options drawn from the modes, not as an open prompt. Per-mode question sets live in each [mode file](modes/).
 
 ## 5. Default assumptions
 
@@ -91,7 +206,9 @@ Assume freely, log everything in `PROJECT.md` phrased so it can be contradicted 
 | Testing | Playwright; production build must pass |
 | Budget | Subscriptions only, no pay-per-token |
 
-**Never assume:** the design thesis · brand rules · what is true about you · whether something may be published · a real deadline.
+**Never assume:** the design thesis · brand rules · what is true about you · whether something may be published · a real deadline · **what the object is when it is UNRESOLVED.**
+
+`CONSTRAINTS` from the frame carry into `PROJECT.md` verbatim and survive every later stage. A constraint stated once is never re-asked and never quietly dropped.
 
 ---
 
@@ -124,10 +241,12 @@ Everything else is conditional. Creating a document nobody will read is worse th
 | Mode | Skills |
 |---|---|
 | Client or portfolio | [intake](skills/intake.md), [reference-analysis](skills/reference-analysis.md), [design-direction](skills/design-direction.md), [component-research](skills/component-research.md), [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md) |
-| Product app | intake, component-research, design-direction, evaluation |
+| Product app | intake, component-research, design-direction, EVALUATION-RUBRICS |
 | Game / experiment | intake (light), design-direction (light) |
-| Content system | intake, [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md), evaluation |
-| Audit / review | reference-analysis, evaluation |
+| Content system | intake, [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md), EVALUATION-RUBRICS |
+| Audit / review | reference-analysis, EVALUATION-RUBRICS |
+
+**Any frame with a non-empty `REFERENCE` activates [reference-analysis](skills/reference-analysis.md)** — in any mode, whatever the action.
 
 ---
 
@@ -135,24 +254,24 @@ Everything else is conditional. Creating a document nobody will read is worse th
 
 | Trigger | Why |
 |---|---|
-| Mode confidence is Low | Wrong mode means wrong everything downstream |
+| Confidence is LOW | Wrong mode means wrong everything downstream |
 | A new dependency is proposed | G2, [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |
 | Client data, credentials, or private references appear | [PRIVACY-POLICY.md](PRIVACY-POLICY.md) |
 | Anything would be published, pushed, or deployed | G4 / G5 |
 | A paid API or per-token service would be used | [BUDGET-POLICY.md](BUDGET-POLICY.md) |
 | The request implies auth, a dashboard, or an admin panel you did not ask for | Scope inflation |
 | The design thesis is unapproved but build work is requested | G1 |
-| Sources of truth conflict and section 11 does not resolve it | — |
+| Sources of truth conflict and section 12 does not resolve it | — |
 
 ---
 
 ## 9. Handling inputs
 
-**References.** Route to [reference-analysis](skills/reference-analysis.md) before any design work. **Three minimum** — one produces imitation, three force synthesis. If only one is supplied, ask for two more or name two from [references/visual-references.md](references/visual-references.md) and say which.
+**References.** Governed by **R-REF-1** — a reference modifies the work, never the mode. Route to [reference-analysis](skills/reference-analysis.md) before any design work. **Three minimum** — one produces imitation, three force synthesis. If only one is supplied, ask for two more or name two from [references/visual-references.md](references/visual-references.md) and say which.
 
-**Screenshots of existing products.** Evidence, not instruction — run every observed pattern through [skills/reference-analysis.md](skills/reference-analysis.md) before adopting it.
+**Screenshots of existing products.** Evidence, not instruction — run every observed pattern through [reference-analysis](skills/reference-analysis.md) before adopting it.
 
-**Missing assets.** Resolved at S3, never at S4. No project reaches S4 with an unresolved asset on the critical path — either it exists, it gets made, or **the direction changes so it is not needed.** A type-led direction removes the dependency entirely. See [DESIGN-ASSETS.md](DESIGN-ASSETS.md).
+**Missing assets.** Resolved at S3, never at S4. No project reaches S4 with an unresolved asset on the critical path — either it exists, it gets made, or **the direction changes so it is not needed.** See [DESIGN-ASSETS.md](DESIGN-ASSETS.md).
 
 **Current information.** Anything depending on the state of the world — pricing, versions, limits, licences — gets verified and dated. Never answered from memory. [RESEARCH-POLICY.md](RESEARCH-POLICY.md).
 
@@ -160,44 +279,64 @@ Everything else is conditional. Creating a document nobody will read is worse th
 
 ---
 
-## 10. Accepted patterns — the deliberate-choice escape hatch
+## 10. Accepted patterns — R-PAT-1
 
-[DESIGN-TASTE.md](DESIGN-TASTE.md) lists patterns that are **Blocking** at QA. Those rules exist because a model with no constraint produces the statistical average.
+[DESIGN-TASTE.md](DESIGN-TASTE.md) section 6 lists patterns that are **Blocking** at QA. Those rules exist because a model with no constraint produces the statistical average.
 
-**But you are allowed to choose one of them on purpose.** A dashboard with cards is right for some products. A gradient can be correct. The rules assume genericness came from the tool; sometimes it is your decision, and the system must not fight you.
+**You are allowed to choose one of them on purpose.** The rules assume genericness came from the tool. When it is your decision, the system must not fight you.
 
-To accept a pattern deliberately, declare it in `PROJECT.md`:
+### The intentionality test
 
-```
-ACCEPTED PATTERNS
-<pattern>  — because <reason specific to this project>
-```
+There is **no numeric limit.** A pattern may be deliberately accepted when all five hold:
 
-Effect: that row drops from **Blocking to Note** in [QA-POLICY.md](QA-POLICY.md). It still appears in the report, so it stays visible, but it no longer stops G3.
+1. **The user explicitly chooses it, or the project thesis requires it.**
+2. **The reason is conceptual, narrative, functional, historical, medium-specific, or interaction-based** — not aesthetic preference.
+3. **The reason is stronger than "I like this style."**
+4. **It is documented as an ACCEPTED PATTERN** in `PROJECT.md`, before it is built.
+5. **It remains reviewable.** Accepting the *pattern* does not accept the *execution*.
 
-**Three constraints, or this becomes a way to disable the quality bar:**
+Effect: that row drops from **Blocking to Note** in [QA-POLICY.md](QA-POLICY.md). It stays in the report.
 
-1. **Declared at S1 or S3, before it is built.** Accepting a pattern at S5 to make a failing build pass is a waiver, not a decision — it gets recorded as a waiver with your name on it.
-2. **A reason, not a preference.** "The user monitors six live data streams, so a card grid is the correct density" is a reason. "I like cards" is not, and the router should push back once.
-3. **Maximum three per project.** Four or more means the direction is generic and the acceptances are papering over it. At four, the router stops and says so.
+### Why this is not a loophole
+
+The reviewer can still reject the execution when **the claimed rationale is not visible in the result.** That mechanism keeps this honest, and it is stronger than a count — a count only ever measured how many rules you broke, never whether you meant it.
+
+| Claim | Router response |
+|---|---|
+| "Use glassmorphism because I like glassmorphism" | **Challenge once.** Ask what it is doing. Preference is not a reason. |
+| "Translucent glass panels because the interface is a fictional 2008 operating system and the material language is the narrative" | **Accept**, log it, and hold the build to that claim |
+| "Card grid because the user monitors six live data streams and density is correct" | **Accept** |
+| "A dashboard because it is a dashboard product" | **Challenge once** — what changes without the user watching? |
+
+**If you challenge once and the user restates the preference, it is their project.** Log it as preference-based so the reviewer knows the rationale was never conceptual. Do not challenge twice, and do not block.
 
 The Design director may argue against an acceptance. It may not override one.
 
 ---
 
-## 11. Restarting a direction
+## 11. Restart — R-INT-1
 
-"Scrap it and start over" is the most common creative event and needs a defined procedure, because the default — quietly patching the old direction — produces incoherent work.
+**Restart is an interrupt, not a mode.** It suspends the current stage; it does not change what is being built and it does not destroy work.
 
-**When it fires:** you reject the thesis at G1 · the work is built and the Reviewer returns "rebuild the direction" · you look at it and it is wrong.
+**Recognise it from the action, not from a phrase.** Any `ACTION = RESTART` fires this: *"start over"*, *"scrap this direction"*, *"the concept isn't working"*, *"let's rethink the whole thing"*, *"forget this"*, *"new direction"*, *"keep the research but abandon the visuals"*.
 
-**Procedure:**
+**You do not need to know this procedure exists.** The router recognises the intent and runs it.
 
-1. **Say which layer is being restarted.** Direction only, or scope too? If `PROJECT.md` was wrong, this is an S1 restart and the direction was a symptom.
-2. **Survives:** `PROJECT.md` (unless scope was the problem), `RESEARCH.md`, the token *system* (not its values), the architecture, anything mechanical.
-3. **Dies:** the thesis, the rejection list, the signature moment, and **every component whose form came from the old thesis.** Keeping "the good bits" is what produces incoherence — the bits were good *relative to a direction that no longer exists*.
-4. **Write down why it failed** before writing the new thesis. Put it in the new `DESIGN.md` under "What NOT to copy" — your own failed direction is a reference you must not repeat. This is the step that prevents restarting into the same place.
-5. **G1 re-fires.** Full presentation, all ten checks answered again.
+### Procedure
+
+1. **Freeze, do not delete.** The current direction stops being authoritative immediately. Nothing is overwritten or removed.
+2. **Establish the layer.** Ask one question if it is not stated:
+
+   | Layer | What restarts |
+   |---|---|
+   | Concept / thesis | The organising idea. `DESIGN.md` thesis and rejection list. |
+   | Visual direction | Type, palette, layout, motion — the thesis survives |
+   | Architecture | Structure and stack — the design survives |
+   | Whole project | Back to S1. Scope was the problem; the direction was a symptom. |
+
+3. **Preserve by default.** `RESEARCH.md`, references, assets, `PROJECT.md`, mechanical infrastructure, and the token *system* all survive. **Discard only what the user names.** Research and assets are never thrown away as a side effect.
+4. **Retire the old direction as evidence.** Write down *why it failed* before writing the new one, into the new `DESIGN.md` under "What NOT to copy". Your own dead direction is a reference you must not repeat — this is the step that prevents restarting into the same place.
+5. **Re-run only the necessary gate.** Concept or visual restart → G1. Architecture restart → the architecture half of S3. Whole project → S1.
 6. **Log it** in `RETROSPECTIVE.md`. Two restarts on one project means S1 was under-specified, not that the direction was unlucky.
 
 **Restarting is cheap at S3 and expensive at S5.** That asymmetry is the entire argument for G1.
@@ -219,16 +358,24 @@ If a conflict survives this chain, **stop and ask.** Do not average two instruct
 
 ```
 ROUTING BLOCK
-Mode:         <mode>  (confidence: High | Medium | Low)
-Runner-up:    <mode or none> and why not
-Questions:    <n, batched below>
+Action:       <CREATE | TRANSFORM | ANALYZE | RESTART | EXTEND>
+Object:       <what, or UNRESOLVED>
+Destination:  <where it lives, or unstated>
+Artifact:     <none | subject | source | reference>
+Constraints:  <stated limits, carried verbatim>
+Unresolved:   <what is unknown, and whether it changes the workflow>
+
+Mode:         <mode>  (confidence: HIGH | MEDIUM | LOW)
+Questions:    <n, batched below — none if HIGH>
 Assumptions:  <the 3-5 that matter>
-Documents:    <required, plus any conditional ones and why>
+Documents:    <the required four, plus any conditional ones and why>
 Skills:       <which>
 Gates ahead:  <G1 ... G5>
 Budget:       <INR impact, or "none">
 First action: <the single next thing>
 ```
+
+**The frame is shown, not just the conclusion.** A wrong route is then visible in one line — you can see that `Object: UNRESOLVED` got filled in as a guess, or that a reference was read as a subject.
 
 **First action is mandatory and must be one concrete step.** A Routing Block ending in "let me know how you'd like to proceed" has failed.
 
@@ -238,10 +385,12 @@ First action: <the single next thing>
 
 | Failure | Countermeasure |
 |---|---|
-| Twelve questions, exhausted user | Cap of 5, batched, with defaults |
-| Routing straight to Build because it sounded simple | S3 cannot be skipped for visual modes; G1 blocks it |
-| Producing documents nobody reads | Four required; the rest conditional (section 6) |
-| Treating references as things to copy | Three minimum, plus a mandatory "do not copy" list |
-| Silent scope growth | 3.4 makes a mode change your decision |
-| Fighting a deliberate design choice | Section 10 |
-| Restarting into the same weak direction | Section 11 step 4 |
+| Routing from a noun instead of the action | R-ACT-1; the frame requires ACTION first |
+| An artifact forcing a review of something you wanted built | R-REF-1, R-XFM-1; artifact has a role, not a presence |
+| Confidently building the wrong thing | R-DEST-1; UNRESOLVED object forces LOW, mechanically |
+| Twelve questions, exhausted user | R-ASK-1; cap of 5, batched, with defaults |
+| Building before direction is locked | G1 |
+| Producing documents nobody reads | Four required; the rest conditional |
+| Fighting a deliberate design choice | R-PAT-1, no cap |
+| Restarting into the same weak direction | R-INT-1 step 4 |
+| A new phrasing nobody anticipated | The frame has a slot for it. **If a case needs a new keyword rule, the frame is wrong — fix the frame, not the list.** |

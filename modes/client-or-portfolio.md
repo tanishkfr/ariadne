@@ -21,9 +21,13 @@ Everything else — questions, documents, skills, gates, quality bar — is the 
 
 ## Detection
 
-**Signals:** "portfolio", "my site", "my work", "client", "for a company", a brand name, money, a supplied brief.
+**Reached when the `OBJECT` is a site whose job is reputation** — yours or someone else's.
 
-**Not this mode if:** state outlives the session ([product app](product-app.md)), or an artifact was supplied for critique ([audit / review](audit-review.md)).
+**The word "portfolio" does not route here** ([ROUTER.md](../ROUTER.md) R-DEST-1). "Create my portfolio" does, because the object is the site. "Create something for my portfolio" does not — there the portfolio is the *destination* and the object is unresolved, which is LOW confidence and a question.
+
+**Not this mode if:** state outlives the session ([product app](product-app.md)), or `ACTION = ANALYZE` ([audit / review](audit-review.md)).
+
+**"Redesign my portfolio" is this mode** — a TRANSFORM of direction, routed by its target (R-XFM-1), not a review.
 
 ## Questions
 

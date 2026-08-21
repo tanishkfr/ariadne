@@ -6,9 +6,9 @@ Sustained interaction, real state, returning users. **The mode where architectur
 
 ## Detection
 
-**Signals:** "app", "tool", "dashboard", "users can", "log in", "save", "track", "manage".
+**Reached when the `OBJECT` has state that outlives the session** — accounts, saved data, returning users.
 
-**Tie-break:** if state outlives the session — accounts, saved data, returning users — this mode wins even when it looks like a site ([ROUTER.md](../ROUTER.md) 3.2).
+That is a property of the object, not a word in the request. **It wins over appearance:** a "game" where you log in to save a high score is a product app; a "dashboard" that renders static content and forgets you is not.
 
 **Not this mode if:** the "app" is really a marketing site with a form (premium client website), or a single-session toy (game/experiment).
 

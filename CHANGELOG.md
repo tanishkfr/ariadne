@@ -10,6 +10,64 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.3.0 — 2026-08-21
+
+**The router now routes on intent, not keywords.** The v0.2.1 stress test failed 4 of 8; the failures were not eight bugs but four structural causes, and patching phrases would have produced a longer keyword table with the same defect.
+
+### Why the old model failed
+
+| Cause | Consequence |
+|---|---|
+| Signals were **nouns**; modes are **workflows** | "portfolio" appears in create-the-site, create-something-for-it, and review-it. One noun, three workflows, no way to separate them. |
+| Artifact presence was an **override**, not an input | An existing thing can be a `subject`, a `source`, or a `reference`. Collapsing all three forced builds into reviews. |
+| Confidence counted **keyword tidiness** | One matching keyword = HIGH by construction. This is the mechanism that manufactured confidently-wrong routes. |
+| "Mode" was the router's **only vocabulary** | Restart had nowhere to attach, so nothing routed to it. Accepted-patterns had no way to express intent, so it reached for quantity as a proxy. |
+
+**Root cause: the router computed an answer without ever representing the question.**
+
+### The new model
+
+`message → FRAME (10 slots) → routing rules → mode + confidence → ask / assume / proceed`
+
+Two slots carry the redesign. **`ARTIFACT` holds a role** (subject / source / reference) rather than a boolean, which dissolves the build-vs-review confusion with no keyword list. **`OBJECT` can be `UNRESOLVED`**, which forces LOW confidence mechanically — closing the confidently-wrong failure mode by construction rather than by vigilance.
+
+### Rules, now with canonical IDs
+
+`R-ACT-1` action priority · `R-REF-1` references modify, never select · `R-REF-2` replication routes to CREATE, originality is a design conversation · `R-XFM-1` transformation routes by target · `R-DEST-1` destination is not object · `R-INT-1` restart is an interrupt · `R-PAT-1` accepted patterns by intentionality · `R-CONF-1` confidence from unresolved · `R-ASK-1` fewest highest-impact questions.
+
+Referenced by ID elsewhere instead of paraphrased. `scripts/check.py` verifies every ID is defined and no reference dangles — it does **not** check that a rule still means what a referencing file assumes. Only reading catches that.
+
+### Removed
+
+The §3.1 signal table · tie-break 1 (artifact→audit-review) · tie-break 3 ("offering the two candidates", which never fit a five-way blank) · signal-count confidence · **the numeric cap on accepted patterns** · the per-mode `Signals:` keyword lists in all five mode files.
+
+### Accepted patterns — cap replaced by intentionality
+
+The "maximum three" cap blocked a deliberate request for a glassmorphic card dashboard, and its count was undefined at the boundary. Removed entirely. A pattern is accepted when the reason is conceptual, narrative, functional, historical, medium-specific, or interaction-based — not preference. **Multiple are allowed.**
+
+Not a loophole: accepting the *pattern* does not accept the *execution*. The reviewer still rejects it when the claimed rationale is not visible in the result — a stronger check than a count, which only ever measured how many rules you broke and never whether you meant it.
+
+*Cause: "SaaS dashboard, 17 cards, glassmorphism" — the escape hatch built to stop the system fighting the user just moved the fight from one pattern to four.*
+
+### Found by the new adversarial matrix
+
+Two gaps the redesign itself introduced, caught before shipping:
+
+- **`EXTEND` re-derived a mode.** Adding a leaderboard to a game would have classified it as a product app. EXTEND now inherits the current project's mode; only a real scope change re-routes.
+- **`ANALYZE` with no subject had no destination.** "Which CMS should I use?" fell through. It is now a research question, not a project — audit-review needs something concrete to judge.
+
+### Stale references repaired
+
+Precedence moved section 8 → 12 and mode-switching 3.4 → 3.6; four files still pointed at the old numbers. Converted to rule IDs where an ID exists, which is what the IDs are for.
+
+### Known limits
+
+1. **Still never used on a real project.** The matrix tests the written rules, not a running agent.
+2. **I wrote the router and I ran its tests.** That violates the independence rule this system enforces everywhere else. The mitigation is that every result quotes the rule it came from, so the reasoning is checkable rather than trusted.
+3. **The frame is a reasoning protocol, not a parser.** It works if the agent fills the slots honestly. An agent that writes a confident `OBJECT` where the request was vague defeats R-DEST-1 — the same class of failure as a dishonest scorecard.
+
+---
+
 ## 0.2.1 — 2026-08-21
 
 Router stress test run against the eight cases in section "Week 3" below. **3 PASS, 4 FAIL, 1 FRICTION.** Fixes applied to what was authorised; the routing failures are recorded here undecided.

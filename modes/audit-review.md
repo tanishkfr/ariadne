@@ -6,9 +6,9 @@ Critique something that already exists. **QA *is* the deliverable** — there is
 
 ## Detection
 
-**Signals:** "review", "critique", "audit", "roast", "feedback on", "what's wrong with", a URL to an existing thing.
+**Reached when `ACTION = ANALYZE`** and the artifact role is `subject` — the thing exists and you want judgement of it, not a new version of it ([ROUTER.md](../ROUTER.md) R-ACT-1).
 
-**Tie-break:** an existing artifact supplied (URL, repo, screenshot of a live thing) routes here — **unless** the request says "rebuild" or "redesign", which routes to the appropriate build mode with the audit as its S2 ([ROUTER.md](../ROUTER.md) 3.2).
+**Not this mode** when the artifact is a `reference` (R-REF-1) or a `source` for transformation (R-XFM-1). "Build something like this" and "turn this into that" are creation actions that happen to mention an existing thing. **The presence of an artifact never routes here on its own.**
 
 ---
 
