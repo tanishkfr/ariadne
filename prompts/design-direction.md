@@ -103,6 +103,17 @@ Do NOT score this out of 50. Numeric scoring happens at S5 by a reviewer who
 did not write the direction; scoring your own work clusters at 4 and measures
 nothing.
 
+STATE
+Do not edit AGENTS.md yet - G1 has not passed. Instead, include in your
+response the exact block I should paste into AGENTS.md ONCE I approve:
+
+  Current state -> Stage S4 | Last gate G1 | Next prompt build-kickoff.md
+  Approved direction -> thesis VERBATIM, fixed decisions, accepted patterns,
+                        references
+
+Writing an approved direction into AGENTS.md before I approve it would make
+the runtime claim a gate passed that did not.
+
 END YOUR RESPONSE WITH THIS, FILLED IN:
 
   NEXT: S4 Build.

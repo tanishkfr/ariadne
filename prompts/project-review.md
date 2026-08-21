@@ -86,6 +86,10 @@ nobody else will say out loud, and it is the most actionable thing you can tell
 me, because it points at the direction rather than at polish. Do not soften a
 verdict to be encouraging.
 
+DO NOT read or write AGENTS.md, and do not ask for it. You are reviewing
+the artifact, not the project's records - loading them would give you the
+build context this review exists to withhold.
+
 END WITH THIS, FILLED IN:
 
   NEXT: <one of>

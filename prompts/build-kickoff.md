@@ -35,6 +35,11 @@ Include:
   - known risks
   - definition of done
 
+UPDATE AGENTS.md - Implementation constraints section only:
+commands, environment assumptions, token system path, project-specific
+technical constraints, and anything that belongs under "Do not change".
+Leave every other section alone; they are owned by PROJECT.md and DESIGN.md.
+
 Decide which conditional documents this project actually needs:
 ARCHITECTURE.md only past ~10 components or any data model.
 TASKS.md only past ~5 tasks. AGENTS.md if an AI tool builds it (almost always).
@@ -96,6 +101,11 @@ reloaded, performance on the PREVIEW not localhost.
 
 Record every check with evidence - a command output, a number, or a screenshot.
 A check you did not run is recorded as NOT RUN, never as passed.
+
+BEFORE YOU FINISH, update AGENTS.md ## Current state:
+  Stage S5 | Last gate passed <unchanged - G3 is mine to grant> |
+  Next prompt prompts/project-review.md | Updated <today> |
+  Blocked on: <G3, or the blocking QA findings>
 
 END YOUR RESPONSE WITH THIS, FILLED IN:
 

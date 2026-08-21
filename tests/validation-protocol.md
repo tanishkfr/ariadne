@@ -157,3 +157,39 @@ Then decide, with evidence rather than impression:
 > **At least one piece of work exists that would not have been as good without this system — and you can name the specific rule that made the difference.**
 
 If you cannot name the rule, the system did not do it. Anything else is confirmation bias, which is exactly what a validation program exists to prevent.
+
+---
+
+## Runtime state simulation
+
+**SIMULATED — REQUIRES CODEX/CURSOR.** Traced against the written prompts and the
+`AGENTS.md` template on 2026-08-21. This is not provider validation; it proves the
+state mechanism is internally unambiguous, not that any tool honours it.
+
+For each transition: (1) is current state unambiguous, (2) is next stage unambiguous,
+(3) is the next prompt known, (4) does `AGENTS.md` hold enough for a fresh session,
+(5) is conversation history required, (6) do canonical documents stay canonical.
+
+| Transition | Who writes state | Result |
+|---|---|---|
+| S0 → S1 | S1 session generates `AGENTS.md` | **PASS** — Project section filled; Approved direction explicitly pending |
+| S1 → S3 | no write needed | **PASS** — next prompt named in the NEXT block |
+| S3 → G1 | **nothing written** | **PASS** — deliberate. `DESIGN.md` exists but G1 shows pending, so a fresh session presents it rather than building from it. |
+| G1 reject → S3 | nothing to unwind | **PASS** — this is why S3 does not write. A rejected direction never claimed a gate. |
+| G1 approve → S4 | **you paste the block** | **PASS** — manual by design; an agent must not record a gate it did not receive |
+| S4 → S5 | S4 session, both ends | **PASS** — constraints at part A, state at part B |
+| S5 → S6 | **you, at G3** | **PASS with a caveat** — the reviewer is forbidden from touching `AGENTS.md`, so between G3 and the retrospective the stage still reads S5. Documented as expected rather than patched with another mechanism. |
+| S6 → done | S6 session closes out | **PASS** |
+
+**7 transitions · 7 pass · 0 fail · 1 documented caveat.**
+
+**Two deliberate manual writes:** G1 and G3. Both are gates, and a gate an agent
+records for itself is not a gate. The cost is two paste operations per project.
+
+**Fresh-session readiness at every point:** a session opening the repo cold reads
+`AGENTS.md` for stage and gate, `HANDOFF.md` for implementation truth, `PROJECT.md`
+and `DESIGN.md` for decisions. **No transition requires conversation history.**
+
+**What this does not prove:** that Codex or Cursor actually load `AGENTS.md` as
+documented, that an agent reliably updates the state block before ending a session,
+or that the file stays small in practice. All three require the real environment.

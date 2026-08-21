@@ -134,6 +134,17 @@ After I answer, write PROJECT.md with: Problem, Audience, Goal, Non-goals
 (minimum 3), Scope, Constraints, Accepted patterns (if any), Success criteria
 (each falsifiable), References, Assumptions, Open questions, Contradictions.
 
+ALSO WRITE AGENTS.md at the project repository root, from
+templates/AGENTS.md. This is the runtime state file - Codex and Cursor
+discover it automatically, so a future session needs no conversation history.
+
+Fill in now:  Current state - Project - Non-goals - anything already decided.
+Leave EMPTY and marked pending:  Approved direction (no thesis until G1),
+Implementation constraints (no stack decisions until S4).
+
+Do NOT copy Builder OS policies into it. It mirrors decisions and points at
+canonical documents; it never becomes the owner of a rule.
+
 END YOUR RESPONSE WITH THIS, FILLED IN:
 
   NEXT: S3 Design direction.

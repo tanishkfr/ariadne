@@ -8,7 +8,8 @@ Deterministic checks that caught real bugs during construction:
   3. Canonical rule IDs defined, no dangling references
   4. Router suite structure: categories, rules, modes, run history
   5. Stage chain: every chained prompt emits NEXT inside its fenced block
-  6. Duplicated sentences (source-of-truth violations)
+  6. AGENTS template: state fields present, no canonical policy duplicated
+  7. Duplicated sentences (source-of-truth violations)
 
 Usage:  python scripts/check.py [--verbose]
 Exit:   0 clean, 1 problems found.
@@ -230,6 +231,71 @@ def check_stage_chain():
     return problems
 
 
+# Project AGENTS.md template guard. Structure only.
+#
+# AGENTS.md is the runtime state file that ships into a project repo. It is
+# canonical for exactly two things -- Current state and Do not change -- and a
+# mirror for everything else. Two failure modes are cheap to detect:
+#   1. a required state field goes missing, so a fresh session cannot tell
+#      where the project is
+#   2. a canonical policy block gets pasted in wholesale, creating a second
+#      policy system that will silently drift from the real one
+# Whether a reminder has drifted in MEANING is not checkable here. Only reading is.
+AGENTS_TEMPLATE = "templates/AGENTS.md"
+AGENTS_REQUIRED_FIELDS = [
+    "**Stage**", "**Last gate passed**", "**Next stage**",
+    "**Next prompt**", "**Updated**",
+]
+VALID_STAGES = ["S0", "S1", "S2", "S3", "S4", "S5", "S6"]
+VALID_GATES = ["G1", "G2", "G3", "G4", "G5"]
+
+# Sentences whose canonical home is a Builder OS policy file. If one appears
+# verbatim in the AGENTS template, the template has started owning a rule.
+CANON_MARKERS = [
+    ("A gate is a full stop", "WORKFLOW.md"),
+    ("Approval covers one action, once", "WORKFLOW.md"),
+    ("The evidence rule", "QA-POLICY.md"),
+    ("Blocking by default:", "QA-POLICY.md"),
+    ("The escalation ladder", "QA-POLICY.md"),
+    ("intentionality test", "ROUTER.md"),
+    ("Three minimum", "ROUTER.md"),
+    ("statistical centre", "DESIGN-TASTE.md"),
+]
+
+
+def check_agents_template():
+    problems = []
+    full = os.path.join(ROOT, AGENTS_TEMPLATE)
+    if not os.path.exists(full):
+        return [f"{AGENTS_TEMPLATE} is missing -- projects have no runtime state file"]
+
+    text = open(full, encoding="utf-8").read()
+
+    if "## Current state" not in text:
+        problems.append("no '## Current state' section -- a fresh session cannot locate the project")
+    for field in AGENTS_REQUIRED_FIELDS:
+        if field not in text:
+            problems.append(f"Current state missing required field: {field}")
+
+    # stage / gate identifiers must be well formed where they are enumerated
+    for stage in re.findall(r"\bS\d+\b", text):
+        if stage not in VALID_STAGES:
+            problems.append(f"malformed stage identifier: {stage}")
+    for gate in re.findall(r"\bG\d+\b", text):
+        if gate not in VALID_GATES:
+            problems.append(f"malformed gate identifier: {gate}")
+
+    # the template must say it is not canonical, or the precedence inverts
+    if "never becomes the owner" not in text and "not canonical" not in text:
+        problems.append("template does not state it is non-canonical -- risks inverting precedence")
+
+    for marker, owner in CANON_MARKERS:
+        if marker in text:
+            problems.append(f"contains canonical block from {owner}: \"{marker}\"")
+
+    return problems
+
+
 def main():
     failed = False
 
@@ -264,6 +330,15 @@ def main():
                 print(f"        {f}")
     else:
         print(f"ok    rule IDs: {len(RULE_IDS)} defined, no dangling references")
+
+    agents_problems = check_agents_template()
+    if agents_problems:
+        failed = True
+        print(f"FAIL  AGENTS template: {len(agents_problems)} problem(s)")
+        for a in agents_problems:
+            print(f"        {a}")
+    else:
+        print(f"ok    AGENTS template: {len(AGENTS_REQUIRED_FIELDS)} state fields, no canonical policy copied")
 
     chain_problems = check_stage_chain()
     if chain_problems:

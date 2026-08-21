@@ -72,6 +72,13 @@ RULES
   evidence against itself. Deletions need the same format and are usually
   the more valuable proposal.
 
+FINALLY, update AGENTS.md ## Current state:
+  Stage S6 | Last gate passed G4 (if shipped) | Next stage done |
+  Next prompt none | Updated <today>
+
+That is the last write. The repository is now readable by any future session
+without this conversation.
+
 THEN STOP. Do not edit any Builder OS file. I approve, defer, or reject each
 proposal. A deferred proposal stays in RETROSPECTIVE.md - if the same lesson
 gets deferred three times, that repetition is itself the evidence.

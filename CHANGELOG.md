@@ -10,6 +10,56 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.3.3 — 2026-08-21 · V1 CANDIDATE · CORE FROZEN
+
+The three runtime items from the certification audit. **No core changes.** No new modes, skills, roles, policies, or documents.
+
+### Project AGENTS.md is now the runtime state file
+
+`templates/AGENTS.md` rewritten around the `AGENTS.md` open standard — stewarded by the Agentic AI Foundation, auto-discovered by Codex, Cursor and 20+ other tools. It ships into a project repo where Builder OS is absent, so it carries compact reminders rather than pointers.
+
+**It is canonical for exactly two things: `Current state` and `Do not change`.** Everything else mirrors `PROJECT.md` and `DESIGN.md`. The file states its own non-canonical status, and the direction of change is one-way: edit the canonical document first, then update the runtime. A decision that exists only in `AGENTS.md` is a decision nobody recorded.
+
+### Current state is persisted, in one place
+
+Stage · last gate passed · next stage · next prompt · updated date. **No new document, no state machine, no database — plain text in the file every tool already reads.**
+
+Ownership is explicit, because a gate an agent records for itself is not a gate:
+
+| Who | When |
+|---|---|
+| S1 session | generates the file |
+| **You** | **at G1 and G3** |
+| S4 session | both ends |
+| S6 session | closes it out |
+| S5 reviewer | **never** — it would leak the build context the review exists to withhold |
+
+### Generation wired at the earliest reliable point
+
+Traced the prompts: `PROJECT.md` and the routing decision exist at the end of S1; the thesis does not exist until S3; commands do not until S4. So the file is generated at **S1** with the direction section explicitly pending, then updated as the project moves. **No fake or mostly-empty file is ever written**, and S3 deliberately writes nothing — it emits a block for you to paste on approval, so a rejected direction never claims a gate it did not pass.
+
+### Checks
+
+`check.py` gained a structural guard: required state fields, well-formed stage and gate identifiers, an explicit non-canonical declaration, and detection of canonical policy blocks pasted in wholesale. **All three paths negative-tested.**
+
+**That negative test found a real defect in my own guard.** The patch script that wrote the checker interpreted `\b` as an escape, so two regexes contained literal backspace bytes (`0x08`) and could never match — the malformed-identifier check silently passed everything. Repaired at byte level and re-tested. *A check that cannot fail is worse than no check, and this one nearly shipped that way for the second time in this project's history.*
+
+### Simulated — requires Codex/Cursor
+
+Seven state transitions traced against the written prompts: **7 pass, 0 fail, 1 documented caveat.** Between G3 and the retrospective the stage still reads S5, because the reviewer is forbidden from touching project records. Recorded as expected behaviour rather than given its own mechanism. Full trace in [tests/validation-protocol.md](tests/validation-protocol.md).
+
+**This is not provider validation.** It proves the state mechanism is internally unambiguous, not that any tool honours it.
+
+### Deliberately not built
+
+A Builder OS skill — it would duplicate the `AGENTS.md` standard and work in one vendor's product instead of twenty-five. Cross-product automation — nothing drives Codex and Cursor from one controller. `.builder-os/` context packets — the four required documents plus the runtime file already are the packet. Router split · frame changes · print mode · QA reorganisation · new scripts.
+
+### Status
+
+**V1 CANDIDATE. Core frozen.** The next change must come from Test A, Test B, or a real project — not another audit.
+
+---
+
 ## 0.3.1 — 2026-08-21 · READY FOR V1 VALIDATION
 
 Four structural blockers from the V1 readiness review, closed. **No redesign.** No new modes, skills, roles, or frameworks.
