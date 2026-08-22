@@ -47,6 +47,17 @@ STAGES = {
         "forbidden_inputs": [],
         "provider": "codex",
     },
+    "S2": {
+        "prompt": "prompts/research.md",
+        "block": 0,
+        "project_inputs": [],
+        "canonical_inputs": ["RESEARCH-POLICY.md", "templates/RESEARCH.md"],
+        "conditional_inputs": [],
+        "allowed_parents": ["S1", "S2"],
+        "forbidden_inputs": ["unrelated PROJECT.md content", "design context", "source code"],
+        "provider": "codex",
+        "derived_from_project": ["blocking open questions"],
+    },
     "S3": {
         "prompt": "prompts/design-direction.md",
         "block": 0,
@@ -57,7 +68,7 @@ STAGES = {
             "canonical:DESIGN-MOTION.md",
             "canonical:DESIGN-ASSETS.md",
         ],
-        "allowed_parents": ["S1", "S3"],
+        "allowed_parents": ["S1", "S2", "S3"],
         "forbidden_inputs": ["source code", "build history"],
         "provider": "codex",
     },
@@ -213,6 +224,22 @@ def extract_review_values(project_text: str) -> dict[str, str]:
     }
 
 
+def extract_blocking_questions(project_text: str) -> str:
+    section = markdown_section(project_text, "Open questions")
+    questions = []
+    for line in section.splitlines():
+        if not line.lstrip().startswith("|") or "---" in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 4 or cells[0] == "#" or "<" in cells[1]:
+            continue
+        if cells[3].lower() in ("yes", "y", "blocking"):
+            questions.append(f"- {cells[1]} (needed by {cells[2]})")
+    if not questions:
+        raise PacketError("S2 requires at least one blocking PROJECT.md open question")
+    return "\n".join(questions)
+
+
 def replace_line(block: str, label: str, value: str) -> str:
     pattern = rf"(?m)^{re.escape(label)}\s*.*$"
     replacement = f"{label} {value}"
@@ -233,6 +260,21 @@ def parameterise_prompt(stage: str, block: str, args: argparse.Namespace) -> tup
             raise PacketError("S1 prompt has no MY REQUEST parameter")
         block = re.sub(
             r"(?ms)^MY REQUEST:.*\Z", lambda _m: f"MY REQUEST: {request.strip()}", block
+        )
+    elif stage == "S2":
+        project_path = Path(args.project).resolve() / "PROJECT.md"
+        if not project_path.is_file():
+            raise PacketError("S2 requires PROJECT.md containing blocking open questions")
+        questions = extract_blocking_questions(read(project_path))
+        block = replace_line(block, "QUESTIONS:", "\n" + questions)
+        derived.append(
+            {
+                "label": "S2 blocking questions extracted from PROJECT.md",
+                "path": str(project_path),
+                "kind": "project-derived",
+                "source_sha256": sha256_file(project_path),
+                "delivered": False,
+            }
         )
     elif stage == "S3":
         references = "none yet"
@@ -658,7 +700,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
 def repository_contract_problems(stages: dict | None = None) -> list[str]:
     specs = stages or STAGES
     problems = []
-    expected = ["S1", "S3", "S4A", "S4B", "S5", "S6"]
+    expected = ["S1", "S2", "S3", "S4A", "S4B", "S5", "S6"]
     if list(specs) != expected:
         problems.append(f"packet stage list drift: expected {expected}, found {list(specs)}")
     for stage, spec in specs.items():
@@ -749,21 +791,32 @@ def self_test() -> int:
         (project / "PROJECT.md").write_text(
             "# PROJECT\n\n**Mode:** game-experiment\n\n## Goal\n\nMake type respond to sound.\n\n"
             "## Accepted patterns\n\n| Pattern | Because | Rationale type |\n|---|---|---|\n\n"
-            "## Success criteria\n\n1. Sound changes type.\n2. Silence is distinct.\n",
+            "## Success criteria\n\n1. Sound changes type.\n2. Silence is distinct.\n\n"
+            "## Open questions\n\n| # | Question | Needed by | Blocking? |\n|---|---|---|---|\n"
+            "| 1 | Which browser microphone API is current? | S3 | yes |\n",
             encoding="utf-8",
         )
         (project / "AGENTS.md").write_text(
             "## Current state\n\n| **Stage** | `S1` |\n| **Last gate passed** | `none` |\n",
             encoding="utf-8",
         )
+        s2_dir = sandbox / "R1-S2"
+        prepare(ns(stage="S2", project=str(project), output=str(s2_dir), parent=str(s1_dir)))
+        case("conditional S2 packet verifies (positive control)", not verify_packet(s2_dir))
+        (s2_dir / "evidence" / "transcript.md").write_text("S2 transcript\n", encoding="utf-8")
+        (project / "RESEARCH.md").write_text(
+            "# RESEARCH\n\n## Findings\n\n| Claim | Date | Confidence | Source |\n",
+            encoding="utf-8",
+        )
+
         s3_dir = sandbox / "R1-S3"
-        prepare(ns(stage="S3", project=str(project), output=str(s3_dir), parent=str(s1_dir), motion="yes", assets="no"))
+        prepare(ns(stage="S3", project=str(project), output=str(s3_dir), parent=str(s2_dir), motion="yes", assets="no"))
         case("fresh S3 continuation verifies (positive control)", not verify_packet(s3_dir))
 
-        parent_transcript = s1_dir / "evidence" / "transcript.md"
+        parent_transcript = s2_dir / "evidence" / "transcript.md"
         parent_transcript.write_text("changed parent evidence\n", encoding="utf-8")
         case("changed parent transcript is detected", any("parent transcript changed" in p for p in verify_packet(s3_dir)))
-        parent_transcript.write_text("S1 transcript\n", encoding="utf-8")
+        parent_transcript.write_text("S2 transcript\n", encoding="utf-8")
 
         original_project = read(project / "PROJECT.md")
         (project / "PROJECT.md").write_text(original_project + "\nchanged\n", encoding="utf-8")
@@ -826,26 +879,37 @@ def self_test() -> int:
             parent_failed = "wrong parent stage" in str(exc)
         case("wrong continuation parent blocks preparation", parent_failed)
 
+        (s3_dir / "evidence" / "transcript.md").write_text("S3 transcript and human G1 approval\n", encoding="utf-8")
+        s4a_dir = sandbox / "R1-S4A"
+        prepare(ns(stage="S4A", project=str(project), output=str(s4a_dir), parent=str(s3_dir)))
+        case("S4A packet verifies (positive control)", not verify_packet(s4a_dir))
+        (s4a_dir / "evidence" / "transcript.md").write_text("S4A transcript\n", encoding="utf-8")
+
+        (project / "HANDOFF.md").write_text(
+            "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n## Dependencies to install\n\nNone.\n",
+            encoding="utf-8",
+        )
+        s4b_dir = sandbox / "R1-S4B"
+        prepare(ns(stage="S4B", project=str(project), output=str(s4b_dir), parent=str(s4a_dir)))
+        s4b_manifest = json.loads(read(s4b_dir / MANIFEST_NAME))
+        case("Cursor S4B packet verifies (positive control)", not verify_packet(s4b_dir) and s4b_manifest["provider"] == "cursor")
+        (s4b_dir / "evidence" / "transcript.md").write_text("S4B transcript\n", encoding="utf-8")
+
         (project / "QA.md").write_text(
             "# QA\n\n## Mechanical\n\n| 1 | Build | pass | output |\n\n## Judgement\n\nVerdict: Ship\nScore: 40/50\n",
             encoding="utf-8",
         )
-        s4b_parent = sandbox / "R1-S4B"
-        (s4b_parent / "evidence").mkdir(parents=True)
-        (s4b_parent / "evidence" / "transcript.md").write_text("S4B transcript\n", encoding="utf-8")
-        synthetic_parent = {
-            "schema_version": SCHEMA_VERSION,
-            "packet_id": "R1-S4B",
-            "stage": "S4B",
-            "expected_transcript": "evidence/transcript.md",
-        }
-        (s4b_parent / MANIFEST_NAME).write_text(json.dumps(synthetic_parent), encoding="utf-8")
         s5_dir = sandbox / "R1-S5"
-        prepare(ns(stage="S5", project=str(project), output=str(s5_dir), parent=str(s4b_parent), target="http://127.0.0.1:3000", lenses="creative-director (light)"))
+        prepare(ns(stage="S5", project=str(project), output=str(s5_dir), parent=str(s4b_dir), target="http://127.0.0.1:3000", lenses="creative-director (light)"))
         case("isolated S5 packet verifies (positive control)", not verify_packet(s5_dir))
         s5_manifest = json.loads(read(s5_dir / MANIFEST_NAME))
         delivered_kinds = {s["kind"] for s in s5_manifest["sources"] if s.get("delivered", True)}
         case("S5 delivered sources exclude project context (positive control)", delivered_kinds == {"canonical-prompt", "canonical"})
+        (s5_dir / "evidence" / "transcript.md").write_text("Independent S5 transcript\n", encoding="utf-8")
+
+        s6_dir = sandbox / "R1-S6"
+        prepare(ns(stage="S6", project=str(project), output=str(s6_dir), parent=str(s5_dir)))
+        case("S6 packet verifies with canonical template (positive control)", not verify_packet(s6_dir))
 
     print("STAGE PACKET SELF-TEST\n")
     for name, passed in cases:

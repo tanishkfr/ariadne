@@ -69,6 +69,21 @@ Attached: <the documents this stage needs>
 Do: <the stage's job>
 ```
 
+For S1, conditional S2, S3, S4A, S5, and S6, generate that opening context instead of
+assembling it manually:
+
+```bash
+python scripts/prepare-stage.py prepare --stage <stage> --project <project> --output <new-packet-directory> [stage options]
+```
+
+The generated `packet.txt` is the only text pasted into the fresh session.
+`manifest.json` records the parent, current Builder OS commit, source hashes,
+conditional-input decisions, and the expected transcript path. Before reuse,
+run `python scripts/prepare-stage.py verify --packet-dir <packet-directory>`.
+Verification fails on source drift, changed parent evidence, wrong stage/parent,
+missing packet sections, or S5 context leakage. Packet output must live outside
+the project repository; real project packets also stay outside Builder OS.
+
 **What to attach per stage:** the pasted stage prompt is always included. These
 are its additional inputs; canonical policy and template files are transported
 for that session only and are never copied into the project repository.

@@ -8,13 +8,18 @@ Not a Builder OS feature. A temporary measuring device, to be deleted if it stop
 
 ---
 
-## Your entire burden: one file per run
+## Run records and stage continuations
 
-Copy [run-template.md](run-template.md) to `runs/<id>.md`, fill it in as you go, run the checker. **The benchmark table is generated — never hand-maintained.**
+Test A still starts from [run-template.md](run-template.md), and the benchmark
+table is still generated rather than hand-maintained. For later fresh-session
+boundaries, [prepare-stage.py](../scripts/prepare-stage.py) creates a distinct
+continuation record, a paste packet, a source manifest, and an evidence path.
+It never overwrites a parent or an existing continuation directory.
 
 ```bash
 python scripts/validate.py --run validation/runs/A1.md --project ../my-project
 python scripts/validate.py --benchmark
+python scripts/prepare-stage.py verify --packet-dir <continuation-directory>
 ```
 
 If this ever costs more effort than the thing it measures, it has failed and should be cut.
@@ -60,7 +65,11 @@ Same loop, plus the two things Test A cannot reach:
 
 **The forced restart.** At G1, reject the first direction *even if you like it*. Say it in your own words — **"scrap this direction and start over"** — and do not quote any rule. Then record what was preserved and what was discarded. Log a `RESTART` event.
 
-**The handoff count.** Open Cursor, fresh session, paste `build-kickoff.md` part B and nothing else. **Log every question as a `QUESTION` event with class A/B/C.** The B-count is the primary metric, target ≤2. Watch specifically for asset location — the pre-validation simulation flagged it as the likeliest gap.
+**The handoff count.** Generate the S4B packet from the completed S4A
+continuation, then open Cursor in a fresh session and paste only `packet.txt`.
+The packet transports canonical Part B and its required inputs without reasoning
+history. **Log every question as a `QUESTION` event with class A/B/C.** The
+B-count is the primary metric, target ≤2.
 
 Then: mechanical QA in Cursor · **independent review in a fresh session with only the URL and success criteria** · retrospective.
 
@@ -89,6 +98,10 @@ A "quality score" would point the other way: it would reward a run that *looks* 
 ## Raw evidence
 
 Keep transcripts, screenshots and the project repo **outside** this repository — they contain project and client material ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)). Reference them by path in the run file. Run records here should carry findings, never client content.
+
+The packet helper enforces this boundary: real project packets are refused inside
+Builder OS and inside the project repository. `--synthetic-validation` is the
+explicit exception for non-private fixtures and protocol runs.
 
 **Test A is the exception, and it is required.** Save the raw first reply to `runs/<id>/evidence/transcript.md`. `finish-test-a.py` reads the FRAME, the confidence, the question and the NEXT block straight out of that file, and checks them against the contract stated in `prompts/project-start.md`. Without the transcript there is no routing measurement. Test A uses a synthetic brief with no client material, so keeping it here is safe.
 

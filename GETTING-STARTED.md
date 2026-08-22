@@ -12,7 +12,7 @@ You describe what you want. A **router** decides what kind of project it is. Tha
 
 **One tool decides. Another tool builds.** They communicate through a file called `HANDOFF.md`, not through you re-explaining things.
 
-Five **gates** stop the process for your approval: before designing (G1), before installing anything (G2), before showing you the finished build (G3), before shipping (G4), before publishing (G5).
+Five **gates** stop the process for your approval: before building (G1), before installing anything (G2), after build and review evidence (G3), before shipping (G4), before publishing (G5).
 
 That is it. Everything else is detail.
 
@@ -20,21 +20,16 @@ That is it. Everything else is detail.
 
 ## Step 1 — Prerequisites
 
-Already on this machine: node, npm, git, gh (authenticated), corepack.
-
-**Missing: pnpm.** Every default in this system assumes it.
+Required for Builder OS itself: Python 3.8+ and Git. Required when a project reaches the default build stack: Node.js and pnpm. GitHub authentication, hosting accounts, and Cursor sign-in are not prerequisites for routing or design.
 
 ```bash
-corepack enable
-```
-
-Then verify:
-
-```bash
+python --version
+git --version
+node --version
 pnpm --version
 ```
 
-If `corepack enable` fails on permissions, run the terminal as Administrator once.
+If a build prerequisite is missing, stop and install it deliberately; do not substitute a package manager or Node version silently.
 
 ---
 
@@ -54,11 +49,11 @@ If `corepack enable` fails on permissions, run the terminal as Administrator onc
 
 This is the tool that **decides**. It does not write your code.
 
-1. Create a project or custom instruction set.
-2. Paste the setup instructions from [adapters/codex.md](adapters/codex.md).
-3. Upload two files to its knowledge: **[ROUTER.md](ROUTER.md)** and **[DESIGN-TASTE.md](DESIGN-TASTE.md)**.
+1. Read the setup and session boundary in [adapters/codex.md](adapters/codex.md).
+2. Start each stage in a fresh session.
+3. Generate the stage's packet with [scripts/prepare-stage.py](scripts/prepare-stage.py). The packet carries only the canonical inputs that stage needs and records their hashes.
 
-Those two carry most of the system's value. Do not upload the whole system — you will pay for that context on every message, and it will not read them all anyway.
+Do not upload the whole Builder OS. Generated packets are transient transport artifacts, not a second knowledge base.
 
 ---
 
@@ -68,7 +63,7 @@ This is the tool that **builds**. It does not decide direction.
 
 1. Follow [adapters/cursor.md](adapters/cursor.md).
 2. Add the project rules block from that file.
-3. For each new project, copy [templates/AGENTS.md](templates/AGENTS.md) to the project root and fill it in.
+3. Let S1 create the project-root `AGENTS.md`. Do not pre-create it; S1 must fill the runtime state from the routed project.
 
 Claude Code works identically as a fallback — see [adapters/claude-code.md](adapters/claude-code.md). **Read the cautions in that file**, particularly about design skills whose house style can override your `DESIGN.md`.
 
@@ -80,12 +75,29 @@ Do not read the rest of the documentation first. Run something small and real.
 
 **Pick a [game-experiment](modes/game-experiment.md).** It is the lightest mode: three questions, two documents, and it finishes in a day.
 
-1. Copy [prompts/project-start.md](prompts/project-start.md).
-2. Paste it into your reasoning tool. Replace the last line with your idea.
-3. Answer the questions.
-4. The session ends by naming the next prompt. **Paste [prompts/design-direction.md](prompts/design-direction.md).**
+1. Create an empty project repository containing only `.git` and `.gitignore`.
+2. Put the brief in a text file outside the project, then prepare S1:
 
-Every stage hands you the next one. You should never finish a stage and have to browse this repository to work out what happens next — if you do, that is a bug worth recording.
+   ```bash
+   python scripts/prepare-stage.py prepare --stage S1 --project <project-path> --output <runs-path>/P1-S1 --request-file <brief-path>
+   ```
+
+3. Open a fresh reasoning session rooted at the project and paste only `<runs-path>/P1-S1/packet.txt`.
+4. Save the verbatim session transcript to `<runs-path>/P1-S1/evidence/transcript.md`.
+5. Answer the routing questions. Once S1 has created `PROJECT.md` and `AGENTS.md`, prepare S3:
+
+   ```bash
+   python scripts/prepare-stage.py prepare --stage S3 --project <project-path> --output <runs-path>/P1-S3 --parent <runs-path>/P1-S1 --motion yes --assets no
+   ```
+
+   Set the two trigger flags from the actual project. Use `--references-file` when references exist; otherwise the packet explicitly carries `none yet`.
+
+   If `PROJECT.md` contains a blocking factual question, prepare S2 first with
+   `--stage S2 --parent <runs-path>/P1-S1`. Save its transcript and `RESEARCH.md`,
+   then use the S2 packet directory as S3's parent. S2 transports only those
+   blocking questions plus the canonical research policy and template.
+
+Every stage hands you the next one. The packet verifier refuses stale canonical sources, a missing parent transcript, a wrong parent stage, or an existing output directory, so previous evidence is not silently overwritten.
 
 When you reach **G1**, the system will present a design direction and stop. **This is the moment that matters.** Read it. If it says "clean, modern, minimal", reject it — that is a mood, not a direction, and the system is meant to catch that. Ask for a thesis specific enough that a template would fail it.
 
@@ -93,7 +105,13 @@ When you reach **G1**, the system will present a design direction and stop. **Th
 
 ## Step 6 — Run one review
 
-After you have built something, run [prompts/project-review.md](prompts/project-review.md) in a **fresh session**.
+After S4B has completed mechanical QA, prepare S5 with the reachable target and the human-selected lens:
+
+```bash
+python scripts/prepare-stage.py prepare --stage S5 --project <project-path> --output <runs-path>/P1-S5 --parent <runs-path>/P1-S4B --target <url> --lenses "creative-director (light)"
+```
+
+Run its `packet.txt` in a **fresh independent session**. The generator extracts only intent, success criteria, and accepted patterns from `PROJECT.md`; it excludes the project documents, source, QA, and build history.
 
 Fresh matters. A session that built the thing will defend it, because it knows why every compromise happened. That sympathy is exactly what your audience will not have.
 
@@ -107,6 +125,7 @@ Do not read all of it now. Read each file the first time you hit its stage.
 |---|---|
 | Right now | This file, then [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md) |
 | Starting any project | [ROUTER.md](ROUTER.md) |
+| Preparing any fresh stage | [scripts/prepare-stage.py](scripts/prepare-stage.py) |
 | At your first G1 | [DESIGN-TASTE.md](DESIGN-TASTE.md) — the most valuable file here |
 | First time an agent wants to install something | [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |
 | First time you run QA | [QA-POLICY.md](QA-POLICY.md) |

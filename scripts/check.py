@@ -38,7 +38,7 @@ REQUIRED = [
     "templates/PROJECT.md", "templates/DESIGN.md",
     "templates/HANDOFF.md", "templates/QA.md",
     # one entry point per active stage -- the v0.3 gap this closes
-    "prompts/project-start.md", "prompts/design-direction.md",
+    "prompts/project-start.md", "prompts/research.md", "prompts/design-direction.md",
     "prompts/build-kickoff.md", "prompts/project-review.md",
     "prompts/retrospective.md",
     "tests/router-cases.md",
@@ -231,6 +231,7 @@ def check_router_suite():
 # documentation for the human; only the fence reaches the agent.
 CHAINED_PROMPTS = [
     "prompts/project-start.md",
+    "prompts/research.md",
     "prompts/design-direction.md",
     "prompts/build-kickoff.md",
     "prompts/project-review.md",
@@ -341,6 +342,18 @@ DELIVERY_CONTRACTS = [
         ],
         "inputs": ["skills/intake.md", "AGENTS template transport mirror"],
         "retry": "NEXT: S1 Discovery resume.",
+        "forbidden_missing": ["NEXT: S3 Design direction."],
+    },
+    {
+        "path": "prompts/research.md",
+        "block": 0,
+        "tokens": [
+            "REQUIRED INPUTS", "QUESTIONS", "RESEARCH-POLICY.md",
+            "templates/RESEARCH.md", "IF MISSING",
+            "NEXT: S3 Design direction.",
+        ],
+        "inputs": ["QUESTIONS", "RESEARCH-POLICY.md", "templates/RESEARCH.md"],
+        "retry": "NEXT: S2 Research retry.",
         "forbidden_missing": ["NEXT: S3 Design direction."],
     },
     {
@@ -549,6 +562,22 @@ def check_delivery_contract_texts(texts):
                 "prompts/project-review.md still permits direct Ship -> G4 sequencing"
             )
 
+    research = texts.get("prompts/research.md", "")
+    research_blocks = fenced_blocks(research)
+    if research_blocks:
+        unresolved = re.search(
+            r"(?ms)^If any question remains too uncertain.*?^Then STOP\.",
+            research_blocks[0],
+        )
+        if not unresolved:
+            problems.append("prompts/research.md has no unresolved-evidence stop path")
+        else:
+            blocked = unresolved.group(0)
+            if "NEXT: S2 Research resolution." not in blocked:
+                problems.append("prompts/research.md unresolved evidence must stay in S2")
+            if "NEXT: S3 Design direction." in blocked:
+                problems.append("prompts/research.md advances to S3 with unresolved evidence")
+
     for path, spec in ADAPTER_DELIVERY.items():
         text = texts.get(path)
         if text is None:
@@ -746,6 +775,16 @@ def self_test_delivery_contracts():
          bool(check_delivery_contract_texts(mutate(
              "prompts/design-direction.md",
              "NEXT: S3 Design direction retry.", "NEXT: S4 Build."
+         )))),
+        ("blocked S2 advancing to S3 fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/research.md",
+             "NEXT: S2 Research retry.", "NEXT: S3 Design direction."
+         )))),
+        ("unresolved S2 evidence advancing to S3 fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/research.md",
+             "NEXT: S2 Research resolution.", "NEXT: S3 Design direction."
          )))),
         ("missing S4B canonical QA policy fails",
          bool(check_delivery_contract_texts(mutate(

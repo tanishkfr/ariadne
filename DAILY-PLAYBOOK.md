@@ -24,9 +24,10 @@ Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](WORKFLOW.
 
 ## The stage map
 
-| Stage | Paste this | Into |
+| Stage | Canonical entry | Into |
 |---|---|---|
 | Start anything | [prompts/project-start.md](prompts/project-start.md) | Reasoning tool |
+| Blocking factual research | [prompts/research.md](prompts/research.md) | Reasoning tool, fresh session |
 | Design direction (**G1**) | [prompts/design-direction.md](prompts/design-direction.md) | Reasoning tool |
 | Build | [prompts/build-kickoff.md](prompts/build-kickoff.md) | Build tool, fresh session |
 | Review (**G3**) | [prompts/project-review.md](prompts/project-review.md) | **Fresh session** |
@@ -36,15 +37,21 @@ Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](WORKFLOW.
 
 Each one ends by naming the next. Follow the chain rather than this table.
 
+For fresh sessions, do not assemble those inputs by hand. Run
+`python scripts/prepare-stage.py prepare ...`, paste its generated `packet.txt`,
+and save the transcript at the path it prints. Run
+`python scripts/prepare-stage.py verify --packet-dir <packet-directory>` before
+reusing a prepared packet; source or parent drift fails closed.
+
 ## By situation
 
 ### "I have an idea"
 
-1. Paste [prompts/project-start.md](prompts/project-start.md) into the reasoning tool.
-2. Answer up to 5 questions.
-3. Paste [prompts/design-direction.md](prompts/design-direction.md) when it hands it to you.
+1. Prepare S1 from the brief with [scripts/prepare-stage.py](scripts/prepare-stage.py).
+2. Paste only its `packet.txt` into a fresh reasoning session and answer up to 5 questions.
+3. Save the transcript, then prepare S3 with S1 as its explicit parent.
 
-Do not open an editor. Do not pick a framework. Do not start a repo.
+Do not start implementation or pick a framework. The repository stays empty until S1 writes its project documents.
 
 ### "I know what I'm building, I want to start"
 
@@ -89,10 +96,10 @@ Anything you will check twice becomes a Playwright test. Writing it costs about 
 
 1. Build tool: run the mechanical checklist ([QA-POLICY.md](QA-POLICY.md) section 3). Record evidence per row.
 2. Capture screenshots — **and look at them yourself**.
-3. **Fresh session**: run [prompts/project-review.md](prompts/project-review.md).
+3. Generate S5 and give only its `packet.txt` to a **fresh independent session**.
 4. Present G3.
 5. On approval: G4 to ship.
-6. Fifteen minutes on `RETROSPECTIVE.md`. **Edit one Builder OS file.** Log it in [CHANGELOG.md](CHANGELOG.md).
+6. Fifteen minutes on `RETROSPECTIVE.md`. Record proposals; edit Builder OS only after human approval, then log the approved change in [CHANGELOG.md](CHANGELOG.md).
 
 ### "I want to write a post"
 

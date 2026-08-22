@@ -2,7 +2,7 @@
 
 A project router and operating system for building websites, apps, games, experiments and content — with a design quality bar that is written down and enforced, and a clear separation between which tool thinks and which tool builds.
 
-Not a framework, an app, or a dependency. A set of documents you point an AI tool at.
+Not a framework, an app, or a dependency. Canonical Markdown plus small deterministic transport and validation tools.
 
 ---
 
@@ -24,10 +24,11 @@ Not a framework, an app, or a dependency. A set of documents you point an AI too
 Your request
   -> ROUTER.md              detects the mode, asks up to 5 questions
   -> WORKFLOW.md            runs S0-S6, assigns a role, enforces the gates
+  -> prepare-stage.py       transports only this stage's canonical inputs
   -> templates/             produces PROJECT, DESIGN, HANDOFF, QA
   -> QA-POLICY.md           mechanical checks (the builder)
   -> EVALUATION-RUBRICS.md  judgement checks (a fresh session)
-  -> RETROSPECTIVE          edits this system, logged in CHANGELOG
+  -> RETROSPECTIVE          proposes changes for human approval
 ```
 
 Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build complete · **G4** ship · **G5** publish. Nothing irreversible happens without you.
@@ -37,7 +38,7 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 **Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — 30 minutes, then one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
-**Starting now:** paste [prompts/project-start.md](prompts/project-start.md) into your reasoning tool.
+**Starting now:** generate a fresh S1 packet with [prepare-stage.py](scripts/prepare-stage.py), then paste `packet.txt` into your reasoning tool.
 
 ## The five modes
 
@@ -68,17 +69,17 @@ Builder OS/
 ├─ CONTENT-SYSTEM.md       Writing, analytics, learning loop
 ├─ CHANGELOG.md            How this system changed + the 30-day check
 ├─ GETTING-STARTED.md · DAILY-PLAYBOOK.md · MIGRATION-CHECKLIST.md
-├─ skills/       5   intake, reference-analysis, design-direction,
-│                    component-research, evaluation
+├─ skills/       4   intake, reference-analysis, design-direction,
+│                    component-research
 ├─ templates/   11   4 required, 7 conditional
 ├─ modes/        5
 ├─ adapters/     3   codex / cursor / claude-code
 ├─ references/   2   visual references, UI libraries
-├─ prompts/      6   start, direction, build, review, portfolio, content,
-│                    retrospective — one entry point per stage
+├─ prompts/      8   start, conditional research, direction, build, review,
+│                    portfolio, content, retrospective
 ├─ tests/            router-cases.md (regression suite),
-│                    validation-protocol.md (3 real-world tests, unrun)
-└─ scripts/          check.py — links, files, rule IDs, suite, duplicates
+│                    validation-protocol.md (Test A exercised; B/C unrun)
+└─ scripts/          check.py · validate.py · deterministic stage packets
 ```
 
 ## Principles
@@ -93,7 +94,7 @@ Builder OS/
 
 **Four documents, not eleven.** `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. The rest exist when they earn it — a document nobody reads is worse than none, because it manufactures the appearance of process.
 
-**The system improves itself.** Every retrospective edits a file here and logs it in [CHANGELOG.md](CHANGELOG.md).
+**The system learns under human control.** A retrospective proposes a specific change; the human approves, defers, or rejects it before any Builder OS file changes.
 
 ## What it will not do
 
@@ -107,12 +108,10 @@ Builder OS/
 
 ## Status
 
-**v0.3.0.** The router now routes on **intent**, not keywords. It builds a ten-slot interpretation of your request — action, object, artifact role, constraints — and routes from that. Keyword matching confidently produced the wrong workflow whenever intent differed from literal wording; an unresolved object now forces a question instead of a guess.
+**v0.3.6.** Stage prompts can now be delivered as verified, paste-ready packets with explicit parents, source hashes, expected transcript paths, and stale-source detection. The router still routes on **intent**, not keywords.
 
 Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
-**Status: READY FOR V1 VALIDATION — not v1.0.0.** Every stage now has an entry point and the router
-suite is back in the repo, but **no real project has been through it.** The three tests in
-[tests/validation-protocol.md](tests/validation-protocol.md) are what earn the v1.0.0 tag.
+**Status: NEAR READY — not v1.0.0.** A Codex Test A exercise has reached S5, but Cursor remains prepared rather than validated and no Test B or Test C has completed. See [V1-READINESS.md](V1-READINESS.md).
 
 Run `python scripts/check.py` after any edit.

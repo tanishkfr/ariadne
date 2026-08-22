@@ -10,6 +10,48 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.3.6 — 2026-08-22 · V1 STAGE TRANSPORT AND CONTINUATION HARDENING
+
+The A3R1 exercise proved that correct standalone delivery contracts were still
+painful to operate: the operator manually found canonical inputs, concatenated
+multi-file packets, created continuation records, chose evidence paths, preserved
+parent hashes, and rebuilt S5 isolation by hand. That repeated work is now owned
+by `scripts/prepare-stage.py`, a transport helper rather than an orchestrator or
+policy system.
+
+The helper prepares S1, conditional S2, S3, S4A, S4B, isolated S5, and S6. Every
+generated continuation has an explicit parent, source commit, per-source SHA-256,
+conditional-input decisions, an expected transcript path, and a machine-readable
+manifest. Preparation refuses existing output directories, packets inside the
+project, real project packets inside Builder OS, wrong or same-stage parents
+without an explicit retry, and parents whose transcript is missing. Verification
+fails when a canonical or project input, parent manifest, parent transcript,
+packet section, stage, or S5 delivery set has drifted.
+
+Two deterministic stage-input gaps were closed. Conditional S2 had an adapter
+delivery row and canonical policy/template but no pasteable entry point; the new
+`prompts/research.md` executes the existing conditional stage without changing
+its policy or adding a gate. S6 produced `RETROSPECTIVE.md` but neither its prompt
+nor adapter delivered `templates/RETROSPECTIVE.md`; both now do. Canonical policy
+and template ownership is unchanged.
+
+`scripts/check.py` now checks nine standalone prompt contracts, five chained
+prompt transitions, the packet transport map, S4A→S4B parent order, S5 isolation,
+and S6 template delivery. Its self-test adds positive controls and negative
+mutations. The packet helper's own 20-case self-test covers a synthetic
+S1→S2→S3→S4A→Cursor-labelled S4B→S5→S6 chain plus stale sources, changed parent
+evidence, missing sections, wrong stage/parent, missing evidence, duplicate
+continuations, and forbidden S5 context.
+
+Operator documentation now describes generated transport and removes stale
+machine-specific setup claims. Cursor has a concrete validation handover, but was
+not opened or run; packet generation proves readiness to test, not provider
+behaviour. No remote push, deployment, production action, credential access,
+gate approval, validation-evidence rewrite, routing change, or workflow-gate
+change occurred.
+
+---
+
 ## 0.3.5 — 2026-08-21 · STANDALONE STAGE DELIVERY-CONTRACT REPAIR
 
 A3 exposed the first deterministic standalone-input defect at S1. The bounded
