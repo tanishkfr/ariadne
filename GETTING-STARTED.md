@@ -37,11 +37,15 @@ If a build prerequisite is missing, stop and install it deliberately; do not sub
 
 **Do this before subscribing to anything.** It takes two minutes and converts four unverified rows in [BUDGET-POLICY.md](BUDGET-POLICY.md) into verified ones.
 
-1. Open Cursor's pricing page **while in India** and look for the ₹650 plan you mentioned. It does not appear on the international page. Confirm the price at checkout, not on the marketing page.
+1. Open Cursor's pricing page **while in India** and record the plan and amount
+   your signed-in checkout actually shows. Confirm at checkout, not from an old
+   document or a third-party summary.
 2. Open ChatGPT's pricing page and record what you are actually charged in INR.
 3. Write both into the table in [BUDGET-POLICY.md](BUDGET-POLICY.md) section 3 with today's date.
 
-**Expected total: around ₹2,649/month**, which is inside your ideal band. If the ₹650 plan does not exist, read section 4 of that file — the fallback order is there, and it changes what you should subscribe to.
+Do not carry an expected total from this guide. Add the two currently verified
+amounts in [BUDGET-POLICY.md](BUDGET-POLICY.md); its fallback order applies when
+the resulting total is outside your band.
 
 ---
 

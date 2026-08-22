@@ -1,6 +1,8 @@
 # REAL-WORLD VALIDATION PROTOCOL
 
-Three tests. **None have been run.** Builder OS is `READY FOR V1 VALIDATION`, not v1.0.0, and stays that way until at least Test A and Test B are complete.
+Three tests. Test A has multiple recorded runs; Test B B1 is formally closed as
+`PASS WITH PROVIDER-QUOTA EVIDENCE EXCEPTION`; Test C has not run. This status
+update does not change the procedures below.
 
 Router tests ([router-cases.md](router-cases.md)) prove the rules are internally consistent. They prove **nothing** about document quality, handoff sufficiency, design outcomes, QA effectiveness, or whether any of this saves time.
 

@@ -10,6 +10,58 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.1.0-rc.1 — 2026-08-23 · PRODUCT INTELLIGENCE AND SAFE ADOPTION
+
+The V1 runtime made canonical delivery reliable, but a real returning operator
+still received a thin stage-oriented status, an implementer could be handed an
+under-specified `HANDOFF.md`, partial external work required knowledge of a
+low-level retry command, concurrent self-tests collided, and existing projects
+could not enter the product at all.
+
+Builder OS now derives a calm project briefing and health map from canonical
+project documents, packet lineage, provider preflight, structured returns, QA,
+and append-only evidence notes. It reports the complete goal, approved direction,
+current work, attention items, and the next human decision without becoming a
+second policy owner. Durable notes distinguish verified, reasonably assumed,
+externally unverified, and blocked facts.
+
+The S4 boundary now fails closed on missing outcome/acceptance criteria, content
+readiness, implementer discretion, thesis drift, success-criteria drift,
+unapproved dependencies, unresolved critical assets, incomplete provider routing,
+or a missing return contract. The existing `HANDOFF.md` template and S4A prompt
+own those missing transport fields; the underlying design, QA, routing, and gate
+policies are unchanged. Structured returns also gain a deterministic JSON view
+for re-entry while preserving the provider's Markdown report.
+
+The public `advance` command now records obvious same-session output, prepares
+routine continuation, and automatically creates a non-overwriting S4B child when
+an external return is partial or blocked. Complete returns remain the positive
+control and reach isolated S5 only when mechanical QA exists. Provider preflight
+recommends the recorded fallback or a bounded split instead of only naming a
+failure.
+
+Existing repositories can opt into `start --adopt-existing`. Adoption inspects
+the live project read-only during S1, preserves every existing file and current
+behaviour, records its provenance, and refuses to overwrite `PROJECT.md` or
+`AGENTS.md`. Ordinary start still refuses a non-empty directory. The entry skill
+and operator guides expose this as an optional migration path, not a silent mode.
+
+Independent runtime, packet, and installer self-tests now use unique
+Windows-compatible workspaces, closing a reproduced concurrent-suite collision.
+The realistic Memory Atlas journey reached S2 and S3 without manual packet work,
+then stopped correctly at human G1. A genuinely fresh Codex task rediscovered the
+run and reported the full status with zero prompt, packet, hash, transcript, or
+run-path lookup. A current Test B Cursor S4B packet verifies against this release;
+Cursor was not opened and complete live provider return remains unverified.
+
+**Scope:** `ROUTER.md`, `WORKFLOW.md`, modes, canonical design/QA/research/
+evaluation/privacy policies, human gate authority, provider-neutral capability
+routing, historical evidence, production state, and remotes are unchanged. No
+dependency was installed, no credential was accessed, and nothing was pushed or
+deployed.
+
+---
+
 ## 1.0.0 — 2026-08-23 · CALM RUNTIME AND RECOVERABLE PROVIDER HANDOFFS
 
 Test B established that Builder OS's standalone delivery contracts could be

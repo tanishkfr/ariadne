@@ -40,6 +40,7 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 **Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — install the entry skill, then describe one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
+**Current productization evidence:** [V1.1-READINESS.md](V1.1-READINESS.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
 **Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
 
