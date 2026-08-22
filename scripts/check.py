@@ -377,6 +377,7 @@ DELIVERY_CONTRACTS = [
         "tokens": [
             "REQUIRED INPUTS", "PROJECT.md", "DESIGN.md", "AGENTS.md",
             "templates/HANDOFF.md", "IF MISSING", "NEXT: S4 Build.",
+            "prepare-stage.py prepare --stage S4B",
         ],
         "inputs": ["PROJECT.md", "DESIGN.md", "AGENTS.md", "templates/HANDOFF.md"],
         "retry": "NEXT: S4 Handoff retry.",
@@ -789,6 +790,12 @@ def self_test_delivery_contracts():
         ("missing S4B canonical QA policy fails",
          bool(check_delivery_contract_texts(mutate(
              "prompts/build-kickoff.md", "- QA-POLICY.md.", "- QA rules."
+         )))),
+        ("S4A transition without generated S4B packet fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/build-kickoff.md",
+             "prepare-stage.py prepare --stage S4B",
+             "manually assemble S4B",
          )))),
         ("S5 G4 before explicit G3 fails",
          bool(check_delivery_contract_texts(mutate(

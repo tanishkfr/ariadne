@@ -68,7 +68,9 @@ Do not create the others. A document nobody reads is worse than none.
 END YOUR RESPONSE WITH THIS, FILLED IN:
 
   NEXT: S4 Build.
-  Paste Part B of prompts/build-kickoff.md into the build tool in a fresh session.
+  Generate the fresh S4B transport packet with:
+  python scripts/prepare-stage.py prepare --stage S4B --project <project> --output <new-packet-directory> --parent <S4A-packet-directory>
+  Verify that packet, then paste its packet.txt into the build tool in a fresh session.
   Carry forward: HANDOFF.md, DESIGN.md, AGENTS.md, QA-POLICY.md, templates/QA.md
   Blocked on: <nothing, or the exact unresolved handoff input>
 
