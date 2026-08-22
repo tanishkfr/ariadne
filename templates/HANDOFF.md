@@ -67,6 +67,25 @@
 
 **Nothing else may be installed without asking.**
 
+## Implementation routing
+
+> Provider choice is an execution decision, not a design decision. Route by the
+> capability classes in `MODEL-ROUTING.md`; record provider facts only when
+> observable and mark unknowns honestly.
+
+| Field | Recommendation |
+|---|---|
+| Capability needed | `R2` / `R3` / `R4` / split with `R1` |
+| Provider | <recommended provider or `retain in orchestrator`> |
+| Model | <exact model if known, otherwise `provider default — unverified`> |
+| Effort | low / medium / high |
+| Workload | small / medium / large |
+| Split | <what stays with the orchestrator, or `none`> |
+| Reason | <why this route fits the work> |
+
+Before an external build packet is created, Builder OS runs provider preflight.
+Availability and quota are runtime facts; do not invent them in this document.
+
 ## Motion requirements
 
 | Element | Purpose | Trigger | Duration | Easing | Reduced-motion state |
@@ -110,6 +129,13 @@
 - [ ] Screenshots captured **and inspected**
 - [ ] `QA.md` complete with a non-empty Known gaps list
 - [ ] G3 presented
+
+## Return handoff
+
+At completion, interruption, or provider exhaustion, return the filled canonical
+`templates/RETURN-HANDOFF.md` block. A partial return is valid only when it names
+completed work, incomplete work, evidence, and the exact resume point. Do not
+claim checks that were not run.
 
 ## If the design cannot be built as specified
 

@@ -86,7 +86,11 @@ STAGES = {
         "prompt": "prompts/build-kickoff.md",
         "block": 1,
         "project_inputs": ["HANDOFF.md", "DESIGN.md", "AGENTS.md"],
-        "canonical_inputs": ["QA-POLICY.md", "templates/QA.md"],
+        "canonical_inputs": [
+            "QA-POLICY.md",
+            "templates/QA.md",
+            "templates/RETURN-HANDOFF.md",
+        ],
         "conditional_inputs": [],
         "allowed_parents": ["S4A", "S4B"],
         "forbidden_inputs": ["earlier reasoning conversation"],
@@ -238,6 +242,68 @@ def extract_blocking_questions(project_text: str) -> str:
     if not questions:
         raise PacketError("S2 requires at least one blocking PROJECT.md open question")
     return "\n".join(questions)
+
+
+RETURN_HANDOFF_HEADINGS = [
+    "What was built",
+    "Files changed",
+    "Architecture decisions",
+    "Design deviations",
+    "Dependencies",
+    "Tests",
+    "Evidence",
+    "Known issues",
+    "Incomplete work",
+    "Accessibility and performance",
+    "Assumptions",
+    "Next inspection",
+]
+
+
+def return_handoff_problems(text: str) -> list[str]:
+    """Validate continuation evidence without treating it as a transcript."""
+    problems = []
+    if not text.strip():
+        return ["return handoff is empty"]
+    for heading in RETURN_HANDOFF_HEADINGS:
+        if not re.search(rf"(?im)^##\s+{re.escape(heading)}\s*$", text):
+            problems.append(f"return handoff missing section: {heading}")
+    for field in ("Status", "Provider", "Model", "Effort", "Started", "Ended"):
+        match = re.search(rf"(?im)^\*\*{field}:\*\*\s*(.+?)\s*$", text)
+        if not match or re.search(r"<[^>]+>|\bcomplete / partial / blocked\b", match.group(1)):
+            problems.append(f"return handoff has unfilled field: {field}")
+    status = re.search(r"(?im)^\*\*Status:\*\*\s*(.+?)\s*$", text)
+    if status and status.group(1).strip().lower() not in ("complete", "partial", "blocked"):
+        problems.append("return handoff Status must be complete, partial, or blocked")
+    return problems
+
+
+def stage_result_problems(path: Path, parent: dict) -> list[str]:
+    """Validate structural evidence without pretending it is a transcript."""
+    try:
+        result = json.loads(read(path))
+    except (json.JSONDecodeError, OSError) as exc:
+        return [f"invalid structural stage result: {exc}"]
+    problems = []
+    if result.get("schema_version") != 1:
+        problems.append("structural stage result has wrong schema version")
+    if result.get("packet_id") != parent.get("packet_id"):
+        problems.append("structural stage result has wrong packet ID")
+    if result.get("stage") != parent.get("stage"):
+        problems.append("structural stage result has wrong stage")
+    if result.get("status") != "complete":
+        problems.append("structural stage result is not complete")
+    files = result.get("files")
+    if not isinstance(files, list) or not files:
+        problems.append("structural stage result has no output files")
+    else:
+        for entry in files:
+            file_path = Path(entry.get("path", ""))
+            if not file_path.is_file():
+                problems.append(f"structural stage output missing: {file_path}")
+            elif sha256_file(file_path) != entry.get("sha256"):
+                problems.append(f"structural stage output changed: {file_path}")
+    return problems
 
 
 def replace_line(block: str, label: str, value: str) -> str:
@@ -409,11 +475,38 @@ def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tupl
     return sources, omitted
 
 
-def load_parent(parent_arg: str | None, stage: str, retry: bool) -> tuple[dict | None, Path | None]:
+def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
+    transcript = parent_dir / parent.get("expected_transcript", "evidence/transcript.md")
+    if transcript.is_file():
+        return transcript, "verbatim-transcript"
+    if parent.get("stage") == "S4B":
+        returned = parent_dir / "evidence" / "return-handoff.md"
+        if returned.is_file():
+            problems = return_handoff_problems(read(returned))
+            if problems:
+                raise PacketError("parent return handoff is malformed: " + "; ".join(problems))
+            return returned, "structured-return-handoff"
+    structural = parent_dir / "evidence" / "stage-result.json"
+    if structural.is_file():
+        problems = stage_result_problems(structural, parent)
+        if problems:
+            raise PacketError("parent structural evidence is malformed: " + "; ".join(problems))
+        return structural, "structural-stage-result"
+    raise PacketError(
+        f"parent evidence is missing: {transcript}; save the transcript"
+        + (" or ingest the S4B return handoff" if parent.get("stage") == "S4B" else "")
+        + " or record a structurally verified stage result"
+        + " before preparing the continuation"
+    )
+
+
+def load_parent(
+    parent_arg: str | None, stage: str, retry: bool
+) -> tuple[dict | None, Path | None, Path | None, str | None]:
     if stage == "S1":
         if parent_arg:
             raise PacketError("S1 is an initial packet and cannot have a parent")
-        return None, None
+        return None, None, None, None
     if not parent_arg:
         raise PacketError(f"{stage} requires --parent pointing at a prepared parent packet")
 
@@ -430,12 +523,8 @@ def load_parent(parent_arg: str | None, stage: str, retry: bool) -> tuple[dict |
     if parent_stage == stage and not retry:
         raise PacketError(f"same-stage parent requires --retry for {stage}")
 
-    transcript = parent_dir / parent.get("expected_transcript", "evidence/transcript.md")
-    if not transcript.is_file():
-        raise PacketError(
-            f"parent evidence is missing: {transcript}; save it before preparing the continuation"
-        )
-    return parent, parent_dir
+    evidence, evidence_kind = parent_evidence(parent, parent_dir)
+    return parent, parent_dir, evidence, evidence_kind
 
 
 def section_header(entry: dict) -> str:
@@ -511,7 +600,9 @@ def prepare(args: argparse.Namespace) -> Path:
         )
 
     check_project_boundary(stage, project)
-    parent, parent_dir = load_parent(args.parent, stage, args.retry)
+    parent, parent_dir, parent_evidence_path, parent_evidence_kind = load_parent(
+        args.parent, stage, args.retry
+    )
     block, prompt_path = prompt_block(stage)
     block, derived = parameterise_prompt(stage, block, args)
     prompt = source_entry(
@@ -542,10 +633,9 @@ def prepare(args: argparse.Namespace) -> Path:
         "parent_id": parent.get("packet_id") if parent else None,
         "parent_manifest": str((parent_dir / MANIFEST_NAME).resolve()) if parent_dir else None,
         "parent_manifest_sha256": sha256_file(parent_dir / MANIFEST_NAME) if parent_dir else None,
-        "parent_evidence": str((parent_dir / parent["expected_transcript"]).resolve()) if parent_dir else None,
-        "parent_evidence_sha256": (
-            sha256_file(parent_dir / parent["expected_transcript"]) if parent_dir else None
-        ),
+        "parent_evidence": str(parent_evidence_path.resolve()) if parent_evidence_path else None,
+        "parent_evidence_kind": parent_evidence_kind,
+        "parent_evidence_sha256": sha256_file(parent_evidence_path) if parent_evidence_path else None,
         "retry": bool(args.retry),
         "packet_file": PACKET_NAME,
         "packet_sha256": sha256_file(packet_path),
@@ -724,6 +814,8 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S5 packet must not deliver project documents")
     if specs.get("S4B", {}).get("allowed_parents") != ["S4A", "S4B"]:
         problems.append("S4B packet parent contract drifted from S4A -> S4B")
+    if "templates/RETURN-HANDOFF.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
+        problems.append("S4B packet must deliver the canonical return-handoff template")
     return problems
 
 
@@ -893,7 +985,14 @@ def self_test() -> int:
         prepare(ns(stage="S4B", project=str(project), output=str(s4b_dir), parent=str(s4a_dir)))
         s4b_manifest = json.loads(read(s4b_dir / MANIFEST_NAME))
         case("Cursor S4B packet verifies (positive control)", not verify_packet(s4b_dir) and s4b_manifest["provider"] == "cursor")
-        (s4b_dir / "evidence" / "transcript.md").write_text("S4B transcript\n", encoding="utf-8")
+        returned = (
+            "# IMPLEMENTATION RETURN HANDOFF: fixture\n\n"
+            "**Status:** complete\n**Provider:** fixture\n**Model:** fixture\n"
+            "**Effort:** medium\n**Started:** 2026-08-23\n**Ended:** 2026-08-23\n\n"
+            + "\n\n".join(f"## {heading}\n\nnone" for heading in RETURN_HANDOFF_HEADINGS)
+            + "\n"
+        )
+        (s4b_dir / "evidence" / "return-handoff.md").write_text(returned, encoding="utf-8")
 
         (project / "QA.md").write_text(
             "# QA\n\n## Mechanical\n\n| 1 | Build | pass | output |\n\n## Judgement\n\nVerdict: Ship\nScore: 40/50\n",
@@ -903,6 +1002,7 @@ def self_test() -> int:
         prepare(ns(stage="S5", project=str(project), output=str(s5_dir), parent=str(s4b_dir), target="http://127.0.0.1:3000", lenses="creative-director (light)"))
         case("isolated S5 packet verifies (positive control)", not verify_packet(s5_dir))
         s5_manifest = json.loads(read(s5_dir / MANIFEST_NAME))
+        case("S4B return handoff supports continuation without a fabricated transcript", s5_manifest.get("parent_evidence_kind") == "structured-return-handoff")
         delivered_kinds = {s["kind"] for s in s5_manifest["sources"] if s.get("delivered", True)}
         case("S5 delivered sources exclude project context (positive control)", delivered_kinds == {"canonical-prompt", "canonical"})
         (s5_dir / "evidence" / "transcript.md").write_text("Independent S5 transcript\n", encoding="utf-8")

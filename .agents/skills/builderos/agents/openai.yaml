@@ -1,0 +1,4 @@
+interface:
+  display_name: "Builder OS"
+  short_description: "Run or resume a Builder OS creative project"
+  default_prompt: "Use Builder OS to run this project from the current state."

@@ -36,14 +36,15 @@ REQUIRED = [
     "QA-POLICY.md", "EVALUATION-RUBRICS.md", "LIBRARY-POLICY.md",
     "CHANGELOG.md",
     "templates/PROJECT.md", "templates/DESIGN.md",
-    "templates/HANDOFF.md", "templates/QA.md",
+    "templates/HANDOFF.md", "templates/QA.md", "templates/RETURN-HANDOFF.md",
     # one entry point per active stage -- the v0.3 gap this closes
     "prompts/project-start.md", "prompts/research.md", "prompts/design-direction.md",
     "prompts/build-kickoff.md", "prompts/project-review.md",
     "prompts/retrospective.md",
     "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
-    "scripts/prepare-stage.py",
+    "scripts/prepare-stage.py", "scripts/builderos.py",
+    ".agents/skills/builderos/SKILL.md",
 ]
 
 # Sentences allowed to repeat: gate names and block headers that must stay
@@ -377,7 +378,7 @@ DELIVERY_CONTRACTS = [
         "tokens": [
             "REQUIRED INPUTS", "PROJECT.md", "DESIGN.md", "AGENTS.md",
             "templates/HANDOFF.md", "IF MISSING", "NEXT: S4 Build.",
-            "prepare-stage.py prepare --stage S4B",
+            "Return to Builder OS", "templates/RETURN-HANDOFF.md",
         ],
         "inputs": ["PROJECT.md", "DESIGN.md", "AGENTS.md", "templates/HANDOFF.md"],
         "retry": "NEXT: S4 Handoff retry.",
@@ -389,12 +390,13 @@ DELIVERY_CONTRACTS = [
         "tokens": [
             "REQUIRED INPUTS", "HANDOFF.md", "DESIGN.md", "AGENTS.md",
             "QA-POLICY.md", "templates/QA.md", "IF MISSING",
+            "templates/RETURN-HANDOFF.md", "BEGIN/END markers",
             "feature-branch preview", "already connected",
             "NEXT: S5 Review.",
         ],
         "inputs": [
             "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
-            "templates/QA.md",
+            "templates/QA.md", "templates/RETURN-HANDOFF.md",
         ],
         "retry": "NEXT: S4 Build retry.",
         "forbidden_missing": ["NEXT: S5 Review."],
@@ -476,7 +478,8 @@ ADAPTER_DELIVERY = {
         "end": "If a required S4B input is unavailable",
         "tokens": [
             "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
-            "templates/QA.md", "explicit human G3 approval",
+            "templates/QA.md", "templates/RETURN-HANDOFF.md",
+            "explicit human G3 approval",
         ],
     },
 }
@@ -610,6 +613,7 @@ def check_delivery_contracts():
 # Generated stage packets are transport artifacts. This loader lets the
 # repository checker validate the helper's transport map without restating it.
 PACKET_TOOL = "scripts/prepare-stage.py"
+RUNTIME_TOOL = "scripts/builderos.py"
 
 
 def load_packet_tool():
@@ -627,6 +631,23 @@ def check_packet_tool():
         return load_packet_tool().repository_contract_problems()
     except Exception as exc:
         return [f"{PACKET_TOOL} could not be checked: {exc}"]
+
+
+def load_runtime_tool():
+    path = os.path.join(ROOT, RUNTIME_TOOL)
+    spec = importlib.util.spec_from_file_location("builder_os_runtime", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_runtime_tool():
+    if not os.path.exists(os.path.join(ROOT, RUNTIME_TOOL)):
+        return [f"{RUNTIME_TOOL} is missing"]
+    try:
+        return load_runtime_tool().repository_contract_problems()
+    except Exception as exc:
+        return [f"{RUNTIME_TOOL} could not be checked: {exc}"]
 
 
 def agents_transport_form(template_text):
@@ -791,11 +812,11 @@ def self_test_delivery_contracts():
          bool(check_delivery_contract_texts(mutate(
              "prompts/build-kickoff.md", "- QA-POLICY.md.", "- QA rules."
          )))),
-        ("S4A transition without generated S4B packet fails",
+        ("S4A transition without Builder OS handoff fails",
          bool(check_delivery_contract_texts(mutate(
-             "prompts/build-kickoff.md",
-             "prepare-stage.py prepare --stage S4B",
-             "manually assemble S4B",
+            "prompts/build-kickoff.md",
+            "Return to Builder OS",
+            "assemble the next packet manually",
          )))),
         ("S5 G4 before explicit G3 fails",
          bool(check_delivery_contract_texts(mutate(
@@ -864,7 +885,9 @@ def main():
         delivery_failed = self_test_delivery_contracts()
         print("\nStage-packet transport self-test")
         packet_failed = self_test_packet_tool()
-        failed = agents_failed or delivery_failed or packet_failed
+        print("\nRuntime controller self-test")
+        runtime_failed = load_runtime_tool().self_test()
+        failed = agents_failed or delivery_failed or packet_failed or runtime_failed
         print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
         return 1 if failed else 0
 
@@ -940,6 +963,15 @@ def main():
             print(f"        {problem}")
     else:
         print("ok    stage packets: source parity, parent chain, and S5 isolation mapped")
+
+    runtime_problems = check_runtime_tool()
+    if runtime_problems:
+        failed = True
+        print(f"FAIL  runtime controller: {len(runtime_problems)} problem(s)")
+        for problem in runtime_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    runtime controller: entry skill, preflight, return handoff, and log contracts")
 
     chain_problems = check_stage_chain()
     if chain_problems:

@@ -69,8 +69,9 @@ Attached: <the documents this stage needs>
 Do: <the stage's job>
 ```
 
-For S1, conditional S2, S3, S4A, S5, and S6, generate that opening context instead of
-assembling it manually:
+For normal operation, invoke the repository `builderos` skill. It discovers the
+current state, runs the controller, selects the valid parent, and generates the
+opening context. The low-level recovery command is:
 
 ```bash
 python scripts/prepare-stage.py prepare --stage <stage> --project <project> --output <new-packet-directory> [stage options]

@@ -54,6 +54,9 @@ Include:
   - asset status: ready / generating / substituted. Nothing unresolved.
   - known risks
   - definition of done
+  - implementation routing: capability class, provider recommendation, model
+    if known, effort, workload, any split, and the reason. Do not guess live
+    availability or quota; Builder OS checks those immediately before handoff.
 
 UPDATE AGENTS.md - Implementation constraints section only:
 commands, environment assumptions, token system path, project-specific
@@ -68,10 +71,10 @@ Do not create the others. A document nobody reads is worse than none.
 END YOUR RESPONSE WITH THIS, FILLED IN:
 
   NEXT: S4 Build.
-  Generate the fresh S4B transport packet with:
-  python scripts/prepare-stage.py prepare --stage S4B --project <project> --output <new-packet-directory> --parent <S4A-packet-directory>
-  Verify that packet, then paste its packet.txt into the build tool in a fresh session.
-  Carry forward: HANDOFF.md, DESIGN.md, AGENTS.md, QA-POLICY.md, templates/QA.md
+  Return to Builder OS. It will check provider availability, generate and verify
+  the fresh build packet, and tell me the one external action required.
+  Carry forward: HANDOFF.md, DESIGN.md, AGENTS.md, QA-POLICY.md,
+  templates/QA.md, templates/RETURN-HANDOFF.md
   Blocked on: <nothing, or the exact unresolved handoff input>
 
 Then STOP.
@@ -91,6 +94,7 @@ REQUIRED INPUTS
 - AGENTS.md.
 - QA-POLICY.md.
 - templates/QA.md.
+- templates/RETURN-HANDOFF.md.
 
 IF MISSING
 Verify every input before editing code. If any is missing, STOP. Name it; do not
@@ -153,17 +157,22 @@ reloaded, performance on the PREVIEW not localhost.
 Record every check with evidence - a command output, a number, or a screenshot.
 A check you did not run is recorded as NOT RUN, never as passed.
 
+Before ending for any reason - complete, partial, blocked, or provider limit -
+fill templates/RETURN-HANDOFF.md and emit it between its exact BEGIN/END markers.
+This is how Builder OS resumes without this conversation. A partial return must
+name the exact resume point. The return handoff does not replace the verbatim
+transcript or independent review evidence.
+
 BEFORE YOU FINISH, update AGENTS.md ## Current state:
   Stage S5 | Last gate passed <unchanged - G3 is mine to grant> |
   Next prompt prompts/project-review.md | Updated <today> |
   Blocked on: <G3, or the blocking QA findings>
 
-END YOUR RESPONSE WITH THIS, FILLED IN:
+END YOUR RESPONSE WITH THE COMPLETE RETURN HANDOFF BLOCK, THEN THIS, FILLED IN:
 
   NEXT: S5 Review.
-  Paste prompts/project-review.md into a FRESH session - one that did not
-  build this. Give it the target, intent, success criteria, accepted patterns
-  or "none", and EVALUATION-RUBRICS.md - no project documents or build context.
+  Return the handoff to Builder OS. It will ingest the implementation evidence
+  and prepare the isolated review packet for a fresh reviewer.
   QA evidence: <where QA.md is>
   Blocked on: <G3, or what else you need from me>
 
