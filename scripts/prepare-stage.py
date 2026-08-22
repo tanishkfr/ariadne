@@ -26,6 +26,7 @@ import re
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 
@@ -837,10 +838,8 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
 
 @contextlib.contextmanager
 def self_test_workspace():
-    """A deterministic writable fixture root; Windows temp ACLs block this sandbox."""
-    path = ROOT / "validation" / "packet-self-test-work"
-    if path.exists():
-        raise PacketError(f"self-test workspace already exists: {path}")
+    """A unique writable fixture root under validation for Windows ACL safety."""
+    path = ROOT / "validation" / f"packet-self-test-{uuid.uuid4().hex}"
     path.mkdir()
     try:
         yield path
@@ -854,6 +853,12 @@ def self_test() -> int:
 
     def case(name: str, passed: bool) -> None:
         cases.append((name, passed))
+
+    with self_test_workspace() as first_workspace, self_test_workspace() as second_workspace:
+        case(
+            "independent packet self-test workspaces do not collide",
+            first_workspace != second_workspace and first_workspace.exists() and second_workspace.exists(),
+        )
 
     case("repository packet contracts pass (positive control)", not repository_contract_problems())
     changed = copy.deepcopy(STAGES)

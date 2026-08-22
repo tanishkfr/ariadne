@@ -14,6 +14,7 @@ import hashlib
 import json
 import shutil
 import sys
+import uuid
 from pathlib import Path
 
 
@@ -121,9 +122,7 @@ def parser() -> argparse.ArgumentParser:
 
 @contextlib.contextmanager
 def self_test_workspace():
-    path = ROOT / "validation" / "skill-install-self-test-work"
-    if path.exists():
-        raise InstallError(f"Self-test workspace already exists: {path}")
+    path = ROOT / "validation" / f"skill-install-self-test-{uuid.uuid4().hex}"
     path.mkdir()
     try:
         yield path
@@ -137,6 +136,12 @@ def self_test() -> int:
 
     def case(name: str, passed: bool) -> None:
         cases.append((name, passed))
+
+    with self_test_workspace() as first_workspace, self_test_workspace() as second_workspace:
+        case(
+            "independent installer self-test workspaces do not collide",
+            first_workspace != second_workspace and first_workspace.exists() and second_workspace.exists(),
+        )
 
     with self_test_workspace() as workspace:
         target = workspace / "managed-skill"

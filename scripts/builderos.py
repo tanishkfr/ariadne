@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -1499,9 +1500,7 @@ def repository_contract_problems() -> list[str]:
 
 @contextlib.contextmanager
 def self_test_workspace():
-    path = ROOT / "validation" / "builderos-self-test-work"
-    if path.exists():
-        raise RuntimeError_(f"Self-test workspace already exists: {path}")
+    path = ROOT / "validation" / f"builderos-self-test-{uuid.uuid4().hex}"
     path.mkdir()
     try:
         yield path
@@ -1681,6 +1680,11 @@ def self_test() -> int:
         cases.append((name, passed))
 
     case("repository runtime contracts pass (positive control)", not repository_contract_problems())
+    with self_test_workspace() as first_workspace, self_test_workspace() as second_workspace:
+        case(
+            "independent runtime self-test workspaces do not collide",
+            first_workspace != second_workspace and first_workspace.exists() and second_workspace.exists(),
+        )
     canonical_skill = read(ROOT / ".agents" / "skills" / "builderos" / "SKILL.md")
     canonical_interface = read(ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml")
     canonical_install = read(ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json")
