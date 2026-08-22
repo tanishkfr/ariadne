@@ -58,11 +58,33 @@ Route work to a *class* first. This is the layer that does not change.
 
 ### Role separation in one line each
 
-- **Codex (`R1`)** — decides. Strategy, grilling, design direction, architecture, evaluation, retrospectives. Produces documents. Writes little code.
+- **Codex (`R1`)** — decides. Strategy, grilling, design direction, architecture, evaluation, retrospectives. It may retain a bounded high-reasoning implementation/debugging split named in `HANDOFF.md`; it does not absorb routine build volume.
 - **Cursor (`R2`/`R3`/`R4`)** — builds. Implements the handoff, refactors, runs the browser, fixes QA findings. Reads documents. Writes most code.
 - **Claude Code (`R2` fallback, `R4`)** — implements during the transition, and handles agentic multi-file work in a terminal. Interchangeable with Cursor by design. See [adapters/claude-code.md](adapters/claude-code.md).
 
 If any one of these disappears tomorrow, the other two absorb its classes and the system still runs. That is the test of provider-neutrality, and it is the reason no Builder OS document outside [adapters/](adapters/) names a product.
+
+### Runtime routing record and preflight
+
+S4A records the decision in `HANDOFF.md`: capability class, provider or
+orchestrator retention, model when known, effort, workload, split, and reason.
+The stable decision is the capability requirement; a product name is a runtime
+mapping, not a design decision.
+
+Immediately before external S4B work, the runtime reads that record and checks
+observable provider availability and quota. It records one of four evidence
+states:
+
+- **verified** — availability and sufficient usage were explicitly confirmed;
+- **reasonably assumed** — a bounded workload has no known blocking signal;
+- **human check required** — a large handoff has unknown availability or quota;
+- **blocked** — the provider is unavailable, usage is insufficient, or limited
+  availability cannot safely carry one large task.
+
+If implementation stays with the orchestrator, external preflight is recorded
+as not required. A blocked or human-check-required result cannot produce the
+external build handoff. Change the provider mapping, split, or effort in the
+handoff; do not weaken the capability class merely because a product is limited.
 
 ---
 

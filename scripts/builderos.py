@@ -30,6 +30,14 @@ STATE_NAME = "builderos-run.json"
 LOG_NAME = "OPERATIONS.md"
 PREFLIGHT_NAME = "provider-preflight.json"
 RUNTIME_SCHEMA = 1
+REVIEW_HEADINGS = [
+    "Judgement",
+    "Accepted patterns",
+    "Feel tests",
+    "Review lenses",
+    "Findings",
+    "Review recommendation",
+]
 
 
 class RuntimeError_(RuntimeError):
@@ -294,6 +302,7 @@ def start(args: argparse.Namespace) -> int:
         "created_at": now(),
         "updated_at": now(),
         "status": "active",
+        "request": request.strip(),
         "evidence_state": "verified-transport; provider stage not yet observed",
         "packets": [{"id": packet_id, "stage": "S1", "path": str(output)}],
         "provider_preflight": None,
@@ -601,6 +610,92 @@ def ingest_return(args: argparse.Namespace) -> int:
     return 0
 
 
+def review_judgement_problems(text: str) -> list[str]:
+    problems = []
+    for heading in REVIEW_HEADINGS:
+        level = "##" if heading == "Judgement" else "###"
+        matches = re.findall(rf"(?im)^{re.escape(level)}\s+{re.escape(heading)}\s*$", text)
+        if not matches:
+            problems.append(f"review judgement missing section: {heading}")
+        elif len(matches) > 1:
+            problems.append(f"review judgement duplicates section: {heading}")
+    level_two = re.findall(r"(?im)^##\s+(.+?)\s*$", text)
+    if level_two != ["Judgement"]:
+        problems.append("review judgement contains an unexpected level-two section")
+    for field in (
+        "Review target", "Reviewed independently", "Success criteria reviewed",
+        "Recommendation", "The one thing", "Lens conflicts",
+    ):
+        if len(re.findall(rf"(?im)^\*\*{re.escape(field)}:\*\*\s*(.+?)\s*$", text)) != 1:
+            problems.append(f"review judgement has missing or duplicate field: {field}")
+    if not re.search(r"(?im)^\*\*Reviewed independently:\*\*\s*yes\b", text):
+        problems.append("review judgement does not attest independent review")
+    if re.search(r"<[^>]+>", text):
+        problems.append("review judgement still contains placeholders")
+    recommendation = re.search(r"(?im)^\*\*Recommendation:\*\*\s*(.+?)\s*$", text)
+    allowed = ("fix and re-review", "restart the direction", "present g3")
+    if not recommendation or recommendation.group(1).strip().lower() not in allowed:
+        problems.append("review judgement has an invalid recommendation")
+    return problems
+
+
+def extract_marked_block(text: str, begin: str, end: str, label: str) -> str:
+    if text.count(begin) != 1 or text.count(end) != 1:
+        raise RuntimeError_(f"{label} must contain exactly one {begin}/{end} marker pair")
+    _before, remainder = text.split(begin, 1)
+    block, _after = remainder.split(end, 1)
+    return block.strip() + "\n"
+
+
+def ingest_review(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    if entry["stage"] != "S5":
+        raise RuntimeError_("Independent review judgements belong to the current S5 boundary")
+    source = Path(args.input).resolve()
+    if not source.is_file() or source.stat().st_size == 0:
+        raise RuntimeError_(f"Independent review input is missing or empty: {source}")
+    raw = read(source)
+    block = extract_marked_block(raw, "BEGIN QA JUDGEMENT", "END QA JUDGEMENT", "Review response")
+    problems = review_judgement_problems(block)
+    if problems:
+        raise RuntimeError_("Review judgement rejected: " + "; ".join(problems))
+    evidence_dir = packet / "evidence"
+    raw_destination = evidence_dir / "review-response.md"
+    block_destination = evidence_dir / "review-judgement.md"
+    if raw_destination.exists() or block_destination.exists():
+        raise RuntimeError_("Refusing to overwrite existing independent review evidence")
+    project = Path(state["project"])
+    qa_path = project / "QA.md"
+    if not qa_path.is_file():
+        raise RuntimeError_("Independent review ingestion requires the existing mechanical QA.md")
+    qa = read(qa_path)
+    pattern = r"(?ms)^## Judgement\s*$.*?(?=^## Screenshots\s*$)"
+    if not re.search(pattern, qa):
+        raise RuntimeError_("QA.md has no replaceable Judgement-to-Screenshots region")
+    updated = re.sub(pattern, block.rstrip() + "\n\n", qa, count=1)
+    shutil.copyfile(source, raw_destination)
+    block_destination.write_text(block, encoding="utf-8")
+    qa_path.write_text(updated, encoding="utf-8")
+    state["updated_at"] = now()
+    state["evidence_state"] = "independent review response and judgement recorded"
+    state["next"] = "Present mechanical and independent evidence for the human G3 decision."
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Independent review ingested",
+        "The reviewer output must be preserved and applied without manual rewriting or loss of independence.",
+        "Verified marked judgement block; raw response preserved; QA judgement region replaced.",
+        [str(raw_destination), str(block_destination), str(qa_path)],
+        f"Raw SHA-256 {sha256(raw_destination)}; judgement SHA-256 {sha256(block_destination)}",
+        state["next"],
+    )
+    print("Done. Independent review evidence is recorded without changing its judgement.")
+    print("Next: present the combined evidence for the human G3 decision.")
+    return 0
+
+
 def infer_next_stage(state: dict) -> tuple[str | None, str]:
     entry, _packet = current_packet(state, allow_project_drift=True)
     stage = entry["stage"]
@@ -679,6 +774,7 @@ def prepare_next(args: argparse.Namespace) -> int:
         target=args.target,
         lenses=args.lenses,
         synthetic_validation=args.synthetic_validation,
+        request=state.get("request"),
     )
     TRANSPORT.prepare(transport_namespace(**kwargs))
     state["packets"].append({"id": packet_id, "stage": stage, "path": str(output)})
@@ -759,7 +855,7 @@ def skill_contract_problems(
         problems.append("builderos installation example is malformed")
     for token in (
         "scripts/builderos.py", "discover --project", "provider preflight",
-        "ingest-return", "Never grant a gate",
+        "ingest-return", "ingest-review", "same-stage retry", "Never grant a gate",
     ):
         if token not in skill_text:
             problems.append(f"builderos skill missing runtime boundary: {token}")
@@ -776,6 +872,7 @@ def repository_contract_problems() -> list[str]:
         ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml",
         ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json",
         ROOT / "scripts" / "install-builderos-skill.py",
+        ROOT / "prompts" / "project-review.md",
     ]
     for path in required:
         if not path.is_file():
@@ -797,6 +894,10 @@ def repository_contract_problems() -> list[str]:
             problems.append(f"S4 prompt missing runtime contract: {token}")
     if "templates/RETURN-HANDOFF.md" not in TRANSPORT.STAGES["S4B"]["canonical_inputs"]:
         problems.append("S4B packet does not deliver the return-handoff template")
+    review = read(required[7])
+    for token in ("BEGIN QA JUDGEMENT", "END QA JUDGEMENT", "## Judgement"):
+        if token not in review:
+            problems.append(f"S5 prompt missing review-ingestion contract: {token}")
     return problems
 
 
@@ -824,6 +925,47 @@ def filled_return(status_value: str = "complete") -> str:
     )
 
 
+def filled_review() -> str:
+    return """Reviewer summary.
+
+BEGIN QA JUDGEMENT
+## Judgement
+
+**Review target:** http://127.0.0.1:3000
+**Reviewed independently:** yes - no project or build context was supplied
+**Success criteria reviewed:** 1. The interaction has a clear response.
+
+### Accepted patterns
+
+none
+
+### Feel tests
+
+- **Five-second:** specific
+- **Swap:** passes
+- **Recall:** clear
+
+### Review lenses
+
+| Lens | Score | Verdict | Blocking | The one thing |
+|---|---|---|---|---|
+| creative-director | 40/50 | Ship | none | none |
+
+### Findings
+
+none
+
+### Review recommendation
+
+**Recommendation:** Present G3
+**The one thing:** none
+**Lens conflicts:** none
+END QA JUDGEMENT
+
+NEXT: Present G3.
+"""
+
+
 def self_test() -> int:
     cases = []
 
@@ -845,6 +987,23 @@ def self_test() -> int:
     case("complete return handoff passes (positive control)", not TRANSPORT.return_handoff_problems(filled_return()))
     case("missing return section fails", bool(TRANSPORT.return_handoff_problems(filled_return().replace("## Known issues", "## Notes"))))
     case("invalid return status fails", bool(TRANSPORT.return_handoff_problems(filled_return("done"))))
+    review_block = extract_marked_block(
+        filled_review(), "BEGIN QA JUDGEMENT", "END QA JUDGEMENT", "Review response"
+    )
+    case("review judgement contract passes (positive control)", not review_judgement_problems(review_block))
+    case("review placeholder is detected", bool(review_judgement_problems(review_block.replace("none", "<pending>", 1))))
+    case("review independence omission is detected", bool(review_judgement_problems(review_block.replace("yes -", "no -", 1))))
+    case("review section injection is detected", bool(review_judgement_problems(review_block + "\n## Screenshots\n\nnone\n")))
+    case("duplicate return section is detected", bool(TRANSPORT.return_handoff_problems(filled_return() + "\n## Known issues\n\nnone\n")))
+    try:
+        extract_marked_block(
+            filled_review().replace("BEGIN QA JUDGEMENT", "BEGIN REVIEW"),
+            "BEGIN QA JUDGEMENT", "END QA JUDGEMENT", "Review response",
+        )
+        missing_review_marker = False
+    except RuntimeError_:
+        missing_review_marker = True
+    case("missing review marker is detected", missing_review_marker)
 
     with self_test_workspace() as workspace:
         project = workspace / "project"
@@ -1026,11 +1185,21 @@ def self_test() -> int:
         partial_path.write_text(filled_return("partial"), encoding="utf-8")
         (project / "QA.md").write_text(
             "# QA\n\n## Mechanical\n\n| # | Check | Result | Evidence |\n|---|---|---|---|\n"
-            "| 1 | Build | pass | fixture |\n\n## Judgement\n\nPending.\n",
+            "| 1 | Build | pass | fixture |\n\n## Judgement\n\nPending.\n\n"
+            "## Screenshots\n\n| View | Path |\n|---|---|\n| Fixture | none |\n",
             encoding="utf-8",
         )
         case("partial implementation return blocks review", infer_next_stage(load_state(run_root))[0] is None)
-        partial_path.unlink()
+        prepare_next(runtime_args(retry=True))
+        state = load_state(run_root)
+        retry_entry, retry_packet = current_packet(state)
+        retry_manifest = json.loads(read(retry_packet / TRANSPORT.MANIFEST_NAME))
+        case(
+            "partial implementation resumes in a non-overwriting S4B child",
+            retry_entry["stage"] == "S4B"
+            and retry_manifest["parent_id"] == s4b_entry["id"]
+            and retry_manifest["parent_evidence_kind"] == "structured-return-handoff",
+        )
         returned_source = workspace / "return.md"
         returned_source.write_text(filled_return(), encoding="utf-8")
         ingest_return(runtime_args(input=str(returned_source)))
@@ -1044,6 +1213,22 @@ def self_test() -> int:
             state["packets"][-1]["stage"] == "S5"
             and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"],
         )
+        review_source = workspace / "review.md"
+        review_source.write_text(filled_review(), encoding="utf-8")
+        ingest_review(runtime_args(input=str(review_source)))
+        qa_after_review = read(project / "QA.md")
+        case(
+            "independent review ingestion preserves mechanics and judgement",
+            "| 1 | Build | pass | fixture |" in qa_after_review
+            and "**Recommendation:** Present G3" in qa_after_review
+            and read(s5_packet / "evidence" / "review-response.md") == filled_review(),
+        )
+        try:
+            ingest_review(runtime_args(input=str(review_source)))
+            duplicate_review_blocked = False
+        except RuntimeError_:
+            duplicate_review_blocked = True
+        case("independent review evidence cannot be overwritten", duplicate_review_blocked)
         case("operations log remains readable after full dry run", not operations_log_problems(read(run_root / LOG_NAME)))
 
     print("BUILDER OS RUNTIME SELF-TEST\n")
@@ -1107,6 +1292,10 @@ def parser() -> argparse.ArgumentParser:
     run_selector(return_p)
     return_p.add_argument("--input", required=True)
 
+    review_p = sub.add_parser("ingest-review", help="preserve and apply a marked independent-review judgement")
+    run_selector(review_p)
+    review_p.add_argument("--input", required=True)
+
     next_p = sub.add_parser("prepare-next", help="discover and prepare the next valid project boundary")
     run_selector(next_p)
     next_p.add_argument("--stage", choices=list(TRANSPORT.STAGES))
@@ -1134,6 +1323,7 @@ def main() -> int:
             "record-result": structural_result,
             "record-transcript": record_transcript,
             "ingest-return": ingest_return,
+            "ingest-review": ingest_review,
             "prepare-next": prepare_next,
         }
         if args.command in commands:

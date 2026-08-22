@@ -2,7 +2,8 @@
 
 A project router and operating system for building websites, apps, games, experiments and content — with a design quality bar that is written down and enforced, and a clear separation between which tool thinks and which tool builds.
 
-Not a framework, an app, or a dependency. Canonical Markdown plus small deterministic transport and validation tools.
+Not a framework or a project dependency. Canonical Markdown plus a small
+runtime controller, deterministic transport, and validation tools.
 
 ---
 
@@ -22,9 +23,11 @@ Not a framework, an app, or a dependency. Canonical Markdown plus small determin
 
 ```
 Your request
+  -> builderos skill        starts or resumes the right run
+  -> builderos.py           discovers state and prepares the next boundary
   -> ROUTER.md              detects the mode, asks up to 5 questions
   -> WORKFLOW.md            runs S0-S6, assigns a role, enforces the gates
-  -> prepare-stage.py       transports only this stage's canonical inputs
+  -> prepare-stage.py       transports only the current canonical inputs
   -> templates/             produces PROJECT, DESIGN, HANDOFF, QA
   -> QA-POLICY.md           mechanical checks (the builder)
   -> EVALUATION-RUBRICS.md  judgement checks (a fresh session)
@@ -35,10 +38,10 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 ## Start here
 
-**Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — 30 minutes, then one real project.
+**Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — install the entry skill, then describe one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
-**Starting now:** generate a fresh S1 packet with [prepare-stage.py](scripts/prepare-stage.py), then paste `packet.txt` into your reasoning tool.
+**Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
 
 ## The five modes
 
@@ -69,6 +72,7 @@ Builder OS/
 ├─ CONTENT-SYSTEM.md       Writing, analytics, learning loop
 ├─ CHANGELOG.md            How this system changed + the 30-day check
 ├─ GETTING-STARTED.md · DAILY-PLAYBOOK.md · MIGRATION-CHECKLIST.md
+├─ .agents/skills/   Builder OS Codex entry point
 ├─ skills/       4   intake, reference-analysis, design-direction,
 │                    component-research
 ├─ templates/   11   4 required, 7 conditional
@@ -79,7 +83,7 @@ Builder OS/
 │                    portfolio, content, retrospective
 ├─ tests/            router-cases.md (regression suite),
 │                    validation-protocol.md (Test A exercised; B/C unrun)
-└─ scripts/          check.py · validate.py · deterministic stage packets
+└─ scripts/          builderos.py · prepare-stage.py · check.py · validate.py
 ```
 
 ## Principles
@@ -108,10 +112,17 @@ Builder OS/
 
 ## Status
 
-**v0.3.6.** Stage prompts can now be delivered as verified, paste-ready packets with explicit parents, source hashes, expected transcript paths, and stale-source detection. The router still routes on **intent**, not keywords.
+**v1.0.0.** A managed Codex entry skill now starts or resumes a project,
+discovers its durable state, prepares verified boundaries, records evidence,
+checks provider readiness, ingests structured implementation returns, and keeps
+a plain-language operations log. The router still routes on **intent**, not
+keywords.
 
 Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
-**Status: NEAR READY — not v1.0.0.** A Codex Test A exercise has reached S5, but Cursor remains prepared rather than validated and no Test B or Test C has completed. See [V1-READINESS.md](V1-READINESS.md).
+**Status: V1 READY.** Test B proved the fresh-session handoff through the
+start of implementation; provider quota prevented full build/return observation.
+The return path is therefore structurally verified and externally unverified,
+not presented as a live pass. See [V1-READINESS.md](V1-READINESS.md).
 
 Run `python scripts/check.py` after any edit.

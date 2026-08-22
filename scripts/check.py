@@ -616,6 +616,7 @@ def check_delivery_contracts():
 # repository checker validate the helper's transport map without restating it.
 PACKET_TOOL = "scripts/prepare-stage.py"
 RUNTIME_TOOL = "scripts/builderos.py"
+INSTALLER_TOOL = "scripts/install-builderos-skill.py"
 
 
 def load_packet_tool():
@@ -650,6 +651,14 @@ def check_runtime_tool():
         return load_runtime_tool().repository_contract_problems()
     except Exception as exc:
         return [f"{RUNTIME_TOOL} could not be checked: {exc}"]
+
+
+def load_installer_tool():
+    path = os.path.join(ROOT, INSTALLER_TOOL)
+    spec = importlib.util.spec_from_file_location("builder_os_skill_installer", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def agents_transport_form(template_text):
@@ -889,7 +898,9 @@ def main():
         packet_failed = self_test_packet_tool()
         print("\nRuntime controller self-test")
         runtime_failed = load_runtime_tool().self_test()
-        failed = agents_failed or delivery_failed or packet_failed or runtime_failed
+        print("\nEntry-skill installer self-test")
+        installer_failed = load_installer_tool().self_test()
+        failed = agents_failed or delivery_failed or packet_failed or runtime_failed or installer_failed
         print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
         return 1 if failed else 0
 

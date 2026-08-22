@@ -10,6 +10,55 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.0.0 — 2026-08-23 · CALM RUNTIME AND RECOVERABLE PROVIDER HANDOFFS
+
+Test B established that Builder OS's standalone delivery contracts could be
+correct while the product remained tiring to operate. The user still had to
+find prompts, construct and verify continuations, track evidence paths, re-enter
+provider routing, discover provider limits mid-build, carry state back from an
+external builder, and paste an independent judgement into `QA.md`. Test B also
+proved that a fresh Cursor/Grok implementation session could consume the S4B
+handoff and begin work; provider quota ended the run before a complete return.
+That evidence is preserved as a provider limitation, not rewritten as success.
+
+Builder OS now has a thin runtime controller and a repo-scoped Codex entry skill.
+The controller starts or discovers a project run, refuses ambiguous histories,
+selects the next valid boundary from project state, delegates packet provenance
+to `prepare-stage.py`, records structural or verbatim evidence honestly, and
+writes a human-readable operations log. An explicit stage argument can only
+confirm the inferred next stage or request a same-stage retry; it cannot bypass
+G1 or another gate.
+
+S4A's canonical `HANDOFF.md` now records capability, provider, model, effort,
+workload, split, and reason. Runtime preflight reads that record and handles
+verified, reasonably-assumed, human-check-required, blocked, and internally
+retained work without inventing availability or quota. A canonical structured
+return contract carries completed work, files, decisions, deviations,
+dependencies, tests, evidence, gaps, and the exact resume point. Complete
+returns can reach isolated review; partial/blocked returns create a new S4B
+child and preserve the earlier attempt.
+
+Independent S5 responses now have a deterministic ingestion boundary. Builder
+OS preserves the raw response byte-for-byte, validates the marked judgement,
+and replaces only the judgement region of `QA.md`. Missing markers,
+placeholders, missing independence attestation, invalid recommendations, and
+duplicate ingestion fail closed. Reviewer scores, verdicts, findings, and
+evidence limitations are never paraphrased.
+
+The managed personal skill installer records the canonical checkout, detects
+drift, and refuses to overwrite an unmanaged skill. Operator documentation now
+starts with `$builderos`; stage commands remain documented only as recovery
+tools. The runtime dry run covers S1 -> S3 -> G1 -> S4A -> provider preflight ->
+S4B partial retry -> complete return -> isolated S5 -> review ingestion.
+
+**Canonical ownership and gates:** `ROUTER.md`, `WORKFLOW.md`, modes, design/QA/
+research/evaluation policies, and human gate authority are unchanged. Generated
+packets, state, logs, and installed skill copies are transport/runtime artifacts,
+not new policy owners. No remote push, deployment, credential access, production
+action, or historical-evidence rewrite occurred.
+
+---
+
 ## 0.3.6 — 2026-08-22 · V1 STAGE TRANSPORT AND CONTINUATION HARDENING
 
 The A3R1 exercise proved that correct standalone delivery contracts were still

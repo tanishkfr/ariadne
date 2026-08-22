@@ -9,6 +9,7 @@ OS checkout from projects elsewhere on disk.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import shutil
@@ -112,13 +113,70 @@ def git_head() -> str:
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command", choices=["install", "verify"])
+    p.add_argument("command", nargs="?", choices=["install", "verify"])
     p.add_argument("--target", default=str(Path.home() / ".agents" / "skills" / "builderos"))
+    p.add_argument("--self-test", action="store_true")
     return p
+
+
+@contextlib.contextmanager
+def self_test_workspace():
+    path = ROOT / "validation" / "skill-install-self-test-work"
+    if path.exists():
+        raise InstallError(f"Self-test workspace already exists: {path}")
+    path.mkdir()
+    try:
+        yield path
+    finally:
+        if path.exists():
+            shutil.rmtree(path)
+
+
+def self_test() -> int:
+    cases = []
+
+    def case(name: str, passed: bool) -> None:
+        cases.append((name, passed))
+
+    with self_test_workspace() as workspace:
+        target = workspace / "managed-skill"
+        install(target)
+        case("managed skill installs and verifies (positive control)", not verify(target))
+        skill = target / "SKILL.md"
+        skill.write_text(skill.read_text(encoding="utf-8") + "drift\n", encoding="utf-8")
+        case("installed source drift is detected", any("drifted" in item for item in verify(target)))
+        install(target)
+        extra = target / "unexpected.txt"
+        extra.write_text("unexpected\n", encoding="utf-8")
+        case("unmanaged installed files are detected", any("unmanaged" in item for item in verify(target)))
+        extra.unlink()
+        location = json.loads((target / INSTALLATION).read_text(encoding="utf-8"))
+        case("installed skill records the canonical checkout", Path(location["builder_os_root"]).resolve() == ROOT.resolve())
+
+        unmanaged = workspace / "unmanaged-skill"
+        unmanaged.mkdir()
+        (unmanaged / "SKILL.md").write_text("personal work\n", encoding="utf-8")
+        try:
+            install(unmanaged)
+            unmanaged_refused = False
+        except InstallError:
+            unmanaged_refused = True
+        case("unmanaged skill is never overwritten", unmanaged_refused)
+
+    print("BUILDER OS SKILL INSTALL SELF-TEST\n")
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print(f"\n{'FAILED' if failed else 'PASS'}  {len(cases) - len(failed)}/{len(cases)}")
+    return 1 if failed else 0
 
 
 def main() -> int:
     args = parser().parse_args()
+    if args.self_test:
+        return self_test()
+    if not args.command:
+        parser().error("command is required unless --self-test is used")
     target = Path(args.target).resolve()
     try:
         if args.command == "install":

@@ -10,46 +10,45 @@ Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](WORKFLOW.
 
 | Situation | Open | Why |
 |---|---|---|
-| New idea, nothing exists | **Reasoning tool** (Codex) | It routes and decides |
-| Documents exist, `HANDOFF.md` is written | **Build tool** (Cursor) | Nothing left to decide |
+| New idea, nothing exists | **Codex**, invoke `$builderos` | It starts, routes, and records the run |
+| Returning to a project | **Codex**, invoke `$builderos` | It discovers the run and resumes from durable state |
+| Builder OS requests external implementation | **The named build tool** | The complete verified handoff is ready |
 | Mid-build, a decision came up | Depends — see below | |
 | A bug | **Build tool** | Bugs are `R2` work |
 | Same bug, twice failed | Reasoning tool | Escalation signal |
 | Something needs checking | **Terminal** | Free, definitive, instant |
 | Reviewing finished work | Reasoning tool, **fresh session** | Independence |
 
-**Default: if you are unsure, open the build tool.** Roughly 80% of hours belong there. If you are spending most of your time in the reasoning tool, S3 was under-specified and work is leaking into your expensive tier.
+**Default: if you are unsure, invoke Builder OS in the project.** It reads the
+state instead of making you infer it. Most implementation hours can still
+belong in the build tool without making the operator choose a stage manually.
 
 ---
 
-## The stage map
+## What Builder OS handles
 
-| Stage | Canonical entry | Into |
+| Human-facing moment | Builder OS action |
 |---|---|---|
-| Start anything | [prompts/project-start.md](prompts/project-start.md) | Reasoning tool |
-| Blocking factual research | [prompts/research.md](prompts/research.md) | Reasoning tool, fresh session |
-| Design direction (**G1**) | [prompts/design-direction.md](prompts/design-direction.md) | Reasoning tool |
-| Build | [prompts/build-kickoff.md](prompts/build-kickoff.md) | Build tool, fresh session |
-| Review (**G3**) | [prompts/project-review.md](prompts/project-review.md) | **Fresh session** |
-| Retrospective | [prompts/retrospective.md](prompts/retrospective.md) | Reasoning tool |
-| A post | [prompts/content-system.md](prompts/content-system.md) | Reasoning tool |
-| Portfolio feedback | [prompts/portfolio-evaluation.md](prompts/portfolio-evaluation.md) | **Fresh session** |
+| “I have an idea” | Creates/fetches the run, routes it, asks one batched question set, writes the brief |
+| Facts block direction | Prepares focused research with only the blocking questions |
+| Direction is ready | Presents G1 and waits for your creative decision |
+| Direction is approved | Produces the implementation handoff and reads its provider recommendation |
+| External build is appropriate | Checks provider availability/quota and gives you one verified packet |
+| Build returns | Validates the structured return and resumes without old chat history |
+| Mechanical QA is complete | Creates the isolated independent-review handoff |
+| Review is recorded | Presents G3; shipping still requires explicit G4 |
 
-Each one ends by naming the next. Follow the chain rather than this table.
-
-For fresh sessions, do not assemble those inputs by hand. Run
-`python scripts/prepare-stage.py prepare ...`, paste its generated `packet.txt`,
-and save the transcript at the path it prints. Run
-`python scripts/prepare-stage.py verify --packet-dir <packet-directory>` before
-reusing a prepared packet; source or parent drift fails closed.
+Prompts, packet IDs, manifests, hashes, parent records, evidence paths, and stage
+names are debugging details. Builder OS manages them. The low-level commands in
+[adapters/codex.md](adapters/codex.md) remain available for recovery.
 
 ## By situation
 
 ### "I have an idea"
 
-1. Prepare S1 from the brief with [scripts/prepare-stage.py](scripts/prepare-stage.py).
-2. Paste only its `packet.txt` into a fresh reasoning session and answer up to 5 questions.
-3. Save the transcript, then prepare S3 with S1 as its explicit parent.
+1. Invoke `$builderos` in Codex.
+2. Describe the idea and project directory normally.
+3. Answer the batched material questions; Builder OS prepares the next valid work.
 
 Do not start implementation or pick a framework. The repository stays empty until S1 writes its project documents.
 
@@ -94,9 +93,9 @@ Anything you will check twice becomes a Playwright test. Writing it costs about 
 
 ### "It's done"
 
-1. Build tool: run the mechanical checklist ([QA-POLICY.md](QA-POLICY.md) section 3). Record evidence per row.
+1. The implementation provider runs the mechanical checklist ([QA-POLICY.md](QA-POLICY.md) section 3) and returns its structured handoff.
 2. Capture screenshots — **and look at them yourself**.
-3. Generate S5 and give only its `packet.txt` to a **fresh independent session**.
+3. Give Builder OS's isolated review handoff to a **fresh independent session**.
 4. Present G3.
 5. On approval: G4 to ship.
 6. Fifteen minutes on `RETROSPECTIVE.md`. Record proposals; edit Builder OS only after human approval, then log the approved change in [CHANGELOG.md](CHANGELOG.md).
@@ -110,6 +109,16 @@ If there is no only-you element, do not post it.
 ### "I want feedback on my portfolio"
 
 [prompts/portfolio-evaluation.md](prompts/portfolio-evaluation.md), in a fresh session, against the deployed URL. Expect it to hurt.
+
+### "I was interrupted"
+
+Invoke `$builderos` from the project again. It discovers the matching run,
+verifies the current packet and evidence, and resumes from the last valid
+boundary. If more than one history claims the project, it stops and asks which
+one is authoritative rather than guessing.
+
+The human-readable history is `OPERATIONS.md` in the run directory. Use it to
+see what happened, why, what changed, what was verified, and the next action.
 
 ---
 

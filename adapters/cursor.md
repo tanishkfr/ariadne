@@ -26,9 +26,13 @@ The design thesis. Architecture decisions. Whether a package may be installed. J
 
 ## Setup
 
-**1. Put `AGENTS.md` at the project root.** Use [templates/AGENTS.md](../templates/AGENTS.md). Cursor reads it automatically. Keep it short — a long rules file gets skimmed.
+**1. Open the project only when Builder OS presents the implementation
+handoff.** S1 has already created root `AGENTS.md`; Cursor reads it
+automatically. Do not manually copy the canonical template into the project.
 
-**2. Add project rules** (`.cursor/rules/` or the Rules settings) with the non-negotiables:
+**2. The generated packet and project `AGENTS.md` already carry the relevant
+rules.** The following is the expected behaviour, not a second rules file to
+maintain:
 
 ```
 This project follows Builder OS. AGENTS.md at the repo root is authoritative.
@@ -81,7 +85,8 @@ python scripts/prepare-stage.py prepare --stage S4B --project <project> --output
 
 The S4B default provider in the manifest is `cursor`. The packet contains the
 current canonical Part B, `HANDOFF.md`, locked `DESIGN.md`, project `AGENTS.md`,
-`QA-POLICY.md`, and `templates/QA.md`; it contains no reasoning transcript.
+`QA-POLICY.md`, `templates/QA.md`, and `templates/RETURN-HANDOFF.md`; it contains
+no reasoning transcript.
 Open Cursor at the project repository, start a fresh chat, paste `packet.txt`,
 and return the completed `templates/RETURN-HANDOFF.md` block. Builder OS ingests
 that block and manages its evidence path. A verbatim transcript is preserved

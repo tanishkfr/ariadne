@@ -62,6 +62,22 @@ the user pastes or attaches it, save it to a temporary file and run
 The return handoff can support continuation, but it does not prove unobserved
 provider behaviour or independent QA.
 
+For independent review, give the reviewer only the generated isolated packet.
+When its marked QA judgement returns, save the response temporarily and run
+`builderos.py ingest-review`. The controller preserves the raw response and
+updates only QA.md's judgement region. Never paraphrase a score, verdict,
+finding, or evidence limitation.
+
+## QA and recovery
+
+After implementation returns, inspect the recorded files and run the applicable
+local checks from the delivered QA policy before independent review. Fix work
+retained in the orchestrator when it is within the approved handoff. For work
+owned by an external implementer, diagnose the failure and generate a
+same-stage retry from the partial/blocked return; do not ask the user to rebuild packet
+lineage. A retry never overwrites prior evidence and never reopens G1 unless the
+finding changes the approved direction.
+
 ## Communication
 
 Say what completed, what happens next, and whether the user needs to act. Use

@@ -89,3 +89,21 @@ or canonical drift; and blocked partial implementation returns from S5.
 provider preflight -> S4B return -> isolated S5. Negative controls cover gate
 bypass, ambiguous histories, canonical drift, changed output hashes, provider
 limits, malformed/partial returns, and skill discovery drift.
+
+### 2026-08-23 — independent evidence ingestion and operator documentation
+
+**Why:** S5 returned a canonical marked QA judgement, but the operator still had
+to preserve the reviewer response and edit `QA.md` manually. First-time and
+daily documentation also continued to lead with packet/stage commands even
+after the entry skill existed.
+
+**Action:** Added fail-closed independent-review ingestion that preserves the raw
+response byte-for-byte and replaces only the judgement region of `QA.md`.
+Extended same-stage recovery to the S1 resume already emitted by the canonical
+prompt. Updated the Codex/Cursor adapters and operator docs so `$builderos` is
+the normal path and low-level packet commands are recovery tools.
+
+**Validation:** Negative controls cover missing markers, placeholders, missing
+independence attestation, invalid/partial returns, duplicate review evidence,
+S1 resume lineage, and S4B partial retry. The full synthetic runtime now reaches
+review ingestion while preserving mechanical QA and S5 isolation.

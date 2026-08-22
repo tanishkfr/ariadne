@@ -16,6 +16,7 @@ Capability classes: **`R1`** (deep reasoning), with `R4` where browsing is avail
 | S1 | Discovery, grilling | `PROJECT.md` |
 | S2 | Research judgement | `RESEARCH.md` |
 | S3 | Design direction, architecture | `DESIGN.md`, `ARCHITECTURE.md`, `TASKS.md`, `HANDOFF.md` |
+| S4, conditional | A bounded high-reasoning implementation/debugging split explicitly retained in `HANDOFF.md` | Code and return handoff for that split |
 | S5 | Evaluation lenses | Rubric scores |
 | S6 | Retrospective, Builder OS amendments | `RETROSPECTIVE.md`, `CHANGELOG.md` |
 
@@ -23,7 +24,15 @@ Roles: Strategist, Design director, Researcher, Architect, all reviewer roles, C
 
 ## Does not own
 
-Writing production code. Running builds. Driving a browser against localhost. Git operations. Anything a terminal command answers.
+Bulk or routine production implementation. Running commands through reasoning
+instead of the terminal. Reviewing its own retained implementation. Anything
+not explicitly routed to it in `HANDOFF.md`.
+
+Codex may retain a bounded S4 split only when the handoff names the files/scope
+and the work genuinely needs `R1` reasoning, such as a difficult state machine,
+high-risk integration, or twice-failed diagnosis. It then consumes the same S4B
+contract, runs free checks locally, and returns the same structured handoff. It
+does not reinterpret the direction or grant G3.
 
 **The rule that saves the most usage: never paste a codebase into Codex.** Paste the interface, the error, and the constraint. Context is what exhausts limits ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 8).
 
@@ -31,43 +40,27 @@ Writing production code. Running builds. Driving a browser against localhost. Gi
 
 ## Setup
 
-Create a project or custom instruction set containing:
+Install the managed personal entry skill once:
 
-```
-I use a system called Builder OS. Its documents are the source of truth.
-
-Your role: orchestrator. You handle strategy, discovery, grilling, research
-judgement, design direction, architecture, evaluation, and retrospectives.
-You do NOT write production code — you produce documents that another tool builds from.
-
-Always:
-- Start by detecting the project mode and emitting a Routing Block.
-- Ask a maximum of 5 questions, batched, each with a proposed default.
-- Log every assumption so it can be contradicted in one line.
-- Never approve your own work. Gates are human-only.
-- Date and source any claim about pricing, versions, limits, or licences.
-  If you cannot verify it, say "unverified" — never guess.
-- End every response with one concrete next action.
-
-Never:
-- Write a full implementation. Produce a HANDOFF.md instead.
-- Claim a check ran that did not run.
-- Recommend installing a package without the G2 format.
+```bash
+python scripts/install-builderos-skill.py install
+python scripts/install-builderos-skill.py verify
 ```
 
-Then paste [ROUTER.md](../ROUTER.md) and [DESIGN-TASTE.md](../DESIGN-TASTE.md) into the project's files or knowledge. Those two carry most of the system's value. Add others per session as needed — do not paste all 60 files.
+In a new task, invoke `$builderos` or say “Use Builder OS” with the ordinary
+brief. The skill locates this checkout and loads canonical policy through the
+current generated packet. Do not paste `ROUTER.md`, `DESIGN-TASTE.md`, or the
+whole Builder OS into project knowledge; that bypasses context minimisation and
+creates stale copies.
 
 ---
 
 ## Session discipline
 
-**One session per stage.** A single long thread carries S1's context into S5 and pays for it on every message. Start fresh and open with:
-
-```
-Builder OS, Stage S<n>, mode <mode>.
-Attached: <the documents this stage needs>
-Do: <the stage's job>
-```
+**Fresh only where the boundary requires it.** Builder OS can perform compatible
+reasoning work in the current task; external implementation and independent
+review still receive clean, minimal contexts. The user does not compose a stage
+header or reconstruct attachments.
 
 For normal operation, invoke the repository `builderos` skill. It discovers the
 current state, runs the controller, selects the valid parent, and generates the
@@ -77,10 +70,11 @@ opening context. The low-level recovery command is:
 python scripts/prepare-stage.py prepare --stage <stage> --project <project> --output <new-packet-directory> [stage options]
 ```
 
-The generated `packet.txt` is the only text pasted into the fresh session.
+The generated `packet.txt` is the only text pasted into a required fresh session.
 `manifest.json` records the parent, current Builder OS commit, source hashes,
-conditional-input decisions, and the expected transcript path. Before reuse,
-run `python scripts/prepare-stage.py verify --packet-dir <packet-directory>`.
+conditional-input decisions, and the expected transcript path. Builder OS
+verifies it before presenting an external action. For low-level recovery, run
+`python scripts/prepare-stage.py verify --packet-dir <packet-directory>`.
 Verification fails on source drift, changed parent evidence, wrong stage/parent,
 missing packet sections, or S5 context leakage. Packet output must live outside
 the project repository; real project packets also stay outside Builder OS.
@@ -134,9 +128,9 @@ If you are at S3 without an approved thesis and Codex is out, wait. Waiting is c
 
 | Failure | Countermeasure |
 |---|---|
-| Codex writing the whole app | It produces `HANDOFF.md`, not components |
+| Codex absorbing the whole app | Bulk implementation stays `R2`; only the explicit retained split may be coded here |
 | Pasting the codebase to ask one question | Paste the interface and the error |
-| One thread for the whole project | One session per stage |
+| One bloated task crossing implementation or review boundaries | Builder OS creates the clean handoff; do not carry old chat history across it |
 | Evaluating with the design document attached | S5 gets the URL and criteria only |
 | Undated pricing or version claims | Verify or mark unverified |
 | Ending with "let me know how you'd like to proceed" | Every response ends in a concrete next action |

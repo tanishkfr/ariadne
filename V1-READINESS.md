@@ -1,113 +1,204 @@
 # BUILDER OS V1 READINESS
 
-**Assessment date:** 2026-08-22
+**Assessment date:** 2026-08-23
 
-**Baseline:** `995ae95fa468baa2ef712fb56dee0cda6a22c96c`
+**Hardening baseline:** `06d290655cd5e0e575b59fc0354591a94260d2bc`
 
-**Rollback checkpoint:** `24c6356` — deterministic stage packet transport
+**Rollback checkpoints:**
+
+- `1b41c8e` — Test B closure evidence
+- `fd3f139` — runtime orchestration and return contract
+- `4fabc39` — recovery, discovery, and automatic progression
 
 ## V1 STATUS
 
-**NEAR READY**
+**READY**
 
-Builder OS now has a deterministic transport path for every executable project
-boundary from S1 through S6, including conditional S2 and the split S4A/S4B
-boundary. Generated packets identify their stage and parent, carry exact source
-hashes, reserve a transcript path, and fail closed when their source or parent
-evidence changes. Cursor is ready for validation but has not been run.
+Builder OS now has a calm Codex entry, durable project/run discovery, automatic
+canonical packet preparation, source and parent provenance, provider-aware
+implementation routing, structured implementation return, isolated independent
+review, review ingestion, recovery without evidence overwrite, and a readable
+operations log. The user directs the project and grants meaningful gates; they
+do not need to know stage IDs, prompts, manifests, hashes, parent paths, or
+transcript locations.
 
-This is not v1.0.0 yet. The transport and contract layer is mechanically proven;
-provider behaviour and the core design-quality thesis still require the existing
-real-project validation protocol.
+READY does not mean every external provider behaviour was observed. Test B
+proved the Cursor/Grok handoff could be consumed and implementation could begin,
+then ended at a provider quota boundary. Live provider return remains externally
+unverified; its contract and continuation path are structurally verified and
+negative-tested, which is an accepted V1 evidence limitation rather than a
+fabricated pass.
 
-## FIXED
+## OPERATOR EXPERIENCE
 
-| Problem | Owner | Change | Validation |
+The normal path is:
+
+1. Open a clean Codex task, invoke `$builderos`, and describe the project.
+2. Builder OS starts or discovers the run, performs routing, intake, research,
+   and direction work, and records evidence.
+3. The human approves or rejects the creative direction at G1.
+4. Builder OS writes the rich implementation handoff, reads its routing record,
+   and checks observable provider availability/quota.
+5. If an external builder is appropriate, the human performs one unavoidable
+   action: open it at the project and paste the one verified packet.
+6. Builder OS ingests the marked implementation return, verifies or routes
+   follow-up QA, and creates an isolated review packet.
+7. Builder OS preserves and applies the marked independent judgement without
+   rewriting it, then presents G3. Shipping remains G4.
+
+The low-level packet commands remain available for recovery, not routine use.
+
+## IMPLEMENTED CAPABILITIES
+
+| Capability | Owner | V1 behaviour | Evidence |
 |---|---|---|---|
-| Operators manually found and concatenated stage inputs | `scripts/prepare-stage.py` | Generates paste-ready S1, S2, S3, S4A, S4B, S5, and S6 packets from canonical and current project sources | Full synthetic S1→S6 chain; packet self-tests |
-| Continuations could be assembled without a reliable parent or transcript | `scripts/prepare-stage.py` | Every continuation names a parent manifest and hashes the parent record and transcript; missing evidence blocks preparation | Negative tests for missing/changed evidence and wrong parent |
-| Old packets could be reused after a prompt, policy, template, or project input changed | `scripts/prepare-stage.py` | `manifest.json` records SHA-256 provenance and `verify` compares every current source before reuse | Negative tests for canonical and project drift |
-| A continuation could overwrite a prior record | `scripts/prepare-stage.py` | Existing output directories are refused; each retry is a new, explicit child | Duplicate-continuation negative test |
-| S5 isolation depended on careful manual copying | `scripts/prepare-stage.py` | Extracts only intent, criteria, and accepted patterns; delivers only the S5 prompt and canonical rubric | Positive isolated packet plus forbidden project-context negative test |
-| Conditional S2 had policy and template inputs but no pasteable entry | `prompts/research.md` | Adds the executable boundary for the existing conditional stage; unresolved evidence stays in S2 | In-fence delivery/blocked-transition guards; full-chain simulation |
-| S6 produced `RETROSPECTIVE.md` without receiving its canonical template | `prompts/retrospective.md` | Requires and uses `templates/RETROSPECTIVE.md`; Codex adapter and packet map deliver it | Prompt, adapter, packet parity checks and negative tests |
-| Getting-started guidance required manual prompt/file assembly and contained machine-specific setup claims | Operator documentation | Documents generated packets, evidence paths, triggers, and current limitations | Repository link and duplicate-rule checks |
+| Entry and resume | repository and managed personal `builderos` skill | Starts from ordinary language or discovers one matching durable run | skill contract tests; managed install verification |
+| Orchestration | `scripts/builderos.py` | Infers the next valid boundary; explicit stage is an assertion, not an override | full synthetic S1-to-S5 progression; gate-bypass negative test |
+| Canonical delivery | `scripts/prepare-stage.py` | Builds exact stage packets with source/parent hashes and isolation | packet self-test; repository checks |
+| Evidence | controller plus packet manifests | Preserves transcripts when available; accepts structural same-session evidence without claiming a transcript | stale-output and canonical-drift controls |
+| Provider routing | `MODEL-ROUTING.md`, `HANDOFF.md`, controller | Reads capability/provider/model/effort/workload/split; checks runtime availability/quota | verified, assumed, human-check, and blocked controls |
+| External handoff | canonical S4 prompt and packet | Delivers design, runtime state, QA policy/template, and return contract | parity checks and Test B consumption |
+| Return continuity | `templates/RETURN-HANDOFF.md`, controller | Validates complete/partial/blocked returns; complete may reach S5, partial creates a non-overwriting S4B retry | positive, malformed, partial, and retry controls |
+| Independent review | S5 packet and controller | Delivers only target/intent/criteria/accepted patterns/rubric; preserves raw response and updates only QA judgement | isolation, placeholder, independence, marker, duplicate-ingestion controls |
+| Operations history | per-run `OPERATIONS.md` | Records actions, reasons, files, evidence class, failures, repairs, and next action | full dry-run log integrity check |
 
-## CONVENIENCE IMPROVEMENTS
+## FRICTION REMOVED
 
-The operator no longer needs to:
-
-- locate and concatenate canonical prompt, policy, template, and project files;
-- reconstruct a continuation record or decide its transcript location;
-- compare a packet manually with the current Builder OS source;
-- remember whether S4A or S4B applies;
-- copy S5 criteria and accepted patterns while manually excluding build context;
-- risk overwriting an earlier continuation or transcript;
-- work out which canonical retrospective structure S6 must use.
-
-The remaining manual work is intentional: answer material questions, decide
-conditional S3 motion/asset triggers, select the independent review lens, grant
-gates, operate the fresh provider session, and save its transcript.
+- No manual prompt or template hunting.
+- No manual packet concatenation or stale-source comparison.
+- No manual parent/continuation IDs or transcript destinations.
+- No manual re-entry of implementation-routing decisions already in `HANDOFF.md`.
+- No opening a large external task before observable quota/availability preflight.
+- No conversation-history dependency when implementation returns.
+- No manual replacement or paraphrasing of the independent QA judgement.
+- No project restart after a partial implementation; retries preserve the parent
+  and earlier evidence.
+- No silent choice between two histories claiming the same project.
 
 ## SKILLS
 
-No skill changed. All four existing skills have a concrete trigger, inputs,
-output, method, and stop condition. The observed V1 failures were delivery and
-continuity defects; changing skill methods would have put transport behaviour in
-the wrong owner and risked altering already-proven design/research policy.
+The four canonical method skills remain focused on intake, reference analysis,
+design direction, and component research. Their policy did not need redesign.
+The new repo-scoped `builderos` skill is an orchestration entry, not another
+policy owner: it locates this repository and delegates routing, stage policy,
+packet transport, and gates to their canonical owners.
+
+The managed personal installation is verified against the repository copy and
+refuses to overwrite an unmanaged skill. Skill metadata and trigger drift have
+positive and negative controls.
 
 ## VALIDATION
 
-- Baseline `scripts/check.py`: PASS before editing.
-- Current `scripts/check.py`: PASS after the implemented changes.
-- `scripts/check.py --self-test`: PASS, including positive controls and negative
-  mutations for prompt delivery, S2 blocking, S5 isolation, S6 template delivery,
-  and S4A→S4B parent order.
-- `scripts/prepare-stage.py --self-test`: PASS, 20/20 cases.
-- Synthetic chain: S1 → conditional S2 → S3 → S4A → Cursor-labelled S4B →
-  isolated S5 → S6; every generated packet verified.
-- `scripts/validate.py --self-test`: PASS, 21/21 guards at baseline; rerun in the
-  final suite.
-- No provider transcript or successful artifact was fabricated by the dry run.
+- `python -m py_compile` for every changed Python file: PASS.
+- `python scripts/check.py`: PASS; links, required files, ownership,
+  delivery, packet, runtime, stage-chain, router, and duplicate guards green.
+- `python scripts/check.py --self-test`: PASS; every integrated negative suite
+  and its positive controls green.
+- `python scripts/prepare-stage.py --self-test`: PASS, 24/24.
+- `python scripts/builderos.py --self-test`: PASS, including full S1-to-S5
+  progression, partial retry, and review ingestion.
+- `python scripts/install-builderos-skill.py --self-test`: PASS, 5/5.
+- `python scripts/validate.py --self-test`: PASS, 29/29 guards fail on their
+  broken fixtures.
+- Managed personal skill `install` and `verify`: PASS.
+- `git diff --check`: PASS.
 
-## CURSOR
+The generic skill-authoring helper could not execute because its Python runtime
+does not include PyYAML. No package was installed to mask that environment fact;
+the repository instead validates the skill frontmatter, UI metadata, trigger
+contract, installation pointer, source parity, and drift with deterministic
+positive and negative controls.
 
-**Cursor READY FOR VALIDATION**
+## PROVIDERS
 
-Prepared:
+**Codex:** entry skill installed and verified on this machine. The controller
+and packet chain are behaviourally exercised in this task and structurally
+covered in self-tests.
 
-- a Cursor-default S4B packet built from canonical Part B and its exact inputs;
-- source, parent, and transcript provenance;
-- explicit exclusion of reasoning history and S5 judgement context;
-- a future validation checklist in `adapters/cursor.md`;
-- a deterministic positive control that generates and verifies the Cursor packet.
+**Cursor/Grok:** the Test B handoff was consumed successfully and implementation
+began. A quota limit stopped the live build before full QA and return. Current
+S4B packet generation, provider labelling, return ingestion, partial retry, and
+S5 isolation are structurally verified. A live complete return remains
+externally unverified.
 
-Not claimed: Cursor sign-in, packet ingestion, repository reading, implementation,
-QA behaviour, continuation behaviour, or handoff-question count. Cursor was not
-opened or run during this sprint.
+**Provider neutrality:** routing remains capability-first (`R1`-`R6`), canonical
+handoffs are plain Markdown, and provider mechanics stay in adapters/transport.
+Changing the provider does not change the project thesis or gate semantics.
 
-## STILL UNPROVEN
+## EVIDENCE CLASSIFICATION
 
-- Codex and Cursor behaviour when using the new generated packets in real fresh sessions.
-- Codex→Cursor handoff sufficiency and the target of at most two class-B questions.
-- Test B's forced restart, implementation fidelity, browser QA, and review loop.
-- Test C's three-week content learning loop.
-- Provider neutrality beyond structural adapter/packet parity.
-- Production deployment and rollback behaviour; no deployment was attempted.
-- Whether the core thesis consistently produces better, less generic work across projects.
-- A3R1's independent microphone-granted and quiet/loud evidence gap remains exactly as recorded.
+### Verified
+
+- Repository contracts, links, router cases, frozen gate/routing ownership.
+- Managed skill installation and repository parity.
+- Run discovery, ambiguity refusal, automatic progression, and recovery.
+- Packet source/parent provenance and stale/damaged packet failure.
+- Provider-preflight decision states.
+- Structured return and independent-review ingestion.
+- S5 context isolation.
+- Test B handoff consumption and implementation start.
+
+### Reasonably assumed
+
+- A supported external implementation provider can complete a well-specified
+  S4B packet when sufficient usage is available; Test B reached implementation
+  before quota exhaustion.
+- A fresh Codex task will discover the installed skill through the documented
+  repository/user skill mechanism; installation and metadata are verified, but
+  this hardening task did not create a second live Codex task merely to observe
+  discovery UI.
+
+### Externally unverified
+
+- One complete live Cursor/Grok implementation-return cycle.
+- Production deployment and rollback; neither was attempted.
+- Provider-neutral live execution with a third implementation provider.
+- Test C's multi-week content-learning loop.
+
+### Blocked
+
+None for repository V1 readiness. External implementation still requires the
+human to operate the selected signed-in provider, and external release actions
+remain deliberately gated.
 
 ## HUMAN DECISIONS REMAINING
 
-1. Run the existing Test B protocol with Cursor and judge the real handoff and output.
-2. After Test B and Test C evidence, decide whether the repository earns the v1.0.0 tag.
+- G1 creative direction and any restart that changes it.
+- G2 dependency approval.
+- Material scope/design trade-offs and waivers.
+- The unavoidable signed-in external provider action when selected.
+- G3 acceptance of build/review evidence.
+- G4 ship and G5 publish authority.
 
-No human policy decision is required for the implemented transport helper; it
-does not approve gates or change canonical policy ownership.
+These are product boundaries, not operator ceremony.
+
+## CURSOR READY FOR USE
+
+The handoff is generated and verified automatically. The one manual action is
+opening the signed-in provider at the project and pasting the packet. The
+provider must return the marked implementation block. Builder OS handles its
+storage, validation, retry lineage, and continuation.
+
+## OPERATIONS LOGS
+
+- Hardening run: [`operations/V1-PRODUCTIONIZATION.md`](operations/V1-PRODUCTIONIZATION.md)
+- Each project: `<run-root>/OPERATIONS.md`, discoverable from the project with
+  `builderos.py discover --project <project>` when debugging.
+
+## PRODUCT NAME
+
+**Recommendation: keep “Builder OS” for V1.** It is already embedded in evidence,
+prompts, adapters, and operator language, and describes the product without
+claiming autonomous creative authority. A mythological rename would create
+migration and trademark work without improving the operator path. Revisit only
+after repeated real use reveals a clearer identity; naming is not a V1 blocker.
 
 ## NEXT MANUAL SESSION
 
-1. Start one real Test B project with a generated S1 packet.
-2. At G1, perform the protocol's forced restart, then approve the replacement direction.
-3. Generate S4A, save its transcript, generate S4B, and follow the Cursor validation handover in `adapters/cursor.md`.
-4. Record every Cursor clarification question and continue through the existing Test B procedure without changing the protocol.
+1. Open a clean Codex task in a fresh project and invoke `$builderos`.
+2. Describe one real project normally and judge only the meaningful questions
+   and G1 direction.
+3. If Builder OS selects Cursor/Grok, confirm observable quota, paste the one
+   generated packet, and return its marked handoff.
+4. Continue through independent review and G3; do not deploy unless G4 is
+   explicitly approved.

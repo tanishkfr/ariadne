@@ -1,6 +1,6 @@
 # GETTING STARTED
 
-First-time setup. About 30 minutes, then one real project.
+First-time setup. About five minutes, then one real project.
 
 Written for someone who has never used this system. If any step assumes knowledge you do not have, that is a bug in this file — fix it when you hit it.
 
@@ -45,15 +45,30 @@ If a build prerequisite is missing, stop and install it deliberately; do not sub
 
 ---
 
-## Step 3 — Set up your reasoning tool (Codex / ChatGPT)
+## Step 3 — Install the Builder OS entry
 
-This is the tool that **decides**. It does not write your code.
+From the Builder OS repository, run:
 
-1. Read the setup and session boundary in [adapters/codex.md](adapters/codex.md).
-2. Start each stage in a fresh session.
-3. Generate the stage's packet with [scripts/prepare-stage.py](scripts/prepare-stage.py). The packet carries only the canonical inputs that stage needs and records their hashes.
+```bash
+python scripts/install-builderos-skill.py install
+python scripts/install-builderos-skill.py verify
+```
 
-Do not upload the whole Builder OS. Generated packets are transient transport artifacts, not a second knowledge base.
+The installed skill is a managed copy that points back to this checkout. The
+repository remains canonical. Re-run `install` after pulling a Builder OS
+update; `verify` detects drift and refuses an unmanaged skill directory.
+
+Open a clean Codex task and write:
+
+```text
+$builderos
+I want to make ...
+```
+
+Natural language such as “Use Builder OS for this project” also triggers it.
+Builder OS creates or finds the durable run, reads the current packet itself,
+and performs same-session reasoning work. It asks you only for a real decision
+or an unavoidable external action.
 
 ---
 
@@ -61,9 +76,13 @@ Do not upload the whole Builder OS. Generated packets are transient transport ar
 
 This is the tool that **builds**. It does not decide direction.
 
-1. Follow [adapters/cursor.md](adapters/cursor.md).
-2. Add the project rules block from that file.
-3. Let S1 create the project-root `AGENTS.md`. Do not pre-create it; S1 must fill the runtime state from the routed project.
+1. Sign in only when Builder OS has selected an external implementation handoff.
+2. Open the project directory and paste the one verified handoff Builder OS gives you.
+3. Return the generated implementation-return block. Builder OS validates and stores it.
+
+You do not need to copy project rules or canonical QA files manually; they are
+inside the verified handoff packet. Let the project-brief pass create root
+`AGENTS.md`; do not pre-create it.
 
 Claude Code works identically as a fallback — see [adapters/claude-code.md](adapters/claude-code.md). **Read the cautions in that file**, particularly about design skills whose house style can override your `DESIGN.md`.
 
@@ -75,29 +94,18 @@ Do not read the rest of the documentation first. Run something small and real.
 
 **Pick a [game-experiment](modes/game-experiment.md).** It is the lightest mode: three questions, two documents, and it finishes in a day.
 
-1. Create an empty project repository containing only `.git` and `.gitignore`.
-2. Put the brief in a text file outside the project, then prepare S1:
+1. Choose or create an empty project directory. Builder OS will initialise its
+   local Git repository if required.
+2. Invoke `$builderos` and describe the idea normally.
+3. Answer the one batched set of material questions. Accept all proposed
+   defaults in one line when they are right.
+4. Review the design direction at G1. This is the first intentional pause.
 
-   ```bash
-   python scripts/prepare-stage.py prepare --stage S1 --project <project-path> --output <runs-path>/P1-S1 --request-file <brief-path>
-   ```
-
-3. Open a fresh reasoning session rooted at the project and paste only `<runs-path>/P1-S1/packet.txt`.
-4. Save the verbatim session transcript to `<runs-path>/P1-S1/evidence/transcript.md`.
-5. Answer the routing questions. Once S1 has created `PROJECT.md` and `AGENTS.md`, prepare S3:
-
-   ```bash
-   python scripts/prepare-stage.py prepare --stage S3 --project <project-path> --output <runs-path>/P1-S3 --parent <runs-path>/P1-S1 --motion yes --assets no
-   ```
-
-   Set the two trigger flags from the actual project. Use `--references-file` when references exist; otherwise the packet explicitly carries `none yet`.
-
-   If `PROJECT.md` contains a blocking factual question, prepare S2 first with
-   `--stage S2 --parent <runs-path>/P1-S1`. Save its transcript and `RESEARCH.md`,
-   then use the S2 packet directory as S3's parent. S2 transports only those
-   blocking questions plus the canonical research policy and template.
-
-Every stage hands you the next one. The packet verifier refuses stale canonical sources, a missing parent transcript, a wrong parent stage, or an existing output directory, so previous evidence is not silently overwritten.
+Behind the scenes, Builder OS creates the run outside the project, transports
+only the current stage's inputs, verifies their hashes, records available
+evidence, and chooses research or design from the actual project state. A
+failure resumes from the last valid boundary; it does not overwrite history or
+restart the project.
 
 When you reach **G1**, the system will present a design direction and stop. **This is the moment that matters.** Read it. If it says "clean, modern, minimal", reject it — that is a mood, not a direction, and the system is meant to catch that. Ask for a thesis specific enough that a template would fail it.
 
@@ -105,13 +113,10 @@ When you reach **G1**, the system will present a design direction and stop. **Th
 
 ## Step 6 — Run one review
 
-After S4B has completed mechanical QA, prepare S5 with the reachable target and the human-selected lens:
-
-```bash
-python scripts/prepare-stage.py prepare --stage S5 --project <project-path> --output <runs-path>/P1-S5 --parent <runs-path>/P1-S4B --target <url> --lenses "creative-director (light)"
-```
-
-Run its `packet.txt` in a **fresh independent session**. The generator extracts only intent, success criteria, and accepted patterns from `PROJECT.md`; it excludes the project documents, source, QA, and build history.
+After implementation and mechanical QA, Builder OS generates one isolated
+review handoff for a **fresh independent session**. It extracts only intent,
+success criteria, accepted patterns, the target, and the canonical rubric. It
+excludes project documents, source, QA, and build history.
 
 Fresh matters. A session that built the thing will defend it, because it knows why every compromise happened. That sympathy is exactly what your audience will not have.
 
@@ -124,8 +129,8 @@ Do not read all of it now. Read each file the first time you hit its stage.
 | When | Read |
 |---|---|
 | Right now | This file, then [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md) |
-| Starting any project | [ROUTER.md](ROUTER.md) |
-| Preparing any fresh stage | [scripts/prepare-stage.py](scripts/prepare-stage.py) |
+| Starting any project | Invoke `$builderos`; it loads [ROUTER.md](ROUTER.md) when needed |
+| Debugging transport | [scripts/prepare-stage.py](scripts/prepare-stage.py) |
 | At your first G1 | [DESIGN-TASTE.md](DESIGN-TASTE.md) — the most valuable file here |
 | First time an agent wants to install something | [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |
 | First time you run QA | [QA-POLICY.md](QA-POLICY.md) |

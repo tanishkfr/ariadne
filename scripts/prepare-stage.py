@@ -43,7 +43,7 @@ STAGES = {
         "project_inputs": [],
         "canonical_inputs": ["skills/intake.md"],
         "conditional_inputs": [],
-        "allowed_parents": [],
+        "allowed_parents": ["S1"],
         "forbidden_inputs": [],
         "provider": "codex",
     },
@@ -266,11 +266,14 @@ def return_handoff_problems(text: str) -> list[str]:
     if not text.strip():
         return ["return handoff is empty"]
     for heading in RETURN_HANDOFF_HEADINGS:
-        if not re.search(rf"(?im)^##\s+{re.escape(heading)}\s*$", text):
+        matches = re.findall(rf"(?im)^##\s+{re.escape(heading)}\s*$", text)
+        if not matches:
             problems.append(f"return handoff missing section: {heading}")
+        elif len(matches) > 1:
+            problems.append(f"return handoff duplicates section: {heading}")
     for field in ("Status", "Provider", "Model", "Effort", "Started", "Ended"):
-        match = re.search(rf"(?im)^\*\*{field}:\*\*\s*(.+?)\s*$", text)
-        if not match or re.search(r"<[^>]+>|\bcomplete / partial / blocked\b", match.group(1)):
+        matches = re.findall(rf"(?im)^\*\*{field}:\*\*\s*(.+?)\s*$", text)
+        if len(matches) != 1 or re.search(r"<[^>]+>|\bcomplete / partial / blocked\b", matches[0] if matches else ""):
             problems.append(f"return handoff has unfilled field: {field}")
     status = re.search(r"(?im)^\*\*Status:\*\*\s*(.+?)\s*$", text)
     if status and status.group(1).strip().lower() not in ("complete", "partial", "blocked"):
@@ -508,10 +511,10 @@ def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
 def load_parent(
     parent_arg: str | None, stage: str, retry: bool
 ) -> tuple[dict | None, Path | None, Path | None, str | None]:
-    if stage == "S1":
-        if parent_arg:
-            raise PacketError("S1 is an initial packet and cannot have a parent")
+    if stage == "S1" and not parent_arg:
         return None, None, None, None
+    if stage == "S1" and parent_arg and not retry:
+        raise PacketError("an S1 continuation requires --retry")
     if not parent_arg:
         raise PacketError(f"{stage} requires --parent pointing at a prepared parent packet")
 
@@ -825,6 +828,8 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S5 packet must not deliver project documents")
     if specs.get("S4B", {}).get("allowed_parents") != ["S4A", "S4B"]:
         problems.append("S4B packet parent contract drifted from S4A -> S4B")
+    if specs.get("S1", {}).get("allowed_parents") != ["S1"]:
+        problems.append("S1 packet must support a linked same-stage resume")
     if "templates/RETURN-HANDOFF.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
         problems.append("S4B packet must deliver the canonical return-handoff template")
     return problems
@@ -860,6 +865,9 @@ def self_test() -> int:
     changed = copy.deepcopy(STAGES)
     changed["S4B"]["allowed_parents"] = ["S3"]
     case("wrong S4A to S4B parent contract fails", bool(repository_contract_problems(changed)))
+    changed = copy.deepcopy(STAGES)
+    changed["S1"]["allowed_parents"] = []
+    case("missing S1 resume parent contract fails", bool(repository_contract_problems(changed)))
 
     with self_test_workspace() as sandbox:
         project = sandbox / "project"
@@ -890,6 +898,17 @@ def self_test() -> int:
         prepare(ns(stage="S1", project=str(project), output=str(s1_dir), request="Build a small type experiment."))
         case("fresh S1 packet verifies (positive control)", not verify_packet(s1_dir))
         (s1_dir / "evidence" / "transcript.md").write_text("S1 transcript\n", encoding="utf-8")
+        s1_retry = sandbox / "R1-S1-C1"
+        prepare(ns(
+            stage="S1", project=str(project), output=str(s1_retry), parent=str(s1_dir),
+            retry=True, request="Build a small type experiment.",
+        ))
+        s1_retry_manifest = json.loads(read(s1_retry / MANIFEST_NAME))
+        case(
+            "S1 resume creates a linked non-overwriting child",
+            not verify_packet(s1_retry)
+            and s1_retry_manifest["parent_id"] == json.loads(read(s1_dir / MANIFEST_NAME))["packet_id"],
+        )
 
         (project / "PROJECT.md").write_text(
             "# PROJECT\n\n**Mode:** game-experiment\n\n## Goal\n\nMake type respond to sound.\n\n"
