@@ -28,7 +28,9 @@ Builder OS. Do not reconstruct its policies from this skill.
 1. Identify the project directory from the active workspace or the user's
    explicit path. Keep runtime packets and evidence outside the project.
 2. Run `python <root>/scripts/builderos.py discover --project <project>` and
-   resume the single matching run with `status --project <project>`. If more
+   resume the single matching run with `status --project <project>`. Treat its
+   goal, approved direction, health, attention items, and next action as the
+   opening briefing. If more
    than one history matches, ask which history is authoritative; never guess or
    create a second run merely because conversation history is absent.
 3. For a new brief, run `builderos.py start` with the ordinary-language request.
@@ -37,10 +39,15 @@ Builder OS. Do not reconstruct its policies from this skill.
 4. Read the generated `packet.txt` yourself and perform the current reasoning
    stage in this task when independence does not require a fresh task. The user
    must not locate prompts, policies, templates, packet IDs, or transcript paths.
-5. After a stage produces its project files, record available evidence and run
-   `builderos.py prepare-next`. Let the controller discover the valid parent and
-   next boundary. Supply only genuine judgement inputs that cannot be derived,
-   such as whether motion/assets apply or the chosen independent-review lens.
+5. After a same-session stage produces its project files, run
+   `builderos.py advance`. It records the obvious outputs and prepares routine
+   continuation without making the user operate evidence or packet commands.
+   Supply only semantic choices the controller cannot derive, such as whether
+   motion/assets apply or the independent-review lens. Use the lower-level
+   evidence and preparation commands only for diagnosis or recovery.
+6. Record a rejected direction, durable risk, lesson, or non-blocking evidence
+   gap with `builderos.py record-note`; do not rely on this conversation to
+   remember it. Project documents remain canonical for active decisions.
 
 ## Human boundaries
 
@@ -51,8 +58,11 @@ provider/account access, shipping, or publishing. Never grant a gate.
 When an external implementer is appropriate, run provider preflight first. It
 reads provider, model, effort, workload, split, and reason from `HANDOFF.md`;
 only live availability/quota facts may need an external check. Do not generate
-the external S4B packet when preflight is blocked. Present one plain action to
-the user; keep hashes and stage mechanics in `OPERATIONS.md`.
+the external build handoff when `builderos.py handoff-readiness` or preflight is
+blocked. Present the recommendation in plain language. When ready, give the user
+one clickable packet artifact to attach or paste after they open the selected
+provider; never make them search for it. Keep hashes and stage mechanics in
+`OPERATIONS.md`.
 
 ## External return
 

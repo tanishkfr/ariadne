@@ -42,11 +42,16 @@ context is the single largest waste of usage in this system.
 
 Include:
   - project summary, three sentences
+  - the outcome and every success criterion VERBATIM from PROJECT.md, because
+    the fresh build session does not receive PROJECT.md
+  - content readiness: source of visible copy/data, or an explicit fixture / N-A
   - the design thesis VERBATIM from DESIGN.md - do not paraphrase, the
     wording is the constraint
   - signature moment + its mobile equivalent, marked BUILD FIRST
   - decisions that are now FIXED and must not be relitigated
     (typography, palette, grid, motion timing/easing, stack, state, CMS)
+  - implementer discretion: what small execution choices remain open, and what
+    may not be reinterpreted without a BUILD FINDING
   - implementation sequence: token system first, signature moment second
   - files to create, components to build
   - pre-approved dependencies ONLY - anything else needs G2 before installing

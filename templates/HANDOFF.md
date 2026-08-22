@@ -14,6 +14,26 @@
 
 > Three sentences maximum. What it is, who it is for, what makes it different.
 
+## Outcome and acceptance criteria
+
+> Copy the goal and numbered success criteria from `PROJECT.md` without
+> weakening or reinterpreting them. The fresh implementer does not receive
+> `PROJECT.md`; this is its testable definition of the intended outcome.
+
+**Outcome:** <verbatim goal from PROJECT.md>
+
+1. <verbatim success criterion>
+
+## Content readiness
+
+> Name the source of every piece of user-visible copy or data. Use `ready`,
+> `provided fixture`, or `not applicable`. Placeholder content is an unresolved
+> input, not an implementation detail.
+
+**Status:** <ready | provided fixture | not applicable>
+
+**Source and constraints:** <paths, supplied copy/data, or why content is not applicable>
+
 ## Design thesis
 
 > Verbatim from `DESIGN.md`. **Do not paraphrase.** The wording is the constraint.
@@ -35,6 +55,16 @@
 | Stack | <deviations from default, if any> |
 | State | <where state lives> |
 | CMS / backend | <decision> |
+
+## Implementer discretion
+
+> Keep small execution choices with the implementer; keep the approved
+> direction out of reach. If a forbidden choice becomes necessary, raise a
+> `BUILD FINDING` rather than silently changing it.
+
+**May decide:** <implementation details that do not change outcome or direction>
+
+**Must not reinterpret:** <thesis, signature moment, non-goals, content, and other fixed decisions>
 
 ## Implementation sequence
 

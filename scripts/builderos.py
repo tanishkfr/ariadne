@@ -30,6 +30,22 @@ STATE_NAME = "builderos-run.json"
 LOG_NAME = "OPERATIONS.md"
 PREFLIGHT_NAME = "provider-preflight.json"
 RUNTIME_SCHEMA = 1
+FRIENDLY_STAGES = {
+    "S1": "project brief",
+    "S2": "focused research",
+    "S3": "design direction",
+    "S4A": "implementation plan",
+    "S4B": "implementation and mechanical QA",
+    "S5": "independent review",
+    "S6": "retrospective",
+}
+EXPECTED_STAGE_OUTPUTS = {
+    "S1": ["PROJECT.md", "AGENTS.md"],
+    "S2": ["RESEARCH.md"],
+    "S3": ["DESIGN.md", "AGENTS.md"],
+    "S4A": ["HANDOFF.md", "AGENTS.md"],
+    "S6": ["RETROSPECTIVE.md", "AGENTS.md"],
+}
 REVIEW_HEADINGS = [
     "Judgement",
     "Accepted patterns",
@@ -306,7 +322,8 @@ def start(args: argparse.Namespace) -> int:
         "evidence_state": "verified-transport; provider stage not yet observed",
         "packets": [{"id": packet_id, "stage": "S1", "path": str(output)}],
         "provider_preflight": None,
-        "next": "Run the project brief stage from the prepared packet.",
+        "notes": [],
+        "next": "Complete the project brief from the prepared context.",
     }
     write_json(run_root / STATE_NAME, state)
     append_log(
@@ -319,15 +336,179 @@ def start(args: argparse.Namespace) -> int:
         "Builder OS should read and run the prepared project-brief packet.",
     )
     print("Done. The project is ready for its brief and discovery pass.")
-    print(f"RUN_ROOT  {run_root}")
-    print(f"PACKET    {output / 'packet.txt'}")
-    print("USER      Nothing else to locate or assemble.")
+    print("From you: nothing to locate or assemble; describe the project normally.")
     return 0
 
 
 def state_field(text: str, name: str) -> str:
     match = re.search(rf"(?m)^\|\s*\*\*{re.escape(name)}\*\*\s*\|\s*`?([^|`]+)", text)
     return match.group(1).strip() if match else ""
+
+
+def safe_section(text: str, heading: str) -> str:
+    try:
+        return TRANSPORT.markdown_section(text, heading)
+    except TRANSPORT.PacketError:
+        return ""
+
+
+def plain_markdown(value: str) -> str:
+    value = re.sub(r"[`*_]", "", value.strip())
+    value = re.sub(r"\[([^]]+)]\([^)]+\)", r"\1", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def first_meaningful_line(section: str) -> str:
+    for raw in section.splitlines():
+        line = raw.strip()
+        if (
+            not line
+            or line.startswith((">", "|", "#", "```", "~~~"))
+            or re.fullmatch(r"[-: ]+", line)
+        ):
+            continue
+        line = re.sub(r"^(?:[-*+] |\d+\.\s+)", "", line)
+        value = plain_markdown(line)
+        if value and not value.startswith("<"):
+            return value
+    return "not yet recorded"
+
+
+def numbered_items(section: str) -> list[str]:
+    items = []
+    for line in section.splitlines():
+        match = re.match(r"^\s*\d+\.\s+(.+?)\s*$", line)
+        if match:
+            value = plain_markdown(match.group(1))
+            if value and "<" not in value:
+                items.append(value)
+    return items
+
+
+def markdown_table_rows(section: str) -> list[list[str]]:
+    rows = []
+    for line in section.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        cells = [plain_markdown(cell) for cell in line.strip().strip("|").split("|")]
+        if not cells or all(re.fullmatch(r"[-: ]*", cell) for cell in cells):
+            continue
+        rows.append(cells)
+    return rows[1:] if len(rows) > 1 else []
+
+
+def project_mode(project_text: str) -> str:
+    match = re.search(r"(?im)^\*\*Mode:\*\*\s*([^·\n]+)", project_text)
+    return plain_markdown(match.group(1)) if match else "not yet recorded"
+
+
+def design_thesis(text: str) -> str:
+    section = safe_section(text, "Design thesis")
+    for line in section.splitlines():
+        match = re.match(r"^\s*\*\*(.+?)\*\*\s*$", line)
+        if match and "<" not in match.group(1):
+            return plain_markdown(match.group(1))
+    return ""
+
+
+def canonical_handoff_headings() -> list[str]:
+    template = read(ROOT / "templates" / "HANDOFF.md")
+    return [
+        heading.strip()
+        for heading in re.findall(r"(?m)^##\s+(.+?)\s*$", template)
+        if heading.strip() != "If the design cannot be built as specified"
+    ]
+
+
+def handoff_context_problems(project: Path) -> list[str]:
+    """Validate implementation context without owning the handoff's policy."""
+    problems = []
+    required = ["PROJECT.md", "DESIGN.md", "AGENTS.md", "HANDOFF.md"]
+    missing = [name for name in required if not (project / name).is_file()]
+    if missing:
+        return ["missing implementation input: " + ", ".join(missing)]
+
+    project_text = read(project / "PROJECT.md")
+    design_text = read(project / "DESIGN.md")
+    agents_text = read(project / "AGENTS.md")
+    handoff_text = read(project / "HANDOFF.md")
+
+    if not re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", design_text):
+        problems.append("DESIGN.md does not record a human-locked G1 direction")
+    if not re.match(r"G1\b", state_field(agents_text, "Last gate passed")):
+        problems.append("AGENTS.md does not record human G1 approval")
+
+    for heading in canonical_handoff_headings():
+        if not re.search(rf"(?im)^##\s+{re.escape(heading)}\s*$", handoff_text):
+            problems.append(f"HANDOFF.md is missing canonical section: {heading}")
+    placeholders = sorted(set(re.findall(r"<[^>\n]+>", handoff_text)))
+    if placeholders:
+        problems.append("HANDOFF.md still contains placeholders: " + ", ".join(placeholders[:5]))
+
+    design_value = design_thesis(design_text)
+    handoff_value = design_thesis(handoff_text)
+    if not design_value or not handoff_value:
+        problems.append("the approved design thesis is missing from DESIGN.md or HANDOFF.md")
+    elif handoff_value != design_value:
+        problems.append("HANDOFF.md does not carry the approved design thesis verbatim")
+
+    project_criteria = numbered_items(safe_section(project_text, "Success criteria"))
+    handoff_criteria = numbered_items(safe_section(handoff_text, "Outcome and acceptance criteria"))
+    if not project_criteria:
+        problems.append("PROJECT.md has no concrete success criteria")
+    elif handoff_criteria != project_criteria:
+        problems.append("HANDOFF.md does not carry PROJECT.md success criteria verbatim")
+
+    if first_meaningful_line(safe_section(handoff_text, "Content readiness")) == "not yet recorded":
+        problems.append("HANDOFF.md does not resolve content readiness")
+    if first_meaningful_line(safe_section(handoff_text, "Implementer discretion")) == "not yet recorded":
+        problems.append("HANDOFF.md does not define implementation judgement boundaries")
+
+    dependencies = markdown_table_rows(safe_section(handoff_text, "Dependencies to install"))
+    for row in dependencies:
+        if not row or row[0].lower() in ("none", "n/a"):
+            continue
+        if len(row) < 3 or not row[1] or not row[2] or row[2].lower() in ("pending", "unapproved"):
+            problems.append(f"dependency is not versioned and G2-approved: {row[0]}")
+
+    assets = markdown_table_rows(safe_section(handoff_text, "Asset requirements"))
+    for row in assets:
+        if not row or row[0].lower() in ("none", "n/a"):
+            continue
+        status = row[1].lower() if len(row) > 1 else ""
+        blocking = row[3].lower() if len(row) > 3 else ""
+        if blocking in ("yes", "true", "blocking") and status not in ("ready", "substituted"):
+            problems.append(f"critical asset is unresolved: {row[0]} ({status or 'unknown'})")
+
+    try:
+        handoff_routing(project)
+    except RuntimeError_ as exc:
+        problems.append(str(exc))
+    if not (ROOT / "templates" / "RETURN-HANDOFF.md").is_file():
+        problems.append("canonical implementation return contract is missing")
+    return problems
+
+
+def packet_evidence(packet: Path, manifest: dict) -> list[str]:
+    evidence = []
+    transcript = packet / manifest.get("expected_transcript", "evidence/transcript.md")
+    if transcript.is_file():
+        evidence.append("verbatim transcript")
+    if (packet / "evidence" / "stage-result.json").is_file():
+        evidence.append("structural stage result")
+    if (packet / "evidence" / "return-handoff.md").is_file():
+        evidence.append("structured return handoff")
+    if (packet / "evidence" / "review-judgement.md").is_file():
+        evidence.append("independent review judgement")
+    return evidence
+
+
+def latest_evidence_path(state: dict, name: str) -> Path | None:
+    for entry in reversed(state.get("packets", [])):
+        candidate = Path(entry["path"]) / "evidence" / name
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def project_runtime(project: Path) -> dict:
@@ -343,20 +524,210 @@ def project_runtime(project: Path) -> dict:
     return result
 
 
+def retry_count(state: dict, stage: str) -> int:
+    count = 0
+    for entry in state.get("packets", []):
+        if entry.get("stage") != stage:
+            continue
+        manifest = Path(entry["path"]) / TRANSPORT.MANIFEST_NAME
+        if manifest.is_file():
+            try:
+                count += int(bool(json.loads(read(manifest)).get("retry")))
+            except (json.JSONDecodeError, OSError):
+                continue
+    return count
+
+
+def project_intelligence(
+    run_root: Path, state: dict, entry: dict, packet: Path, manifest: dict
+) -> dict:
+    project = Path(state["project"])
+    project_text = read(project / "PROJECT.md") if (project / "PROJECT.md").is_file() else ""
+    design_text = read(project / "DESIGN.md") if (project / "DESIGN.md").is_file() else ""
+    handoff_text = read(project / "HANDOFF.md") if (project / "HANDOFF.md").is_file() else ""
+    qa_text = read(project / "QA.md") if (project / "QA.md").is_file() else ""
+    runtime = project_runtime(project)
+    stage = entry["stage"]
+
+    open_rows = markdown_table_rows(safe_section(project_text, "Open questions"))
+    blocking_questions = [
+        row[1] if len(row) > 1 else row[0]
+        for row in open_rows
+        if row and row[-1].lower() in ("yes", "true", "blocking") and "<" not in " ".join(row)
+    ]
+    reference_rows = [
+        row for row in markdown_table_rows(safe_section(project_text, "References"))
+        if row and "<" not in " ".join(row)
+    ]
+    constraint_rows = [
+        row for row in markdown_table_rows(safe_section(project_text, "Constraints"))
+        if row and "<" not in " ".join(row)
+    ]
+    fixed_decisions = [
+        row for row in markdown_table_rows(safe_section(handoff_text, "Decisions that are fixed"))
+        if row and "<" not in " ".join(row)
+    ]
+    design_value = design_thesis(design_text)
+    g1_locked = bool(re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", design_text))
+
+    health = []
+
+    def add(area: str, status_value: str, detail: str) -> None:
+        health.append({"area": area, "state": status_value, "detail": detail})
+
+    brief_ready = bool(project_text and (project / "AGENTS.md").is_file())
+    add("brief", "ready" if brief_ready else "pending", "Goal and project runtime state are recorded." if brief_ready else "The project brief is still being developed.")
+
+    if (project / "RESEARCH.md").is_file():
+        add("research", "ready", "Focused research evidence is recorded.")
+    elif blocking_questions:
+        add("research", "attention", f"{len(blocking_questions)} blocking question(s) need evidence.")
+    else:
+        add("research", "not-needed", "No blocking research question is recorded.")
+
+    if g1_locked and design_value:
+        add("direction", "ready", "The human-approved thesis is locked at G1.")
+    elif design_text:
+        add("direction", "needs-human", "A direction exists and needs human judgement at G1.")
+    else:
+        add("direction", "pending", "No design direction has been written yet.")
+
+    design_assets = markdown_table_rows(safe_section(design_text, "Asset direction"))
+    unresolved_assets = [
+        row[0] for row in design_assets
+        if row and len(row) > 3 and row[3].lower() in ("yes", "true", "blocking")
+        and len(row) > 1 and row[1].lower() not in ("yes", "ready", "substituted")
+    ]
+    if unresolved_assets:
+        add("assets", "attention", "Critical assets unresolved: " + ", ".join(unresolved_assets))
+    elif design_text:
+        add("assets", "ready", "No unresolved critical asset is recorded.")
+    else:
+        add("assets", "pending", "Asset needs are decided with the design direction.")
+
+    dependency_rows = [
+        row for row in markdown_table_rows(safe_section(handoff_text, "Dependencies to install"))
+        if row and row[0].lower() not in ("none", "n/a")
+    ]
+    unapproved = [
+        row[0] for row in dependency_rows
+        if len(row) < 3 or not row[2] or row[2].lower() in ("pending", "unapproved")
+    ]
+    if unapproved:
+        add("dependencies", "attention", "G2 approval missing: " + ", ".join(unapproved))
+    elif handoff_text:
+        add("dependencies", "ready", f"{len(dependency_rows)} approved dependency item(s); no unresolved G2 item." if dependency_rows else "No external dependency is required.")
+    else:
+        add("dependencies", "pending", "Dependencies are decided in the implementation plan.")
+
+    if handoff_text:
+        readiness = handoff_context_problems(project)
+        add("handoff", "attention" if readiness else "ready", readiness[0] if readiness else "Implementation context is complete and internally consistent.")
+    else:
+        add("handoff", "pending", "The implementation plan has not been written yet.")
+
+    preflight = state.get("provider_preflight") or {}
+    decision = preflight.get("decision")
+    if decision in ("verified", "reasonably-assumed", "not-required"):
+        add("provider", "ready", preflight.get("reason", "Provider route is ready."))
+    elif decision in ("blocked", "human-check-required"):
+        add("provider", "attention", preflight.get("reason", "Provider route needs attention."))
+    else:
+        add("provider", "pending", "Provider readiness is checked immediately before implementation.")
+
+    returned = latest_evidence_path(state, "return-handoff.md")
+    machine_return = latest_evidence_path(state, "return-handoff.json")
+    return_record = {}
+    if machine_return:
+        try:
+            return_record = json.loads(read(machine_return))
+        except json.JSONDecodeError:
+            return_record = {}
+    if returned and returned.is_file() and TRANSPORT.return_handoff_status(read(returned)) == "complete":
+        add("implementation", "ready", "A complete structured implementation return is recorded.")
+    elif stage == "S4B":
+        add("implementation", "in-progress", "Implementation has not returned complete evidence yet.")
+    elif stage in ("S5", "S6"):
+        add("implementation", "ready", "Implementation reached verification.")
+    else:
+        add("implementation", "pending", "Implementation has not started.")
+
+    review_recorded = (packet / "evidence" / "review-judgement.md").is_file()
+    if review_recorded or ("**Reviewed independently:** yes" in qa_text):
+        add("QA", "needs-human", "Mechanical and independent evidence are ready for human G3 judgement.")
+    elif qa_text:
+        add("QA", "attention", "Mechanical QA exists; independent review is not yet recorded.")
+    else:
+        add("QA", "pending", "QA evidence is created during and after implementation.")
+
+    add("continuity", "ready", "The current packet, parent provenance, and evidence boundary verify.")
+    attention = [item for item in health if item["state"] in ("attention", "needs-human")]
+    if any(item["state"] == "attention" for item in attention):
+        overall = "attention"
+    elif any(item["state"] == "needs-human" for item in attention):
+        overall = "needs-human"
+    else:
+        overall = "on-track"
+
+    if stage == "S3" and design_text and not g1_locked:
+        human_need = "Review the proposed design direction and approve, reject, or redirect it."
+    elif decision == "human-check-required":
+        human_need = "Confirm the selected provider's current availability and usable quota."
+    elif stage == "S4B" and not returned:
+        human_need = "Start the selected implementation provider with the prepared handoff."
+    elif stage == "S5" and review_recorded:
+        human_need = "Decide whether the combined build and review evidence is acceptable at G3."
+    else:
+        human_need = "Nothing right now; Builder OS can continue the current work."
+
+    notes = state.get("notes", [])
+    return_sections = return_record.get("sections", {})
+    completed_work = first_meaningful_line(return_sections.get("what-was-built", ""))
+    known_issues = first_meaningful_line(return_sections.get("known-issues", ""))
+    if known_issues.lower() in ("none", "none known"):
+        known_issues = "none known"
+    lessons = [item["summary"] for item in notes if item.get("kind") == "lesson"]
+    risks = [
+        item["summary"] for item in notes
+        if item.get("kind") in ("risk", "evidence-gap")
+    ]
+    return {
+        "project_name": project.name,
+        "mode": project_mode(project_text),
+        "goal": first_meaningful_line(safe_section(project_text, "Goal")),
+        "current_work": FRIENDLY_STAGES.get(stage, stage),
+        "approved_direction": design_value or "not yet approved",
+        "rejected_direction_attempts": retry_count(state, "S3"),
+        "blocking_questions": blocking_questions,
+        "open_questions": [row[1] if len(row) > 1 else row[0] for row in open_rows if row],
+        "constraints": [dict(name=row[0], detail=row[1] if len(row) > 1 else "") for row in constraint_rows],
+        "references": [row[0] for row in reference_rows],
+        "important_decisions": [dict(name=row[0], value=row[1] if len(row) > 1 else "") for row in fixed_decisions],
+        "implementation": {
+            "status": return_record.get("metadata", {}).get("status", "not returned"),
+            "provider": return_record.get("metadata", {}).get("provider", "not yet selected"),
+            "completed_work": completed_work,
+            "known_issues": known_issues,
+        },
+        "risks_and_evidence_gaps": risks,
+        "lessons": lessons,
+        "runtime_state": runtime,
+        "health": health,
+        "overall_health": overall,
+        "notes": notes,
+        "next_recommended_action": state.get("next", "Continue from the current verified boundary."),
+        "needs_from_human": human_need,
+        "evidence": packet_evidence(packet, manifest) or ["not yet recorded"],
+        "operations_log": str(run_root / LOG_NAME),
+    }
+
+
 def status(args: argparse.Namespace) -> int:
     run_root = resolve_run_root(args)
     state = load_state(run_root)
     entry, packet = current_packet(state, allow_project_drift=True)
     manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
-    evidence_options = []
-    transcript = packet / manifest.get("expected_transcript", "evidence/transcript.md")
-    if transcript.is_file():
-        evidence_options.append("verbatim transcript")
-    if (packet / "evidence" / "stage-result.json").is_file():
-        evidence_options.append("structural stage result")
-    if (packet / "evidence" / "return-handoff.md").is_file():
-        evidence_options.append("structured return handoff")
-    runtime = project_runtime(Path(state["project"]))
+    intelligence = project_intelligence(run_root, state, entry, packet, manifest)
     payload = {
         "run_id": state["run_id"],
         "project": state["project"],
@@ -364,20 +735,25 @@ def status(args: argparse.Namespace) -> int:
         "current_boundary": entry["stage"],
         "packet": str(packet / "packet.txt"),
         "packet_verified": True,
-        "evidence": evidence_options or ["not yet recorded"],
-        "project_state": runtime,
+        "intelligence": intelligence,
         "provider_preflight": state.get("provider_preflight") or "not run",
-        "next": state.get("next"),
-        "operations_log": str(run_root / LOG_NAME),
     }
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        print(f"Project: {Path(state['project']).name}")
-        print(f"Current work: {entry['stage']} ({', '.join(payload['evidence'])})")
-        print(f"Project state: {runtime['stage']}, last gate {runtime['gate']}")
-        print(f"Next: {state.get('next')}")
-        print(f"Operations log: {run_root / LOG_NAME}")
+        attention = [
+            item for item in intelligence["health"]
+            if item["state"] in ("attention", "needs-human")
+        ]
+        print(f"{intelligence['project_name']}")
+        print(f"Goal: {intelligence['goal']}")
+        print(f"Where we left off: {intelligence['current_work']}.")
+        print(f"Direction: {intelligence['approved_direction']}")
+        print(f"Project health: {intelligence['overall_health'].replace('-', ' ')}")
+        if attention:
+            print("Attention: " + "; ".join(item["detail"] for item in attention))
+        print(f"Next: {intelligence['next_recommended_action']}")
+        print(f"From you: {intelligence['needs_from_human']}")
     return 0
 
 
@@ -414,6 +790,20 @@ def preflight_decision(availability: str, quota: str, workload: str) -> tuple[st
     return "reasonably-assumed", "No blocking provider signal is known; the bounded workload may proceed."
 
 
+def preflight_recommendation(
+    decision: str, provider: str, workload: str, fallback: str | None
+) -> str:
+    if decision in ("verified", "reasonably-assumed", "not-required"):
+        return f"Proceed with {provider}; keep the structured return handoff as the continuity boundary."
+    if fallback:
+        return f"Use {fallback} after recording it in HANDOFF.md and rerunning preflight."
+    if decision == "human-check-required":
+        return f"Check {provider} once before launch; if capacity is limited, split the work or use the recorded fallback."
+    if workload == "large":
+        return "Split the implementation into independently returnable tasks or choose an available fallback."
+    return "Choose an available provider with the same capability class, then rerun preflight."
+
+
 def handoff_routing(project: Path) -> dict[str, str]:
     handoff = project / "HANDOFF.md"
     if not handoff.is_file():
@@ -436,7 +826,13 @@ def handoff_routing(project: Path) -> dict[str, str]:
 def provider_preflight(args: argparse.Namespace) -> int:
     run_root = resolve_run_root(args)
     state = load_state(run_root)
-    routing = handoff_routing(Path(state["project"]))
+    project = Path(state["project"])
+    context_problems = handoff_context_problems(project)
+    if context_problems:
+        raise RuntimeError_(
+            "Implementation handoff is not ready: " + "; ".join(context_problems)
+        )
+    routing = handoff_routing(project)
     provider = args.provider or routing["provider"]
     model = args.model or routing["model"]
     effort = args.effort or routing["effort"].lower()
@@ -451,6 +847,9 @@ def provider_preflight(args: argparse.Namespace) -> int:
         reason = "Implementation remains in the orchestrator; no external provider preflight is required."
     else:
         decision, reason = preflight_decision(args.availability, args.quota, workload)
+    recommendation = preflight_recommendation(
+        decision, provider, workload, args.fallback
+    )
     record = {
         "schema_version": 1,
         "checked_at": now(),
@@ -466,6 +865,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
         "split": routing["split"],
         "routing_reason": routing["reason"],
         "fallback": args.fallback or "not supplied",
+        "recommendation": recommendation,
     }
     write_json(run_root / PREFLIGHT_NAME, record)
     state["provider_preflight"] = record
@@ -473,7 +873,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
     state["next"] = (
         "Prepare the verified external build handoff."
         if decision in ("verified", "reasonably-assumed", "not-required")
-        else reason
+        else recommendation
     )
     write_json(run_root / STATE_NAME, state)
     append_log(
@@ -485,9 +885,48 @@ def provider_preflight(args: argparse.Namespace) -> int:
         f"provider={provider}; model={model}; effort={effort}; workload={workload}; availability={args.availability}; quota={args.quota}",
         state["next"],
     )
-    print(f"Provider preflight: {decision.upper()}")
+    print(f"Provider readiness: {decision.replace('-', ' ')}")
     print(reason)
+    print(f"Recommendation: {recommendation}")
     return 0 if decision in ("verified", "reasonably-assumed", "not-required") else 2
+
+
+def handoff_readiness_command(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    project = Path(state["project"])
+    problems = handoff_context_problems(project)
+    preflight = state.get("provider_preflight") or {}
+    decision = preflight.get("decision", "not-run")
+    if problems:
+        status_value = "blocked"
+        next_action = "Complete the named implementation-plan gaps before provider launch."
+    elif decision not in ("verified", "reasonably-assumed", "not-required"):
+        status_value = "provider-check-needed"
+        next_action = "Check the selected provider's current suitability and availability."
+    else:
+        status_value = "ready"
+        next_action = "Start the selected implementation provider with the verified handoff."
+    payload = {
+        "status": status_value,
+        "project": str(project),
+        "context_problems": problems,
+        "provider_preflight": preflight or "not run",
+        "next": next_action,
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        if status_value == "ready":
+            print("Ready. The implementation agent has complete, consistent context.")
+        elif problems:
+            print("Not ready. The implementation plan still has gaps:")
+            for problem in problems:
+                print(f"- {problem}")
+        else:
+            print("The implementation plan is complete. Provider readiness still needs one check.")
+        print(f"Next: {next_action}")
+    return 0 if status_value == "ready" else 2
 
 
 def structural_result(args: argparse.Namespace) -> int:
@@ -584,11 +1023,32 @@ def ingest_return(args: argparse.Namespace) -> int:
     if problems:
         raise RuntimeError_("Return handoff rejected: " + "; ".join(problems))
     destination = packet / "evidence" / "return-handoff.md"
-    if destination.exists():
+    machine_destination = packet / "evidence" / "return-handoff.json"
+    if destination.exists() or machine_destination.exists():
         raise RuntimeError_(f"Refusing to overwrite existing return handoff: {destination}")
     destination.write_text(text, encoding="utf-8")
-    status_match = re.search(r"(?im)^\*\*Status:\*\*\s*(.+?)\s*$", text)
-    return_status = status_match.group(1).strip().lower()
+    metadata = {}
+    for field in ("Status", "Provider", "Model", "Effort", "Started", "Ended"):
+        match = re.search(rf"(?im)^\*\*{re.escape(field)}:\*\*\s*(.+?)\s*$", text)
+        metadata[field.lower()] = match.group(1).strip() if match else "unrecorded"
+    return_status = metadata["status"].lower()
+    sections = {
+        slug(heading): safe_section(text, heading).strip()
+        for heading in TRANSPORT.RETURN_HANDOFF_HEADINGS
+    }
+    write_json(
+        machine_destination,
+        {
+            "schema_version": 1,
+            "recorded_at": now(),
+            "packet_id": entry["id"],
+            "source": str(destination),
+            "source_sha256": sha256(destination),
+            "metadata": metadata,
+            "sections": sections,
+            "evidence_class": "structured provider report; not a transcript or independent review",
+        },
+    )
     state["updated_at"] = now()
     state["evidence_state"] = "structured external return; transcript remains separate"
     state["next"] = (
@@ -602,7 +1062,7 @@ def ingest_return(args: argparse.Namespace) -> int:
         "Implementation return ingested",
         "Builder OS needs durable implementation state without relying on provider conversation history.",
         f"Validated structured return with status {return_status}.",
-        [str(destination)],
+        [str(destination), str(machine_destination)],
         "Structured provider report; not a verbatim transcript and not independent QA.",
         state["next"],
     )
@@ -696,6 +1156,120 @@ def ingest_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def record_note(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    note = {
+        "recorded_at": now(),
+        "kind": args.kind,
+        "summary": args.summary.strip(),
+        "evidence_state": args.evidence,
+    }
+    if not note["summary"]:
+        raise RuntimeError_("A project note needs a concrete summary")
+    notes = state.setdefault("notes", [])
+    if any(
+        item.get("kind") == note["kind"] and item.get("summary") == note["summary"]
+        for item in notes
+    ):
+        raise RuntimeError_("That project note is already recorded")
+    notes.append(note)
+    state["updated_at"] = now()
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        f"Project {args.kind.replace('-', ' ')} recorded",
+        "Project continuity needs durable facts that should not be reconstructed from chat.",
+        note["summary"],
+        evidence=note["evidence_state"],
+        next_action=state.get("next", "Continue from the current verified boundary."),
+    )
+    print("Done. I added that fact to the project's durable history.")
+    return 0
+
+
+def stage_has_evidence(packet: Path) -> bool:
+    evidence = packet / "evidence"
+    return any(
+        (evidence / name).is_file()
+        for name in ("transcript.md", "stage-result.json", "return-handoff.md", "review-judgement.md")
+    )
+
+
+def advance(args: argparse.Namespace) -> int:
+    """Record obvious same-session outputs and continue through routine boundaries."""
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    stage = entry["stage"]
+    project = Path(state["project"])
+
+    if not stage_has_evidence(packet):
+        expected = EXPECTED_STAGE_OUTPUTS.get(stage)
+        if stage == "S3":
+            design = read(project / "DESIGN.md") if (project / "DESIGN.md").is_file() else ""
+            agents = read(project / "AGENTS.md") if (project / "AGENTS.md").is_file() else ""
+            if not re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", design) or not re.match(
+                r"G1\b", state_field(agents, "Last gate passed")
+            ):
+                state["next"] = "Review the proposed design direction at G1."
+                state["updated_at"] = now()
+                write_json(run_root / STATE_NAME, state)
+                append_log(
+                    run_root,
+                    "Creative decision requested",
+                    "The design direction exists, but Builder OS cannot grant G1 for the human.",
+                    "No continuation or stage evidence was created.",
+                    next_action=state["next"],
+                )
+                print("I have a design direction ready for your judgement.")
+                print("From you: approve it, reject it, or redirect it.")
+                return 2
+        if expected:
+            missing = [name for name in expected if not (project / name).is_file()]
+            if missing:
+                print(f"Paused. {FRIENDLY_STAGES.get(stage, stage).capitalize()} is not complete yet.")
+                print("Missing: " + ", ".join(missing))
+                return 2
+            structural_result(
+                argparse.Namespace(
+                    run_root=str(run_root),
+                    project=None,
+                    status="complete",
+                    provider=args.provider,
+                    model=args.model,
+                    summary=f"{FRIENDLY_STAGES.get(stage, stage).capitalize()} complete.",
+                    file=expected,
+                )
+            )
+        elif stage in ("S4B", "S5"):
+            state["next"] = (
+                "Return the complete implementation handoff."
+                if stage == "S4B"
+                else "Complete the independent review and return its marked judgement."
+            )
+            state["updated_at"] = now()
+            write_json(run_root / STATE_NAME, state)
+            print(f"Paused. {state['next']}")
+            return 2
+
+    return prepare_next(
+        argparse.Namespace(
+            run_root=str(run_root),
+            project=None,
+            stage=None,
+            retry=False,
+            provider=args.transport_provider,
+            references_file=args.references_file,
+            motion=args.motion,
+            assets=args.assets,
+            target=args.target,
+            lenses=args.lenses,
+            synthetic_validation=args.synthetic_validation,
+        )
+    )
+
+
 def infer_next_stage(state: dict) -> tuple[str | None, str]:
     entry, _packet = current_packet(state, allow_project_drift=True)
     stage = entry["stage"]
@@ -719,6 +1293,9 @@ def infer_next_stage(state: dict) -> tuple[str | None, str]:
     if stage == "S4A":
         if not (project / "HANDOFF.md").is_file():
             return None, "The implementation handoff is incomplete."
+        context_problems = handoff_context_problems(project)
+        if context_problems:
+            return None, "The implementation handoff is incomplete: " + "; ".join(context_problems)
         preflight = state.get("provider_preflight") or {}
         if preflight.get("decision") not in ("verified", "reasonably-assumed", "not-required"):
             return None, "Provider preflight must clear before the external build handoff."
@@ -780,7 +1357,7 @@ def prepare_next(args: argparse.Namespace) -> int:
     state["packets"].append({"id": packet_id, "stage": stage, "path": str(output)})
     state["updated_at"] = now()
     state["evidence_state"] = "verified-transport; stage not yet observed"
-    state["next"] = f"Run the prepared {stage} boundary."
+    state["next"] = f"Continue with {FRIENDLY_STAGES.get(stage, stage)}."
     write_json(run_root / STATE_NAME, state)
     append_log(
         run_root,
@@ -791,9 +1368,13 @@ def prepare_next(args: argparse.Namespace) -> int:
         "Transport verified; provider behaviour not yet observed.",
         state["next"],
     )
-    print("Done. Builder OS prepared and verified the next boundary.")
-    print(f"PACKET  {output / 'packet.txt'}")
-    print("USER    Nothing to assemble. Open an external session only when Builder OS says it is required.")
+    print(f"Done. I prepared everything needed for {FRIENDLY_STAGES.get(stage, stage)}.")
+    if stage == "S4B":
+        print("From you: start the selected implementation provider when you are ready.")
+    elif stage == "S5":
+        print("From you: open one fresh independent review session with the prepared context.")
+    else:
+        print("From you: nothing right now.")
     return 0
 
 
@@ -855,6 +1436,7 @@ def skill_contract_problems(
         problems.append("builderos installation example is malformed")
     for token in (
         "scripts/builderos.py", "discover --project", "provider preflight",
+        "handoff-readiness", "builderos.py advance", "record-note",
         "ingest-return", "ingest-review", "same-stage retry", "Never grant a gate",
     ):
         if token not in skill_text:
@@ -885,11 +1467,25 @@ def repository_contract_problems() -> list[str]:
         if f"## {heading}" not in return_template:
             problems.append(f"return-handoff template missing section: {heading}")
     handoff = read(required[2])
-    for token in ("## Implementation routing", "## Return handoff", "provider preflight"):
+    for token in (
+        "## Outcome and acceptance criteria",
+        "## Content readiness",
+        "## Implementer discretion",
+        "## Implementation routing",
+        "## Return handoff",
+        "provider preflight",
+    ):
         if token not in handoff:
             problems.append(f"HANDOFF template missing runtime contract: {token}")
     build = read(required[3])
-    for token in ("templates/RETURN-HANDOFF.md", "BEGIN/END markers", "provider availability"):
+    for token in (
+        "success criterion VERBATIM",
+        "content readiness",
+        "implementer discretion",
+        "templates/RETURN-HANDOFF.md",
+        "BEGIN/END markers",
+        "provider availability",
+    ):
         if token not in build:
             problems.append(f"S4 prompt missing runtime contract: {token}")
     if "templates/RETURN-HANDOFF.md" not in TRANSPORT.STAGES["S4B"]["canonical_inputs"]:
@@ -966,6 +1562,118 @@ NEXT: Present G3.
 """
 
 
+def filled_handoff() -> str:
+    return """# HANDOFF: Fixture
+
+**To:** Implementer on fixture · **From:** Architect · **Date:** 2026-08-23 · **G1 approved:** 2026-08-23
+
+## Project summary
+
+A small typographic interaction for testing the Builder OS runtime.
+
+## Outcome and acceptance criteria
+
+**Outcome:** Test a typographic interaction.
+
+1. The interaction has a clear response.
+
+## Content readiness
+
+**Status:** not applicable
+
+**Source and constraints:** The fixture has no user-visible editorial copy.
+
+## Design thesis
+
+**A speaking line makes sound visible through one typographic gesture.**
+
+**Signature moment:** the line expands with input and remains legible on mobile — **build this first**
+
+## Decisions that are fixed
+
+| Decision | Value |
+|---|---|
+| Typography | system sans, 6x ratio |
+| Palette | off-black, warm white |
+| Grid | one responsive column |
+| Motion | feedback, 180ms linear |
+| Stack | default |
+| State | session only |
+| CMS / backend | none |
+
+## Implementer discretion
+
+**May decide:** internal component names and test-file organisation.
+
+**Must not reinterpret:** thesis, signature gesture, non-goals, or success criterion.
+
+## Implementation sequence
+
+1. Token system.
+2. Speaking-line interaction.
+
+## Files to create
+
+| Path | Purpose |
+|---|---|
+| src/app/page.tsx | interaction |
+
+## Components to build
+
+| Component | Responsibility | Client? | Notes |
+|---|---|---|---|
+| SpeakingLine | render response | client | fixture |
+
+## Dependencies to install
+
+| Package | Version | Approved on |
+|---|---|---|
+| none | n/a | n/a |
+
+## Implementation routing
+
+| Field | Recommendation |
+|---|---|
+| Capability needed | `R2` |
+| Provider | Cursor / Grok |
+| Model | provider default — unverified |
+| Effort | medium |
+| Workload | medium |
+| Split | none |
+| Reason | Normal visual implementation. |
+
+## Motion requirements
+
+| Element | Purpose | Trigger | Duration | Easing | Reduced-motion state |
+|---|---|---|---|---|---|
+| line | feedback | input | 180ms | linear | discrete levels |
+
+## Asset requirements
+
+| Asset | Status | Path | Blocking? |
+|---|---|---|---|
+| none | ready | n/a | no |
+
+## QA requirements
+
+- Production build, typecheck, console, responsive, keyboard, and reduced-motion checks.
+
+## Known risks
+
+| Risk | Likelihood | If it happens |
+|---|---|---|
+| input unavailable | low | use explicit blocked state |
+
+## Definition of done
+
+- [ ] Success criterion observed.
+
+## Return handoff
+
+Return the filled canonical implementation handoff on every exit.
+"""
+
+
 def self_test() -> int:
     cases = []
 
@@ -984,6 +1692,10 @@ def self_test() -> int:
     case("insufficient quota blocks", preflight_decision("available", "insufficient", "medium")[0] == "blocked")
     case("unknown quota blocks a large handoff", preflight_decision("available", "unknown", "large")[0] == "human-check-required")
     case("bounded unknown provider is a recorded assumption", preflight_decision("unknown", "unknown", "small")[0] == "reasonably-assumed")
+    case(
+        "blocked provider recommends the supplied fallback",
+        "Claude Code" in preflight_recommendation("blocked", "Cursor", "large", "Claude Code"),
+    )
     case("complete return handoff passes (positive control)", not TRANSPORT.return_handoff_problems(filled_return()))
     case("missing return section fails", bool(TRANSPORT.return_handoff_problems(filled_return().replace("## Known issues", "## Notes"))))
     case("invalid return status fails", bool(TRANSPORT.return_handoff_problems(filled_return("done"))))
@@ -1107,7 +1819,13 @@ def self_test() -> int:
         manifest_path.write_text(manifest_original, encoding="utf-8")
 
         (project / "DESIGN.md").write_text(
-            "# DESIGN\n\n**Status:** locked at G1 on 2026-08-23\n", encoding="utf-8"
+            "# DESIGN\n\n**Status:** locked at G1 on 2026-08-23\n\n"
+            "## Design thesis\n\n"
+            "**A speaking line makes sound visible through one typographic gesture.**\n\n"
+            "## Asset direction\n\n"
+            "| Asset | Exists? | Plan | Blocking? |\n|---|---|---|---|\n"
+            "| none | yes | no asset required | no |\n",
+            encoding="utf-8",
         )
         (project / "AGENTS.md").write_text(
             "## Current state\n\n| **Stage** | `S3` |\n| **Last gate passed** | `G1` |\n"
@@ -1133,15 +1851,7 @@ def self_test() -> int:
         state = load_state(run_root)
         case("G1 approval automatically prepares S4A", state["packets"][-1]["stage"] == "S4A")
 
-        (project / "HANDOFF.md").write_text(
-            "# HANDOFF\n\n**G1 approved:** 2026-08-23\n\n"
-            "## Implementation routing\n\n| Field | Recommendation |\n|---|---|\n"
-            "| Capability needed | `R2` |\n| Provider | Cursor / Grok |\n"
-            "| Model | provider default — unverified |\n| Effort | medium |\n"
-            "| Workload | medium |\n| Split | none |\n"
-            "| Reason | Normal visual implementation. |\n",
-            encoding="utf-8",
-        )
+        (project / "HANDOFF.md").write_text(filled_handoff(), encoding="utf-8")
         (project / "AGENTS.md").write_text(
             "## Current state\n\n| **Stage** | `S4` |\n| **Last gate passed** | `G1` |\n"
             "| **Next prompt** | `prompts/build-kickoff.md` |\n",
@@ -1165,6 +1875,58 @@ def self_test() -> int:
             status="complete", provider="fixture", model="fixture",
             summary="Implementation handoff complete", file=["HANDOFF.md", "AGENTS.md"],
         ))
+        case("complete implementation handoff passes readiness", not handoff_context_problems(project))
+        (project / "HANDOFF.md").write_text(
+            filled_handoff().replace("## Implementer discretion", "## Execution notes", 1),
+            encoding="utf-8",
+        )
+        case(
+            "missing handoff readiness section is detected",
+            any("Implementer discretion" in problem for problem in handoff_context_problems(project)),
+        )
+        (project / "HANDOFF.md").write_text(
+            filled_handoff().replace("system sans, 6x ratio", "<pending typography>", 1),
+            encoding="utf-8",
+        )
+        case(
+            "handoff placeholder is detected",
+            any("placeholders" in problem for problem in handoff_context_problems(project)),
+        )
+        (project / "HANDOFF.md").write_text(
+            filled_handoff().replace(
+                "| none | n/a | n/a |",
+                "| motion | 13.1.1 | pending |",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        case(
+            "unapproved handoff dependency is detected",
+            any("G2-approved" in problem for problem in handoff_context_problems(project)),
+        )
+        (project / "HANDOFF.md").write_text(
+            filled_handoff().replace(
+                "| none | ready | n/a | no |",
+                "| hero still | generating | n/a | yes |",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        case(
+            "unresolved critical handoff asset is detected",
+            any("critical asset" in problem for problem in handoff_context_problems(project)),
+        )
+        incomplete = filled_handoff().replace(
+            "1. The interaction has a clear response.",
+            "1. A different criterion.",
+            1,
+        )
+        (project / "HANDOFF.md").write_text(incomplete, encoding="utf-8")
+        case(
+            "handoff success-criteria drift is detected",
+            any("success criteria verbatim" in problem for problem in handoff_context_problems(project)),
+        )
+        (project / "HANDOFF.md").write_text(filled_handoff(), encoding="utf-8")
         provider_preflight(runtime_args(availability="available", quota="sufficient"))
         state = load_state(run_root)
         case(
@@ -1203,6 +1965,14 @@ def self_test() -> int:
         returned_source = workspace / "return.md"
         returned_source.write_text(filled_return(), encoding="utf-8")
         ingest_return(runtime_args(input=str(returned_source)))
+        return_record_path = retry_packet / "evidence" / "return-handoff.json"
+        case(
+            "implementation return produces deterministic machine state",
+            return_record_path.is_file()
+            and json.loads(read(return_record_path))["metadata"]["status"] == "complete"
+            and json.loads(read(return_record_path))["source_sha256"]
+            == sha256(retry_packet / "evidence" / "return-handoff.md"),
+        )
         prepare_next(runtime_args(target="http://127.0.0.1:3000", lenses="creative-director (light)"))
         state = load_state(run_root)
         _s5_entry, s5_packet = current_packet(state)
@@ -1230,6 +2000,69 @@ def self_test() -> int:
             duplicate_review_blocked = True
         case("independent review evidence cannot be overwritten", duplicate_review_blocked)
         case("operations log remains readable after full dry run", not operations_log_problems(read(run_root / LOG_NAME)))
+
+        auto_project = workspace / "ordinary-idea"
+        auto_run = workspace / "ordinary-idea-builderos"
+        start(
+            argparse.Namespace(
+                project=str(auto_project), run_root=str(auto_run), run_id="ordinary-idea",
+                request="Make a small browser piece where a sentence changes with the time of day.",
+                request_file=None, synthetic_validation=True,
+            )
+        )
+        (auto_project / "PROJECT.md").write_text(
+            "# PROJECT: Day Sentence\n\n**Mode:** game-experiment · **Status:** locked\n\n"
+            "## Goal\n\nMake time feel visible through one changing sentence.\n\n"
+            "## Success criteria\n\n1. A visitor sees the sentence change across two fixture times.\n\n"
+            "## Open questions\n\nNone.\n",
+            encoding="utf-8",
+        )
+        (auto_project / "AGENTS.md").write_text(
+            "## Current state\n\n| **Stage** | `S1` |\n| **Last gate passed** | `none` |\n"
+            "| **Next prompt** | `prompts/design-direction.md` |\n",
+            encoding="utf-8",
+        )
+        advance(
+            argparse.Namespace(
+                run_root=str(auto_run), project=None, provider="orchestrator",
+                model="fixture", transport_provider=None, references_file=None,
+                motion="yes", assets="no", target=None,
+                lenses=None, synthetic_validation=True,
+            )
+        )
+        auto_state = load_state(auto_run)
+        auto_entry, auto_packet = current_packet(auto_state)
+        auto_manifest = json.loads(read(auto_packet / TRANSPORT.MANIFEST_NAME))
+        case(
+            "public advance records routine outputs and prepares the next work",
+            auto_entry["stage"] == "S3"
+            and (Path(auto_state["packets"][0]["path"]) / "evidence" / "stage-result.json").is_file(),
+        )
+        auto_intelligence = project_intelligence(
+            auto_run, auto_state, auto_entry, auto_packet, auto_manifest
+        )
+        case(
+            "project briefing derives goal and human-level current work",
+            auto_intelligence["goal"] == "Make time feel visible through one changing sentence."
+            and auto_intelligence["current_work"] == "design direction",
+        )
+        record_note(
+            argparse.Namespace(
+                run_root=str(auto_run), project=None, kind="evidence-gap",
+                summary="Live sunrise timing is externally unverified; fixture times cover deterministic behaviour.",
+                evidence="externally-unverified",
+            )
+        )
+        case(
+            "non-blocking evidence gap remains durable without stopping progress",
+            load_state(auto_run)["notes"][-1]["evidence_state"] == "externally-unverified"
+            and load_state(auto_run)["packets"][-1]["stage"] == "S3",
+        )
+        case(
+            "two project histories remain isolated",
+            discover_run_roots(project) == [run_root.resolve()]
+            and discover_run_roots(auto_project) == [auto_run.resolve()],
+        )
 
     print("BUILDER OS RUNTIME SELF-TEST\n")
     for name, passed in cases:
@@ -1266,6 +2099,12 @@ def parser() -> argparse.ArgumentParser:
     run_selector(status_p)
     status_p.add_argument("--json", action="store_true")
 
+    readiness_p = sub.add_parser(
+        "handoff-readiness", help="check implementation context before provider launch"
+    )
+    run_selector(readiness_p)
+    readiness_p.add_argument("--json", action="store_true")
+
     preflight_p = sub.add_parser("preflight", help="record provider/model/effort readiness before external work")
     run_selector(preflight_p)
     preflight_p.add_argument("--provider")
@@ -1296,6 +2135,34 @@ def parser() -> argparse.ArgumentParser:
     run_selector(review_p)
     review_p.add_argument("--input", required=True)
 
+    note_p = sub.add_parser("record-note", help="add a durable project decision, risk, or evidence note")
+    run_selector(note_p)
+    note_p.add_argument(
+        "--kind",
+        required=True,
+        choices=["decision", "rejected-direction", "risk", "lesson", "evidence-gap", "recovery"],
+    )
+    note_p.add_argument("--summary", required=True)
+    note_p.add_argument(
+        "--evidence",
+        required=True,
+        choices=["verified", "reasonably-assumed", "externally-unverified", "blocked"],
+    )
+
+    advance_p = sub.add_parser(
+        "advance", help="record obvious same-session outputs and continue routine work"
+    )
+    run_selector(advance_p)
+    advance_p.add_argument("--provider", default="orchestrator")
+    advance_p.add_argument("--model", default="not recorded")
+    advance_p.add_argument("--transport-provider", choices=["codex", "cursor", "other"])
+    advance_p.add_argument("--references-file")
+    advance_p.add_argument("--motion", choices=["yes", "no"])
+    advance_p.add_argument("--assets", choices=["yes", "no"])
+    advance_p.add_argument("--target")
+    advance_p.add_argument("--lenses")
+    advance_p.add_argument("--synthetic-validation", action="store_true", help=argparse.SUPPRESS)
+
     next_p = sub.add_parser("prepare-next", help="discover and prepare the next valid project boundary")
     run_selector(next_p)
     next_p.add_argument("--stage", choices=list(TRANSPORT.STAGES))
@@ -1319,11 +2186,14 @@ def main() -> int:
             "start": start,
             "discover": discover,
             "status": status,
+            "handoff-readiness": handoff_readiness_command,
             "preflight": provider_preflight,
             "record-result": structural_result,
             "record-transcript": record_transcript,
             "ingest-return": ingest_return,
             "ingest-review": ingest_review,
+            "record-note": record_note,
+            "advance": advance,
             "prepare-next": prepare_next,
         }
         if args.command in commands:
