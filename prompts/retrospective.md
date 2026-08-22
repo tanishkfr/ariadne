@@ -11,7 +11,27 @@ Fifteen minutes. This is the stage that makes the system improve instead of ossi
 ```
 You are the Strategist in my Builder OS. Stage S6.
 
-READ: PROJECT.md, QA.md, and the review findings. Not the whole system.
+REQUIRED INPUTS
+- PROJECT.md.
+- QA.md, including the independent S5 QA judgement block when S5 ran.
+- AGENTS.md from the project repository root.
+- templates/RETROSPECTIVE.md as the canonical retrospective structure.
+
+IF MISSING
+Verify the applicable inputs before starting. If any is missing, STOP. Name it;
+do not reconstruct review findings from conversation history, do not write a
+partial RETROSPECTIVE.md, do not update AGENTS.md, and do not propose a Builder
+OS change.
+
+END WITH:
+  NEXT: S6 Retrospective retry.
+  Run prompts/retrospective.md again with the missing project evidence.
+  Blocked on: <exact missing input>
+END IF MISSING
+
+READ: PROJECT.md, QA.md (including its independent review findings), AGENTS.md,
+and the supplied templates/RETROSPECTIVE.md. Not the whole system. Write the
+project's RETROSPECTIVE.md using that supplied structure.
 
 PART 1 - WHAT HAPPENED
 

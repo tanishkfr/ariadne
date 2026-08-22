@@ -10,6 +10,114 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 0.3.6 — 2026-08-22 · V1 STAGE TRANSPORT AND CONTINUATION HARDENING
+
+The A3R1 exercise proved that correct standalone delivery contracts were still
+painful to operate: the operator manually found canonical inputs, concatenated
+multi-file packets, created continuation records, chose evidence paths, preserved
+parent hashes, and rebuilt S5 isolation by hand. That repeated work is now owned
+by `scripts/prepare-stage.py`, a transport helper rather than an orchestrator or
+policy system.
+
+The helper prepares S1, conditional S2, S3, S4A, S4B, isolated S5, and S6. Every
+generated continuation has an explicit parent, source commit, per-source SHA-256,
+conditional-input decisions, an expected transcript path, and a machine-readable
+manifest. Preparation refuses existing output directories, packets inside the
+project, real project packets inside Builder OS, wrong or same-stage parents
+without an explicit retry, and parents whose transcript is missing. Verification
+fails when a canonical or project input, parent manifest, parent transcript,
+packet section, stage, or S5 delivery set has drifted.
+
+Two deterministic stage-input gaps were closed. Conditional S2 had an adapter
+delivery row and canonical policy/template but no pasteable entry point; the new
+`prompts/research.md` executes the existing conditional stage without changing
+its policy or adding a gate. S6 produced `RETROSPECTIVE.md` but neither its prompt
+nor adapter delivered `templates/RETROSPECTIVE.md`; both now do. Canonical policy
+and template ownership is unchanged.
+
+`scripts/check.py` now checks nine standalone prompt contracts, five chained
+prompt transitions, the packet transport map, S4A→S4B parent order, S5 isolation,
+and S6 template delivery. Its self-test adds positive controls and negative
+mutations. The packet helper's own 20-case self-test covers a synthetic
+S1→S2→S3→S4A→Cursor-labelled S4B→S5→S6 chain plus stale sources, changed parent
+evidence, missing sections, wrong stage/parent, missing evidence, duplicate
+continuations, and forbidden S5 context.
+
+Operator documentation now describes generated transport and removes stale
+machine-specific setup claims. Cursor has a concrete validation handover, but was
+not opened or run; packet generation proves readiness to test, not provider
+behaviour. No remote push, deployment, production action, credential access,
+gate approval, validation-evidence rewrite, routing change, or workflow-gate
+change occurred.
+
+---
+
+## 0.3.5 — 2026-08-21 · STANDALONE STAGE DELIVERY-CONTRACT REPAIR
+
+A3 exposed the first deterministic standalone-input defect at S1. The bounded
+S0-S6 delivery audit performed before resuming A3R1 found the same root cause at
+later boundaries: several pasted stage prompts named canonical Builder OS files
+that a fresh project session was never instructed or equipped to receive. Some
+blocked paths could also print the next stage, and S5 could proceed directly to
+G4 without first presenting the combined mechanical and independent evidence at
+human-only G3.
+
+The affected prompts now declare **REQUIRED INPUTS** and an in-fence **IF MISSING**
+contract. A missing input stops in the same stage, names the gap, forbids partial
+outputs, and emits a same-stage retry rather than a forward transition. Provider
+adapter matrices now deliver the existing canonical skill, policy, rubric, and
+template files transiently to the sessions that consume them. They are not copied
+into project repositories and their ownership is unchanged.
+
+S4A now explicitly hands off to S4B. S4B distinguishes an already-connected
+feature-branch preview from push, merge, connection, and production actions using
+the existing `WORKFLOW.md` rules. S5 emits a paste-ready independent judgement
+block for `QA.md`, presents G3 first, and permits a G4 request only after explicit
+human G3 approval. S6 consumes those persisted findings from `QA.md`. Content
+drafting and weekly review now declare voice, pillars, and current learnings as
+continuity inputs instead of relying on conversation history.
+
+`scripts/check.py` guards all eight affected prompt boundaries and both adapter
+matrices. Its self-test includes repository and harmless-change positive controls
+plus negative mutations for an out-of-fence manifest, missing blocked behaviour,
+forward transition while blocked, missing canonical QA delivery, reversed G3/G4
+order, missing QA judgement persistence, adapter omissions, and missing content
+continuity.
+
+**Scope:** no routing rule, workflow rule, mode, skill, canonical design/QA/
+research/evaluation policy, template, validation protocol, or validation run was
+changed. A3R1 was not resumed and A4 was not created.
+
+---
+
+## 0.3.4 — 2026-08-21 · A3 DETERMINISTIC S1 INPUT-CONTRACT REPAIR
+
+A3 exposed a deterministic defect before S1 could write its first document. The
+standalone test project correctly contained only `.git` and `.gitignore`, while
+`prompts/project-start.md` required the session to generate root `AGENTS.md` from
+`templates/AGENTS.md`. The pasted prompt neither contained that template nor gave
+the standalone session a path or mechanism to reach the Builder OS repository.
+Codex stopped rather than inventing the missing contract; no project document was
+created and S3 was not started.
+
+The S1 fenced prompt now carries an exact **non-canonical transport mirror** of
+`templates/AGENTS.md`. The template remains the sole canonical owner. The mirror's
+nested Markdown code fences use tildes so they cannot close the outer pasted prompt;
+otherwise the transported contract is exact. This preserves the standalone-project
+model without adding an initializer, attachment step, or test-only exception.
+
+`scripts/check.py` now compares the mirror against the canonical template's
+deterministic transport form. Its self-test includes three positive controls and
+four negative cases: canonical-only drift, prompt-only drift, a mirror outside the
+S1 fence, and a missing mirror. A paired canonical-and-mirror update must pass, so
+the guard cannot succeed by discarding its inputs or hard-coding today's content.
+
+**Scope:** `templates/AGENTS.md`, routing, stages, setup scripts, and every unrelated
+frozen-core file are unchanged. A3 remains stopped at S1; this repair has not been
+used to resume it or start A4.
+
+---
+
 ## 0.3.3 — 2026-08-21 · V1 CANDIDATE · CORE FROZEN
 
 The three runtime items from the certification audit. **No core changes.** No new modes, skills, roles, policies, or documents.

@@ -21,6 +21,8 @@ import os
 import re
 import sys
 import glob
+import contextlib
+import shutil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNS_DIR = os.path.join(ROOT, "validation", "runs")
@@ -150,6 +152,49 @@ def parse_events(text):
     return events
 
 
+def event_stage(event):
+    """Normalise the stage cell without changing the recorded evidence."""
+    return str(event.get("stage", "")).strip().strip("*` ").upper()
+
+
+def is_handoff_question(event):
+    """Test B's handoff metric belongs only to the fresh S4/S4B build session."""
+    return event.get("type") == "QUESTION" and event_stage(event) in ("S4", "S4B")
+
+
+def handoff_measurement_ready(events):
+    """A zero becomes evidence only after the fresh build boundary was observed.
+
+    Current records should label fresh build events S4B. The S4 QUESTION fallback
+    preserves compatibility with records created before the S4A/S4B split.
+    """
+    return any(event_stage(event) == "S4B" for event in events) or any(
+        is_handoff_question(event) for event in events
+    )
+
+
+def test_b_restart_problems(text, events):
+    """Enforce the protocol's forced restart before Test B reaches S4."""
+    if field(text, "Test").strip().upper() != "B":
+        return []
+
+    restart_positions = [i for i, event in enumerate(events) if event["type"] == "RESTART"]
+    build_positions = [
+        i for i, event in enumerate(events) if event_stage(event) in ("S4", "S4B")
+    ]
+    problems = []
+    if build_positions and (
+        not restart_positions or min(restart_positions) > min(build_positions)
+    ):
+        problems.append(
+            "Test B reached S4/S4B before its mandatory forced-restart event"
+        )
+    result = field(text, "Result").strip().upper()
+    if result == "PASS" and not restart_positions:
+        problems.append("Test B cannot PASS without an evidenced RESTART event")
+    return problems
+
+
 # ---------------------------------------------------------------- checks
 
 def check_mode_drift():
@@ -224,6 +269,8 @@ def check_run_file(text, path):
                 f"{name}: QUESTION event missing class A/B/C -- "
                 f"the B-count is the primary handoff metric and cannot be derived without it"
             )
+
+    problems.extend(f"{name}: {problem}" for problem in test_b_restart_problems(text, events))
 
     # Baseline must be captured, and for Test A it must be captured FIRST or
     # it is contaminated by having seen the Builder OS output.
@@ -307,8 +354,9 @@ def check_project(project, expected_mode, expected_stage):
 def compute_metrics(events, observations):
     """Counts only. No composite score, by design."""
     q = [e for e in events if e["type"] == "QUESTION"]
+    handoff_q = [e for e in q if is_handoff_question(e)]
     return {
-        "MEASURED  b_class_questions": sum(1 for e in q if e.get("qclass") == "B"),
+        "MEASURED  b_class_questions": sum(1 for e in handoff_q if e.get("qclass") == "B"),
         "MEASURED  a_class_questions": sum(1 for e in q if e.get("qclass") == "A"),
         "MEASURED  c_class_questions": sum(1 for e in q if e.get("qclass") == "C"),
         "MEASURED  failures": sum(1 for e in events if e["type"] == "FAILURE"),
@@ -320,6 +368,20 @@ def compute_metrics(events, observations):
         "HUMAN     value_events": sum(1 for e in events if e["type"] == "VALUE"),
         "HUMAN     friction_events": sum(1 for e in events if e["type"] == "FRICTION"),
     }
+
+
+@contextlib.contextmanager
+def self_test_workspace(label):
+    """Use the writable repository fixture root instead of protected system temp."""
+    path = os.path.join(ROOT, "validation", f"validate-self-test-{label}")
+    if os.path.exists(path):
+        raise RuntimeError(f"self-test workspace already exists: {path}")
+    os.makedirs(path)
+    try:
+        yield path
+    finally:
+        if os.path.exists(path):
+            shutil.rmtree(path)
 
 
 # ---------------------------------------------------------------- modes
@@ -361,8 +423,16 @@ def run_check(run_path, project, expected_stage):
     for k, v in metrics.items():
         print(f"  {k}: {v}")
     b = metrics["MEASURED  b_class_questions"]
-    print(f"\n  B-class handoff re-derivations: {b}  (target <= 2)  "
-          f"{'PASS' if b <= 2 else 'OVER TARGET'}")
+    if field(text, "Test").strip().upper() == "B":
+        if handoff_measurement_ready(events):
+            status = "PASS" if b <= 2 else "OVER TARGET"
+            print(f"\n  B-class handoff re-derivations: {b}  (target <= 2)  {status}")
+        else:
+            print("\n  B-class handoff re-derivations: NOT YET MEASURED  "
+                  "(no fresh S4B/build-session event)")
+    else:
+        print(f"\n  B-class handoff re-derivations: {b}  "
+              "(Test B target applies only to the fresh build session)")
     print("\n  No composite score is produced. Value and friction are human-judged")
     print("  and deliberately not aggregated -- a number there would reward writing")
     print("  more events rather than building better projects.")
@@ -457,14 +527,39 @@ def self_test():
     cases.append(("template example rows are not events", len(parse_events(base)) == 0))
     cases.append(("a real event row still counts", len(parse_events(real)) == 2))
 
+    metric_probe = [
+        {"type": "QUESTION", "stage": "S1", "qclass": "B"},
+        {"type": "QUESTION", "stage": "S4B", "qclass": "B"},
+    ]
+    cases.append(("S1 class-B question is excluded from handoff count",
+                  compute_metrics(metric_probe[:1], {})["MEASURED  b_class_questions"] == 0))
+    cases.append(("S4B class-B question is counted (positive control)",
+                  compute_metrics(metric_probe, {})["MEASURED  b_class_questions"] == 1))
+    cases.append(("handoff count stays unmeasured before S4B",
+                  not handoff_measurement_ready(metric_probe[:1])))
+    cases.append(("S4B event makes zero-question measurement observable (positive control)",
+                  handoff_measurement_ready([{"type": "VALUE", "stage": "S4B"}])))
+
+    restart = {"type": "RESTART", "stage": "S3"}
+    build = {"type": "VALUE", "stage": "S4B"}
+    test_b_probe = "| **Test** | `B` |\n| **Result** | `UNPROVEN` |\n"
+    cases.append(("Test B build without restart fails",
+                  bool(test_b_restart_problems(test_b_probe, [build]))))
+    cases.append(("Test B restart before build passes (positive control)",
+                  not test_b_restart_problems(test_b_probe, [restart, build])))
+    cases.append(("Test B restart after build fails",
+                  bool(test_b_restart_problems(test_b_probe, [build, restart]))))
+    passed_test_b = test_b_probe.replace("UNPROVEN", "PASS")
+    cases.append(("Test B PASS without restart fails",
+                  bool(test_b_restart_problems(passed_test_b, []))))
+
     # escaped pipes must not truncate a value into a bogus "wrong" one
     cases.append(("escaped pipe does not truncate a field",
                   field("| **Mode** | `<a \\| b>` |", "Mode") == "<a | b>"))
 
     # Run-record links are checked HERE, at the record's real nested depth,
     # because check.py no longer walks validation/runs/.
-    import tempfile
-    with tempfile.TemporaryDirectory() as d:
+    with self_test_workspace("links") as d:
         nested = os.path.join(d, "validation", "runs", "A9")
         os.makedirs(nested)
         probe = os.path.join(nested, "run.md")
@@ -488,8 +583,7 @@ def self_test():
                   check_run_links(read(tpl), tpl) == []))
 
     # project guards
-    import tempfile
-    with tempfile.TemporaryDirectory() as d:
+    with self_test_workspace("project") as d:
         probs, _ = check_project(d, "game-experiment", "S3")
         cases.append(("missing required docs", any("required documents missing" in p for p in probs)))
         cases.append(("missing AGENTS.md", any("AGENTS.md missing" in p for p in probs)))

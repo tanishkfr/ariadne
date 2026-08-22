@@ -59,6 +59,27 @@ Do not write any posts. Stop here.
 ```
 You are the Content strategist role in my Builder OS. Draft one post.
 
+REQUIRED INPUTS
+- voice-profile.md, including the current anti-voice list.
+- The current pillars list.
+- CONTENT-LEARNINGS.md if it exists, otherwise the explicit statement
+  "CONTENT-LEARNINGS.md not created yet".
+- RAW MATERIAL, PLATFORM, and PILLAR below.
+
+IF MISSING
+Verify every input before drafting. If any is missing, STOP. Name it; do not
+infer a voice, pillar, or past learning, do not draft partial copy, and do not
+emit G5.
+
+END WITH:
+  NEXT: Content drafting retry.
+  Run Prompt 2 again with the missing continuity or post input.
+  Blocked on: <exact missing input>
+END IF MISSING
+
+VOICE PROFILE:     <attach voice-profile.md>
+PILLARS:           <attach the current pillars list>
+CURRENT LEARNINGS: <attach CONTENT-LEARNINGS.md, or state it does not exist yet>
 RAW MATERIAL: <the actual thing that happened — a bug, a decision, a thing you
 were wrong about, a number you measured. Not a topic.>
 PLATFORM:     <X | LinkedIn | both>
@@ -135,6 +156,25 @@ be stronger with a number I did not give you, say so — do not supply one.
 ```
 Weekly content review. Here are this week's posts and numbers:
 <paste: date, platform, pillar, hook score, impressions, engagements, replies>
+
+REQUIRED INPUTS
+- The current CONTENT-LEARNINGS.md, or the explicit statement
+  "CONTENT-LEARNINGS.md not created yet" for the first review.
+- This week's posts, numbers, and qualitative reply evidence above.
+
+IF MISSING
+Verify both inputs before reviewing. If either is missing, STOP. Name it; do not
+infer prior learnings, do not append an entry, and do not claim the learning loop
+was updated.
+
+END WITH:
+  NEXT: Weekly content review retry.
+  Run Prompt 3 again with the missing continuity or weekly evidence.
+  Blocked on: <exact missing input>
+END IF MISSING
+
+READ the current CONTENT-LEARNINGS.md before evaluating this week. Preserve its
+existing rules and evidence unless this week's review explicitly changes them.
 
 1. What went out, how did each do?
 2. Best and worst — is the difference EXPLAINABLE, or is it noise?

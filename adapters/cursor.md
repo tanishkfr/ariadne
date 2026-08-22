@@ -58,6 +58,50 @@ Not "it renders on the dev server".
 
 ## Working method
 
+### Fresh-session input matrix
+
+The stage prompt is always supplied. Builder OS policy/template files below are
+session inputs, not project files; do not copy them permanently into the project.
+
+| Stage | Supply to the fresh build session | Keep out |
+|---|---|---|
+| S4B build | The project repository; `HANDOFF.md`; `DESIGN.md`; project-root `AGENTS.md`; Builder OS `QA-POLICY.md`; Builder OS `templates/QA.md` | Earlier reasoning/build conversations; unrelated Builder OS files |
+| S5 mechanical QA | The same project repository and canonical QA inputs used at S4B | `EVALUATION-RUBRICS.md`; independent judgement belongs to the fresh Reviewer session |
+| S6 ship action | The branch/target, completed `QA.md`, explicit human G3 approval, and the one approved G4 ship request | Design chat and reviewer conversation |
+
+If a required S4B input is unavailable, follow Part B's **IF MISSING** block and
+stop in S4. Do not substitute a remembered policy or advance to S5.
+
+Prepare Cursor's S4B input from the completed S4A continuation:
+
+```bash
+python scripts/prepare-stage.py prepare --stage S4B --project <project> --output <new-packet-directory> --parent <S4A-packet-directory>
+```
+
+The S4B default provider in the manifest is `cursor`. The packet contains the
+current canonical Part B, `HANDOFF.md`, locked `DESIGN.md`, project `AGENTS.md`,
+`QA-POLICY.md`, and `templates/QA.md`; it contains no reasoning transcript.
+Open Cursor at the project repository, start a fresh chat, paste `packet.txt`,
+and save the verbatim transcript at the path printed by the generator.
+
+### Cursor validation handover
+
+Cursor is prepared for, but not proven by, the following future test:
+
+1. Generate S4B from a completed S4A packet whose transcript exists.
+2. Verify the packet immediately before use.
+3. Start a fresh Cursor session rooted at the project; supply only `packet.txt`.
+4. Record every clarification question and whether `HANDOFF.md` should already
+   have answered it; target no more than two class-B questions.
+5. Let Cursor run implementation and mechanical QA, but do not give it the S5
+   rubric or independent-review packet.
+6. Save the transcript to the generated evidence path and validate the project
+   with the existing run checker.
+
+Do not report Cursor compatibility as passed until that provider session has
+actually completed. Packet generation and parity checks prove readiness to test,
+not Cursor behaviour.
+
 **Start each task fresh.** New chat per `TASKS.md` item. Open with:
 
 ```

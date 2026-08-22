@@ -5,7 +5,7 @@ Stages, gates, roles, and what an agent may do without asking. One file, because
 | Stage | Name | Entry point | Role | Produces | Ends at |
 |---|---|---|---|---|---|
 | **S0-S1** | Route + Discover | [prompts/project-start.md](prompts/project-start.md) | Strategist | Routing Block, `PROJECT.md` | Scope agreed |
-| **S2** | Research | *(inside S1/S3, on trigger)* | Strategist | `RESEARCH.md` *(conditional)* | Facts dated |
+| **S2** | Research | [prompts/research.md](prompts/research.md) *(on trigger)* | Strategist | `RESEARCH.md` *(conditional)* | Facts dated |
 | **S3** | Direct | [prompts/design-direction.md](prompts/design-direction.md) | Design director + Architect | `DESIGN.md` (+`ARCHITECTURE.md`) | **G1** |
 | **S4** | Build | [prompts/build-kickoff.md](prompts/build-kickoff.md) | Architect, then Implementer | `HANDOFF.md`, working code | Build passes |
 | **S5** | Verify | *(mechanical: in build-kickoff)* → [prompts/project-review.md](prompts/project-review.md) | Implementer, then Reviewer | `QA.md` | **G3** |
