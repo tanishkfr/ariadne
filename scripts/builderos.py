@@ -1254,12 +1254,17 @@ def advance(args: argparse.Namespace) -> int:
             print(f"Paused. {state['next']}")
             return 2
 
+    retry = False
+    if stage == "S4B":
+        returned = packet / "evidence" / "return-handoff.md"
+        retry = returned.is_file() and TRANSPORT.return_handoff_status(read(returned)) != "complete"
+
     return prepare_next(
         argparse.Namespace(
             run_root=str(run_root),
             project=None,
             stage=None,
-            retry=False,
+            retry=retry,
             provider=args.transport_provider,
             references_file=args.references_file,
             motion=args.motion,
@@ -1729,6 +1734,7 @@ def self_test() -> int:
             defaults = dict(
                 run_root=str(run_root), project=None, stage=None, retry=False,
                 provider=None, model=None, effort=None, workload=None,
+                transport_provider=None,
                 availability="unknown", quota="unknown", fallback=None,
                 references_file=None, motion=None, assets=None, target=None,
                 lenses=None, synthetic_validation=True,
@@ -1956,12 +1962,12 @@ def self_test() -> int:
             encoding="utf-8",
         )
         case("partial implementation return blocks review", infer_next_stage(load_state(run_root))[0] is None)
-        prepare_next(runtime_args(retry=True))
+        advance(runtime_args())
         state = load_state(run_root)
         retry_entry, retry_packet = current_packet(state)
         retry_manifest = json.loads(read(retry_packet / TRANSPORT.MANIFEST_NAME))
         case(
-            "partial implementation resumes in a non-overwriting S4B child",
+            "public advance resumes a partial implementation in a non-overwriting S4B child",
             retry_entry["stage"] == "S4B"
             and retry_manifest["parent_id"] == s4b_entry["id"]
             and retry_manifest["parent_evidence_kind"] == "structured-return-handoff",
