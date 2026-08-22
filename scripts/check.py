@@ -24,6 +24,8 @@ import os
 import re
 import sys
 import collections
+import copy
+import importlib.util
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERBOSE = "--verbose" in sys.argv
@@ -41,6 +43,7 @@ REQUIRED = [
     "prompts/retrospective.md",
     "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
+    "scripts/prepare-stage.py",
 ]
 
 # Sentences allowed to repeat: gate names and block headers that must stay
@@ -403,9 +406,10 @@ DELIVERY_CONTRACTS = [
         "block": 0,
         "tokens": [
             "REQUIRED INPUTS", "PROJECT.md", "QA.md", "AGENTS.md",
-            "independent S5 QA judgement block", "IF MISSING",
+            "independent S5 QA judgement block", "templates/RETROSPECTIVE.md",
+            "IF MISSING",
         ],
-        "inputs": ["PROJECT.md", "QA.md", "AGENTS.md"],
+        "inputs": ["PROJECT.md", "QA.md", "AGENTS.md", "templates/RETROSPECTIVE.md"],
         "retry": "NEXT: S6 Retrospective retry.",
         "forbidden_missing": [],
     },
@@ -450,6 +454,7 @@ ADAPTER_DELIVERY = {
             "DESIGN-TASTE.md", "templates/DESIGN.md", "DESIGN-MOTION.md",
             "DESIGN-ASSETS.md", "templates/HANDOFF.md",
             "EVALUATION-RUBRICS.md", "completed `QA.md`",
+            "templates/RETROSPECTIVE.md",
         ],
     },
     "adapters/cursor.md": {
@@ -570,6 +575,28 @@ def check_delivery_contracts():
         if os.path.exists(os.path.join(ROOT, path))
     }
     return check_delivery_contract_texts(texts)
+
+
+# Generated stage packets are transport artifacts. This loader lets the
+# repository checker validate the helper's transport map without restating it.
+PACKET_TOOL = "scripts/prepare-stage.py"
+
+
+def load_packet_tool():
+    path = os.path.join(ROOT, PACKET_TOOL)
+    spec = importlib.util.spec_from_file_location("builder_os_prepare_stage", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_packet_tool():
+    if not os.path.exists(os.path.join(ROOT, PACKET_TOOL)):
+        return [f"{PACKET_TOOL} is missing"]
+    try:
+        return load_packet_tool().repository_contract_problems()
+    except Exception as exc:
+        return [f"{PACKET_TOOL} could not be checked: {exc}"]
 
 
 def agents_transport_form(template_text):
@@ -754,14 +781,46 @@ def self_test_delivery_contracts():
     return 1 if failed else 0
 
 
+def self_test_packet_tool():
+    """Positive control plus mutations for packet parity and isolation."""
+    tool = load_packet_tool()
+    actual = tool.STAGES
+
+    missing_s6 = copy.deepcopy(actual)
+    missing_s6["S6"]["canonical_inputs"] = []
+    leaking_s5 = copy.deepcopy(actual)
+    leaking_s5["S5"]["project_inputs"] = ["QA.md"]
+    wrong_parent = copy.deepcopy(actual)
+    wrong_parent["S4B"]["allowed_parents"] = ["S3"]
+
+    cases = [
+        ("repository packet transport map passes (positive control)",
+         not tool.repository_contract_problems(actual)),
+        ("packet map missing S6 template fails",
+         bool(tool.repository_contract_problems(missing_s6))),
+        ("packet map leaking QA into S5 fails",
+         bool(tool.repository_contract_problems(leaking_s5))),
+        ("packet map skipping S4A parent fails",
+         bool(tool.repository_contract_problems(wrong_parent))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def main():
     if SELF_TEST:
         print("AGENTS transport mirror self-test")
         agents_failed = self_test_agents_prompt_mirror()
         print("\nStandalone delivery-contract self-test")
         delivery_failed = self_test_delivery_contracts()
-        print("\nSELF-TEST FAILED" if agents_failed or delivery_failed else "\nSELF-TEST PASS")
-        return 1 if agents_failed or delivery_failed else 0
+        print("\nStage-packet transport self-test")
+        packet_failed = self_test_packet_tool()
+        failed = agents_failed or delivery_failed or packet_failed
+        print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
+        return 1 if failed else 0
 
     failed = False
 
@@ -826,6 +885,15 @@ def main():
             f"ok    standalone delivery: {len(DELIVERY_CONTRACTS)} prompt contracts, "
             f"{len(ADAPTER_DELIVERY)} adapter matrices"
         )
+
+    packet_problems = check_packet_tool()
+    if packet_problems:
+        failed = True
+        print(f"FAIL  stage packets: {len(packet_problems)} problem(s)")
+        for problem in packet_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    stage packets: source parity, parent chain, and S5 isolation mapped")
 
     chain_problems = check_stage_chain()
     if chain_problems:

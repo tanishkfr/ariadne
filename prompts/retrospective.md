@@ -15,6 +15,7 @@ REQUIRED INPUTS
 - PROJECT.md.
 - QA.md, including the independent S5 QA judgement block when S5 ran.
 - AGENTS.md from the project repository root.
+- templates/RETROSPECTIVE.md as the canonical retrospective structure.
 
 IF MISSING
 Verify the applicable inputs before starting. If any is missing, STOP. Name it;
@@ -28,8 +29,9 @@ END WITH:
   Blocked on: <exact missing input>
 END IF MISSING
 
-READ: PROJECT.md, QA.md (including its independent review findings), and
-AGENTS.md. Not the whole system.
+READ: PROJECT.md, QA.md (including its independent review findings), AGENTS.md,
+and the supplied templates/RETROSPECTIVE.md. Not the whole system. Write the
+project's RETROSPECTIVE.md using that supplied structure.
 
 PART 1 - WHAT HAPPENED
 
