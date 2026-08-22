@@ -27,10 +27,10 @@ Builder OS. Do not reconstruct its policies from this skill.
 
 1. Identify the project directory from the active workspace or the user's
    explicit path. Keep runtime packets and evidence outside the project.
-2. Look for an existing `builderos-run.json` in the known runtime directory. If
-   one exists, run `python <root>/scripts/builderos.py status --run-root <run>`
-   and resume it. Never create a second run merely because conversation history
-   is absent.
+2. Run `python <root>/scripts/builderos.py discover --project <project>` and
+   resume the single matching run with `status --project <project>`. If more
+   than one history matches, ask which history is authoritative; never guess or
+   create a second run merely because conversation history is absent.
 3. For a new brief, run `builderos.py start` with the ordinary-language request.
    It creates the fresh project shell when needed, allocates the run, prepares
    S1, and starts the operations log.
@@ -48,9 +48,11 @@ Pause only for a decision or external action the canonical workflow reserves to
 the human: creative direction, a material scope tradeoff, dependency approval,
 provider/account access, shipping, or publishing. Never grant a gate.
 
-When an external implementer is appropriate, run provider preflight first. Do
-not generate the external S4B packet when the preflight is blocked. Present one
-plain action to the user; keep hashes and stage mechanics in `OPERATIONS.md`.
+When an external implementer is appropriate, run provider preflight first. It
+reads provider, model, effort, workload, split, and reason from `HANDOFF.md`;
+only live availability/quota facts may need an external check. Do not generate
+the external S4B packet when preflight is blocked. Present one plain action to
+the user; keep hashes and stage mechanics in `OPERATIONS.md`.
 
 ## External return
 

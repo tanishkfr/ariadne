@@ -89,6 +89,47 @@ def default_run_root(project: Path) -> Path:
     return project.parent / f"{project.name}-builderos"
 
 
+def discover_run_roots(project: Path) -> list[Path]:
+    """Find direct-child runtime directories that explicitly name this project."""
+    project = project.resolve()
+    candidates = []
+    try:
+        children = list(project.parent.iterdir())
+    except OSError as exc:
+        raise RuntimeError_(f"Could not inspect the project parent directory: {exc}") from exc
+    for child in children:
+        state_path = child / STATE_NAME
+        if not state_path.is_file():
+            continue
+        try:
+            value = json.loads(read(state_path))
+            recorded = Path(value.get("project", "")).resolve()
+        except (json.JSONDecodeError, OSError, RuntimeError):
+            continue
+        if recorded == project:
+            candidates.append(child.resolve())
+    return sorted(candidates, key=lambda path: str(path).lower())
+
+
+def resolve_run_root(args: argparse.Namespace) -> Path:
+    explicit = getattr(args, "run_root", None)
+    if explicit:
+        return Path(explicit).resolve()
+    project_arg = getattr(args, "project", None)
+    if not project_arg:
+        raise RuntimeError_("Supply the project or run location")
+    project = Path(project_arg).resolve()
+    matches = discover_run_roots(project)
+    if not matches:
+        raise RuntimeError_(f"No Builder OS run records this project: {project}")
+    if len(matches) > 1:
+        raise RuntimeError_(
+            "More than one Builder OS run records this project; choose one explicitly: "
+            + ", ".join(str(path) for path in matches)
+        )
+    return matches[0]
+
+
 def git_head() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True
@@ -197,13 +238,21 @@ def allocate_packet(run_root: Path, run_id: str, stage: str) -> tuple[str, Path]
         index += 1
 
 
-def current_packet(state: dict) -> tuple[dict, Path]:
+def current_packet(state: dict, allow_project_drift: bool = False) -> tuple[dict, Path]:
     packets = state.get("packets", [])
     if not packets:
         raise RuntimeError_("Run state has no prepared packet")
     entry = packets[-1]
     path = Path(entry["path"])
     problems = TRANSPORT.verify_packet(path)
+    if allow_project_drift and problems:
+        manifest = json.loads(read(path / TRANSPORT.MANIFEST_NAME))
+        expected_project_drift = {
+            f"stale source: {source['path']}"
+            for source in manifest.get("sources", [])
+            if str(source.get("kind", "")).startswith("project")
+        }
+        problems = [problem for problem in problems if problem not in expected_project_drift]
     if problems:
         raise RuntimeError_("Current packet is stale or damaged: " + "; ".join(problems))
     return entry, path
@@ -286,9 +335,9 @@ def project_runtime(project: Path) -> dict:
 
 
 def status(args: argparse.Namespace) -> int:
-    run_root = Path(args.run_root).resolve()
+    run_root = resolve_run_root(args)
     state = load_state(run_root)
-    entry, packet = current_packet(state)
+    entry, packet = current_packet(state, allow_project_drift=True)
     manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
     evidence_options = []
     transcript = packet / manifest.get("expected_transcript", "evidence/transcript.md")
@@ -323,6 +372,25 @@ def status(args: argparse.Namespace) -> int:
     return 0
 
 
+def discover(args: argparse.Namespace) -> int:
+    project = Path(args.project).resolve()
+    matches = discover_run_roots(project)
+    if not matches:
+        raise RuntimeError_(f"No Builder OS run records this project: {project}")
+    payload = {"project": str(project), "runs": [str(path) for path in matches]}
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        if len(matches) == 1:
+            print(f"Found the Builder OS run for {project.name}: {matches[0]}")
+        else:
+            print(f"Found {len(matches)} Builder OS runs for {project.name}:")
+            for path in matches:
+                print(f"  {path}")
+            print("Choose the intended run explicitly; Builder OS will not guess between histories.")
+    return 0 if len(matches) == 1 else 2
+
+
 def preflight_decision(availability: str, quota: str, workload: str) -> tuple[str, str]:
     if availability == "unavailable":
         return "blocked", "The provider is unavailable. Use a fallback or wait."
@@ -337,21 +405,57 @@ def preflight_decision(availability: str, quota: str, workload: str) -> tuple[st
     return "reasonably-assumed", "No blocking provider signal is known; the bounded workload may proceed."
 
 
+def handoff_routing(project: Path) -> dict[str, str]:
+    handoff = project / "HANDOFF.md"
+    if not handoff.is_file():
+        raise RuntimeError_("Provider preflight requires the completed HANDOFF.md")
+    section = TRANSPORT.markdown_section(read(handoff), "Implementation routing")
+    values = {}
+    for line in section.splitlines():
+        if not line.lstrip().startswith("|") or "---" in line:
+            continue
+        cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+        if len(cells) >= 2 and cells[0].lower() != "field":
+            values[cells[0].lower()] = cells[1]
+    required = ("capability needed", "provider", "model", "effort", "workload", "split", "reason")
+    missing = [name for name in required if not values.get(name) or "<" in values[name]]
+    if missing:
+        raise RuntimeError_("HANDOFF.md has incomplete implementation routing: " + ", ".join(missing))
+    return values
+
+
 def provider_preflight(args: argparse.Namespace) -> int:
-    run_root = Path(args.run_root).resolve()
+    run_root = resolve_run_root(args)
     state = load_state(run_root)
-    decision, reason = preflight_decision(args.availability, args.quota, args.workload)
+    routing = handoff_routing(Path(state["project"]))
+    provider = args.provider or routing["provider"]
+    model = args.model or routing["model"]
+    effort = args.effort or routing["effort"].lower()
+    workload = args.workload or routing["workload"].lower()
+    if effort not in ("low", "medium", "high"):
+        raise RuntimeError_(f"HANDOFF.md has unsupported effort: {effort}")
+    if workload not in ("small", "medium", "large"):
+        raise RuntimeError_(f"HANDOFF.md has unsupported workload: {workload}")
+    retained = provider.strip().lower() in ("retain in orchestrator", "orchestrator")
+    if retained:
+        decision = "not-required"
+        reason = "Implementation remains in the orchestrator; no external provider preflight is required."
+    else:
+        decision, reason = preflight_decision(args.availability, args.quota, workload)
     record = {
         "schema_version": 1,
         "checked_at": now(),
-        "provider": args.provider,
-        "model": args.model,
-        "effort": args.effort,
-        "workload": args.workload,
+        "capability": routing["capability needed"],
+        "provider": provider,
+        "model": model,
+        "effort": effort,
+        "workload": workload,
         "availability": args.availability,
         "quota": args.quota,
         "decision": decision,
         "reason": reason,
+        "split": routing["split"],
+        "routing_reason": routing["reason"],
         "fallback": args.fallback or "not supplied",
     }
     write_json(run_root / PREFLIGHT_NAME, record)
@@ -359,7 +463,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
     state["updated_at"] = now()
     state["next"] = (
         "Prepare the verified external build handoff."
-        if decision in ("verified", "reasonably-assumed")
+        if decision in ("verified", "reasonably-assumed", "not-required")
         else reason
     )
     write_json(run_root / STATE_NAME, state)
@@ -369,18 +473,18 @@ def provider_preflight(args: argparse.Namespace) -> int:
         "External implementation should not discover preventable availability limits mid-build.",
         f"{decision}: {reason}",
         [str(run_root / PREFLIGHT_NAME)],
-        f"provider={args.provider}; model={args.model}; effort={args.effort}; workload={args.workload}; availability={args.availability}; quota={args.quota}",
+        f"provider={provider}; model={model}; effort={effort}; workload={workload}; availability={args.availability}; quota={args.quota}",
         state["next"],
     )
     print(f"Provider preflight: {decision.upper()}")
     print(reason)
-    return 0 if decision in ("verified", "reasonably-assumed") else 2
+    return 0 if decision in ("verified", "reasonably-assumed", "not-required") else 2
 
 
 def structural_result(args: argparse.Namespace) -> int:
-    run_root = Path(args.run_root).resolve()
+    run_root = resolve_run_root(args)
     state = load_state(run_root)
-    entry, packet = current_packet(state)
+    entry, packet = current_packet(state, allow_project_drift=True)
     destination = packet / "evidence" / "stage-result.json"
     if destination.exists():
         raise RuntimeError_(f"Refusing to overwrite existing stage evidence: {destination}")
@@ -426,9 +530,9 @@ def structural_result(args: argparse.Namespace) -> int:
 
 
 def record_transcript(args: argparse.Namespace) -> int:
-    run_root = Path(args.run_root).resolve()
+    run_root = resolve_run_root(args)
     state = load_state(run_root)
-    _entry, packet = current_packet(state)
+    _entry, packet = current_packet(state, allow_project_drift=True)
     source = Path(args.input).resolve()
     if not source.is_file() or source.stat().st_size == 0:
         raise RuntimeError_("Transcript input is missing or empty")
@@ -454,9 +558,9 @@ def record_transcript(args: argparse.Namespace) -> int:
 
 
 def ingest_return(args: argparse.Namespace) -> int:
-    run_root = Path(args.run_root).resolve()
+    run_root = resolve_run_root(args)
     state = load_state(run_root)
-    entry, packet = current_packet(state)
+    entry, packet = current_packet(state, allow_project_drift=True)
     if entry["stage"] != "S4B":
         raise RuntimeError_("Implementation return handoffs belong to the current S4B boundary")
     source = Path(args.input).resolve()
@@ -498,7 +602,7 @@ def ingest_return(args: argparse.Namespace) -> int:
 
 
 def infer_next_stage(state: dict) -> tuple[str | None, str]:
-    entry, _packet = current_packet(state)
+    entry, _packet = current_packet(state, allow_project_drift=True)
     stage = entry["stage"]
     project = Path(state["project"])
     if stage == "S1":
@@ -521,10 +625,13 @@ def infer_next_stage(state: dict) -> tuple[str | None, str]:
         if not (project / "HANDOFF.md").is_file():
             return None, "The implementation handoff is incomplete."
         preflight = state.get("provider_preflight") or {}
-        if preflight.get("decision") not in ("verified", "reasonably-assumed"):
+        if preflight.get("decision") not in ("verified", "reasonably-assumed", "not-required"):
             return None, "Provider preflight must clear before the external build handoff."
         return "S4B", "The handoff is complete and provider preflight cleared."
     if stage == "S4B":
+        returned = _packet / "evidence" / "return-handoff.md"
+        if returned.is_file() and TRANSPORT.return_handoff_status(read(returned)) != "complete":
+            return None, "Implementation returned partial or blocked; resume it before independent review."
         if not (project / "QA.md").is_file():
             return None, "Implementation or mechanical QA is incomplete."
         return "S5", "Mechanical QA exists; independent review can be isolated."
@@ -536,13 +643,20 @@ def infer_next_stage(state: dict) -> tuple[str | None, str]:
 
 
 def prepare_next(args: argparse.Namespace) -> int:
-    run_root = Path(args.run_root).resolve()
+    run_root = resolve_run_root(args)
     state = load_state(run_root)
-    _entry, parent = current_packet(state)
+    entry, parent = current_packet(state, allow_project_drift=True)
     stage, reason = infer_next_stage(state)
-    if args.stage:
-        stage = args.stage
-        reason = "An explicit stage was requested; canonical parent and boundary checks still apply."
+    if args.retry:
+        requested = args.stage or entry["stage"]
+        if requested != entry["stage"]:
+            raise RuntimeError_("A retry must repeat the current boundary")
+        stage = requested
+        reason = "The current boundary is being retried without overwriting prior evidence."
+    elif args.stage and args.stage != stage:
+        raise RuntimeError_(
+            f"Requested {args.stage}, but the current project state permits only {stage or 'no continuation'}"
+        )
     if not stage:
         state["next"] = reason
         state["updated_at"] = now()
@@ -558,7 +672,7 @@ def prepare_next(args: argparse.Namespace) -> int:
         packet_id=packet_id,
         parent=str(parent),
         retry=args.retry,
-        provider=args.provider,
+        provider=args.provider or transport_provider(state.get("provider_preflight")),
         references_file=args.references_file,
         motion=args.motion,
         assets=args.assets,
@@ -587,11 +701,68 @@ def prepare_next(args: argparse.Namespace) -> int:
     return 0
 
 
+def transport_provider(preflight: dict | None) -> str | None:
+    if not preflight:
+        return None
+    value = str(preflight.get("provider", "")).lower()
+    if "cursor" in value or "grok" in value:
+        return "cursor"
+    if "codex" in value or "orchestrator" in value:
+        return "codex"
+    return "other" if value else None
+
+
 def operations_log_problems(text: str) -> list[str]:
     problems = []
     for token in ("# Builder OS operations", "## Brief", "## Evidence language", "## Timeline"):
         if token not in text:
             problems.append(f"operations log missing: {token}")
+    return problems
+
+
+def skill_contract_problems(
+    skill_text: str | None = None,
+    interface_text: str | None = None,
+    installation_example: str | None = None,
+) -> list[str]:
+    skill_path = ROOT / ".agents" / "skills" / "builderos" / "SKILL.md"
+    interface_path = ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml"
+    example_path = ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json"
+    if skill_text is None:
+        skill_text = read(skill_path)
+    if interface_text is None:
+        interface_text = read(interface_path)
+    if installation_example is None:
+        installation_example = read(example_path)
+    problems = []
+    frontmatter = re.match(r"(?s)^---\s*\n(.*?)\n---\s*\n", skill_text)
+    if not frontmatter:
+        problems.append("builderos skill has no YAML frontmatter")
+    else:
+        header = frontmatter.group(1)
+        name = re.search(r"(?m)^name:\s*(.+?)\s*$", header)
+        description = re.search(r"(?m)^description:\s*(.+?)\s*$", header)
+        if not name or name.group(1).strip() != "builderos":
+            problems.append("builderos skill name must be builderos")
+        if not description or not all(
+            token in description.group(1).lower() for token in ("builder os", "start", "resume")
+        ):
+            problems.append("builderos skill description must advertise start and resume triggers")
+    for token in ("display_name:", "short_description:", "default_prompt:", "Builder OS"):
+        if token not in interface_text:
+            problems.append(f"builderos skill interface missing: {token}")
+    try:
+        example = json.loads(installation_example)
+        if not example.get("builder_os_root"):
+            problems.append("builderos installation example has no builder_os_root")
+    except json.JSONDecodeError:
+        problems.append("builderos installation example is malformed")
+    for token in (
+        "scripts/builderos.py", "discover --project", "provider preflight",
+        "ingest-return", "Never grant a gate",
+    ):
+        if token not in skill_text:
+            problems.append(f"builderos skill missing runtime boundary: {token}")
     return problems
 
 
@@ -602,16 +773,16 @@ def repository_contract_problems() -> list[str]:
         ROOT / "templates" / "RETURN-HANDOFF.md",
         ROOT / "templates" / "HANDOFF.md",
         ROOT / "prompts" / "build-kickoff.md",
+        ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml",
+        ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json",
+        ROOT / "scripts" / "install-builderos-skill.py",
     ]
     for path in required:
         if not path.is_file():
             problems.append(f"runtime contract source missing: {path.relative_to(ROOT)}")
     if problems:
         return problems
-    skill = read(required[0])
-    for token in ("scripts/builderos.py", "provider preflight", "ingest-return", "Never grant a gate"):
-        if token not in skill:
-            problems.append(f"builderos skill missing runtime boundary: {token}")
+    problems.extend(skill_contract_problems())
     return_template = read(required[1])
     for heading in TRANSPORT.RETURN_HANDOFF_HEADINGS:
         if f"## {heading}" not in return_template:
@@ -660,6 +831,13 @@ def self_test() -> int:
         cases.append((name, passed))
 
     case("repository runtime contracts pass (positive control)", not repository_contract_problems())
+    canonical_skill = read(ROOT / ".agents" / "skills" / "builderos" / "SKILL.md")
+    canonical_interface = read(ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml")
+    canonical_install = read(ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json")
+    case("skill discovery contract passes (positive control)", not skill_contract_problems(canonical_skill, canonical_interface, canonical_install))
+    case("skill trigger drift is detected", bool(skill_contract_problems(canonical_skill.replace("resume", "continue", 1), canonical_interface, canonical_install)))
+    case("skill name drift is detected", bool(skill_contract_problems(canonical_skill.replace("name: builderos", "name: builder-os", 1), canonical_interface, canonical_install)))
+    case("skill UI drift is detected", bool(skill_contract_problems(canonical_skill, canonical_interface.replace("default_prompt:", "prompt:"), canonical_install)))
     case("available sufficient provider passes", preflight_decision("available", "sufficient", "large")[0] == "verified")
     case("insufficient quota blocks", preflight_decision("available", "insufficient", "medium")[0] == "blocked")
     case("unknown quota blocks a large handoff", preflight_decision("available", "unknown", "large")[0] == "human-check-required")
@@ -671,6 +849,18 @@ def self_test() -> int:
     with self_test_workspace() as workspace:
         project = workspace / "project"
         run_root = workspace / "run"
+
+        def runtime_args(**values) -> argparse.Namespace:
+            defaults = dict(
+                run_root=str(run_root), project=None, stage=None, retry=False,
+                provider=None, model=None, effort=None, workload=None,
+                availability="unknown", quota="unknown", fallback=None,
+                references_file=None, motion=None, assets=None, target=None,
+                lenses=None, synthetic_validation=True,
+            )
+            defaults.update(values)
+            return argparse.Namespace(**defaults)
+
         start(
             argparse.Namespace(
                 project=str(project), run_root=str(run_root), run_id="fixture",
@@ -692,11 +882,16 @@ def self_test() -> int:
         except RuntimeError_:
             duplicate_blocked = True
         case("duplicate run is refused", duplicate_blocked)
-        (project / "PROJECT.md").write_text(
-            "# PROJECT\n\n## Goal\n\nTest.\n\n## Open questions\n\nNone.\n", encoding="utf-8"
+        project_text = (
+            "# PROJECT\n\n## Goal\n\nTest a typographic interaction.\n\n"
+            "## Accepted patterns\n\n| Pattern | Reason | Rationale type |\n|---|---|---|\n\n"
+            "## Success criteria\n\n1. The interaction has a clear response.\n\n"
+            "## Open questions\n\nNone.\n"
         )
+        (project / "PROJECT.md").write_text(project_text, encoding="utf-8")
         (project / "AGENTS.md").write_text(
-            "## Current state\n\n| **Stage** | `S1` |\n| **Last gate passed** | `none` |\n",
+            "## Current state\n\n| **Stage** | `S1` |\n| **Last gate passed** | `none` |\n"
+            "| **Next prompt** | `prompts/design-direction.md` |\n",
             encoding="utf-8",
         )
         structural_result(
@@ -713,8 +908,143 @@ def self_test() -> int:
         before = read(structural)
         (project / "PROJECT.md").write_text(read(project / "PROJECT.md") + "changed\n", encoding="utf-8")
         case("changed structural output is stale", bool(TRANSPORT.stage_result_problems(structural, parent_manifest)))
-        (project / "PROJECT.md").write_text("# PROJECT\n\n## Goal\n\nTest.\n\n## Open questions\n\nNone.\n", encoding="utf-8")
+        (project / "PROJECT.md").write_text(project_text, encoding="utf-8")
         structural.write_text(before, encoding="utf-8")
+
+        case("run is discoverable from the project (positive control)", discover_run_roots(project) == [run_root.resolve()])
+        duplicate_run = workspace / "run-duplicate"
+        duplicate_run.mkdir()
+        shutil.copyfile(run_root / STATE_NAME, duplicate_run / STATE_NAME)
+        try:
+            resolve_run_root(argparse.Namespace(run_root=None, project=str(project)))
+            ambiguous_history_blocked = False
+        except RuntimeError_:
+            ambiguous_history_blocked = True
+        case("ambiguous run history is never guessed", ambiguous_history_blocked)
+        shutil.rmtree(duplicate_run)
+        prepare_next(runtime_args(motion="no", assets="no"))
+        state = load_state(run_root)
+        case("automatic progression selects S3", state["packets"][-1]["stage"] == "S3")
+        try:
+            prepare_next(runtime_args(stage="S4A"))
+            stage_bypass_blocked = False
+        except RuntimeError_:
+            stage_bypass_blocked = True
+        case("explicit stage cannot bypass G1", stage_bypass_blocked)
+
+        _entry, s3_packet = current_packet(state)
+        manifest_path = s3_packet / TRANSPORT.MANIFEST_NAME
+        manifest_original = read(manifest_path)
+        manifest = json.loads(manifest_original)
+        canonical = next(source for source in manifest["sources"] if source["kind"] == "canonical")
+        canonical["source_sha256"] = "0" * 64
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        try:
+            current_packet(state, allow_project_drift=True)
+            canonical_drift_blocked = False
+        except RuntimeError_:
+            canonical_drift_blocked = True
+        case("post-stage tolerance still rejects canonical drift", canonical_drift_blocked)
+        manifest_path.write_text(manifest_original, encoding="utf-8")
+
+        (project / "DESIGN.md").write_text(
+            "# DESIGN\n\n**Status:** locked at G1 on 2026-08-23\n", encoding="utf-8"
+        )
+        (project / "AGENTS.md").write_text(
+            "## Current state\n\n| **Stage** | `S3` |\n| **Last gate passed** | `G1` |\n"
+            "| **Next prompt** | `prompts/build-kickoff.md` |\n",
+            encoding="utf-8",
+        )
+        try:
+            current_packet(state)
+            strict_project_drift = False
+        except RuntimeError_:
+            strict_project_drift = True
+        try:
+            current_packet(state, allow_project_drift=True)
+            expected_project_drift = True
+        except RuntimeError_:
+            expected_project_drift = False
+        case("new stage outputs do not invalidate delivered inputs", not strict_project_drift and expected_project_drift)
+        structural_result(runtime_args(
+            status="complete", provider="fixture", model="fixture",
+            summary="Direction approved at G1", file=["DESIGN.md", "AGENTS.md"],
+        ))
+        prepare_next(runtime_args())
+        state = load_state(run_root)
+        case("G1 approval automatically prepares S4A", state["packets"][-1]["stage"] == "S4A")
+
+        (project / "HANDOFF.md").write_text(
+            "# HANDOFF\n\n**G1 approved:** 2026-08-23\n\n"
+            "## Implementation routing\n\n| Field | Recommendation |\n|---|---|\n"
+            "| Capability needed | `R2` |\n| Provider | Cursor / Grok |\n"
+            "| Model | provider default — unverified |\n| Effort | medium |\n"
+            "| Workload | medium |\n| Split | none |\n"
+            "| Reason | Normal visual implementation. |\n",
+            encoding="utf-8",
+        )
+        (project / "AGENTS.md").write_text(
+            "## Current state\n\n| **Stage** | `S4` |\n| **Last gate passed** | `G1` |\n"
+            "| **Next prompt** | `prompts/build-kickoff.md` |\n",
+            encoding="utf-8",
+        )
+        try:
+            current_packet(load_state(run_root))
+            s4a_strict_drift = False
+        except RuntimeError_:
+            s4a_strict_drift = True
+        try:
+            current_packet(load_state(run_root), allow_project_drift=True)
+            s4a_expected_drift = True
+        except RuntimeError_:
+            s4a_expected_drift = False
+        case(
+            "expected project-state updates remain recordable",
+            s4a_strict_drift and s4a_expected_drift,
+        )
+        structural_result(runtime_args(
+            status="complete", provider="fixture", model="fixture",
+            summary="Implementation handoff complete", file=["HANDOFF.md", "AGENTS.md"],
+        ))
+        provider_preflight(runtime_args(availability="available", quota="sufficient"))
+        state = load_state(run_root)
+        case(
+            "provider routing is read from HANDOFF.md",
+            state["provider_preflight"]["provider"] == "Cursor / Grok"
+            and state["provider_preflight"]["decision"] == "verified",
+        )
+        prepare_next(runtime_args())
+        state = load_state(run_root)
+        s4b_entry, s4b_packet = current_packet(state)
+        s4b_manifest = json.loads(read(s4b_packet / TRANSPORT.MANIFEST_NAME))
+        case(
+            "cleared preflight prepares a Cursor-labelled S4B packet",
+            s4b_entry["stage"] == "S4B" and s4b_manifest["provider"] == "cursor",
+        )
+
+        partial_path = s4b_packet / "evidence" / "return-handoff.md"
+        partial_path.write_text(filled_return("partial"), encoding="utf-8")
+        (project / "QA.md").write_text(
+            "# QA\n\n## Mechanical\n\n| # | Check | Result | Evidence |\n|---|---|---|---|\n"
+            "| 1 | Build | pass | fixture |\n\n## Judgement\n\nPending.\n",
+            encoding="utf-8",
+        )
+        case("partial implementation return blocks review", infer_next_stage(load_state(run_root))[0] is None)
+        partial_path.unlink()
+        returned_source = workspace / "return.md"
+        returned_source.write_text(filled_return(), encoding="utf-8")
+        ingest_return(runtime_args(input=str(returned_source)))
+        prepare_next(runtime_args(target="http://127.0.0.1:3000", lenses="creative-director (light)"))
+        state = load_state(run_root)
+        _s5_entry, s5_packet = current_packet(state)
+        s5_manifest = json.loads(read(s5_packet / TRANSPORT.MANIFEST_NAME))
+        delivered = [source["label"] for source in s5_manifest["sources"] if source.get("delivered", True)]
+        case(
+            "complete return automatically reaches isolated S5",
+            state["packets"][-1]["stage"] == "S5"
+            and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"],
+        )
+        case("operations log remains readable after full dry run", not operations_log_problems(read(run_root / LOG_NAME)))
 
     print("BUILDER OS RUNTIME SELF-TEST\n")
     for name, passed in cases:
@@ -738,22 +1068,31 @@ def parser() -> argparse.ArgumentParser:
     request.add_argument("--request-file")
     start_p.add_argument("--synthetic-validation", action="store_true", help=argparse.SUPPRESS)
 
+    def run_selector(command: argparse.ArgumentParser) -> None:
+        selection = command.add_mutually_exclusive_group(required=True)
+        selection.add_argument("--run-root")
+        selection.add_argument("--project")
+
+    discover_p = sub.add_parser("discover", help="find the run that records a project")
+    discover_p.add_argument("--project", required=True)
+    discover_p.add_argument("--json", action="store_true")
+
     status_p = sub.add_parser("status", help="show the current project state and next action")
-    status_p.add_argument("--run-root", required=True)
+    run_selector(status_p)
     status_p.add_argument("--json", action="store_true")
 
     preflight_p = sub.add_parser("preflight", help="record provider/model/effort readiness before external work")
-    preflight_p.add_argument("--run-root", required=True)
-    preflight_p.add_argument("--provider", required=True)
-    preflight_p.add_argument("--model", required=True)
-    preflight_p.add_argument("--effort", required=True, choices=["low", "medium", "high"])
-    preflight_p.add_argument("--workload", required=True, choices=["small", "medium", "large"])
-    preflight_p.add_argument("--availability", required=True, choices=["available", "limited", "unavailable", "unknown"])
-    preflight_p.add_argument("--quota", required=True, choices=["sufficient", "insufficient", "unknown"])
+    run_selector(preflight_p)
+    preflight_p.add_argument("--provider")
+    preflight_p.add_argument("--model")
+    preflight_p.add_argument("--effort", choices=["low", "medium", "high"])
+    preflight_p.add_argument("--workload", choices=["small", "medium", "large"])
+    preflight_p.add_argument("--availability", default="unknown", choices=["available", "limited", "unavailable", "unknown"])
+    preflight_p.add_argument("--quota", default="unknown", choices=["sufficient", "insufficient", "unknown"])
     preflight_p.add_argument("--fallback")
 
     result_p = sub.add_parser("record-result", help="record structurally verified same-session outputs")
-    result_p.add_argument("--run-root", required=True)
+    run_selector(result_p)
     result_p.add_argument("--status", required=True, choices=["complete", "partial", "blocked"])
     result_p.add_argument("--provider", required=True)
     result_p.add_argument("--model", required=True)
@@ -761,15 +1100,15 @@ def parser() -> argparse.ArgumentParser:
     result_p.add_argument("--file", action="append", required=True)
 
     transcript_p = sub.add_parser("record-transcript", help="preserve a provider transcript without manual path handling")
-    transcript_p.add_argument("--run-root", required=True)
+    run_selector(transcript_p)
     transcript_p.add_argument("--input", required=True)
 
     return_p = sub.add_parser("ingest-return", help="validate and store an external implementation return handoff")
-    return_p.add_argument("--run-root", required=True)
+    run_selector(return_p)
     return_p.add_argument("--input", required=True)
 
     next_p = sub.add_parser("prepare-next", help="discover and prepare the next valid project boundary")
-    next_p.add_argument("--run-root", required=True)
+    run_selector(next_p)
     next_p.add_argument("--stage", choices=list(TRANSPORT.STAGES))
     next_p.add_argument("--retry", action="store_true")
     next_p.add_argument("--provider", choices=["codex", "cursor", "other"])
@@ -789,6 +1128,7 @@ def main() -> int:
             return self_test()
         commands = {
             "start": start,
+            "discover": discover,
             "status": status,
             "preflight": provider_preflight,
             "record-result": structural_result,

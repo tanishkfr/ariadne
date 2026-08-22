@@ -44,7 +44,9 @@ REQUIRED = [
     "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
     "scripts/prepare-stage.py", "scripts/builderos.py",
+    "scripts/install-builderos-skill.py",
     ".agents/skills/builderos/SKILL.md",
+    ".agents/skills/builderos/agents/openai.yaml",
 ]
 
 # Sentences allowed to repeat: gate names and block headers that must stay

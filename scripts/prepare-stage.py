@@ -278,6 +278,11 @@ def return_handoff_problems(text: str) -> list[str]:
     return problems
 
 
+def return_handoff_status(text: str) -> str:
+    match = re.search(r"(?im)^\*\*Status:\*\*\s*(.+?)\s*$", text)
+    return match.group(1).strip().lower() if match else ""
+
+
 def stage_result_problems(path: Path, parent: dict) -> list[str]:
     """Validate structural evidence without pretending it is a transcript."""
     try:
@@ -524,6 +529,12 @@ def load_parent(
         raise PacketError(f"same-stage parent requires --retry for {stage}")
 
     evidence, evidence_kind = parent_evidence(parent, parent_dir)
+    if stage == "S5" and evidence_kind == "structured-return-handoff":
+        status = return_handoff_status(read(evidence))
+        if status != "complete":
+            raise PacketError(
+                f"S5 requires a complete implementation return; current status is {status or 'unknown'}"
+            )
     return parent, parent_dir, evidence, evidence_kind
 
 
@@ -992,12 +1003,20 @@ def self_test() -> int:
             + "\n\n".join(f"## {heading}\n\nnone" for heading in RETURN_HANDOFF_HEADINGS)
             + "\n"
         )
-        (s4b_dir / "evidence" / "return-handoff.md").write_text(returned, encoding="utf-8")
+        return_path = s4b_dir / "evidence" / "return-handoff.md"
+        return_path.write_text(returned.replace("**Status:** complete", "**Status:** partial"), encoding="utf-8")
 
         (project / "QA.md").write_text(
             "# QA\n\n## Mechanical\n\n| 1 | Build | pass | output |\n\n## Judgement\n\nVerdict: Ship\nScore: 40/50\n",
             encoding="utf-8",
         )
+        try:
+            prepare(ns(stage="S5", project=str(project), output=str(sandbox / "partial-S5"), parent=str(s4b_dir), target="http://127.0.0.1:3000", lenses="creative-director (light)"))
+            partial_return_blocked = False
+        except PacketError as exc:
+            partial_return_blocked = "requires a complete implementation return" in str(exc)
+        case("partial S4B return cannot advance to S5", partial_return_blocked)
+        return_path.write_text(returned, encoding="utf-8")
         s5_dir = sandbox / "R1-S5"
         prepare(ns(stage="S5", project=str(project), output=str(s5_dir), parent=str(s4b_dir), target="http://127.0.0.1:3000", lenses="creative-director (light)"))
         case("isolated S5 packet verifies (positive control)", not verify_packet(s5_dir))

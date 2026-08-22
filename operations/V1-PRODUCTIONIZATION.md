@@ -57,3 +57,35 @@ controller as the smallest owner.
 
 **Next:** implement and negative-test the controller, entry skill, provider
 preflight, return handoff, and generated operations state.
+
+### 2026-08-23 — checkpoint 1: runtime orchestration
+
+**Checkpoint:** `fd3f1393088fe046aa9947749b7080c55c1a70b0`
+
+**Why:** Test B proved canonical packet transport but not a usable operator path
+or a durable external-provider return boundary.
+
+**Action:** Added the repository-scoped Builder OS entry skill, thin runtime
+controller, provider preflight, rich return-handoff template and ingestion,
+structural same-session evidence, and human-readable per-run operations log.
+
+**Validation:** Python compilation passed; runtime self-test 13/13; packet
+self-test 21/21; repository check and both existing self-test suites passed.
+
+### 2026-08-23 — recovery and progression hardening
+
+**Why:** An operator returning in a clean session still needed to remember the
+run directory, and an explicit controller option could request a stage not
+permitted by the inferred gate state. A realistic dry run also showed that
+legitimate post-stage updates to delivered project state must remain recordable
+without tolerating canonical-source drift.
+
+**Action:** Added project-based run discovery with ambiguity refusal; made
+explicit stages assertions rather than overrides; read provider/model/effort/
+workload from `HANDOFF.md`; separated expected project-output drift from packet
+or canonical drift; and blocked partial implementation returns from S5.
+
+**Validation:** Full controller dry run now covers S1 -> S3 -> G1 -> S4A ->
+provider preflight -> S4B return -> isolated S5. Negative controls cover gate
+bypass, ambiguous histories, canonical drift, changed output hashes, provider
+limits, malformed/partial returns, and skill discovery drift.
