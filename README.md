@@ -43,6 +43,12 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
 **Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
 
+**Existing project:** say that you want Builder OS to adopt the current
+repository. The entry skill uses the opt-in `--adopt-existing` path: it inspects
+the live repository read-only during intake, preserves every existing file and
+current behaviour, and creates only the missing Builder OS entry documents. If
+`PROJECT.md` or `AGENTS.md` already exists, it stops instead of overwriting it.
+
 ## The five modes
 
 | Mode | For |

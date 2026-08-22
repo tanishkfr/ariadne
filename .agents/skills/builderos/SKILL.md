@@ -35,7 +35,11 @@ Builder OS. Do not reconstruct its policies from this skill.
    create a second run merely because conversation history is absent.
 3. For a new brief, run `builderos.py start` with the ordinary-language request.
    It creates the fresh project shell when needed, allocates the run, prepares
-   S1, and starts the operations log.
+   S1, and starts the operations log. If the user explicitly wants to bring an
+   existing repository under Builder OS, inspect its top level first and pass
+   `--adopt-existing`. Adoption is non-destructive: preserve current behaviour
+   and every existing file. If `PROJECT.md` or `AGENTS.md` already exists, do
+   not overwrite it; discover the prior run or stop for a deliberate migration.
 4. Read the generated `packet.txt` yourself and perform the current reasoning
    stage in this task when independence does not require a fresh task. The user
    must not locate prompts, policies, templates, packet IDs, or transcript paths.

@@ -53,6 +53,12 @@ current generated packet. Do not paste `ROUTER.md`, `DESIGN-TASTE.md`, or the
 whole Builder OS into project knowledge; that bypasses context minimisation and
 creates stale copies.
 
+For an existing repository with no Builder OS run, explicitly ask the skill to
+adopt it. The runtime uses `start --adopt-existing`, preserves all current files
+and behaviour, and gives S1 read-only repository context. It refuses adoption
+when `PROJECT.md` or `AGENTS.md` already exists rather than overwriting a prior
+state or rules file.
+
 ---
 
 ## Session discipline

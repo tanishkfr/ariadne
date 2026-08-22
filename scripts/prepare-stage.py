@@ -331,6 +331,23 @@ def parameterise_prompt(stage: str, block: str, args: argparse.Namespace) -> tup
             request = read(Path(args.request_file).resolve()).strip()
         if not request:
             raise PacketError("S1 requires --request or --request-file")
+        if getattr(args, "adopt_existing", False):
+            existing = sorted(
+                item.name for item in Path(args.project).resolve().iterdir()
+                if item.name not in {".git", ".gitignore"}
+            )
+            request = (
+                request.strip()
+                + "\n\nBUILDER OS EXISTING-PROJECT ADOPTION CONTEXT\n"
+                + "This is an opt-in adoption of an existing project, not a fresh build. "
+                + "Inspect the live project repository read-only before asking questions. "
+                + "Preserve current behaviour and every pre-existing file. Do not rewrite, "
+                + "delete, rename, or implement anything during S1. Create only PROJECT.md "
+                + "and AGENTS.md after the intake is resolved. Existing top-level entries at "
+                + "packet preparation: "
+                + (", ".join(existing) if existing else "none")
+                + "."
+            )
         if "MY REQUEST:" not in block:
             raise PacketError("S1 prompt has no MY REQUEST parameter")
         block = re.sub(
@@ -390,12 +407,21 @@ def state_field(text: str, name: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def check_project_boundary(stage: str, project: Path) -> None:
+def check_project_boundary(stage: str, project: Path, adopt_existing: bool = False) -> None:
     if not project.is_dir():
         raise PacketError(f"project directory does not exist: {project}")
     if stage == "S1":
         allowed = {".git", ".gitignore"}
         unexpected = sorted(p.name for p in project.iterdir() if p.name not in allowed)
+        if adopt_existing:
+            owned = sorted(name for name in ("PROJECT.md", "AGENTS.md") if (project / name).exists())
+            if owned:
+                raise PacketError(
+                    "existing project already contains Builder OS-owned entry documents: "
+                    + ", ".join(owned)
+                    + "; resume its run or migrate those files deliberately"
+                )
+            return
         if unexpected:
             raise PacketError(
                 "S1 requires a fresh project containing only .git/.gitignore; "
@@ -600,6 +626,8 @@ def prepare(args: argparse.Namespace) -> Path:
     stage = args.stage.upper()
     if stage not in STAGES:
         raise PacketError(f"unsupported stage {stage}; choose one of {list(STAGES)}")
+    if getattr(args, "adopt_existing", False) and stage != "S1":
+        raise PacketError("--adopt-existing is valid only for the S1 intake boundary")
     output = Path(args.output).resolve()
     project = Path(args.project).resolve()
     packet_id = args.packet_id or output.name
@@ -614,7 +642,7 @@ def prepare(args: argparse.Namespace) -> Path:
             "--synthetic-validation and is reserved for synthetic validation"
         )
 
-    check_project_boundary(stage, project)
+    check_project_boundary(stage, project, getattr(args, "adopt_existing", False))
     parent, parent_dir, parent_evidence_path, parent_evidence_kind = load_parent(
         args.parent, stage, args.retry
     )
@@ -652,6 +680,7 @@ def prepare(args: argparse.Namespace) -> Path:
         "parent_evidence_kind": parent_evidence_kind,
         "parent_evidence_sha256": sha256_file(parent_evidence_path) if parent_evidence_path else None,
         "retry": bool(args.retry),
+        "adopt_existing": bool(getattr(args, "adopt_existing", False)),
         "packet_file": PACKET_NAME,
         "packet_sha256": sha256_file(packet_path),
         "expected_transcript": "evidence/transcript.md",
@@ -746,6 +775,14 @@ def verify_packet(packet_dir: Path) -> list[str]:
         problems.append("packet hash mismatch — packet changed after preparation")
     if f"BUILDER OS {stage} STAGE PACKET" not in packet.splitlines()[:2]:
         problems.append("packet stage header does not match manifest stage")
+    adopt_existing = manifest.get("adopt_existing", False)
+    if not isinstance(adopt_existing, bool):
+        problems.append("adopt_existing manifest field must be boolean")
+    elif adopt_existing:
+        if stage != "S1":
+            problems.append("existing-project adoption is valid only at S1")
+        if "BUILDER OS EXISTING-PROJECT ADOPTION CONTEXT" not in packet:
+            problems.append("S1 adoption packet is missing its non-destructive context")
 
     expected_labels = []
     for entry in manifest.get("sources", []):
@@ -884,6 +921,7 @@ def self_test() -> int:
             packet_id=None,
             parent=None,
             retry=False,
+            adopt_existing=False,
             synthetic_validation=True,
             request=None,
             request_file=None,
@@ -902,6 +940,56 @@ def self_test() -> int:
         s1_dir = sandbox / "R1-S1"
         prepare(ns(stage="S1", project=str(project), output=str(s1_dir), request="Build a small type experiment."))
         case("fresh S1 packet verifies (positive control)", not verify_packet(s1_dir))
+
+        existing_project = sandbox / "existing-project"
+        existing_project.mkdir()
+        existing_readme = existing_project / "README.md"
+        existing_readme.write_text("# Existing fixture\n", encoding="utf-8")
+        try:
+            prepare(ns(
+                stage="S1", project=str(existing_project), output=str(sandbox / "existing-refused"),
+                request="Adopt this existing site.",
+            ))
+            default_existing_refused = False
+        except PacketError as exc:
+            default_existing_refused = "fresh project" in str(exc)
+        case("existing project requires explicit adoption", default_existing_refused)
+
+        adopted_s1 = sandbox / "existing-S1"
+        prepare(ns(
+            stage="S1", project=str(existing_project), output=str(adopted_s1),
+            request="Adopt this existing site.", adopt_existing=True,
+        ))
+        adopted_manifest = json.loads(read(adopted_s1 / MANIFEST_NAME))
+        case(
+            "existing project adoption preserves files and declares its boundary",
+            not verify_packet(adopted_s1)
+            and read(existing_readme) == "# Existing fixture\n"
+            and adopted_manifest["adopt_existing"] is True
+            and "EXISTING-PROJECT ADOPTION CONTEXT" in read(adopted_s1 / PACKET_NAME),
+        )
+        adopted_manifest_text = read(adopted_s1 / MANIFEST_NAME)
+        malformed_adoption = json.loads(adopted_manifest_text)
+        malformed_adoption["adopt_existing"] = "yes"
+        (adopted_s1 / MANIFEST_NAME).write_text(
+            json.dumps(malformed_adoption, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        case(
+            "non-boolean adoption provenance is detected",
+            any("must be boolean" in problem for problem in verify_packet(adopted_s1)),
+        )
+        (adopted_s1 / MANIFEST_NAME).write_text(adopted_manifest_text, encoding="utf-8")
+        (existing_project / "AGENTS.md").write_text("existing rules\n", encoding="utf-8")
+        try:
+            prepare(ns(
+                stage="S1", project=str(existing_project), output=str(sandbox / "owned-refused"),
+                request="Adopt this existing site.", adopt_existing=True,
+            ))
+            owned_entry_refused = False
+        except PacketError as exc:
+            owned_entry_refused = "AGENTS.md" in str(exc)
+        case("adoption refuses to overwrite an existing AGENTS.md", owned_entry_refused)
+
         (s1_dir / "evidence" / "transcript.md").write_text("S1 transcript\n", encoding="utf-8")
         s1_retry = sandbox / "R1-S1-C1"
         prepare(ns(
@@ -1083,6 +1171,10 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--target")
     prepare_parser.add_argument("--lenses")
     prepare_parser.add_argument("--synthetic-validation", action="store_true")
+    prepare_parser.add_argument(
+        "--adopt-existing", action="store_true",
+        help="allow an opt-in, non-destructive S1 intake for an existing project",
+    )
 
     verify_parser = sub.add_parser("verify", help="verify source parity and packet structure")
     verify_parser.add_argument("--packet-dir", required=True)

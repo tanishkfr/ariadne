@@ -12,6 +12,7 @@ Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](WORKFLOW.
 |---|---|---|
 | New idea, nothing exists | **Codex**, invoke `$builderos` | It starts, routes, and records the run |
 | Returning to a project | **Codex**, invoke `$builderos` | It discovers the run and resumes from durable state |
+| Existing project, no Builder OS run | **Codex**, invoke `$builderos` and ask to adopt it | It preserves the repository and starts a non-destructive intake |
 | Builder OS requests external implementation | **The named build tool** | The complete verified handoff is ready |
 | Mid-build, a decision came up | Depends — see below | |
 | A bug | **Build tool** | Bugs are `R2` work |
@@ -58,6 +59,14 @@ Check: is `HANDOFF.md` written and was **G1** approved?
 
 - **Yes** → open the build tool, start task 1 from `TASKS.md`.
 - **No** → you are not ready. Go to S3. Building before direction is locked is the thing this system exists to prevent, and "the deadline is tight" is exactly when it happens.
+
+### "I already have a project"
+
+Invoke `$builderos` from that repository and say you want to adopt it. Builder
+OS uses the existing source as read-only intake context, preserves every file,
+and writes no implementation during S1. Existing Builder OS entry documents are
+never overwritten: if `PROJECT.md` or `AGENTS.md` is present, the runtime asks
+you to resume or migrate deliberately.
 
 ### "I'm mid-build and something needs deciding"
 

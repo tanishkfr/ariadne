@@ -95,7 +95,9 @@ Do not read the rest of the documentation first. Run something small and real.
 **Pick a [game-experiment](modes/game-experiment.md).** It is the lightest mode: three questions, two documents, and it finishes in a day.
 
 1. Choose or create an empty project directory. Builder OS will initialise its
-   local Git repository if required.
+   local Git repository if required. For an existing repository, say explicitly
+   that you want to adopt it; Builder OS uses its non-destructive adoption path
+   instead of pretending the repository is empty.
 2. Invoke `$builderos` and describe the idea normally.
 3. Answer the one batched set of material questions. Accept all proposed
    defaults in one line when they are right.
@@ -108,6 +110,21 @@ failure resumes from the last valid boundary; it does not overwrite history or
 restart the project.
 
 When you reach **G1**, the system will present a design direction and stop. **This is the moment that matters.** Read it. If it says "clean, modern, minimal", reject it — that is a mood, not a direction, and the system is meant to catch that. Ask for a thesis specific enough that a template would fail it.
+
+### Bringing in an existing project
+
+Invoke `$builderos` from the repository and say what outcome you want from the
+existing project. Builder OS inspects the live repository during S1 but does not
+rewrite implementation, delete files, or reset current behaviour. The runtime's
+explicit recovery command is:
+
+```bash
+python scripts/builderos.py start --project <project> --adopt-existing --request "<outcome>"
+```
+
+This is intentionally opt-in. Ordinary `start` still refuses a non-empty
+directory. Adoption also refuses to overwrite an existing `PROJECT.md` or
+`AGENTS.md`; in that case resume the recorded run or plan a deliberate merge.
 
 ---
 

@@ -210,15 +210,24 @@ happens next. Canonical policies remain in Builder OS; this is project history.
 """
 
 
-def ensure_fresh_project(project: Path) -> None:
+def ensure_project(project: Path, adopt_existing: bool = False) -> list[str]:
     project.mkdir(parents=True, exist_ok=True)
     allowed = {".git", ".gitignore"}
     unexpected = sorted(item.name for item in project.iterdir() if item.name not in allowed)
-    if unexpected:
+    if unexpected and not adopt_existing:
         raise RuntimeError_(
             "A new Builder OS run needs a fresh project. Existing files found: "
             + ", ".join(unexpected)
+            + ". Use --adopt-existing only when preserving this repository is intentional."
         )
+    if adopt_existing:
+        owned = sorted(name for name in ("PROJECT.md", "AGENTS.md") if (project / name).exists())
+        if owned:
+            raise RuntimeError_(
+                "Existing project already has Builder OS entry documents: "
+                + ", ".join(owned)
+                + ". Resume its recorded run or migrate those files deliberately; they will not be overwritten."
+            )
     ignore = project / ".gitignore"
     if not ignore.exists():
         ignore.write_text(".env\n.env.*\nnode_modules/\n.next/\n", encoding="utf-8")
@@ -228,6 +237,7 @@ def ensure_fresh_project(project: Path) -> None:
         )
         if result.returncode != 0:
             raise RuntimeError_("Could not initialise the project repository: " + result.stderr.strip())
+    return unexpected
 
 
 def transport_namespace(**values) -> argparse.Namespace:
@@ -285,6 +295,7 @@ def current_packet(state: dict, allow_project_drift: bool = False) -> tuple[dict
 
 def start(args: argparse.Namespace) -> int:
     project = Path(args.project).resolve()
+    adopt_existing = bool(getattr(args, "adopt_existing", False))
     run_root = Path(args.run_root).resolve() if args.run_root else default_run_root(project)
     if run_root.exists():
         raise RuntimeError_(
@@ -295,7 +306,7 @@ def start(args: argparse.Namespace) -> int:
         request = read(Path(args.request_file).resolve()).strip()
     if not request or not request.strip():
         raise RuntimeError_("A new run needs an ordinary-language request")
-    ensure_fresh_project(project)
+    existing_entries = ensure_project(project, adopt_existing)
     run_root.mkdir(parents=True)
     run_id = args.run_id or slug(project.name)
     (run_root / LOG_NAME).write_text(initial_log(run_id, project, request), encoding="utf-8")
@@ -308,6 +319,7 @@ def start(args: argparse.Namespace) -> int:
             output=str(output),
             packet_id=packet_id,
             request=request,
+            adopt_existing=adopt_existing,
             synthetic_validation=args.synthetic_validation,
         )
     )
@@ -320,6 +332,7 @@ def start(args: argparse.Namespace) -> int:
         "updated_at": now(),
         "status": "active",
         "request": request.strip(),
+        "adopt_existing": adopt_existing,
         "evidence_state": "verified-transport; provider stage not yet observed",
         "packets": [{"id": packet_id, "stage": "S1", "path": str(output)}],
         "provider_preflight": None,
@@ -330,8 +343,17 @@ def start(args: argparse.Namespace) -> int:
     append_log(
         run_root,
         "Project started",
-        "A fresh ordinary-language brief needs a verified intake boundary.",
-        "Verified: fresh project shell and S1 packet prepared.",
+        (
+            "An existing project needs a non-destructive verified intake boundary."
+            if adopt_existing
+            else "A fresh ordinary-language brief needs a verified intake boundary."
+        ),
+        (
+            "Verified: existing project preserved and S1 adoption packet prepared; "
+            + f"top-level entries observed: {', '.join(existing_entries) or 'none'}."
+            if adopt_existing
+            else "Verified: fresh project shell and S1 packet prepared."
+        ),
         [str(project / ".gitignore"), str(output / "packet.txt"), str(output / "manifest.json")],
         "Packet source parity passed; no provider stage has run.",
         "Builder OS should read and run the prepared project-brief packet.",
@@ -373,6 +395,28 @@ def first_meaningful_line(section: str) -> str:
         if value and not value.startswith("<"):
             return value
     return "not yet recorded"
+
+
+def first_meaningful_paragraph(section: str) -> str:
+    lines: list[str] = []
+    for raw in section.splitlines():
+        line = raw.strip()
+        if not line:
+            if lines:
+                break
+            continue
+        if line.startswith((">", "|", "#", "```", "~~~")) or re.fullmatch(r"[-: ]+", line):
+            if lines:
+                break
+            continue
+        if re.match(r"^(?:[-*+] |\d+\.\s+)", line):
+            if lines:
+                break
+            continue
+        value = plain_markdown(line)
+        if value and not value.startswith("<"):
+            lines.append(value)
+    return " ".join(lines) if lines else "not yet recorded"
 
 
 def numbered_items(section: str) -> list[str]:
@@ -695,7 +739,7 @@ def project_intelligence(
     return {
         "project_name": project.name,
         "mode": project_mode(project_text),
-        "goal": first_meaningful_line(safe_section(project_text, "Goal")),
+        "goal": first_meaningful_paragraph(safe_section(project_text, "Goal")),
         "current_work": FRIENDLY_STAGES.get(stage, stage),
         "approved_direction": design_value or "not yet approved",
         "rejected_direction_attempts": retry_count(state, "S3"),
@@ -1443,7 +1487,8 @@ def skill_contract_problems(
     for token in (
         "scripts/builderos.py", "discover --project", "provider preflight",
         "handoff-readiness", "builderos.py advance", "record-note",
-        "ingest-return", "ingest-review", "same-stage retry", "Never grant a gate",
+        "ingest-return", "ingest-review", "same-stage retry", "--adopt-existing",
+        "Never grant a gate",
     ):
         if token not in skill_text:
             problems.append(f"builderos skill missing runtime boundary: {token}")
@@ -1697,6 +1742,10 @@ def self_test() -> int:
     case("skill trigger drift is detected", bool(skill_contract_problems(canonical_skill.replace("resume", "continue", 1), canonical_interface, canonical_install)))
     case("skill name drift is detected", bool(skill_contract_problems(canonical_skill.replace("name: builderos", "name: builder-os", 1), canonical_interface, canonical_install)))
     case("skill UI drift is detected", bool(skill_contract_problems(canonical_skill, canonical_interface.replace("default_prompt:", "prompt:"), canonical_install)))
+    case(
+        "skill adoption boundary drift is detected",
+        bool(skill_contract_problems(canonical_skill.replace("--adopt-existing", "--migrate-existing", 1), canonical_interface, canonical_install)),
+    )
     case("available sufficient provider passes", preflight_decision("available", "sufficient", "large")[0] == "verified")
     case("insufficient quota blocks", preflight_decision("available", "insufficient", "medium")[0] == "blocked")
     case("unknown quota blocks a large handoff", preflight_decision("available", "unknown", "large")[0] == "human-check-required")
@@ -1741,6 +1790,44 @@ def self_test() -> int:
             )
             defaults.update(values)
             return argparse.Namespace(**defaults)
+
+        adopted_project = workspace / "adopted-project"
+        adopted_project.mkdir()
+        adopted_readme = adopted_project / "README.md"
+        adopted_readme.write_text("# Existing app\n", encoding="utf-8")
+        adopted_run = workspace / "adopted-run"
+        start(
+            argparse.Namespace(
+                project=str(adopted_project), run_root=str(adopted_run), run_id="adopted",
+                request="Adopt this existing app without changing it.", request_file=None,
+                adopt_existing=True, synthetic_validation=True,
+            )
+        )
+        adopted_state = load_state(adopted_run)
+        adopted_entry, adopted_packet = current_packet(adopted_state)
+        case(
+            "runtime adopts an existing project without destructive overwrite",
+            adopted_state["adopt_existing"] is True
+            and adopted_entry["stage"] == "S1"
+            and read(adopted_readme) == "# Existing app\n"
+            and "EXISTING-PROJECT ADOPTION CONTEXT" in read(adopted_packet / "packet.txt"),
+        )
+
+        protected_project = workspace / "protected-project"
+        protected_project.mkdir()
+        (protected_project / "PROJECT.md").write_text("existing brief\n", encoding="utf-8")
+        try:
+            start(
+                argparse.Namespace(
+                    project=str(protected_project), run_root=str(workspace / "protected-run"),
+                    run_id="protected", request="Adopt it.", request_file=None,
+                    adopt_existing=True, synthetic_validation=True,
+                )
+            )
+            protected_entry_refused = False
+        except RuntimeError_ as exc:
+            protected_entry_refused = "PROJECT.md" in str(exc)
+        case("runtime refuses to overwrite existing Builder OS entry documents", protected_entry_refused)
 
         start(
             argparse.Namespace(
@@ -2022,7 +2109,8 @@ def self_test() -> int:
         )
         (auto_project / "PROJECT.md").write_text(
             "# PROJECT: Day Sentence\n\n**Mode:** game-experiment · **Status:** locked\n\n"
-            "## Goal\n\nMake time feel visible through one changing sentence.\n\n"
+            "## Goal\n\nMake time feel visible through one changing\n"
+            "sentence across a normal day.\n\n"
             "## Success criteria\n\n1. A visitor sees the sentence change across two fixture times.\n\n"
             "## Open questions\n\nNone.\n",
             encoding="utf-8",
@@ -2053,7 +2141,7 @@ def self_test() -> int:
         )
         case(
             "project briefing derives goal and human-level current work",
-            auto_intelligence["goal"] == "Make time feel visible through one changing sentence."
+            auto_intelligence["goal"] == "Make time feel visible through one changing sentence across a normal day."
             and auto_intelligence["current_work"] == "design direction",
         )
         record_note(
@@ -2095,6 +2183,10 @@ def parser() -> argparse.ArgumentParser:
     request.add_argument("--request")
     request.add_argument("--request-file")
     start_p.add_argument("--synthetic-validation", action="store_true", help=argparse.SUPPRESS)
+    start_p.add_argument(
+        "--adopt-existing", action="store_true",
+        help="start a non-destructive intake for an existing project",
+    )
 
     def run_selector(command: argparse.ArgumentParser) -> None:
         selection = command.add_mutually_exclusive_group(required=True)
