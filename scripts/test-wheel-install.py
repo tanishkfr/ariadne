@@ -104,7 +104,7 @@ def self_test() -> int:
             root,
             environment=environment_vars,
         )
-        case("fresh Python environment exposes Builder OS version", version_result.stdout.strip() == "Builder OS 1.5.0")
+        case("fresh Python environment exposes Builder OS version", version_result.stdout.strip() == "Builder OS 1.5.1")
 
         data_home = root / "person-data"
         skill = root / "person-codex-skills" / "builderos"
@@ -120,7 +120,7 @@ def self_test() -> int:
         current = json.loads((data_home / "current.json").read_text(encoding="utf-8"))
         runtime = Path(current["runtime_root"])
         installation = json.loads((skill / "references" / "installation.json").read_text(encoding="utf-8"))
-        expected_runtime = (data_home / "versions" / "1.5.0").resolve()
+        expected_runtime = (data_home / "versions" / "1.5.1").resolve()
         case(
             "wheel carries a canonical runtime with no source-checkout dependency",
             runtime.resolve() == expected_runtime
@@ -152,7 +152,7 @@ def self_test() -> int:
         case(
             "reinstall repairs a damaged runtime from the self-contained wheel",
             (runtime / "ROUTER.md").is_file()
-            and "Builder OS 1.5.0 is installed" in repair_result.stdout
+            and "Builder OS 1.5.1 is installed" in repair_result.stdout
             and "[OK] Runtime" in repaired_doctor.stdout,
         )
 

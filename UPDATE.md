@@ -16,6 +16,12 @@ a successful update, the command names the available rollback version.
 
 ## Roll back
 
+If the optional Claude reasoner entry is enabled, remove it first:
+
+```bash
+python -m builderos disable-claude
+```
+
 ```bash
 python -m builderos rollback
 python -m builderos doctor

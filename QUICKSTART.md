@@ -4,10 +4,10 @@ Requires Python 3.8 or newer and Codex.
 
 ## Install
 
-After the `v1.5.0` release is published:
+After the `v1.5.1` release is published:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.0/builder_os-1.5.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.1/builder_os-1.5.1-py3-none-any.whl"
 python -m builderos install
 ```
 

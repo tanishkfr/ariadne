@@ -6,7 +6,7 @@ This is a maintainer procedure, not part of normal use.
    contains `Private :: Do Not Upload`.
 2. Update the single authoritative [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
 3. Start from a clean tracked worktree and run the complete validation listed in
-   [V1.5-READINESS.md](V1.5-READINESS.md).
+   [V1.5.1-READINESS.md](V1.5.1-READINESS.md).
 4. Build the release set:
 
    ```bash

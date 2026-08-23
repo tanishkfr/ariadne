@@ -10,6 +10,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -140,6 +141,22 @@ def self_test() -> int:
         bundle_141 = make_bundle(release_dir, "1.4.1")
         incompatible_bundle = make_bundle(release_dir, "1.5.0", "99.0.0")
         descriptor_141 = local_descriptor(release_dir / "release-141.json", bundle_141, "1.4.1")
+        legacy_manifest = cli.bundle_manifest(bundle_140)
+        for relative in cli.V151_REQUIRED_RUNTIME_FILES:
+            legacy_manifest["files"].pop(relative, None)
+        case(
+            "new launcher accepts a pre-Claude rollback manifest",
+            not cli.validate_release_manifest(legacy_manifest),
+        )
+        current_without_reasoner = json.loads(json.dumps(legacy_manifest))
+        current_without_reasoner["version"] = "1.5.1"
+        case(
+            "V1.5.1 manifest cannot omit its reasoner runtime",
+            any(
+                "required runtime files" in problem
+                for problem in cli.validate_release_manifest(current_without_reasoner)
+            ),
+        )
         home = root / "user-data"
         target = root / "personal-skills" / "builderos"
         project = root / "person-project"
@@ -151,6 +168,15 @@ def self_test() -> int:
         pointer_140 = cli.install_bundle(bundle_140, home, target)
         runtime_140 = Path(pointer_140["runtime_root"])
         case("fresh user installs a self-contained runtime", not cli.runtime_problems(runtime_140))
+        runtime_help = subprocess.run(
+            [sys.executable, str(runtime_140 / "scripts" / "builderos.py"), "--help"],
+            capture_output=True,
+            text=True,
+        )
+        case(
+            "running the installed controller preserves the immutable runtime",
+            runtime_help.returncode == 0 and not cli.runtime_problems(runtime_140),
+        )
         case("fresh install registers one managed skill", not cli.skill_problems(runtime_140, target))
         claude_target = root / "optional-claude-skills" / "builderos"
         case("normal installation does not enable Claude", not claude_target.exists())

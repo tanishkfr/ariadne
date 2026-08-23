@@ -17,10 +17,10 @@ dependency is installed.
 
 ## Public release install
 
-Once `v1.5.0` is published, run these as your normal user:
+Once `v1.5.1` is published, run these as your normal user:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.0/builder_os-1.5.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.1/builder_os-1.5.1-py3-none-any.whl"
 python -m builderos install
 python -m builderos doctor
 ```
@@ -32,6 +32,22 @@ The first command installs the launcher. The second verifies the wheel's
 embedded runtime, creates a versioned user-local installation, and registers the
 managed Codex skill. A separate activation command is intentional: Python
 packages have no safe portable post-install hook for writing Codex skills.
+
+## Optional Claude reasoner
+
+Claude Code is not a dependency and is never enabled by normal installation.
+If its CLI is already available and you explicitly want the experimental
+reasoner entry, run:
+
+```bash
+python -m builderos enable-claude
+```
+
+The command feature-detects the CLI and installs one managed user skill; it
+does not authenticate, add a project `CLAUDE.md`, change the default provider,
+or alter projects. Remove it with `python -m builderos disable-claude`. To
+restore the V1.5 baseline, disable Claude first and then use the existing
+`builderos rollback` command.
 
 ## Locations
 

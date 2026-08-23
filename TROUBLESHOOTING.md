@@ -40,6 +40,13 @@ recorded.
 Run doctor, then `python -m builderos install` to repair registration. Restart
 Codex so it reloads installed skills.
 
+### Claude is unavailable or does not show `$builderos`
+
+Claude is optional. Confirm its CLI is already installed and available on
+`PATH`, then run `python -m builderos enable-claude`. If detection still fails,
+continue with Codex; no project repair or migration is required. Use
+`disable-claude` to remove a damaged optional entry before rollback.
+
 ### I need the actual paths
 
 For diagnostics only:

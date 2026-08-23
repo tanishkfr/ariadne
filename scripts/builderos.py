@@ -27,6 +27,11 @@ from datetime import datetime
 from pathlib import Path
 
 
+# Installed runtimes are immutable and hash-verified. Dynamic helper imports
+# must never create __pycache__ files beside canonical runtime sources.
+sys.dont_write_bytecode = True
+
+
 ROOT = Path(__file__).resolve().parent.parent
 STATE_NAME = "builderos-run.json"
 LOG_NAME = "OPERATIONS.md"

@@ -46,7 +46,7 @@ SKILL_MARKER = ".builderos-managed.json"
 SKILL_INSTALLATION = Path("references") / "installation.json"
 CLAUDE_SKILL_MARKER = ".builderos-managed-claude-reasoner.json"
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?$")
-REQUIRED_RUNTIME_FILES = {
+BASE_REQUIRED_RUNTIME_FILES = {
     "VERSION",
     "ROUTER.md",
     "WORKFLOW.md",
@@ -62,12 +62,14 @@ REQUIRED_RUNTIME_FILES = {
     "scripts/prepare-stage.py",
     "scripts/creative-intelligence.py",
     "scripts/creative-operations.py",
+    ".agents/skills/builderos/SKILL.md",
+    ".agents/skills/builderos/agents/openai.yaml",
+}
+V151_REQUIRED_RUNTIME_FILES = {
     "scripts/reasoners.py",
     "scripts/install-claude-reasoner-skill.py",
     "adapters/reasoners.json",
     "adapters/claude-reasoner-skill/SKILL.md",
-    ".agents/skills/builderos/SKILL.md",
-    ".agents/skills/builderos/agents/openai.yaml",
 }
 
 
@@ -228,8 +230,9 @@ def validate_release_manifest(value: dict) -> list[str]:
         problems.append("unsupported release-manifest schema")
     if value.get("product") != PRODUCT:
         problems.append("release manifest names a different product")
+    release_version = str(value.get("version", ""))
     try:
-        version_key(str(value.get("version", "")))
+        version_key(release_version)
     except ProductError as exc:
         problems.append(str(exc))
     files = value.get("files")
@@ -243,7 +246,13 @@ def validate_release_manifest(value: dict) -> list[str]:
     ):
         problems.append("release manifest has malformed file hashes")
     else:
-        missing = sorted(REQUIRED_RUNTIME_FILES - set(files))
+        required = set(BASE_REQUIRED_RUNTIME_FILES)
+        try:
+            if version_key(release_version) >= version_key("1.5.1"):
+                required.update(V151_REQUIRED_RUNTIME_FILES)
+        except ProductError:
+            pass
+        missing = sorted(required - set(files))
         if missing:
             problems.append("release manifest omits required runtime files: " + ", ".join(missing))
     compatibility = value.get("project_state_schema")

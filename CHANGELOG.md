@@ -10,6 +10,38 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.5.1 — 2026-08-23 · OPTIONAL CLAUDE REASONER
+
+V1.5 had one verified reasoning path and provider-neutral project documents,
+but no durable way to select, switch or recover a second reasoning provider.
+V1.5.1 adds an adapter-owned reasoner capability contract with Codex as the
+unchanged default and Claude as explicit opt-in. Claude is not a dependency,
+is not installed by normal setup, and remains execution-unverified on the
+validation machine because its CLI is absent.
+
+Reasoning packets for S1, S2, S3, S4A, S5 and S6 now inherit the recorded
+reasoner. S4B remains controlled by the existing implementation handoff and
+provider preflight. A pre-output provider switch creates an immutable linked
+same-stage child; a post-output switch waits for the next reasoning boundary.
+Failures become parent evidence. Codex fallback occurs only when no material
+current-stage output exists; otherwise the controller preserves the partial
+work and stops for human judgement. Rejected-direction context, S5 isolation,
+partial implementation returns and both switch directions have deterministic
+positive and negative controls.
+
+An optional thin Claude user skill operates the same controller and generated
+packets without copying policy or creating project `CLAUDE.md`. `builderos
+enable-claude` feature-detects the CLI and installs only that managed skill;
+`disable-claude` removes it. Normal install, Codex skill, project files, gates,
+canonical handoffs and Cursor/Grok implementation routing remain unchanged.
+
+**Scope:** no change to `ROUTER.md`, `WORKFLOW.md`, modes, prompts, canonical
+design/research/QA/evaluation policies, templates, S5 isolation, human approval
+authority or project-state schema. No Claude command, authentication, live
+session, provider install, remote push or deployment was performed.
+
+---
+
 ## 1.5.0 — 2026-08-23 · REAL-PROJECT CREATIVE PRODUCTION
 
 Builder OS could already install, transport verified stage context and preserve

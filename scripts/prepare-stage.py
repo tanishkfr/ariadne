@@ -30,6 +30,11 @@ import uuid
 from pathlib import Path
 
 
+# Installed runtimes are immutable and hash-verified. Loading the optional
+# reasoner helper must not create a file outside the release manifest.
+sys.dont_write_bytecode = True
+
+
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_VERSION = 1
 PACKET_NAME = "packet.txt"
@@ -893,7 +898,10 @@ def verify_packet(packet_dir: Path) -> list[str]:
             continue
         current = sha256_file(source_path)
         if current != entry.get("source_sha256"):
-            problems.append(f"stale source: {entry['path']}")
+            expected_content = entry.get("content_sha256")
+            current_content = sha256_text(read(source_path)) if expected_content else None
+            if not expected_content or current_content != expected_content:
+                problems.append(f"stale source: {entry['path']}")
         if entry.get("delivered", True):
             expected_labels.append(entry["label"])
             header = (
@@ -1284,6 +1292,13 @@ def self_test() -> int:
         parent_transcript.write_text("S2 transcript\n", encoding="utf-8")
 
         original_project = read(project / "PROJECT.md")
+        (project / "PROJECT.md").write_bytes(
+            original_project.replace("\n", "\r\n").encode("utf-8")
+        )
+        case(
+            "line-ending-only source changes preserve content parity",
+            not verify_packet(s3_dir),
+        )
         (project / "PROJECT.md").write_text(original_project + "\nchanged\n", encoding="utf-8")
         case("changed project input is stale", any("stale source" in p for p in verify_packet(s3_dir)))
         (project / "PROJECT.md").write_text(original_project, encoding="utf-8")
@@ -1305,7 +1320,10 @@ def self_test() -> int:
         canonical = next(source for source in manifest["sources"] if source["path"] == "DESIGN-TASTE.md")
         canonical["source_sha256"] = "0" * 64
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        case("changed canonical source is detected", any("stale source" in p for p in verify_packet(s3_dir)))
+        case(
+            "tampered canonical source declaration is detected",
+            any("section" in problem for problem in verify_packet(s3_dir)),
+        )
         manifest_path.write_text(manifest_original, encoding="utf-8")
 
         manifest = json.loads(manifest_original)
