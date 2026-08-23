@@ -99,11 +99,38 @@ def read_json(path: Path) -> dict:
     return value
 
 
+def replace_with_retry(
+    source: Path,
+    target: Path,
+    *,
+    attempts: int = 10,
+    replace=None,
+    sleep=None,
+) -> None:
+    """Complete one atomic replace despite short Windows sharing violations."""
+    replace = replace or (lambda old, new: old.replace(new))
+    sleep = sleep or __import__("time").sleep
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            replace(source, target)
+            return
+        except (PermissionError, OSError) as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                sleep(0.05 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+
+
 def atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    try:
+        temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        replace_with_retry(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def append_history(home: Path, event: str, details: dict) -> None:

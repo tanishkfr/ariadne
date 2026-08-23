@@ -135,6 +135,31 @@ def self_test() -> int:
         ).as_posix().endswith("/data/person/builderos"),
     )
 
+    replace_attempts = []
+
+    def transient_replace(_source: Path, _target: Path) -> None:
+        replace_attempts.append(1)
+        if len(replace_attempts) < 3:
+            raise PermissionError("fixture sharing violation")
+
+    cli.replace_with_retry(
+        Path("fixture.tmp"), Path("fixture.json"), attempts=3,
+        replace=transient_replace, sleep=lambda _delay: None,
+    )
+    case("launcher atomic writes retry transient sharing violations", len(replace_attempts) == 3)
+    try:
+        cli.replace_with_retry(
+            Path("fixture.tmp"), Path("fixture.json"), attempts=2,
+            replace=lambda _source, _target: (_ for _ in ()).throw(
+                PermissionError("fixture persistent denial")
+            ),
+            sleep=lambda _delay: None,
+        )
+        persistent_replace_failed = False
+    except PermissionError:
+        persistent_replace_failed = True
+    case("launcher atomic writes expose persistent denial", persistent_replace_failed)
+
     with workspace() as root:
         release_dir = root / "release"
         bundle_140 = make_bundle(release_dir, "1.4.0")
