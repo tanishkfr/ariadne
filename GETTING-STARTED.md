@@ -33,10 +33,10 @@ python --version
 
 ## Step 2 — Install Builder OS
 
-After the `v1.4.0` public release is available:
+After the `v1.5.0` public release is available:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.4.0/builder_os-1.4.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.0/builder_os-1.5.0-py3-none-any.whl"
 python -m builderos install
 python -m builderos doctor
 ```

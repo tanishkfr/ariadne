@@ -17,10 +17,10 @@ dependency is installed.
 
 ## Public release install
 
-Once `v1.4.0` is published, run these as your normal user:
+Once `v1.5.0` is published, run these as your normal user:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.4.0/builder_os-1.4.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.0/builder_os-1.5.0-py3-none-any.whl"
 python -m builderos install
 python -m builderos doctor
 ```

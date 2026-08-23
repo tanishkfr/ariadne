@@ -10,6 +10,50 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.5.0 — 2026-08-23 · REAL-PROJECT CREATIVE PRODUCTION
+
+Builder OS could already install, transport verified stage context and preserve
+human gates, but real-project operation still hid two practical weaknesses:
+human interruptions were counted without separating routine machinery from
+creative authority, and a rejected pre-G1 direction required the operator to
+reconstruct the reason and continuation context manually.
+
+V1.5 makes the human-intervention budget operational with explicit categories
+for setup, file movement, prompt discovery, routine confirmation, creative
+decisions, external-provider launches and review decisions. Project status now
+reports mechanical work separately from creative authority and external
+actions. It also reports the latest evidenced creative-review strengths,
+weaknesses, priority and iteration state without turning internal review into a
+gate approval.
+
+The creative-operations ledger now requires complete implementation mappings,
+observed positive controls for verified visual evidence, explicit drift for
+every approved requirement, linked review iterations, do-not-change boundaries
+and a fixed two-iteration stop. Five realistic fixtures exercise minimal work,
+ambitious provider limits, non-destructive adoption, conflicting references and
+explicit social activation, including non-success branches.
+
+A new `restart-direction` runtime path preserves the rejected `DESIGN.md` and
+the human's reason verbatim, records complete S3 execution without approving
+G1, and creates a non-overwriting same-stage child. The child carries the exact
+previous reference and conditional design inputs plus hashed restart evidence;
+missing, changed or out-of-boundary restart context fails deterministically.
+
+The executable-skill checker now requires explicit trigger, input, output and
+done/stop contracts for every selected method. Runtime and packet controls cover
+skill drift, partial implementation, unobserved visual claims, missing drift,
+review parentage, iteration limits and restart provenance with positive and
+mutation controls.
+
+**Scope:** `ROUTER.md`, `WORKFLOW.md`, modes, prompts, canonical design/research/
+QA/evaluation policies, templates, provider neutrality, gate semantics and S5
+isolation are unchanged. Tightening internal creative-review readiness into a
+hard S5 prerequisite remains a human decision; it was not implemented. Cursor
+was unavailable. No dependency install, remote push, deployment, credential
+access or historical validation rewrite occurred.
+
+---
+
 ## 1.4.0 — 2026-08-23 · INSTALLABLE USER-LOCAL PRODUCT
 
 Builder OS previously had a capable runtime and managed Codex entry skill, but

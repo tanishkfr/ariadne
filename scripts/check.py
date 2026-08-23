@@ -36,7 +36,7 @@ REQUIRED = [
     "README.md", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md",
     "QA-POLICY.md", "EVALUATION-RUBRICS.md", "LIBRARY-POLICY.md",
     "CHANGELOG.md", "QUICKSTART.md", "INSTALL.md", "UPDATE.md",
-    "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md",
+    "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md", "V1.5-READINESS.md",
     "VERSION", "pyproject.toml", "build_backend/builderos_backend.py",
     "src/builderos/__init__.py", "src/builderos/__main__.py", "src/builderos/cli.py",
     "templates/PROJECT.md", "templates/DESIGN.md",
@@ -1132,7 +1132,7 @@ def self_test_distribution_contract():
          bool(check_distribution_texts({**actual, "VERSION": "version-next\n"}))),
         ("duplicated package version fails",
          bool(check_distribution_texts(mutate(
-             "pyproject.toml", 'dynamic = ["version"]', 'version = "1.4.0"'
+             "pyproject.toml", 'dynamic = ["version"]', 'version = "1.5.0"'
          )))),
         ("wheel without embedded runtime fails",
          bool(check_distribution_texts(mutate(
@@ -1150,7 +1150,7 @@ def self_test_distribution_contract():
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(
              ".agents/skills/builderos/references/installation.example.json",
-             '"version": "1.4.0"', '"release": "1.4.0"'
+             '"version": "1.5.0"', '"release": "1.5.0"'
          )))),
     ]
     for name, passed in cases:
