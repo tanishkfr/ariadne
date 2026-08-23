@@ -335,10 +335,10 @@ def main() -> int:
     print(f"SHA256 {result['checksums']}")
     publication = publication_state()
     if publication["status"] == "blocked":
-        print("STATUS PACKAGING CANDIDATE — public release blocked: " + publication["reason"])
+        print("STATUS PACKAGING CANDIDATE - public release blocked: " + publication["reason"])
         print("NEXT   obtain explicit human licence selection; do not publish these files")
     else:
-        print("STATUS RELEASE CANDIDATE — not published")
+        print("STATUS RELEASE CANDIDATE - not published")
         print("NEXT   obtain explicit human tag and GitHub release authority")
     return 0
 
