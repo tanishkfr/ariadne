@@ -57,6 +57,7 @@ REQUIRED = [
     "scripts/test-reasoner-rollback.py",
     "scripts/test-real-projects.py", "validation/fixtures/v1.5-real-projects.json",
     "validation/fixtures/v1.5.1-reasoner-flows.json",
+    "scripts/test-social-intelligence.py", "validation/fixtures/v1.5.2-social-flows.json",
     "scripts/install-builderos-skill.py",
     "scripts/build-release.py", "scripts/test-distribution.py",
     "scripts/test-wheel-install.py",
@@ -96,7 +97,7 @@ DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 GENERATED = ("validation/runs/",)
 EPHEMERAL_SELF_TEST = (
     re.compile(
-        r"^validation/(?:builderos|creative-intelligence|creative-operations|distribution|packet|real-projects|release|skill-install|wheel)-self-test-[0-9a-f]{32}/"
+        r"^validation/(?:builderos|creative-intelligence|creative-operations|distribution|packet|real-projects|release|skill-install|social|wheel)-self-test-[0-9a-f]{32}/"
     ),
     re.compile(r"^validation/validate-self-test-[a-z0-9-]+/"),
 )
@@ -824,6 +825,16 @@ def load_real_projects_tool():
     return module
 
 
+def load_social_tool():
+    path = os.path.join(ROOT, "scripts", "test-social-intelligence.py")
+    spec = importlib.util.spec_from_file_location("builder_os_social_intelligence", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Could not load social intelligence self-test")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_installer_tool():
     path = os.path.join(ROOT, INSTALLER_TOOL)
     spec = importlib.util.spec_from_file_location("builder_os_skill_installer", path)
@@ -1211,6 +1222,8 @@ def main():
         operations_failed = load_creative_operations_tool().self_test()
         print("\nReal-project fixture self-test")
         real_projects_failed = load_real_projects_tool().main()
+        print("\nSocial-intelligence fixture self-test")
+        social_failed = load_social_tool().self_test()
         print("\nEntry-skill installer self-test")
         installer_failed = load_installer_tool().self_test()
         print("\nOptional Claude entry-skill installer self-test")
@@ -1224,7 +1237,7 @@ def main():
         failed = (
             agents_failed or delivery_failed or packet_failed or skill_contract_failed or runtime_failed
             or reasoner_failed
-            or creative_failed or operations_failed or real_projects_failed or installer_failed
+            or creative_failed or operations_failed or real_projects_failed or social_failed or installer_failed
             or claude_installer_failed
             or distribution_contract_failed or release_failed or distribution_failed
         )

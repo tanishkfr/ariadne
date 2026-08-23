@@ -38,6 +38,7 @@ evidence distinctions and handoff structure.
 | Visual-QA planning | verified | externally unverified |
 | Creative review | verified | externally unverified |
 | Social strategy | verified | externally unverified |
+| Social result learning | verified | externally unverified |
 | CLI non-interactive JSON/schema output | not applicable | verified in official documentation; not locally executed |
 | Session resume | task continuity uses Builder OS state | verified in official documentation; integration unverified |
 | Native skill entry | managed Builder OS skill verified | documented; optional Builder OS skill not live-tested |

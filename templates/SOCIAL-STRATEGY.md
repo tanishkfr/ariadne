@@ -1,66 +1,122 @@
 # SOCIAL STRATEGY: <project>
 
-> Conditional project artifact. Owner: Content strategist · Skill: [social-strategy.md](../skills/social-strategy.md)
-> Strategy and drafting only. This document never authorises posting, account access, or paid distribution.
+> Conditional project artifact. Owner: Content strategist · Method: [social-strategy.md](../skills/social-strategy.md)
+> Strategy and drafting only. This file cannot authorise account access, scheduling, paid distribution, or publication.
 
 **Status:** <draft / revised>
+
+**Contract version:** 2
+
 **Activated by:** <the user's request>
+
+**Research depth:** <minimal / standard / deep>
+
 **Voice basis:** <provided examples / project context only>
+
 **Draft status:** <voice-matched / rough-draft>
 
-## Project signal
+## What I recommend
 
-- **Audience:** <who should care>
-- **Strongest visual:** <real project evidence>
-- **Strongest story:** <real project decision or lesson>
-- **Useful hook:** <why a human would stop>
+- **Primary audience:** <who should care and why they are first>
+- **Selected platforms:** <one to three>
+- **Not recommended:** <relevant exclusions and why>
+- **Practical cadence:** <bounded by the user's capacity and available material>
 
-## Platforms
+## Project story
 
-| Platform | Why this project fits | Evidence class | Checked | Source IDs |
-|---|---|---|---|---|
-| | | documented / observed / inferred / speculative | YYYY-MM-DD / n/a | |
+- **What it is:** <grounded in current project evidence>
+- **Why it exists:** <real purpose>
+- **Specific interest:** <unusual detail, tension, failure, or lesson>
+- **Maker decision:** <what the creator actually did>
+- **Strongest moment:** <real visual, interaction, or story beat>
 
-## Strategy
+### Project evidence
 
-| Platform | Recommendation | Why | Evidence class | Source IDs |
+| Artifact | Anchor or observation | SHA-256 |
+|---|---|---|
+| | | |
+
+## Platform decisions
+
+| Platform | Why this project fits | Native treatment | First test |
+|---|---|---|---|
+| | | | |
+
+### Platforms considered but not recommended
+
+| Platform | Why not for this project now |
+|---|---|
+| | |
+
+## Source to decision
+
+| Source ID | Source quality | Retrieved | Evidence class | Finding | Decision affected |
+|---|---|---|---|---|---|
+| | official / primary / credible / observed | YYYY-MM-DD | documented / observed / researched / inferred / speculative | | |
+
+### Conflicting evidence
+
+| Source IDs | Conflict | Resolution or retained uncertainty |
+|---|---|---|
+| | | |
+
+## Content pillars
+
+> Use three to five only when the project sustains them. Otherwise record why a
+> smaller launch sequence is more honest.
+
+| Pillar | Why it belongs to this project | Post treatment |
+|---|---|---|
+| | | |
+
+**If omitted:** <project-specific reason>
+
+## Visual inventory
+
+| Asset ID | Status | What people should see | Path / work needed |
+|---|---|---|---|
+| | existing / to-create / missing | | |
+
+## What I'd post
+
+| ID | Platform | Format | Purpose | Hook | Visual asset | CTA | Evidence class |
+|---|---|---|---|---|---|---|---|
+| | | | | | | none / specific action | |
+
+### Draft: <post ID>
+
+<complete platform-specific rough or voice-supported draft>
+
+**Hypothesis:** <specific and falsifiable>
+
+**Measure:** <signal tied to the purpose>
+
+**Only variable changing:** <one variable>
+
+## What I'd test
+
+| Hypothesis | Treatment | Comparison | Measure | What would remain inconclusive |
 |---|---|---|---|---|
 | | | | | |
 
-## Content concepts
+## Sequence and timing
 
-| # | Platform | Concept | Format | Hook | CTA |
-|---|---|---|---|---|---|
-| 1 | | | | | none / specific action |
-| 2 | | | | | |
-| 3 | | | | | |
+1. <first treatment and why>
+2. <next treatment and why>
+3. <optional follow-up grounded in available material>
 
-## Timing and sequence
+**Timing basis:** <capacity and evidence; no universal best-time claim>
 
-**Timing test:** <what to test; do not invent a universal best time>
+## What I need from you
 
-1. <first post and why>
-2. <next post and why>
+- <voice examples / sensitive-claim confirmation / final post approval / nothing>
 
-## Example post
+## Evidence gaps
 
-<natural project-specific draft>
-
-## Measurement and iteration
-
-- **Watch:** <signals tied to the goal>
-- **Change next:** <one variable at a time>
-- **Do not conclude:** <what limited data cannot establish>
-
-## Evidence register
-
-| ID | Source | Retrieved | Evidence artifact | Supports |
-|---|---|---|---|---|
-| | <URL> | YYYY-MM-DD | <path> | |
+- <missing asset, inaccessible source, unsupported platform behaviour, or none>
 
 ## Revision history
 
-| Version | Revises | Evidence considered | What changed |
+| Strategy ID | Revises | Evidence considered | What changed |
 |---|---|---|---|
-| | none / prior strategy ID | | |
-
+| | none / prior ID | | |

@@ -33,12 +33,34 @@ REVIEW_DIMENSIONS = (
     "narrative", "implementation_quality", "design_fidelity", "portfolio_value",
     "genericness",
 )
-SOCIAL_EVIDENCE_CLASSES = ("documented", "observed", "inferred", "speculative")
+SOCIAL_EVIDENCE_CLASSES = ("documented", "observed", "researched", "inferred", "speculative")
+SOCIAL_RESEARCH_DEPTHS = ("minimal", "standard", "deep")
+SOCIAL_SOURCE_QUALITIES = (
+    "official-platform", "platform-creator-guidance", "primary-research",
+    "credible-industry-research", "observed-example",
+)
+SOCIAL_VISUAL_STATES = ("existing", "to-create", "missing")
+SOCIAL_RESULT_METRICS = (
+    "impressions", "reach", "likes", "comments", "saves", "shares", "clicks",
+    "profile_visits", "watch_time_seconds", "retention_percent", "follows",
+)
+SOCIAL_LEARNING_OUTCOMES = ("supported", "contradicted", "inconclusive")
+SOCIAL_LEARNING_CONFIDENCE = ("weak", "limited", "moderate")
+MAX_SOCIAL_POSTS = 6
+MAX_CURRENT_SOURCE_AGE_DAYS = 180
 MAX_AUTOMATIC_CREATIVE_ITERATIONS = 2
 GENERIC_SOCIAL_OPENERS = (
     "i'm excited to share", "i’m excited to share", "here's a deep dive",
     "here’s a deep dive", "this journey taught me", "i'm thrilled to announce",
-    "i’m thrilled to announce", "game changer", "this changes everything",
+    "i’m thrilled to announce", "thrilled to announce", "at the intersection of",
+    "design isn't just about", "design isn’t just about", "game changer",
+    "this changes everything", "unpopular opinion", "let that sink in",
+    "read that again",
+)
+SOCIAL_GUARANTEE_PATTERNS = (
+    r"\bguarantee(?:d|s)?\s+(?:reach|engagement|impressions|followers|virality)\b",
+    r"\bwill\s+(?:go viral|increase (?:reach|engagement)|perform)\b",
+    r"\bproven\s+(?:growth|algorithm|viral)\s+(?:hack|tactic|formula)\b",
 )
 
 
@@ -277,6 +299,8 @@ def create_ledger(project: Path) -> dict:
         "drift_findings": [],
         "creative_reviews": [],
         "social_strategies": [],
+        "social_results": [],
+        "social_learnings": [],
     }
 
 
@@ -457,10 +481,65 @@ def _creative_references(project: Path) -> dict[str, dict]:
     return {item.get("id"): item for item in value.get("references", []) if item.get("id")}
 
 
+def _social_copy_problems(value: str) -> list[str]:
+    lowered = value.lower()
+    problems = [
+        f"generic AI phrasing: {phrase}"
+        for phrase in GENERIC_SOCIAL_OPENERS
+        if phrase in lowered
+    ]
+    problems.extend(
+        f"unsupported performance promise: {pattern}"
+        for pattern in SOCIAL_GUARANTEE_PATTERNS
+        if re.search(pattern, lowered)
+    )
+    return problems
+
+
+def _checked_date(value: object, *, current: bool) -> str:
+    checked = str(value or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", checked):
+        raise OperationsError("source-backed social recommendation needs a checked_on date")
+    try:
+        checked_at = datetime.strptime(checked, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise OperationsError("social recommendation checked_on is not a real date") from exc
+    age = (datetime.now().astimezone().date() - checked_at).days
+    if age < 0:
+        raise OperationsError("social recommendation checked_on cannot be in the future")
+    if current and age > MAX_CURRENT_SOURCE_AGE_DAYS:
+        raise OperationsError("time-sensitive social recommendation uses an outdated source")
+    return checked
+
+
+def _event_evidence(rows: object, label: str, minimum: int = 1) -> list[dict]:
+    if not isinstance(rows, list) or len(rows) < minimum:
+        raise OperationsError(f"{label} needs at least {minimum} evidence artifact(s)")
+    records = []
+    for item in rows:
+        if not isinstance(item, dict) or not str(item.get("path", "")).strip():
+            raise OperationsError(f"{label} evidence needs a path")
+        records.append(evidence_record(
+            Path(str(item["path"])), str(item.get("anchor", "")).strip() or None
+        ))
+    return records
+
+
+def _social_strategy(ledger: dict, strategy_id: str) -> dict:
+    return by_id(ledger.get("social_strategies", []), strategy_id, "social strategies")
+
+
+def _social_concept(strategy: dict, concept_id: str) -> dict:
+    return by_id(strategy.get("content_concepts", []), concept_id, "social content concepts")
+
+
 def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
     strategy_id = str(event.get("id", "")).strip()
     if not strategy_id or any(item.get("id") == strategy_id for item in ledger.get("social_strategies", [])):
         raise OperationsError("social strategy needs a new non-empty ID")
+    contract_version = event.get("contract_version", 1)
+    if contract_version not in (1, 2):
+        raise OperationsError("social strategy contract_version must be 1 or 2")
     activation = str(event.get("activated_by", "")).strip()
     if not activation:
         raise OperationsError("social strategy needs the user's explicit activation request")
@@ -472,9 +551,81 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
         raise OperationsError("each social platform needs a name and project-specific reason")
     references = _creative_references(project)
     platform_names = {str(item["name"]).strip() for item in platforms}
+    project_story = event.get("project_story", {})
+    project_evidence = []
+    visual_assets = []
+    research_depth = None
+    pillars = []
+    pillars_decision = ""
+    excluded_platforms = []
+    conflicts = []
+    voice_evidence = []
+    if contract_version == 2:
+        research_depth = str(event.get("research_depth", "")).strip()
+        if research_depth not in SOCIAL_RESEARCH_DEPTHS:
+            raise OperationsError("social intelligence needs minimal, standard, or deep research depth")
+        required_story = ("what", "why", "specific_interest", "maker_decision", "strongest_moment")
+        if not isinstance(project_story, dict) or any(
+            not str(project_story.get(field, "")).strip() for field in required_story
+        ):
+            raise OperationsError("social intelligence needs a concrete project story before platform advice")
+        project_evidence = _event_evidence(event.get("project_evidence"), "project story")
+        excluded_platforms = event.get("not_recommended", [])
+        if not isinstance(excluded_platforms, list) or any(
+            not isinstance(item, dict)
+            or not str(item.get("name", "")).strip()
+            or not str(item.get("why_not", "")).strip()
+            for item in excluded_platforms
+        ):
+            raise OperationsError("not-recommended platforms need a name and project-specific reason")
+        if platform_names & {str(item.get("name", "")).strip() for item in excluded_platforms}:
+            raise OperationsError("a platform cannot be both selected and not recommended")
+        conflicts = event.get("source_conflicts", [])
+        if not isinstance(conflicts, list):
+            raise OperationsError("social source_conflicts must be a list")
+        for conflict in conflicts:
+            ids = conflict.get("source_reference_ids", []) if isinstance(conflict, dict) else []
+            if len(ids) < 2 or any(references.get(item, {}).get("state") != "inspected" for item in ids):
+                raise OperationsError("conflicting platform evidence needs at least two inspected sources")
+            if not str(conflict.get("resolution", "")).strip():
+                raise OperationsError("conflicting platform evidence needs an explicit resolution")
+        visual_assets_value = event.get("visual_assets", [])
+        if not isinstance(visual_assets_value, list) or not visual_assets_value:
+            raise OperationsError("social intelligence must record actual visual availability")
+        visual_ids = set()
+        for visual in visual_assets_value:
+            if not isinstance(visual, dict):
+                raise OperationsError("each social visual asset must be an object")
+            visual_id = str(visual.get("id", "")).strip()
+            status = str(visual.get("status", "")).strip()
+            description = str(visual.get("description", "")).strip()
+            if not visual_id or visual_id in visual_ids or status not in SOCIAL_VISUAL_STATES or not description:
+                raise OperationsError("social visual assets need unique IDs, status, and a concrete description")
+            visual_ids.add(visual_id)
+            row = {"id": visual_id, "status": status, "description": description}
+            path_value = str(visual.get("path", "")).strip()
+            if status == "existing":
+                if not path_value:
+                    raise OperationsError("an existing social visual needs a real artifact path")
+                row["evidence"] = evidence_record(Path(path_value))
+            elif path_value:
+                raise OperationsError("a missing or to-create visual cannot claim an existing path")
+            visual_assets.append(row)
+        pillars = event.get("content_pillars", [])
+        pillars_decision = str(event.get("pillars_decision", "")).strip()
+        if not isinstance(pillars, list) or (pillars and not 3 <= len(pillars) <= 5):
+            raise OperationsError("social content pillars must be omitted or contain three to five project-specific pillars")
+        for pillar in pillars:
+            if not isinstance(pillar, dict) or any(
+                not str(pillar.get(field, "")).strip() for field in ("name", "why", "post_type")
+            ):
+                raise OperationsError("each social content pillar needs name, why, and post_type")
+        if not pillars and not pillars_decision:
+            raise OperationsError("omitted social content pillars need a project-specific reason")
     recommendations = event.get("recommendations", [])
     if not isinstance(recommendations, list) or not recommendations:
         raise OperationsError("social strategy needs at least one recommendation")
+    used_reference_ids = set()
     for recommendation in recommendations:
         evidence_class = str(recommendation.get("evidence_class", "")).strip()
         source_ids = recommendation.get("source_reference_ids", [])
@@ -482,21 +633,35 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
             raise OperationsError("social recommendation has an unsupported evidence class")
         if str(recommendation.get("platform", "")).strip() not in platform_names:
             raise OperationsError("social recommendation needs one of the selected platforms")
-        if evidence_class in ("documented", "observed"):
+        if evidence_class in ("documented", "observed", "researched"):
             if not source_ids or any(references.get(item, {}).get("state") != "inspected" for item in source_ids):
-                raise OperationsError("documented or observed social recommendation needs inspected sources")
-            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(recommendation.get("checked_on", ""))):
-                raise OperationsError("documented or observed social recommendation needs a checked_on date")
-        if evidence_class == "inferred" and source_ids and any(
+                raise OperationsError("source-backed social recommendation needs inspected sources")
+            recommendation["checked_on"] = _checked_date(
+                recommendation.get("checked_on"), current=bool(recommendation.get("time_sensitive"))
+            )
+            if contract_version == 2 and str(recommendation.get("source_quality", "")).strip() not in SOCIAL_SOURCE_QUALITIES:
+                raise OperationsError("source-backed social recommendation needs a supported source_quality")
+        if evidence_class in ("inferred", "speculative") and source_ids and any(
             references.get(item, {}).get("state") != "inspected" for item in source_ids
         ):
-            raise OperationsError("inferred social recommendation cites an uninspected source")
+            raise OperationsError("social inference or hypothesis cites an uninspected source")
         if not str(recommendation.get("recommendation", "")).strip() or not str(recommendation.get("reason", "")).strip():
             raise OperationsError("social recommendation needs recommendation and reason")
+        if contract_version == 2 and not str(recommendation.get("finding", "")).strip():
+            raise OperationsError("social recommendation needs an explicit SOURCE -> FINDING -> DECISION trace")
+        copy_problems = _social_copy_problems(
+            " ".join(str(recommendation.get(field, "")) for field in ("recommendation", "reason", "finding"))
+        )
+        if copy_problems:
+            raise OperationsError("social recommendation contains " + "; ".join(copy_problems))
+        used_reference_ids.update(source_ids)
     concepts = event.get("content_concepts", [])
-    if not isinstance(concepts, list) or len(concepts) < 3:
-        raise OperationsError("social strategy needs at least three project-specific content concepts")
-    for concept in concepts:
+    if not isinstance(concepts, list) or not 3 <= len(concepts) <= MAX_SOCIAL_POSTS:
+        raise OperationsError("social strategy needs three to six project-specific content concepts")
+    normalised_concepts = []
+    concept_ids = set()
+    visual_ids = {item["id"] for item in visual_assets}
+    for index, concept in enumerate(concepts, start=1):
         if not isinstance(concept, dict):
             raise OperationsError("each social content concept must be an object")
         required = ("platform", "concept", "format", "hook", "cta")
@@ -504,6 +669,32 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
             raise OperationsError("each social content concept needs platform, concept, format, hook, and CTA")
         if str(concept["platform"]).strip() not in platform_names:
             raise OperationsError("social content concept names an unselected platform")
+        row = dict(concept)
+        row["id"] = str(concept.get("id", "")).strip() or f"{strategy_id}-post-{index}"
+        if row["id"] in concept_ids:
+            raise OperationsError("social content concept IDs must be unique")
+        concept_ids.add(row["id"])
+        if contract_version == 2:
+            for field in ("purpose", "hypothesis", "draft", "visual_asset_id"):
+                if not str(concept.get(field, "")).strip():
+                    raise OperationsError(f"social content concept needs {field}")
+            if str(concept["visual_asset_id"]).strip() not in visual_ids:
+                raise OperationsError("social content concept cites an unknown visual asset")
+            concept_evidence_class = str(concept.get("evidence_class", "")).strip()
+            if concept_evidence_class not in SOCIAL_EVIDENCE_CLASSES:
+                raise OperationsError("social content concept needs a supported evidence class")
+            concept_source_ids = concept.get("source_reference_ids", [])
+            if not isinstance(concept_source_ids, list) or any(
+                references.get(item, {}).get("state") != "inspected" for item in concept_source_ids
+            ):
+                raise OperationsError("social content concept cites an uninspected source")
+            used_reference_ids.update(concept_source_ids)
+            copy_problems = _social_copy_problems(
+                " ".join(str(concept.get(field, "")) for field in ("hook", "draft", "hypothesis"))
+            )
+            if copy_problems:
+                raise OperationsError("social content concept contains " + "; ".join(copy_problems))
+        normalised_concepts.append(row)
     sequence = event.get("sequence", [])
     measurement = event.get("measurement", [])
     timing = str(event.get("timing", "")).strip()
@@ -515,32 +706,168 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
     example = str(event.get("example_post", "")).strip()
     if not example:
         raise OperationsError("social strategy needs at least one example post")
-    lowered = example.lower()
-    found = [phrase for phrase in GENERIC_SOCIAL_OPENERS if phrase in lowered]
-    if found:
-        raise OperationsError("example social copy contains generic AI phrasing: " + ", ".join(found))
+    copy_problems = _social_copy_problems(example)
+    if copy_problems:
+        raise OperationsError("example social copy contains " + "; ".join(copy_problems))
     voice_basis = str(event.get("voice_basis", "")).strip()
     draft_status = str(event.get("draft_status", "")).strip()
     if voice_basis != "provided-examples" and draft_status != "rough-draft":
         raise OperationsError("copy without provided voice examples must be marked rough-draft")
+    if contract_version == 2 and voice_basis == "provided-examples":
+        voice_evidence = _event_evidence(event.get("voice_evidence"), "voice matching", 2)
     artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
     revises = str(event.get("revises", "")).strip()
     if revises and not any(item.get("id") == revises for item in ledger.get("social_strategies", [])):
         raise OperationsError("social strategy revision names an unknown parent strategy")
+    source_evidence = []
+    for reference_id in sorted(used_reference_ids):
+        reference = references.get(reference_id, {})
+        if reference.get("state") == "inspected" and isinstance(reference.get("evidence"), dict):
+            source_evidence.append({
+                "id": reference_id,
+                "source": reference.get("source"),
+                "evidence": dict(reference["evidence"]),
+            })
     ledger.setdefault("social_strategies", []).append({
         "id": strategy_id,
+        "contract_version": contract_version,
         "activated_by": activation,
         "audience": audience,
         "platforms": platforms,
+        "not_recommended": excluded_platforms,
+        "research_depth": research_depth,
+        "project_story": project_story if contract_version == 2 else {},
+        "project_evidence": project_evidence,
+        "visual_assets": visual_assets,
+        "content_pillars": pillars,
+        "pillars_decision": pillars_decision,
+        "source_conflicts": conflicts,
+        "source_evidence": source_evidence,
         "recommendations": recommendations,
-        "content_concepts": concepts,
+        "content_concepts": normalised_concepts,
         "timing": timing,
         "sequence": sequence,
         "measurement": measurement,
         "iteration": iteration,
         "example_post": example,
         "voice_basis": voice_basis,
+        "voice_evidence": voice_evidence,
         "draft_status": draft_status,
+        "artifact": artifact,
+        "revises": revises or None,
+        "recorded_at": now(),
+    })
+
+
+def record_social_result(ledger: dict, event: dict) -> None:
+    result_id = str(event.get("id", "")).strip()
+    if not result_id or any(item.get("id") == result_id for item in ledger.get("social_results", [])):
+        raise OperationsError("social result needs a new non-empty ID")
+    if str(event.get("provided_by", "")).strip() != "user":
+        raise OperationsError("social performance data must be explicitly user-provided")
+    strategy = _social_strategy(ledger, str(event.get("strategy_id", "")).strip())
+    concept = _social_concept(strategy, str(event.get("concept_id", "")).strip())
+    platform = str(event.get("platform", "")).strip()
+    if platform != str(concept.get("platform", "")).strip():
+        raise OperationsError("social result platform does not match its planned post")
+    observed_on = _checked_date(event.get("observed_on"), current=False)
+    metrics = event.get("metrics", {})
+    if not isinstance(metrics, dict):
+        raise OperationsError("social result metrics must be an object")
+    unknown = sorted(set(metrics) - set(SOCIAL_RESULT_METRICS))
+    if unknown:
+        raise OperationsError("social result uses unsupported metrics: " + ", ".join(unknown))
+    for name, value in metrics.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise OperationsError(f"social metric {name} must be a non-negative observed number")
+        if name == "retention_percent" and value > 100:
+            raise OperationsError("social retention_percent cannot exceed 100")
+    qualitative = event.get("qualitative_signals", [])
+    if not isinstance(qualitative, list) or any(not str(item).strip() for item in qualitative):
+        raise OperationsError("social qualitative_signals must be concrete text entries")
+    if not metrics and not qualitative:
+        raise OperationsError("social result needs actual performance data or a qualitative signal")
+    evidence = evidence_record(Path(str(event.get("evidence_path", ""))))
+    revises = str(event.get("revises", "")).strip()
+    same_observation = [
+        item for item in ledger.get("social_results", [])
+        if item.get("strategy_id") == strategy["id"]
+        and item.get("concept_id") == concept["id"]
+        and item.get("observed_on") == observed_on
+    ]
+    if same_observation and not revises:
+        raise OperationsError("contradictory or replacement social data must revise the prior result")
+    if revises:
+        parent = by_id(ledger.get("social_results", []), revises, "social results")
+        if parent.get("strategy_id") != strategy["id"] or parent.get("concept_id") != concept["id"]:
+            raise OperationsError("social result correction must revise the same planned post")
+        if not str(event.get("correction_reason", "")).strip():
+            raise OperationsError("social result correction needs a reason")
+    ledger.setdefault("social_results", []).append({
+        "id": result_id,
+        "strategy_id": strategy["id"],
+        "concept_id": concept["id"],
+        "platform": platform,
+        "observed_on": observed_on,
+        "provided_by": "user",
+        "metrics": metrics,
+        "qualitative_signals": qualitative,
+        "evidence": evidence,
+        "revises": revises or None,
+        "correction_reason": str(event.get("correction_reason", "")).strip() or None,
+        "recorded_at": now(),
+    })
+
+
+def record_social_learning(ledger: dict, event: dict) -> None:
+    learning_id = str(event.get("id", "")).strip()
+    if not learning_id or any(item.get("id") == learning_id for item in ledger.get("social_learnings", [])):
+        raise OperationsError("social learning needs a new non-empty ID")
+    strategy = _social_strategy(ledger, str(event.get("strategy_id", "")).strip())
+    result_ids = event.get("result_ids", [])
+    if not isinstance(result_ids, list) or not result_ids or len(result_ids) != len(set(result_ids)):
+        raise OperationsError("social learning needs distinct result IDs")
+    results = [by_id(ledger.get("social_results", []), item, "social results") for item in result_ids]
+    if any(item.get("strategy_id") != strategy["id"] for item in results):
+        raise OperationsError("social learning cannot combine results from different strategies")
+    outcome = str(event.get("outcome", "")).strip()
+    confidence = str(event.get("confidence", "")).strip()
+    if outcome not in SOCIAL_LEARNING_OUTCOMES or confidence not in SOCIAL_LEARNING_CONFIDENCE:
+        raise OperationsError("social learning needs a supported outcome and confidence")
+    if len(results) < 2 and outcome != "inconclusive":
+        raise OperationsError("one social result cannot support or contradict a hypothesis")
+    interpretation = str(event.get("interpretation", "")).strip()
+    if not interpretation:
+        raise OperationsError("social learning needs a bounded interpretation")
+    next_test = event.get("next_test", {})
+    if not isinstance(next_test, dict) or any(
+        not str(next_test.get(field, "")).strip() for field in ("hypothesis", "variable", "measure")
+    ):
+        raise OperationsError("social learning needs one falsifiable next test and one changing variable")
+    promoted_rule = str(event.get("promoted_rule", "")).strip()
+    if promoted_rule and len(results) < 3:
+        raise OperationsError("a social rule needs at least three recorded results")
+    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+    revises = str(event.get("revises", "")).strip()
+    if revises and not any(item.get("id") == revises for item in ledger.get("social_learnings", [])):
+        raise OperationsError("social learning revision names an unknown parent")
+    plans = []
+    for result in results:
+        concept = _social_concept(strategy, result["concept_id"])
+        plans.append({
+            "concept_id": concept["id"],
+            "hypothesis": str(concept.get("hypothesis", "")).strip() or "legacy strategy: hypothesis not recorded",
+        })
+    ledger.setdefault("social_learnings", []).append({
+        "id": learning_id,
+        "strategy_id": strategy["id"],
+        "result_ids": result_ids,
+        "plans": plans,
+        "outcome": outcome,
+        "confidence": confidence,
+        "interpretation": interpretation,
+        "next_test": next_test,
+        "promoted_rule": promoted_rule or None,
         "artifact": artifact,
         "revises": revises or None,
         "recorded_at": now(),
@@ -559,6 +886,10 @@ def apply_event(project: Path, ledger: dict, event: dict) -> None:
         record_creative_review(ledger, event)
     elif event_type == "social-strategy":
         record_social_strategy(project, ledger, event)
+    elif event_type == "social-result":
+        record_social_result(ledger, event)
+    elif event_type == "social-learning":
+        record_social_learning(ledger, event)
     else:
         raise OperationsError(f"unsupported creative operations event: {event_type}")
 
@@ -617,11 +948,29 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
             problems.extend(artifact_problems(item["evidence"], f"visual evidence {item.get('id')}") )
     for item in ledger.get("social_strategies", []):
         problems.extend(artifact_problems(item.get("artifact", {}), f"social strategy {item.get('id')}") )
+    if ledger.get("social_strategies"):
+        latest_strategy = ledger["social_strategies"][-1]
+        for index, item in enumerate(latest_strategy.get("project_evidence", []), start=1):
+            problems.extend(artifact_problems(item, f"social project evidence {index}"))
+        for item in latest_strategy.get("visual_assets", []):
+            if item.get("evidence"):
+                problems.extend(artifact_problems(item["evidence"], f"social visual {item.get('id')}"))
+        for index, item in enumerate(latest_strategy.get("voice_evidence", []), start=1):
+            problems.extend(artifact_problems(item, f"social voice evidence {index}"))
+        for item in latest_strategy.get("source_evidence", []):
+            problems.extend(artifact_problems(item.get("evidence", {}), f"social source {item.get('id')}"))
+    for item in ledger.get("social_results", []):
+        problems.extend(artifact_problems(item.get("evidence", {}), f"social result {item.get('id')}"))
+    if ledger.get("social_learnings"):
+        latest_learning = ledger["social_learnings"][-1]
+        problems.extend(artifact_problems(
+            latest_learning.get("artifact", {}), f"social learning {latest_learning.get('id')}"
+        ))
     return list(dict.fromkeys(problems))
 
 
 def project_problems(project: Path, require: str = "plan") -> list[str]:
-    if require not in ("plan", "implementation", "visual", "review", "social"):
+    if require not in ("plan", "implementation", "visual", "review", "social", "social-learning"):
         return [f"unsupported creative operations requirement: {require}"]
     ledger = load_ledger(project)
     if ledger is None:
@@ -630,6 +979,14 @@ def project_problems(project: Path, require: str = "plan") -> list[str]:
     if require == "social":
         if not ledger.get("social_strategies"):
             problems.append("no explicitly requested social strategy is recorded")
+        return list(dict.fromkeys(problems))
+    if require == "social-learning":
+        if not ledger.get("social_strategies"):
+            problems.append("no explicitly requested social strategy is recorded")
+        if not ledger.get("social_results"):
+            problems.append("no user-provided social performance result is recorded")
+        if not ledger.get("social_learnings"):
+            problems.append("no social PLAN -> RESULT -> INTERPRETATION -> NEXT TEST record exists")
         return list(dict.fromkeys(problems))
     levels = {"plan": 0, "implementation": 1, "visual": 2, "review": 3}
     required_level = levels[require]
@@ -693,7 +1050,7 @@ def project_problems(project: Path, require: str = "plan") -> list[str]:
 
 def summary(ledger: dict | None) -> dict:
     if ledger is None:
-        return {"status": "not-tracked", "requirements": 0, "implemented": 0, "observed": 0, "drift": 0, "creative_reviews": 0, "social_strategies": 0}
+        return {"status": "not-tracked", "requirements": 0, "implemented": 0, "observed": 0, "drift": 0, "creative_reviews": 0, "social_strategies": 0, "social_results": 0, "social_learnings": 0}
     return {
         "status": "tracked",
         "requirements": len(ledger.get("requirements", [])),
@@ -702,6 +1059,8 @@ def summary(ledger: dict | None) -> dict:
         "drift": sum(item.get("state") == "drift" for item in ledger.get("drift_findings", [])),
         "creative_reviews": len(ledger.get("creative_reviews", [])),
         "social_strategies": len(ledger.get("social_strategies", [])),
+        "social_results": len(ledger.get("social_results", [])),
+        "social_learnings": len(ledger.get("social_learnings", [])),
     }
 
 
@@ -727,9 +1086,18 @@ def repository_contract_problems(texts: dict[str, str] | None = None) -> list[st
             "rendered or observed", "highest-value improvement", "cannot approve",
             "`DESIGN.md`", "parent_review_id", "two reviews",
         ],
-        "social": ["explicitly asks", "one to three platforms", "documented", "rough-draft", "does not publish"],
-        "social_template": ["## Platforms", "## Content concepts", "## Timing and sequence", "## Measurement and iteration", "## Evidence register"],
-        "runtime_reference": ["operations-plan", "record-operations", "operations-check", "social-strategy", "No event grants G1-G5"],
+        "social": [
+            "explicitly asks", "one to three platforms", "researched", "rough-draft",
+            "PLAN -> RESULT -> INTERPRETATION -> NEXT TEST", "never publishes",
+        ],
+        "social_template": [
+            "## Project story", "## Platform decisions", "## Source to decision",
+            "## Visual inventory", "## What I'd post", "## What I'd test",
+        ],
+        "runtime_reference": [
+            "operations-plan", "record-operations", "operations-check",
+            "social-result", "social-learning", "No event grants G1-G5",
+        ],
     }
     for name, tokens in required_tokens.items():
         value = values.get(name, "")

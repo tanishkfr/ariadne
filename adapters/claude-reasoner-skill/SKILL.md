@@ -45,6 +45,14 @@ Claude into the V1.5.1 implementer.
 For isolated S5, start fresh and use only the current S5 packet. Do not request
 or inspect design, handoff, QA, source or build-history context.
 
+When the user explicitly requests project distribution or supplies social
+performance data, use the shared runtime `skills/social-strategy.md`,
+`templates/SOCIAL-STRATEGY.md`, and conditional
+`templates/CONTENT-LEARNINGS.md`. Read current project evidence directly and
+record the same provider-neutral social strategy, result, and learning events.
+Claude may draft and reason here; it cannot publish, fabricate metrics, grant
+G5, or claim live social behaviour without user-supplied evidence.
+
 ## Failure
 
 If Claude cannot continue, run `record-reasoner-failure` with a concrete

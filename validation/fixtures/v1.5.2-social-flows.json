@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "id": "portfolio-launch",
+      "archetype": "portfolio website launch",
+      "goal": "Present a product designer's accessibility case studies to design leads.",
+      "audience": "Design leads hiring product designers who can explain consequential accessibility decisions.",
+      "research_depth": "standard",
+      "platforms": ["LinkedIn", "Instagram"],
+      "not_recommended": ["TikTok"],
+      "visual_status": "existing",
+      "visual": "A captioned before-and-after carousel showing the focus-order correction.",
+      "voice_examples": 2,
+      "story": {
+        "what": "A portfolio that shows accessibility decisions through working interface evidence.",
+        "why": "Hiring reviewers need to see reasoning and outcomes rather than polished screens alone.",
+        "specific_interest": "The strongest case study replaces a visually tidy but unusable focus order.",
+        "maker_decision": "The designer reordered the interaction model before refining the surface.",
+        "strongest_moment": "The before-and-after keyboard path makes the design consequence visible."
+      }
+    },
+    {
+      "id": "interactive-experiment",
+      "archetype": "interactive experimental project",
+      "goal": "Launch a browser experiment where letterforms respond to room sound.",
+      "audience": "Interaction designers and creative technologists interested in expressive browser work.",
+      "research_depth": "standard",
+      "platforms": ["X", "Instagram"],
+      "not_recommended": ["LinkedIn"],
+      "visual_status": "existing",
+      "visual": "A short screen recording that contrasts quiet and loud typographic states.",
+      "voice_examples": 0,
+      "story": {
+        "what": "A microphone-reactive typographic instrument running in the browser.",
+        "why": "It explores sound as a material for reading rather than as a chart input.",
+        "specific_interest": "Silence is a designed state instead of an empty visualisation.",
+        "maker_decision": "The maker mapped spectral change to letterform tension rather than raw scale.",
+        "strongest_moment": "A quiet word tightens and then opens when a voice enters the room."
+      }
+    },
+    {
+      "id": "process-case-study",
+      "archetype": "case study with a strong process story",
+      "goal": "Explain how a civic archive stopped behaving like a card catalogue.",
+      "audience": "Information designers and cultural organisations working with public archives.",
+      "research_depth": "deep",
+      "platforms": ["LinkedIn", "Behance"],
+      "not_recommended": ["Dribbble"],
+      "visual_status": "existing",
+      "visual": "An annotated sequence comparing the rejected grid with the final red-thread index.",
+      "voice_examples": 0,
+      "story": {
+        "what": "A public-memory archive organised as a connected reading route.",
+        "why": "The collection needed to show why fragments belonged together.",
+        "specific_interest": "The first legible card grid erased the relationships that made the archive meaningful.",
+        "maker_decision": "The designer replaced categories with one visible provenance thread.",
+        "strongest_moment": "The rejected grid and final thread can be understood in one annotated comparison."
+      }
+    },
+    {
+      "id": "weak-visual-assets",
+      "archetype": "project with weak visual assets",
+      "goal": "Distribute a small research tool whose current screenshots are mostly empty forms.",
+      "audience": "Researchers who need to compare interview evidence without losing provenance.",
+      "research_depth": "minimal",
+      "platforms": ["LinkedIn"],
+      "not_recommended": ["Instagram", "TikTok"],
+      "visual_status": "to-create",
+      "visual": "Create one anonymised flow diagram from source capture to cited insight; no suitable visual exists yet.",
+      "voice_examples": 0,
+      "story": {
+        "what": "A research tool that preserves the source behind each synthesised interview finding.",
+        "why": "Teams lose trust when an insight cannot be traced back to what a participant said.",
+        "specific_interest": "The provenance link is more useful than the current form-heavy interface.",
+        "maker_decision": "The builder made every synthesis card retain its evidence chain.",
+        "strongest_moment": "The useful story is the evidence flow, but a publishable visual still needs to be created."
+      }
+    },
+    {
+      "id": "performance-return",
+      "archetype": "project with real performance data",
+      "goal": "Learn from a three-post launch for an independent cinema programme.",
+      "audience": "Film programmers and visually literate cinema audiences.",
+      "research_depth": "standard",
+      "platforms": ["Instagram"],
+      "not_recommended": ["X"],
+      "visual_status": "existing",
+      "visual": "Three programme treatments using the same featured-film still with different editorial framing.",
+      "voice_examples": 0,
+      "performance": true,
+      "story": {
+        "what": "An editorial programme for a fictional independent cinema called Afterimage.",
+        "why": "The programme connects films through cultural moments rather than conventional genre labels.",
+        "specific_interest": "The featured screening behaves like an event inside a programme, not another streaming card.",
+        "maker_decision": "The designer used programme notes and sequencing as the cinema's identity system.",
+        "strongest_moment": "The featured screening interrupts the programme rhythm with one oversized editorial frame."
+      }
+    }
+  ]
+}

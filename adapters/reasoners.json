@@ -13,6 +13,7 @@
         "intake": "verified",
         "research": "verified",
         "social-strategy": "verified",
+        "social-learning": "verified",
         "visual-qa-planning": "verified"
       },
       "entry": "embedded",
@@ -28,6 +29,7 @@
         "intake": "externally-unverified",
         "research": "externally-unverified",
         "social-strategy": "externally-unverified",
+        "social-learning": "externally-unverified",
         "visual-qa-planning": "externally-unverified"
       },
       "entry": "external-cli",

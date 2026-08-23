@@ -2007,12 +2007,14 @@ def record_operations(args: argparse.Namespace) -> int:
     append_log(
         run_root,
         "Creative operations evidence recorded",
-        "Implementation, rendered evidence, drift, creative judgement, and social strategy must remain separate claims.",
+        "Implementation, rendered evidence, drift, creative judgement, social strategy, user-provided results, and learning must remain separate claims.",
         (
             f"{result['implemented']}/{result['requirements']} requirement(s) implemented; "
             f"{result['observed']} observed/verified visual result(s); "
             f"{result['creative_reviews']} actionable creative review(s); "
-            f"{result['social_strategies']} optional social strategy record(s)."
+            f"{result['social_strategies']} optional social strategy record(s); "
+            f"{result['social_results']} user-provided result(s); "
+            f"{result['social_learnings']} bounded learning record(s)."
         ),
         [str(source), str(destination)],
         f"Input SHA-256 {sha256(source)}; ledger validation passed.",
@@ -3855,7 +3857,7 @@ def parser() -> argparse.ArgumentParser:
     run_selector(operations_check_p)
     operations_check_p.add_argument(
         "--require",
-        choices=["plan", "implementation", "visual", "review", "social"],
+        choices=["plan", "implementation", "visual", "review", "social", "social-learning"],
         default="plan",
     )
     operations_check_p.add_argument("--json", action="store_true")

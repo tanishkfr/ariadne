@@ -22,13 +22,21 @@ Supported event types are:
 - `drift`: classify a difference as `approved`, `allowed`, `drift`, or `unknown` using evidence IDs;
 - `creative-review`: record the ten-dimension judgement, one highest-value action,
   a fixed `do_not_change` boundary, and `parent_review_id` on every follow-up;
-- `social-strategy`: record an explicitly requested, project-aware strategy and its evidence artifact.
+- `social-strategy`: record an explicitly requested, project-aware strategy and its evidence artifact;
+- `social-result`: preserve user-provided metrics or qualitative evidence for one planned post;
+- `social-learning`: connect recorded plans and results to one bounded interpretation and next test.
 
 Use [visual-qa.md](../../../../skills/visual-qa.md),
 [creative-review.md](../../../../skills/creative-review.md), or
 [social-strategy.md](../../../../skills/social-strategy.md) for the event-specific
-method. Run `builderos.py operations-check --require plan|implementation|visual|review|social`
+method. Run `builderos.py operations-check --require plan|implementation|visual|review|social|social-learning`
 for the evidence level being claimed before relying on the ledger.
+
+Contract-version 2 social strategies prove their project story, current source
+trace, real or explicitly missing visual inventory, voice basis, complete post
+concepts and hypotheses. Social results must be user-provided and artifact
+backed. Learning writes project-local `CONTENT-LEARNINGS.md`; one result stays
+inconclusive, and a promoted rule needs three recorded results.
 
 `operations-check --require review` is ready only after every approved requirement
 is implemented, its planned viewports have rendered/observed evidence, drift is

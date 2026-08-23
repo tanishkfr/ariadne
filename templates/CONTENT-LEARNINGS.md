@@ -38,9 +38,9 @@
 
 ## Post log
 
-| Date | Platform | Pillar | Hook score | Format | Impressions | Engagements | Profile visits | Follows | Qualitative |
-|---|---|---|---|---|---|---|---|---|---|
-| | X / LI | | /5 | | | | | | <who replied, what they said> |
+| Result ID | Strategy / post ID | Date | Platform | Pillar | Format | Supplied metrics | Qualitative | Evidence artifact |
+|---|---|---|---|---|---|---|---|---|
+| | | | | | | <only metrics actually supplied> | <who replied, what they said> | <screenshot / CSV / export> |
 
 > **Qualitative beats quantitative.** One reply from someone whose work you respect outweighs 5,000 impressions. Impression counts will not record that — this column will.
 
@@ -48,11 +48,11 @@
 
 ### Week of <date>
 
-1. **What went out:** <>
-2. **Best and worst:** <> — **explainable, or noise?** <>
-3. **Hypothesis supported or contradicted:** <>
-4. **What people actually responded to (replies, not counts):** <>
-5. **One change for next week:** <>
+1. **Plan:** <the recorded hypothesis and treatment>
+2. **Result:** <supplied metrics and qualitative evidence>
+3. **Interpretation:** <bounded conclusion, or inconclusive>
+4. **Next test:** <one changed variable and how it will be measured>
+5. **What people actually responded to:** <qualitative signal, or not supplied>
 
 **Changed in this file:** <what was added, promoted, or demoted — or "nothing, and here is why">
 
@@ -60,9 +60,9 @@
 
 ## Experiments
 
-| # | Hypothesis | Variable | Posts | Period | Result |
-|---|---|---|---|---|---|
-| 1 | <specific and falsifiable> | <the single thing changing> | <n> | <dates> | supported / contradicted / **inconclusive** |
+| # | Hypothesis | Variable | Result IDs | Period | Outcome | Confidence | Next test |
+|---|---|---|---|---|---|---|---|
+| 1 | <specific and falsifiable> | <the single thing changing> | <IDs> | <dates> | supported / contradicted / **inconclusive** | weak / limited / moderate | <one variable> |
 
 > One experiment at a time. One variable. **Inconclusive is the most common correct result**
 > ([CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) section 12).

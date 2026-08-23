@@ -156,10 +156,14 @@ finding changes the approved direction.
 
 When the user explicitly requests social strategy, use
 `<root>/skills/social-strategy.md` and the conditional
-`<root>/templates/SOCIAL-STRATEGY.md`.
-Record current source evidence and the finished artifact through the
-creative-operations contract. Do not activate social planning by default, post
-content, authenticate accounts, or imply that strategy changes the build gates.
+`<root>/templates/SOCIAL-STRATEGY.md`. Inspect the richest current project
+state and real visual assets before researching platforms. Record current
+SOURCE -> FINDING -> DECISION evidence and the finished artifact through the
+creative-operations contract. If the user later supplies performance evidence,
+use the same method with `<root>/templates/CONTENT-LEARNINGS.md`; preserve
+PLAN -> RESULT -> INTERPRETATION -> NEXT TEST in project-local evidence.
+Do not activate social work by default, publish, authenticate, schedule, invent
+metrics, or imply that distribution changes the build gates.
 
 ## Communication
 
