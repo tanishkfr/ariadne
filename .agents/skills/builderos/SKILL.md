@@ -159,7 +159,9 @@ When the user explicitly requests social strategy, use
 `<root>/templates/SOCIAL-STRATEGY.md`. Inspect the richest current project
 state and real visual assets before researching platforms. Record current
 SOURCE -> FINDING -> DECISION evidence and the finished artifact through the
-creative-operations contract. If the user later supplies performance evidence,
+creative-operations contract. When intake previously skipped this optional
+method, first preserve the later request through the documented
+`skill-activation` evidence event. If the user later supplies performance evidence,
 use the same method with `<root>/templates/CONTENT-LEARNINGS.md`; preserve
 PLAN -> RESULT -> INTERPRETATION -> NEXT TEST in project-local evidence.
 Do not activate social work by default, publish, authenticate, schedule, invent

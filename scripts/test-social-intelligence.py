@@ -338,6 +338,21 @@ def self_test() -> int:
         duplicate.update({"id": "contradictory-result", "provided_by": "user"})
         case("contradictory performance data cannot overwrite an observation", rejected(lambda: OPS.record_social_result(ledger, duplicate)))
 
+        correction = copy.deepcopy(duplicate)
+        correction.update({
+            "id": "corrected-result", "revises": result_ids[0],
+            "correction_reason": "The first export omitted saves.",
+        })
+        OPS.record_social_result(ledger, correction)
+        case(
+            "explicit correction preserves both performance records",
+            len([item for item in ledger["social_results"] if item["concept_id"] == correction["concept_id"]]) == 2,
+        )
+        case(
+            "corrected data makes the prior learning explicitly stale",
+            any("superseded" in item for item in OPS.ledger_problems(project, ledger)),
+        )
+
         one_result_learning = {
             "id": "overclaim", "strategy_id": strategy["id"], "result_ids": [result_ids[0]],
             "outcome": "supported", "confidence": "weak", "interpretation": "One post proves the pattern.",
@@ -346,15 +361,22 @@ def self_test() -> int:
         }
         case("one post cannot establish a performance learning", rejected(lambda: OPS.record_social_learning(ledger, one_result_learning)))
 
-        creative = CREATIVE.create_ledger(project, {
-            **CREATIVE.low_assessment(),
-            "social_request": {"value": True, "request": "I want to launch this project on social."},
+        creative = CREATIVE.create_ledger(project, CREATIVE.low_assessment())
+        CREATIVE.activate_optional_skill(creative, {
+            "skill": "social-strategy",
+            "explicit_request": "I want to launch this project on social.",
         })
         CREATIVE.record_skill_event(creative, {"skill": "social-strategy", "state": "invoked", "evidence_path": str(source_a)})
         CREATIVE.record_skill_event(creative, {"skill": "social-strategy", "state": "completed", "output_path": str(strategy_path), "result": "Project-aware strategy recorded.", "usefulness": "useful"})
         CREATIVE.record_decision(creative, {"id": "social-decision", "decision": "Use the editorial programme frame.", "principle": "The actual project mechanism should lead distribution.", "basis": "thesis", "reference_ids": [], "artifact_path": str(strategy_path), "artifact_anchor": "What I recommend", "status": "proposed", "gate": "G5 pending"})
         CREATIVE.record_skill_event(creative, {"skill": "social-strategy", "state": "used", "downstream_path": str(strategy_path), "decision_ids": ["social-decision"]})
-        case("social skill execution is proven through recommended invoked completed used states", next(item for item in creative["skills"] if item["name"] == "social-strategy")["state"] == "used")
+        social_history = next(item for item in creative["skills"] if item["name"] == "social-strategy")
+        case(
+            "late social request preserves skipped recommended invoked completed used history",
+            social_history["state"] == "used"
+            and [item["state"] for item in social_history["history"]][-4:]
+            == ["recommended", "invoked", "completed", "used"],
+        )
 
         saved_learning = learnings.read_text(encoding="utf-8")
         learnings.write_text(saved_learning + "changed without a new event\n", encoding="utf-8")

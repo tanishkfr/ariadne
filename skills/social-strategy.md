@@ -13,8 +13,10 @@ unverified until live execution exists.
 
 ## Strategy method
 
-1. Confirm the user's explicit request, then read the richest project evidence
-   available. Start with `PROJECT.md`; use `DESIGN.md`, `HANDOFF.md`, approved
+1. Confirm the user's explicit request. If the project originally skipped this
+   optional method, record a `skill-activation` event with that request before
+   invocation; never rewrite the earlier skipped history. Then read the richest
+   project evidence available. Start with `PROJECT.md`; use `DESIGN.md`, `HANDOFF.md`, approved
    thesis, implementation, screenshots, recordings, references, assets and
    retrospective evidence when they exist. Do not reduce a finished project to
    its original brief.

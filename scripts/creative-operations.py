@@ -830,6 +830,11 @@ def record_social_learning(ledger: dict, event: dict) -> None:
     results = [by_id(ledger.get("social_results", []), item, "social results") for item in result_ids]
     if any(item.get("strategy_id") != strategy["id"] for item in results):
         raise OperationsError("social learning cannot combine results from different strategies")
+    superseded = {
+        item.get("revises") for item in ledger.get("social_results", []) if item.get("revises")
+    }
+    if any(item["id"] in superseded for item in results):
+        raise OperationsError("social learning cannot rely on a superseded result")
     outcome = str(event.get("outcome", "")).strip()
     confidence = str(event.get("confidence", "")).strip()
     if outcome not in SOCIAL_LEARNING_OUTCOMES or confidence not in SOCIAL_LEARNING_CONFIDENCE:
@@ -845,8 +850,8 @@ def record_social_learning(ledger: dict, event: dict) -> None:
     ):
         raise OperationsError("social learning needs one falsifiable next test and one changing variable")
     promoted_rule = str(event.get("promoted_rule", "")).strip()
-    if promoted_rule and len(results) < 3:
-        raise OperationsError("a social rule needs at least three recorded results")
+    if promoted_rule and len({item.get("concept_id") for item in results}) < 3:
+        raise OperationsError("a social rule needs at least three distinct recorded posts")
     artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
     revises = str(event.get("revises", "")).strip()
     if revises and not any(item.get("id") == revises for item in ledger.get("social_learnings", [])):
@@ -966,6 +971,16 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
         problems.extend(artifact_problems(
             latest_learning.get("artifact", {}), f"social learning {latest_learning.get('id')}"
         ))
+        known_results = {item.get("id") for item in ledger.get("social_results", [])}
+        missing_results = set(latest_learning.get("result_ids", [])) - known_results
+        if missing_results:
+            problems.append("social learning cites unknown results: " + ", ".join(sorted(missing_results)))
+        superseded = {
+            item.get("revises") for item in ledger.get("social_results", []) if item.get("revises")
+        }
+        stale_results = set(latest_learning.get("result_ids", [])) & superseded
+        if stale_results:
+            problems.append("social learning uses superseded results: " + ", ".join(sorted(stale_results)))
     return list(dict.fromkeys(problems))
 
 

@@ -324,6 +324,26 @@ def _skill_by_name(ledger: dict, name: str) -> dict:
     return matches[0]
 
 
+def activate_optional_skill(ledger: dict, event: dict) -> None:
+    name = str(event.get("skill", "")).strip()
+    request = str(event.get("explicit_request", "")).strip()
+    skill = _skill_by_name(ledger, name)
+    if skill.get("mandatory"):
+        raise CreativeError("mandatory creative work cannot use optional late activation")
+    if skill.get("state") != "skipped":
+        raise CreativeError(f"optional late activation requires a skipped skill: {name}")
+    if not request:
+        raise CreativeError("optional late activation needs the user's explicit request")
+    skill["selected"] = True
+    skill["state"] = "recommended"
+    skill["reason"] = "The user explicitly activated this optional capability after intake."
+    skill.setdefault("history", []).append({
+        "state": "recommended",
+        "activated_by": request,
+        "recorded_at": now(),
+    })
+
+
 def record_skill_event(ledger: dict, event: dict) -> None:
     name = str(event.get("skill", "")).strip()
     state = str(event.get("state", "")).strip()
@@ -559,7 +579,9 @@ def apply_event(ledger: dict, event: dict) -> None:
     if not isinstance(event, dict):
         raise CreativeError("creative evidence event must be an object")
     kind = event.get("type")
-    if kind == "skill":
+    if kind == "skill-activation":
+        activate_optional_skill(ledger, event)
+    elif kind == "skill":
         record_skill_event(ledger, event)
     elif kind == "reference":
         record_reference(ledger, event)
@@ -933,6 +955,25 @@ def self_test() -> int:
         except CreativeError:
             unsupported_social_activation = False
         case("social strategy cannot self-activate without request evidence", not unsupported_social_activation)
+        late_social = create_ledger(project, low_assessment())
+        activate_optional_skill(late_social, {
+            "skill": "social-strategy",
+            "explicit_request": "Help me launch this finished project on social.",
+        })
+        case(
+            "explicit later request can activate previously skipped social work",
+            _skill_by_name(late_social, "social-strategy")["state"] == "recommended"
+            and _skill_by_name(late_social, "social-strategy")["selected"],
+        )
+        try:
+            missing_late_request = create_ledger(project, low_assessment())
+            activate_optional_skill(missing_late_request, {
+                "skill": "social-strategy", "explicit_request": "",
+            })
+            late_without_request = True
+        except CreativeError:
+            late_without_request = False
+        case("late social activation cannot invent a user request", not late_without_request)
 
         reference_assessment = low_assessment(visual_dependence="high", reference_sensitivity="high", generic_risk="high")
         reference_assessment["alternatives_helpful"] = {

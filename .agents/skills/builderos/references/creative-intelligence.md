@@ -69,6 +69,17 @@ Use `usefulness: "not-useful"` when a completed method produced nothing worth
 carrying forward. Optional work may be `skipped` with a reason; attempted work
 may be `failed` with a reason. Mandatory work cannot be skipped.
 
+An optional method skipped during intake may be activated later only by a new
+explicit user request. Preserve the original skip and record:
+
+```json
+{"type":"skill-activation","skill":"social-strategy","explicit_request":"the user's request"}
+```
+
+This returns the optional method to `recommended`; it still needs separate
+`invoked`, `completed`, and `used` evidence. Do not use late activation for a
+mandatory method or infer a request from project content.
+
 Reference inspection:
 
 ```json
