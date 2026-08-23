@@ -48,8 +48,10 @@ REQUIRED = [
     "prompts/retrospective.md",
     "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
+    "adapters/reasoner-contract.md", "adapters/reasoners.json",
+    "adapters/claude-reasoner.md",
     "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
-    "scripts/creative-operations.py",
+    "scripts/creative-operations.py", "scripts/reasoners.py",
     "scripts/test-real-projects.py", "validation/fixtures/v1.5-real-projects.json",
     "scripts/install-builderos-skill.py",
     "scripts/build-release.py", "scripts/test-distribution.py",
@@ -774,6 +776,16 @@ def load_runtime_tool():
     return module
 
 
+def load_reasoner_tool():
+    path = os.path.join(ROOT, "scripts", "reasoners.py")
+    spec = importlib.util.spec_from_file_location("builder_os_reasoners", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Could not load reasoner contract checker")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def check_runtime_tool():
     if not os.path.exists(os.path.join(ROOT, RUNTIME_TOOL)):
         return [f"{RUNTIME_TOOL} is missing"]
@@ -1172,6 +1184,8 @@ def main():
         skill_contract_failed = self_test_skill_contracts()
         print("\nRuntime controller self-test")
         runtime_failed = load_runtime_tool().self_test()
+        print("\nReasoner adapter self-test")
+        reasoner_failed = load_reasoner_tool().self_test()
         print("\nCreative intelligence self-test")
         creative_failed = load_creative_tool().self_test()
         print("\nCreative operations self-test")
@@ -1188,6 +1202,7 @@ def main():
         distribution_failed = load_distribution_tool().self_test()
         failed = (
             agents_failed or delivery_failed or packet_failed or skill_contract_failed or runtime_failed
+            or reasoner_failed
             or creative_failed or operations_failed or real_projects_failed or installer_failed
             or distribution_contract_failed or release_failed or distribution_failed
         )
@@ -1293,6 +1308,15 @@ def main():
             print(f"        {problem}")
     else:
         print("ok    runtime controller: entry skill, preflight, return handoff, and log contracts")
+
+    reasoner_problems = load_reasoner_tool().contract_problems()
+    if reasoner_problems:
+        failed = True
+        print(f"FAIL  reasoner adapters: {len(reasoner_problems)} problem(s)")
+        for problem in reasoner_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    reasoner adapters: Codex default, Claude opt-in, provider-neutral stages")
 
     operations_problems = load_creative_operations_tool().repository_contract_problems()
     if operations_problems:

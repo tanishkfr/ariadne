@@ -20,9 +20,15 @@ Same as [cursor.md](cursor.md): S4 implementation, S5 mechanical QA, S6 git and 
 
 ## Setup
 
-**1. `AGENTS.md` at the project root** ([templates/AGENTS.md](../templates/AGENTS.md)) — Claude Code reads it. A project `CLAUDE.md` works too; do not maintain both, since two rule files drift apart.
+**1. Delivered runtime state.** Claude Code reads `CLAUDE.md`, not `AGENTS.md`.
+Builder OS does not add a provider-specific `CLAUDE.md` to projects. The S4B
+packet explicitly transports the current project-root `AGENTS.md`, so Claude
+must follow that delivered runtime state rather than relying on automatic file
+discovery.
 
-**2. Precedence.** Your global `~/.claude/CLAUDE.md` already carries rules that align closely with this system — think before coding, simplicity first, surgical changes, one task at a time. Project `AGENTS.md` outranks it ([ROUTER.md](../ROUTER.md) section 12, precedence).
+**2. Precedence.** Canonical Builder OS policy and the verified stage packet
+outrank user-level Claude preferences. No claim is made about the contents of a
+particular machine's global `~/.claude/CLAUDE.md`.
 
 **3. Permissions.** Approve build, typecheck, lint, test, and git read commands so Green-tier work does not prompt constantly. **Do not** blanket-approve installs, pushes, or deploys — those are G2 and G4 and the prompt is the gate.
 
@@ -93,5 +99,5 @@ Full sequence: [MIGRATION-CHECKLIST.md](../MIGRATION-CHECKLIST.md).
 | Three design skills producing three directions | Pick one; record the choice |
 | An image skill quietly spending money | Verify billing before running |
 | Blanket-approving all permissions | Installs, pushes, deploys stay gated |
-| Both `CLAUDE.md` and `AGENTS.md` in a project | Keep one |
+| Assuming Claude automatically discovers `AGENTS.md` | Use the verified packet that explicitly delivers it |
 | Using Claude Code for S3 because Codex is out | Wait. Waiting is cheaper than rebuilding. |

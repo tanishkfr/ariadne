@@ -37,6 +37,7 @@ RUNTIME_TREES = ["prompts", "templates", "modes", "skills", "adapters", "referen
 RUNTIME_SCRIPTS = [
     "scripts/builderos.py", "scripts/prepare-stage.py",
     "scripts/creative-intelligence.py", "scripts/creative-operations.py",
+    "scripts/reasoners.py",
     "scripts/install-builderos-skill.py",
 ]
 RUNTIME_SKILL = ".agents/skills/builderos"
@@ -214,7 +215,13 @@ def self_test() -> int:
             names = set(archive.namelist())
             embedded = json.loads(archive.read("RELEASE-MANIFEST.json"))
         case("release carries its internal file manifest", embedded["source_commit"] == "fixture-commit")
-        case("runtime includes managed skill and controller", ".agents/skills/builderos/SKILL.md" in names and "scripts/builderos.py" in names)
+        case(
+            "runtime includes managed skill, controller, and optional reasoner adapter",
+            ".agents/skills/builderos/SKILL.md" in names
+            and "scripts/builderos.py" in names
+            and "scripts/reasoners.py" in names
+            and "adapters/reasoners.json" in names,
+        )
         with zipfile.ZipFile(one["launcher"]) as wheel:
             wheel_names = set(wheel.namelist())
         case("launcher wheel carries seed runtime and command", "builderos/seed-runtime.zip" in wheel_names and any(name.endswith("/entry_points.txt") for name in wheel_names))

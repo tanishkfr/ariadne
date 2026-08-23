@@ -1,0 +1,39 @@
+{
+  "default": "codex",
+  "reasoning_stages": ["S1", "S2", "S3", "S4A", "S5", "S6"],
+  "schema_version": 1,
+  "providers": {
+    "codex": {
+      "adapter": "adapters/codex.md",
+      "capabilities": {
+        "creative-review": "verified",
+        "design-direction": "verified",
+        "fresh-task-continuity": "verified",
+        "handoff": "verified",
+        "intake": "verified",
+        "research": "verified",
+        "social-strategy": "verified",
+        "visual-qa-planning": "verified"
+      },
+      "entry": "embedded",
+      "opt_in": false
+    },
+    "claude": {
+      "adapter": "adapters/claude-reasoner.md",
+      "capabilities": {
+        "creative-review": "externally-unverified",
+        "design-direction": "externally-unverified",
+        "fresh-task-continuity": "externally-unverified",
+        "handoff": "externally-unverified",
+        "intake": "externally-unverified",
+        "research": "externally-unverified",
+        "social-strategy": "externally-unverified",
+        "visual-qa-planning": "externally-unverified"
+      },
+      "entry": "external-cli",
+      "executable": "claude",
+      "opt_in": true,
+      "version_args": ["--version"]
+    }
+  }
+}

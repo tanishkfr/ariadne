@@ -79,6 +79,19 @@ def load_transport():
 TRANSPORT = load_transport()
 
 
+def load_reasoners():
+    path = ROOT / "scripts" / "reasoners.py"
+    spec = importlib.util.spec_from_file_location("builder_os_reasoners", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError_("Builder OS reasoner helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+REASONERS = load_reasoners()
+
+
 def load_creative_intelligence():
     path = ROOT / "scripts" / "creative-intelligence.py"
     spec = importlib.util.spec_from_file_location("builder_os_creative_intelligence", path)
@@ -426,6 +439,18 @@ def allocate_packet(run_root: Path, run_id: str, stage: str) -> tuple[str, Path]
         index += 1
 
 
+def reasoner_output_baseline(project: Path, stage: str) -> dict | None:
+    relative = MATERIAL_REASONER_OUTPUT.get(stage)
+    if not relative:
+        return None
+    path = project / relative
+    return {
+        "path": relative,
+        "exists": path.is_file(),
+        "sha256": sha256(path) if path.is_file() else None,
+    }
+
+
 def current_packet(state: dict, allow_project_drift: bool = False) -> tuple[dict, Path]:
     packets = state.get("packets", [])
     if not packets:
@@ -449,6 +474,19 @@ def current_packet(state: dict, allow_project_drift: bool = False) -> tuple[dict
 def start(args: argparse.Namespace) -> int:
     project = Path(args.project).resolve()
     adopt_existing = bool(getattr(args, "adopt_existing", False))
+    reasoner_id = getattr(args, "reasoner", None) or REASONERS.load_contract()["default"]
+    capability = REASONERS.detect(reasoner_id)
+    if not REASONERS.selectable(capability):
+        raise RuntimeError_(
+            f"The requested {reasoner_id} reasoner is unavailable: "
+            f"{capability.get('execution', 'not observed')}. Nothing was created."
+        )
+    reasoner = REASONERS.selection_record(
+        reasoner_id,
+        "Explicit project-start selection." if getattr(args, "reasoner", None) else "V1.5 default.",
+        capability,
+        now(),
+    )
     run_root = Path(args.run_root).resolve() if args.run_root else default_run_root(project)
     if run_root.exists():
         raise RuntimeError_(
@@ -471,6 +509,7 @@ def start(args: argparse.Namespace) -> int:
             project=str(project),
             output=str(output),
             packet_id=packet_id,
+            provider=reasoner_id,
             request=request,
             adopt_existing=adopt_existing,
             synthetic_validation=args.synthetic_validation,
@@ -487,8 +526,15 @@ def start(args: argparse.Namespace) -> int:
         "request": request.strip(),
         "adopt_existing": adopt_existing,
         "evidence_state": "verified-transport; provider stage not yet observed",
-        "packets": [{"id": packet_id, "stage": "S1", "path": str(output)}],
+        "packets": [{
+            "id": packet_id,
+            "stage": "S1",
+            "path": str(output),
+            "reasoner_output_baseline": reasoner_output_baseline(project, "S1"),
+        }],
         "provider_preflight": None,
+        "reasoner": reasoner,
+        "reasoner_history": [reasoner],
         "notes": [],
         "human_interventions": [],
         "creative_evidence_required": True,
@@ -510,7 +556,7 @@ def start(args: argparse.Namespace) -> int:
             else "Verified: fresh project shell and S1 packet prepared."
         ),
         [str(project / ".gitignore"), str(output / "packet.txt"), str(output / "manifest.json")],
-        "Packet source parity passed; no provider stage has run.",
+        f"Packet source parity passed; reasoner selected: {reasoner_id}; no provider stage has run.",
         "Builder OS should read and run the prepared project-brief packet.",
     )
     print("Done. The project is ready for its brief and discovery pass.")
@@ -1062,6 +1108,7 @@ def status(args: argparse.Namespace) -> int:
         "current_boundary": entry["stage"],
         "packet": str(packet / "packet.txt"),
         "packet_verified": True,
+        "reasoner": REASONERS.selected(state),
         "intelligence": intelligence,
         "provider_preflight": state.get("provider_preflight") or "not run",
     }
@@ -1075,6 +1122,7 @@ def status(args: argparse.Namespace) -> int:
         print(f"{intelligence['project_name']}")
         print(f"Goal: {intelligence['goal']}")
         print(f"Where we left off: {intelligence['current_work']}.")
+        print(f"Reasoner: {REASONERS.selected(state)['id']}.")
         if intelligence["approved_direction"] != "not yet approved":
             print(f"Approved direction: {intelligence['approved_direction']}")
         elif intelligence["proposed_direction"] != "none":
@@ -1099,6 +1147,242 @@ def status(args: argparse.Namespace) -> int:
         print(f"Next: {intelligence['next_recommended_action']}")
         print(f"From you: {intelligence['needs_from_human']}")
     return 0
+
+
+def reasoner_status(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    contract = REASONERS.load_contract()
+    selection = REASONERS.selected(state, contract)
+    identifier = args.reasoner or selection["id"]
+    capability = REASONERS.detect(identifier, contract)
+    payload = {
+        "default": contract["default"],
+        "selected": selection,
+        "checked": capability,
+        "workflow_capabilities": contract["providers"][identifier]["capabilities"],
+        "reasoning_stages": contract["reasoning_stages"],
+        "implementation_boundary": "S4B remains controlled by HANDOFF.md and provider preflight",
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(f"Selected reasoner: {selection['id']} ({selection.get('classification', 'unverified')})")
+        print(f"Checked reasoner: {identifier} — {capability['availability']}")
+        print(f"Version: {capability['version']}")
+        print(f"Execution evidence: {capability['execution']}")
+        print("Next: keep the selected reasoner, or use select-reasoner for an explicit switch.")
+    return 0 if REASONERS.selectable(capability) else 2
+
+
+MATERIAL_REASONER_OUTPUT = {
+    "S1": "PROJECT.md",
+    "S2": "RESEARCH.md",
+    "S3": "DESIGN.md",
+    "S4A": "HANDOFF.md",
+    "S6": "RETROSPECTIVE.md",
+}
+
+
+def material_reasoner_output(state: dict, entry: dict, packet: Path) -> Path | None:
+    if stage_has_evidence(packet):
+        return packet / "evidence"
+    relative = MATERIAL_REASONER_OUTPUT.get(entry["stage"])
+    candidate = Path(state["project"]) / relative if relative else None
+    if not candidate:
+        return None
+    baseline = entry.get("reasoner_output_baseline")
+    if isinstance(baseline, dict) and baseline.get("path") == relative:
+        exists = candidate.is_file()
+        if exists != bool(baseline.get("exists")):
+            return candidate
+        if exists and sha256(candidate) != baseline.get("sha256"):
+            return candidate
+        return None
+    return candidate if candidate.is_file() and candidate.stat().st_size else None
+
+
+def preserved_s5_parameters(packet: Path) -> tuple[str, str]:
+    text = read(packet / TRANSPORT.PACKET_NAME)
+    target = re.search(r"(?m)^TARGET:\s+(.+?)\s*$", text)
+    lenses = re.search(r"(?m)^LENSES:\s+(.+?)\s*$", text)
+    if not target or not lenses or "<" in target.group(1) or "<" in lenses.group(1):
+        raise RuntimeError_("Current S5 packet has no preserved target/lens parameters")
+    return target.group(1).strip(), lenses.group(1).strip()
+
+
+def reasoner_retry_args(run_root: Path, entry: dict, packet: Path) -> argparse.Namespace:
+    values = dict(
+        run_root=str(run_root), project=None, stage=entry["stage"], retry=True,
+        provider=None, references_file=None, references_text=None, restart_context=None,
+        motion=None, assets=None, target=None, lenses=None,
+        synthetic_validation=TRANSPORT.is_within(packet, ROOT),
+    )
+    if entry["stage"] == "S3":
+        references, motion, assets = preserved_s3_parameters(packet)
+        manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
+        restart = next(
+            (
+                item.get("path")
+                for item in manifest.get("sources", [])
+                if item.get("kind") == "continuation-restart-context"
+            ),
+            None,
+        )
+        values.update(
+            references_text=references,
+            motion=motion,
+            assets=assets,
+            restart_context=restart,
+        )
+    elif entry["stage"] == "S5":
+        target, lenses = preserved_s5_parameters(packet)
+        values.update(target=target, lenses=lenses)
+    return argparse.Namespace(**values)
+
+
+def select_reasoner(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    contract = REASONERS.load_contract()
+    capability = REASONERS.detect(args.reasoner, contract)
+    current = REASONERS.selected(state, contract)
+    if not REASONERS.selectable(capability):
+        blocked = REASONERS.selection_record(
+            args.reasoner, args.reason, capability, now(), status="blocked"
+        )
+        state.setdefault("reasoner_history", []).append(blocked)
+        state["updated_at"] = now()
+        write_json(run_root / STATE_NAME, state)
+        append_log(
+            run_root,
+            "Reasoner selection blocked",
+            args.reason,
+            f"{args.reasoner} remains unavailable; {current['id']} remains selected.",
+            evidence=capability.get("execution", "not observed"),
+            next_action="Keep the current reasoner or make the external provider available.",
+        )
+        print(f"Stopped. {args.reasoner} is unavailable; {current['id']} remains selected.")
+        return 2
+
+    selection = REASONERS.selection_record(args.reasoner, args.reason, capability, now())
+    if current["id"] == args.reasoner:
+        state["reasoner"] = selection
+        state.setdefault("reasoner_history", []).append(selection)
+        state["updated_at"] = now()
+        write_json(run_root / STATE_NAME, state)
+        print(f"Done. {args.reasoner} remains the selected reasoner; capability evidence was refreshed.")
+        return 0
+
+    material = material_reasoner_output(state, entry, packet)
+    if entry["stage"] not in contract["reasoning_stages"] or material:
+        state["reasoner"] = selection
+        state.setdefault("reasoner_history", []).append(selection)
+        state["updated_at"] = now()
+        state["next"] = (
+            f"Finish the current {entry['stage']} boundary; {args.reasoner} applies at the next reasoning stage."
+        )
+        write_json(run_root / STATE_NAME, state)
+        append_log(
+            run_root,
+            "Reasoner switch queued",
+            args.reason,
+            f"{current['id']} -> {args.reasoner}; current material state was preserved.",
+            [str(material)] if material else [],
+            "No gate or current implementation boundary changed.",
+            state["next"],
+        )
+        print(f"Done. {args.reasoner} will be used at the next reasoning boundary.")
+        return 0
+
+    retry_args = reasoner_retry_args(run_root, entry, packet)
+    evidence = packet / "evidence" / "reasoner-switch.json"
+    if evidence.exists():
+        raise RuntimeError_(f"Refusing to overwrite reasoner switch evidence: {evidence}")
+    record = REASONERS.continuity_record(
+        "reasoner-switch", entry["id"], entry["stage"], current["id"], args.reasoner,
+        args.reason, "verified", now(),
+    )
+    write_json(evidence, record)
+    state["reasoner"] = selection
+    state.setdefault("reasoner_history", []).append(selection)
+    state["updated_at"] = now()
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Reasoner switched",
+        args.reason,
+        f"{current['id']} -> {args.reasoner}; a linked same-stage child will use canonical state.",
+        [str(evidence)],
+        "Verified selection and immutable parent continuity; no gate changed.",
+        f"Prepare the linked {entry['stage']} child.",
+    )
+    return prepare_next(retry_args)
+
+
+def record_reasoner_failure(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
+    contract = REASONERS.load_contract()
+    if entry["stage"] not in contract["reasoning_stages"]:
+        raise RuntimeError_("Reasoner failure recovery does not own the S4B implementation boundary")
+    from_reasoner = manifest.get("provider")
+    if from_reasoner not in contract["providers"]:
+        raise RuntimeError_(f"Current packet has no supported reasoner provider: {from_reasoner}")
+    destination = packet / "evidence" / "reasoner-failure.json"
+    if destination.exists():
+        raise RuntimeError_(f"Refusing to overwrite reasoner failure evidence: {destination}")
+    material = material_reasoner_output(state, entry, packet)
+    safe_fallback = from_reasoner != "codex" and material is None
+    record = REASONERS.continuity_record(
+        "reasoner-failure", entry["id"], entry["stage"], from_reasoner,
+        "codex" if safe_fallback else None, args.summary, args.evidence, now(),
+    )
+    write_json(destination, record)
+    state.setdefault("reasoner_history", []).append({"event": "failure", **record})
+    if not safe_fallback:
+        state["updated_at"] = now()
+        state["next"] = (
+            "Decide how to preserve or continue the material partial output."
+            if material
+            else "Resolve the Codex failure before continuing; no unverified automatic fallback is selected."
+        )
+        write_json(run_root / STATE_NAME, state)
+        append_log(
+            run_root,
+            "Reasoner failure recorded",
+            "A provider failure must not become completion or silently replace material creative work.",
+            args.summary,
+            [str(destination)] + ([str(material)] if material else []),
+            f"{args.evidence}; no gate changed and no fallback packet was created.",
+            state["next"],
+        )
+        print(f"Paused. The {from_reasoner} failure was preserved; no automatic fallback was safe.")
+        return 2
+
+    retry_args = reasoner_retry_args(run_root, entry, packet)
+    capability = REASONERS.detect("codex", contract)
+    fallback = REASONERS.selection_record(
+        "codex", f"Safe fallback after {from_reasoner} failure: {args.summary}",
+        capability, now(), status="fallback",
+    )
+    state["reasoner"] = fallback
+    state.setdefault("reasoner_history", []).append(fallback)
+    state["updated_at"] = now()
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Reasoner fallback prepared",
+        "No material stage output existed, so retrying from canonical state cannot erase a creative decision.",
+        f"{from_reasoner} -> codex after: {args.summary}",
+        [str(destination)],
+        f"{args.evidence}; no gate changed.",
+        f"Prepare the linked {entry['stage']} Codex retry.",
+    )
+    return prepare_next(retry_args)
 
 
 def discover(args: argparse.Namespace) -> int:
@@ -2180,6 +2464,23 @@ def prepare_next(args: argparse.Namespace) -> int:
             "Prepare the verified implementation packet.",
         )
     packet_id, output = allocate_packet(run_root, state["run_id"], stage)
+    requested_provider = args.provider
+    if stage in REASONERS.load_contract()["reasoning_stages"]:
+        chosen = REASONERS.selected(state)["id"]
+        if requested_provider and requested_provider != chosen:
+            raise RuntimeError_(
+                f"Reasoner override {requested_provider!r} does not match the recorded selection "
+                f"{chosen!r}; use select-reasoner so the switch is preserved."
+            )
+        capability = REASONERS.detect(chosen)
+        if not REASONERS.selectable(capability):
+            raise RuntimeError_(
+                f"Selected reasoner {chosen} is unavailable: "
+                f"{capability.get('execution', 'not observed')}. No packet was created."
+            )
+        packet_provider = chosen
+    else:
+        packet_provider = requested_provider or transport_provider(state.get("provider_preflight"))
     kwargs = dict(
         stage=stage,
         project=state["project"],
@@ -2187,7 +2488,7 @@ def prepare_next(args: argparse.Namespace) -> int:
         packet_id=packet_id,
         parent=str(parent),
         retry=args.retry,
-        provider=args.provider or transport_provider(state.get("provider_preflight")),
+        provider=packet_provider,
         references_file=args.references_file,
         references_text=getattr(args, "references_text", None),
         restart_context=getattr(args, "restart_context", None),
@@ -2199,7 +2500,12 @@ def prepare_next(args: argparse.Namespace) -> int:
         request=state.get("request"),
     )
     TRANSPORT.prepare(transport_namespace(**kwargs))
-    state["packets"].append({"id": packet_id, "stage": stage, "path": str(output)})
+    state["packets"].append({
+        "id": packet_id,
+        "stage": stage,
+        "path": str(output),
+        "reasoner_output_baseline": reasoner_output_baseline(Path(state["project"]), stage),
+    })
     state["updated_at"] = now()
     state["evidence_state"] = "verified-transport; stage not yet observed"
     state["next"] = f"Continue with {FRIENDLY_STAGES.get(stage, stage)}."
@@ -2329,6 +2635,9 @@ def repository_contract_problems() -> list[str]:
         ROOT / "skills" / "creative-review.md",
         ROOT / "skills" / "social-strategy.md",
         ROOT / "templates" / "SOCIAL-STRATEGY.md",
+        ROOT / "scripts" / "reasoners.py",
+        ROOT / "adapters" / "reasoners.json",
+        ROOT / "adapters" / "reasoner-contract.md",
     ]
     for path in required:
         if not path.is_file():
@@ -2369,6 +2678,7 @@ def repository_contract_problems() -> list[str]:
         if token not in review:
             problems.append(f"S5 prompt missing review-ingestion contract: {token}")
     problems.extend(OPERATIONS.repository_contract_problems())
+    problems.extend(REASONERS.contract_problems())
     return problems
 
 
@@ -2622,9 +2932,47 @@ def self_test() -> int:
                 references_file=None, references_text=None, restart_context=None,
                 motion=None, assets=None, target=None,
                 lenses=None, synthetic_validation=True,
+                reasoner=None, reason="fixture reason", summary="fixture failure",
+                evidence="blocked", json=False,
             )
             defaults.update(values)
             return argparse.Namespace(**defaults)
+
+        real_detect = REASONERS.detect
+
+        def fixture_detect(identifier: str, contract: dict | None = None) -> dict:
+            if identifier == "claude":
+                return {
+                    "id": "claude", "availability": "detected",
+                    "classification": "reasonably-assumed", "version": "fixture-cli",
+                    "executable": "fixture/claude", "execution": "fixture only; live execution unverified",
+                }
+            return real_detect(identifier, contract)
+
+        blocked_project = workspace / "claude-unavailable-project"
+        blocked_run = workspace / "claude-unavailable-run"
+        REASONERS.detect = lambda identifier, contract=None: (
+            {
+                "id": identifier, "availability": "unavailable", "classification": "blocked",
+                "version": "not observed", "executable": "not found", "execution": "fixture unavailable",
+            }
+            if identifier == "claude" else real_detect(identifier, contract)
+        )
+        try:
+            start(argparse.Namespace(
+                project=str(blocked_project), run_root=str(blocked_run), run_id="blocked",
+                request="Fixture Claude start.", request_file=None, reasoner="claude",
+                adopt_existing=False, synthetic_validation=True,
+            ))
+            unavailable_start_blocked = False
+        except RuntimeError_:
+            unavailable_start_blocked = True
+        finally:
+            REASONERS.detect = real_detect
+        case(
+            "unavailable Claude start leaves no project or run",
+            unavailable_start_blocked and not blocked_project.exists() and not blocked_run.exists(),
+        )
 
         adopted_project = workspace / "adopted-project"
         adopted_project.mkdir()
@@ -2673,6 +3021,83 @@ def self_test() -> int:
         )
         state = load_state(run_root)
         case("start creates one verified S1 packet", len(state["packets"]) == 1 and not TRANSPORT.verify_packet(Path(state["packets"][0]["path"])))
+        case("legacy-compatible start records Codex as the default reasoner", REASONERS.selected(state)["id"] == "codex")
+        REASONERS.detect = fixture_detect
+        try:
+            select_reasoner(runtime_args(reasoner="claude", reason="Explicit fixture switch to Claude."))
+            claude_state = load_state(run_root)
+            claude_entry, claude_packet = current_packet(claude_state)
+            claude_manifest = json.loads(read(claude_packet / TRANSPORT.MANIFEST_NAME))
+            codex_to_claude = (
+                claude_manifest["provider"] == "claude"
+                and claude_manifest["parent_evidence_kind"] == "reasoner-switch"
+                and not (project / "CLAUDE.md").exists()
+            )
+            select_reasoner(runtime_args(reasoner="codex", reason="Explicit fixture switch back to Codex."))
+            codex_state = load_state(run_root)
+            _codex_entry, codex_packet = current_packet(codex_state)
+            codex_manifest = json.loads(read(codex_packet / TRANSPORT.MANIFEST_NAME))
+            claude_to_codex = (
+                codex_manifest["provider"] == "codex"
+                and codex_manifest["parent_id"] == claude_entry["id"]
+                and codex_manifest["parent_evidence_kind"] == "reasoner-switch"
+            )
+        finally:
+            REASONERS.detect = real_detect
+        case("Codex to Claude creates a linked provider-neutral S1 child", codex_to_claude)
+        case("Claude to Codex continues from durable S1 state", claude_to_codex)
+        fallback_project = workspace / "fallback-project"
+        fallback_run = workspace / "fallback-run"
+        REASONERS.detect = fixture_detect
+        try:
+            start(argparse.Namespace(
+                project=str(fallback_project), run_root=str(fallback_run), run_id="fallback",
+                request="Test safe reasoner fallback.", request_file=None, reasoner="claude",
+                adopt_existing=False, synthetic_validation=True,
+            ))
+            fallback_result = record_reasoner_failure(argparse.Namespace(
+                run_root=str(fallback_run), project=None,
+                summary="Fixture Claude session stopped before writing output.", evidence="blocked",
+            ))
+            fallback_state = load_state(fallback_run)
+            _fallback_entry, fallback_packet = current_packet(fallback_state)
+            fallback_manifest = json.loads(read(fallback_packet / TRANSPORT.MANIFEST_NAME))
+        finally:
+            REASONERS.detect = real_detect
+        case(
+            "empty Claude failure falls back to a linked Codex retry",
+            fallback_result == 0
+            and fallback_manifest["provider"] == "codex"
+            and fallback_manifest["parent_evidence_kind"] == "reasoner-failure"
+            and REASONERS.selected(fallback_state)["id"] == "codex",
+        )
+
+        material_project = workspace / "material-failure-project"
+        material_run = workspace / "material-failure-run"
+        REASONERS.detect = fixture_detect
+        try:
+            start(argparse.Namespace(
+                project=str(material_project), run_root=str(material_run), run_id="material",
+                request="Test material reasoner failure.", request_file=None, reasoner="claude",
+                adopt_existing=False, synthetic_validation=True,
+            ))
+            (material_project / "PROJECT.md").write_text(
+                "# PROJECT\n\nPartial provider output.\n", encoding="utf-8"
+            )
+            material_result = record_reasoner_failure(argparse.Namespace(
+                run_root=str(material_run), project=None,
+                summary="Fixture Claude stopped after writing a partial brief.", evidence="blocked",
+            ))
+            material_state = load_state(material_run)
+        finally:
+            REASONERS.detect = real_detect
+        case(
+            "material Claude failure pauses without automatic creative replacement",
+            material_result == 2
+            and len(material_state["packets"]) == 1
+            and REASONERS.selected(material_state)["id"] == "claude"
+            and (Path(material_state["packets"][0]["path"]) / "evidence" / "reasoner-failure.json").is_file(),
+        )
         case("start creates a readable operations log", not operations_log_problems(read(run_root / LOG_NAME)))
         try:
             start(
@@ -2810,6 +3235,37 @@ def self_test() -> int:
                 for row in state["human_interventions"]
             )
             and any(note["kind"] == "rejected-direction" for note in state["notes"]),
+        )
+        REASONERS.detect = fixture_detect
+        try:
+            select_reasoner(runtime_args(
+                reasoner="claude",
+                reason="Continue the rejected-direction retry with the alternate reasoner.",
+            ))
+            state = load_state(run_root)
+            switched_restart_entry, switched_restart_packet = current_packet(
+                state, allow_project_drift=True
+            )
+            switched_restart_manifest = json.loads(
+                read(switched_restart_packet / TRANSPORT.MANIFEST_NAME)
+            )
+            restart_switch_preserved = (
+                switched_restart_manifest["provider"] == "claude"
+                and switched_restart_manifest["parent_id"] == retry_entry["id"]
+                and any(
+                    source.get("kind") == "continuation-restart-context"
+                    for source in switched_restart_manifest["sources"]
+                )
+            )
+            select_reasoner(runtime_args(
+                reasoner="codex", reason="Return the fixture to its default reasoner."
+            ))
+            state = load_state(run_root)
+        finally:
+            REASONERS.detect = real_detect
+        case(
+            "reasoner switch preserves rejected-direction context and restart boundary",
+            restart_switch_preserved,
         )
 
         (project / "DESIGN.md").write_text(
@@ -3056,6 +3512,32 @@ def self_test() -> int:
             "## Screenshots\n\n| View | Path |\n|---|---|\n| Fixture | none |\n",
             encoding="utf-8",
         )
+        partial_hash = sha256(partial_path)
+        REASONERS.detect = fixture_detect
+        try:
+            select_reasoner(runtime_args(
+                reasoner="claude",
+                reason="Use Claude for the next reasoning boundary after the partial build returns.",
+            ))
+        finally:
+            REASONERS.detect = real_detect
+        queued_state = load_state(run_root)
+        queued_entry, queued_packet = current_packet(queued_state, allow_project_drift=True)
+        queued_manifest = json.loads(read(queued_packet / TRANSPORT.MANIFEST_NAME))
+        case(
+            "reasoner switch cannot rewrite a partial Cursor implementation boundary",
+            queued_entry["id"] == s4b_entry["id"]
+            and queued_manifest["provider"] == "cursor"
+            and sha256(partial_path) == partial_hash
+            and REASONERS.selected(queued_state)["id"] == "claude",
+        )
+        REASONERS.detect = fixture_detect
+        try:
+            select_reasoner(runtime_args(
+                reasoner="codex", reason="Return the next reasoning boundary to Codex."
+            ))
+        finally:
+            REASONERS.detect = real_detect
         case("partial implementation return blocks review", infer_next_stage(load_state(run_root))[0] is None)
         advance(runtime_args())
         state = load_state(run_root)
@@ -3117,6 +3599,25 @@ def self_test() -> int:
             state["packets"][-1]["stage"] == "S5"
             and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"],
         )
+        REASONERS.detect = fixture_detect
+        try:
+            select_reasoner(runtime_args(
+                reasoner="claude", reason="Run the isolated review with the alternate reasoner."
+            ))
+            state = load_state(run_root)
+            _s5_entry, s5_packet = current_packet(state)
+            s5_manifest = json.loads(read(s5_packet / TRANSPORT.MANIFEST_NAME))
+            delivered = [
+                source["label"] for source in s5_manifest["sources"]
+                if source.get("delivered", True)
+            ]
+            s5_claude_isolated = (
+                s5_manifest["provider"] == "claude"
+                and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"]
+            )
+        finally:
+            REASONERS.detect = real_detect
+        case("Claude S5 retry preserves independent-review isolation", s5_claude_isolated)
         review_source = workspace / "review.md"
         review_source.write_text(filled_review(), encoding="utf-8")
         ingest_review(runtime_args(input=str(review_source)))
@@ -3230,6 +3731,10 @@ def parser() -> argparse.ArgumentParser:
     start_p.add_argument("--project", required=True)
     start_p.add_argument("--run-root")
     start_p.add_argument("--run-id")
+    start_p.add_argument(
+        "--reasoner", choices=list(REASONERS.load_contract()["providers"]),
+        help="explicit reasoning provider; Codex is the default",
+    )
     request = start_p.add_mutually_exclusive_group(required=True)
     request.add_argument("--request")
     request.add_argument("--request-file")
@@ -3251,6 +3756,27 @@ def parser() -> argparse.ArgumentParser:
     status_p = sub.add_parser("status", help="show the current project state and next action")
     run_selector(status_p)
     status_p.add_argument("--json", action="store_true")
+
+    reasoner_status_p = sub.add_parser(
+        "reasoner-status", help="show selected reasoner and current capability evidence"
+    )
+    run_selector(reasoner_status_p)
+    reasoner_status_p.add_argument("--reasoner", choices=list(REASONERS.load_contract()["providers"]))
+    reasoner_status_p.add_argument("--json", action="store_true")
+
+    select_reasoner_p = sub.add_parser(
+        "select-reasoner", help="record an explicit provider choice and prepare a safe linked retry when needed"
+    )
+    run_selector(select_reasoner_p)
+    select_reasoner_p.add_argument("--reasoner", required=True, choices=list(REASONERS.load_contract()["providers"]))
+    select_reasoner_p.add_argument("--reason", required=True)
+
+    failure_p = sub.add_parser(
+        "record-reasoner-failure", help="preserve a reasoner failure and fall back only when no material output exists"
+    )
+    run_selector(failure_p)
+    failure_p.add_argument("--summary", required=True)
+    failure_p.add_argument("--evidence", required=True, choices=list(REASONERS.EVIDENCE_CLASSES))
 
     readiness_p = sub.add_parser(
         "handoff-readiness", help="check implementation context before provider launch"
@@ -3383,7 +3909,7 @@ def parser() -> argparse.ArgumentParser:
     run_selector(next_p)
     next_p.add_argument("--stage", choices=list(TRANSPORT.STAGES))
     next_p.add_argument("--retry", action="store_true")
-    next_p.add_argument("--provider", choices=["codex", "cursor", "other"])
+    next_p.add_argument("--provider", choices=["codex", "claude", "cursor", "other"])
     next_p.add_argument("--references-file")
     next_p.add_argument("--motion", choices=["yes", "no"])
     next_p.add_argument("--assets", choices=["yes", "no"])
@@ -3402,6 +3928,9 @@ def main() -> int:
             "start": start,
             "discover": discover,
             "status": status,
+            "reasoner-status": reasoner_status,
+            "select-reasoner": select_reasoner,
+            "record-reasoner-failure": record_reasoner_failure,
             "handoff-readiness": handoff_readiness_command,
             "preflight": provider_preflight,
             "record-result": structural_result,

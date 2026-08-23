@@ -37,6 +37,21 @@ MANIFEST_NAME = "manifest.json"
 RECORD_NAME = "continuation.md"
 
 
+def load_reasoners():
+    path = ROOT / "scripts" / "reasoners.py"
+    spec = __import__("importlib.util").util.spec_from_file_location(
+        "builder_os_reasoners", path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Builder OS reasoner helper could not be loaded")
+    module = __import__("importlib.util").util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+REASONERS = load_reasoners()
+
+
 STAGES = {
     "S1": {
         "prompt": "prompts/project-start.md",
@@ -578,10 +593,22 @@ def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
         if problems:
             raise PacketError("parent structural evidence is malformed: " + "; ".join(problems))
         return structural, "structural-stage-result"
+    continuity = [
+        parent_dir / "evidence" / f"{kind}.json"
+        for kind in REASONERS.CONTINUITY_KINDS
+        if (parent_dir / "evidence" / f"{kind}.json").is_file()
+    ]
+    if len(continuity) > 1:
+        raise PacketError("parent has ambiguous reasoner continuity evidence")
+    if continuity:
+        problems = REASONERS.continuity_problems(continuity[0], parent)
+        if problems:
+            raise PacketError("parent reasoner continuity evidence is malformed: " + "; ".join(problems))
+        return continuity[0], continuity[0].stem
     raise PacketError(
         f"parent evidence is missing: {transcript}; save the transcript"
         + (" or ingest the S4B return handoff" if parent.get("stage") == "S4B" else "")
-        + " or record a structurally verified stage result"
+        + " or record a structurally verified stage result or reasoner continuity event"
         + " before preparing the continuation"
     )
 
@@ -718,6 +745,8 @@ def prepare(args: argparse.Namespace) -> Path:
     sources.extend(derived)
 
     provider = args.provider or STAGES[stage]["provider"]
+    if stage == "S4B" and provider == "claude":
+        raise PacketError("Claude reasoner cannot be used as the S4B implementation provider")
     return_target = (
         (project / ".builderos" / "returns" / f"{packet_id}.md").resolve()
         if stage == "S4B"
@@ -930,6 +959,10 @@ def verify_packet(packet_dir: Path) -> list[str]:
             problems.append("parent transcript evidence is missing")
         elif sha256_file(parent_evidence) != manifest.get("parent_evidence_sha256"):
             problems.append("parent transcript changed after continuation preparation")
+        evidence_kind = manifest.get("parent_evidence_kind")
+        if evidence_kind in REASONERS.CONTINUITY_KINDS and parent_path.is_file():
+            parent = json.loads(read(parent_path))
+            problems.extend(REASONERS.continuity_problems(parent_evidence, parent))
     return problems
 
 
@@ -1106,6 +1139,41 @@ def self_test() -> int:
             not verify_packet(s1_retry)
             and s1_retry_manifest["parent_id"] == json.loads(read(s1_dir / MANIFEST_NAME))["packet_id"],
         )
+
+        reasoner_parent = sandbox / "reasoner-S1"
+        prepare(ns(
+            stage="S1", project=str(project), output=str(reasoner_parent),
+            request="Build a provider-neutral fixture.", provider="codex",
+        ))
+        reasoner_parent_manifest = json.loads(read(reasoner_parent / MANIFEST_NAME))
+        switch_path = reasoner_parent / "evidence" / "reasoner-switch.json"
+        switch = REASONERS.continuity_record(
+            "reasoner-switch", reasoner_parent_manifest["packet_id"], "S1",
+            "codex", "claude", "Fixture switch.", "verified",
+            "2026-08-23T00:00:00+05:30",
+        )
+        switch_path.write_text(json.dumps(switch, indent=2) + "\n", encoding="utf-8")
+        reasoner_child = sandbox / "reasoner-S1-C1"
+        prepare(ns(
+            stage="S1", project=str(project), output=str(reasoner_child),
+            parent=str(reasoner_parent), retry=True,
+            request="Build a provider-neutral fixture.", provider="claude",
+        ))
+        case(
+            "reasoner continuity creates a verified same-stage child (positive control)",
+            not verify_packet(reasoner_child)
+            and json.loads(read(reasoner_child / MANIFEST_NAME))["parent_evidence_kind"]
+            == "reasoner-switch",
+        )
+        switch_original = read(switch_path)
+        malformed_switch = dict(switch)
+        malformed_switch["packet_id"] = "wrong-parent"
+        switch_path.write_text(json.dumps(malformed_switch, indent=2) + "\n", encoding="utf-8")
+        case(
+            "wrong reasoner continuity parent makes the child stale",
+            any("wrong packet ID" in problem for problem in verify_packet(reasoner_child)),
+        )
+        switch_path.write_text(switch_original, encoding="utf-8")
 
         (project / "PROJECT.md").write_text(
             "# PROJECT\n\n**Mode:** game-experiment\n\n## Goal\n\nMake type respond to sound.\n\n"
@@ -1391,7 +1459,7 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--packet-id")
     prepare_parser.add_argument("--parent")
     prepare_parser.add_argument("--retry", action="store_true")
-    prepare_parser.add_argument("--provider", choices=["codex", "cursor", "other"])
+    prepare_parser.add_argument("--provider", choices=["codex", "claude", "cursor", "other"])
     prepare_parser.add_argument("--request")
     prepare_parser.add_argument("--request-file")
     prepare_parser.add_argument("--references-file")
