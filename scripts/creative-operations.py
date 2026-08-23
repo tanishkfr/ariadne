@@ -34,6 +34,7 @@ REVIEW_DIMENSIONS = (
     "genericness",
 )
 SOCIAL_EVIDENCE_CLASSES = ("documented", "observed", "inferred", "speculative")
+MAX_AUTOMATIC_CREATIVE_ITERATIONS = 2
 GENERIC_SOCIAL_OPENERS = (
     "i'm excited to share", "i’m excited to share", "here's a deep dive",
     "here’s a deep dive", "this journey taught me", "i'm thrilled to announce",
@@ -414,10 +415,19 @@ def record_creative_review(ledger: dict, event: dict) -> None:
     iteration = str(event.get("iteration", "")).strip()
     if iteration not in ("yes", "no", "conditional"):
         raise OperationsError("creative review iteration must be yes, no, or conditional")
+    reviews = ledger.get("creative_reviews", [])
+    parent_review_id = str(event.get("parent_review_id", "")).strip()
+    if reviews and parent_review_id != reviews[-1].get("id"):
+        raise OperationsError("a follow-up creative review must name the latest review as parent_review_id")
+    if not reviews and parent_review_id:
+        raise OperationsError("the first creative review cannot name a parent_review_id")
     required = ("strongest", "weakest", "biggest_risk", "highest_value_improvement")
     row = {key: str(event.get(key, "")).strip() for key in required}
     if not all(row.values()):
         raise OperationsError("creative review needs strongest, weakest, risk, and highest-value improvement")
+    do_not_change = str(event.get("do_not_change", "")).strip()
+    if not do_not_change:
+        raise OperationsError("creative review needs a do_not_change boundary")
     dimensions = event.get("dimensions", {})
     if not isinstance(dimensions, dict) or set(dimensions) != set(REVIEW_DIMENSIONS):
         raise OperationsError("creative review needs all ten project-quality dimensions")
@@ -432,7 +442,8 @@ def record_creative_review(ledger: dict, event: dict) -> None:
         "evidence_ids": evidence_ids,
         "dimensions": dimensions,
         "iteration": iteration,
-        "do_not_change": str(event.get("do_not_change", "")).strip(),
+        "parent_review_id": parent_review_id or None,
+        "do_not_change": do_not_change,
         "recorded_at": now(),
     })
     ledger.setdefault("creative_reviews", []).append(row)
@@ -624,21 +635,59 @@ def project_problems(project: Path, require: str = "plan") -> list[str]:
     required_level = levels[require]
     requirement_ids = {item.get("id") for item in ledger.get("requirements", [])}
     if required_level >= 1:
-        mapped = {item.get("requirement_id") for item in ledger.get("implementations", [])}
+        implementations = ledger.get("implementations", [])
+        mapped = {item.get("requirement_id") for item in implementations}
         for requirement_id in sorted(requirement_ids - mapped):
             problems.append(f"implementation mapping is missing: {requirement_id}")
+        for item in implementations:
+            if item.get("requirement_id") in requirement_ids and item.get("status") != "implemented":
+                problems.append(
+                    f"implementation is not complete: {item.get('requirement_id')} ({item.get('status', 'unknown')})"
+                )
     if required_level >= 2:
         evidence = ledger.get("visual_evidence", [])
         for target in ledger.get("visual_qa_plan", {}).get("targets", []):
             for requirement_id in target.get("requirement_ids", []):
                 rows = [item for item in evidence if item.get("requirement_id") == requirement_id]
                 for viewport in target.get("viewports", []):
-                    if not any(item.get("viewport") == viewport for item in rows):
+                    at_viewport = [item for item in rows if item.get("viewport") == viewport]
+                    if not at_viewport:
                         problems.append(
                             f"visual evidence is missing: {requirement_id} at {viewport}px"
                         )
-    if required_level >= 3 and not ledger.get("creative_reviews"):
-        problems.append("no evidence-backed creative review is recorded")
+                    elif not any(
+                        item.get("level") in ("rendered", "observed", "verified")
+                        for item in at_viewport
+                    ):
+                        problems.append(
+                            f"visual result is not observed: {requirement_id} at {viewport}px"
+                        )
+        drift_by_requirement = {}
+        for item in ledger.get("drift_findings", []):
+            drift_by_requirement[item.get("requirement_id")] = item
+        for requirement_id in sorted(requirement_ids):
+            finding = drift_by_requirement.get(requirement_id)
+            if finding is None:
+                problems.append(f"drift classification is missing: {requirement_id}")
+            elif finding.get("state") in ("drift", "unknown"):
+                problems.append(
+                    f"unresolved design drift: {requirement_id} ({finding.get('state')})"
+                )
+    if required_level >= 3:
+        reviews = ledger.get("creative_reviews", [])
+        if not reviews:
+            problems.append("no evidence-backed creative review is recorded")
+        else:
+            latest = reviews[-1]
+            if latest.get("iteration") == "yes":
+                if len(reviews) >= MAX_AUTOMATIC_CREATIVE_ITERATIONS:
+                    problems.append(
+                        "creative iteration budget is exhausted; a human must decide whether to continue"
+                    )
+                else:
+                    problems.append("creative review requires one focused implementation iteration")
+            elif latest.get("iteration") == "conditional":
+                problems.append("creative review needs a human creative decision")
     return list(dict.fromkeys(problems))
 
 
@@ -674,7 +723,10 @@ def repository_contract_problems(texts: dict[str, str] | None = None) -> list[st
             values[name] = path.read_text(encoding="utf-8")
     required_tokens = {
         "visual": ["project-specific", "code-suggests", "unverified", "operations-check", "does not replace"],
-        "review": ["rendered or observed", "highest-value improvement", "cannot approve", "`DESIGN.md`"],
+        "review": [
+            "rendered or observed", "highest-value improvement", "cannot approve",
+            "`DESIGN.md`", "parent_review_id", "two reviews",
+        ],
         "social": ["explicitly asks", "one to three platforms", "documented", "rough-draft", "does not publish"],
         "social_template": ["## Platforms", "## Content concepts", "## Timing and sequence", "## Measurement and iteration", "## Evidence register"],
         "runtime_reference": ["operations-plan", "record-operations", "operations-check", "social-strategy", "No event grants G1-G5"],
@@ -753,6 +805,18 @@ def self_test() -> int:
         case("fresh trace passes (positive control)", not ledger_problems(project, ledger))
         save_ledger(project, ledger)
         case("plan readiness does not imply rendered readiness", not project_problems(project, "plan") and bool(project_problems(project, "visual")))
+        record_visual_evidence(ledger, {
+            "id": "visual-thesis-unverified", "requirement_id": "design-thesis",
+            "level": "unverified", "kind": "screenshot", "viewport": 375,
+            "observation": "The fixture could not render the narrow thesis state.",
+            "blocker": "The visual environment was unavailable for this negative control.",
+        })
+        save_ledger(project, ledger)
+        case(
+            "unverified evidence cannot satisfy an observed visual target",
+            "visual result is not observed: design-thesis at 375px"
+            in project_problems(project, "visual"),
+        )
 
         unlocked = fixture_project(workspace / "unlocked")
         (unlocked / "DESIGN.md").write_text((unlocked / "DESIGN.md").read_text(encoding="utf-8").replace("locked at G1", "draft"), encoding="utf-8")
@@ -765,12 +829,28 @@ def self_test() -> int:
 
         source = project / "app.tsx"
         source.write_text("export const signature = 'red thread';\n", encoding="utf-8")
+        partial_source = project / "partial.html"
+        partial_source.write_text("<main>Archive thesis placeholder.</main>\n", encoding="utf-8")
+        record_implementation(ledger, {
+            "requirement_id": "design-thesis", "status": "partial",
+            "summary": "The archive is visible, but the approved connection is not complete.",
+            "source_path": str(partial_source), "source_anchor": "Archive thesis",
+        })
+        save_ledger(project, ledger)
+        case(
+            "partial implementation cannot satisfy implementation readiness",
+            "implementation is not complete: design-thesis (partial)"
+            in project_problems(project, "implementation"),
+        )
         record_implementation(ledger, {
             "requirement_id": "signature-moment", "status": "implemented",
             "summary": "The thread crosses the archive boundary.",
             "source_path": str(source), "source_anchor": "red thread",
         })
-        case("implementation maps to an approved requirement", len(ledger["implementations"]) == 1)
+        case(
+            "implementation maps to an approved requirement",
+            summary(ledger)["implemented"] == 1,
+        )
 
         screenshot = project / "signature-375.txt"
         screenshot.write_text("Rendered 375px capture: vertical red reading rail.\n", encoding="utf-8")
@@ -815,6 +895,12 @@ def self_test() -> int:
             "why_it_matters": "The signature remains recognisable.", "recommendation": "Preserve it.",
         })
         case("drift classification cites observed evidence", len(ledger["drift_findings"]) == 1)
+        save_ledger(project, ledger)
+        case(
+            "missing drift classification remains explicit",
+            "drift classification is missing: design-thesis"
+            in project_problems(project, "visual"),
+        )
 
         dimensions = {
             name: {"judgement": f"Fixture judgement for {name}.", "evidence_ids": ["visual-signature-observed"]}
@@ -827,7 +913,51 @@ def self_test() -> int:
             "highest_value_improvement": "Inspect the desktop boundary before changing surface polish.",
             "iteration": "conditional", "do_not_change": "Typography and palette.", "dimensions": dimensions,
         })
+        save_ledger(project, ledger)
         case("creative review produces one actionable priority", ledger["creative_reviews"][0]["highest_value_improvement"].startswith("Inspect"))
+        case(
+            "conditional creative review remains a human decision",
+            "creative review needs a human creative decision" in project_problems(project, "review"),
+        )
+        try:
+            record_creative_review(ledger, {
+                "id": "review-unlinked", "evidence_ids": ["visual-signature-observed"],
+                "strongest": "The thread remains memorable.", "weakest": "The tablet state remains weak.",
+                "biggest_risk": "The correction could broaden.",
+                "highest_value_improvement": "Correct only the tablet boundary.",
+                "iteration": "yes", "do_not_change": "Typography and palette.", "dimensions": dimensions,
+            })
+            unlinked_review_allowed = True
+        except OperationsError:
+            unlinked_review_allowed = False
+        case("follow-up creative review cannot lose its parent", not unlinked_review_allowed)
+        record_creative_review(ledger, {
+            "id": "review-2", "parent_review_id": "review-1",
+            "evidence_ids": ["visual-signature-observed"],
+            "strongest": "The thread remains memorable.", "weakest": "The tablet state remains weak.",
+            "biggest_risk": "Another correction could become an open loop.",
+            "highest_value_improvement": "Correct only the tablet boundary.",
+            "iteration": "yes", "do_not_change": "Typography and palette.", "dimensions": dimensions,
+        })
+        save_ledger(project, ledger)
+        case(
+            "creative iteration budget has a fixed stop",
+            "creative iteration budget is exhausted; a human must decide whether to continue"
+            in project_problems(project, "review"),
+        )
+        record_creative_review(ledger, {
+            "id": "review-3", "parent_review_id": "review-2",
+            "evidence_ids": ["visual-signature-observed"],
+            "strongest": "The thread remains memorable.", "weakest": "No material weakness remains in the observed state.",
+            "biggest_risk": "Unobserved widths remain an evidence gap.",
+            "highest_value_improvement": "Preserve the corrected tablet boundary.",
+            "iteration": "no", "do_not_change": "Typography and palette.", "dimensions": dimensions,
+        })
+        save_ledger(project, ledger)
+        case(
+            "latest linked review can close the internal iteration loop",
+            not any("creative review" in problem or "iteration budget" in problem for problem in project_problems(project, "review")),
+        )
         case("partial evidence cannot claim the full visual plan", bool(project_problems(project, "visual")))
         try:
             empty_review = create_ledger(project)

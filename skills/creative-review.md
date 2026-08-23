@@ -23,6 +23,10 @@ cannot approve its own work or silently change the approved direction.
    should not change so a focused correction does not become a visual restart.
 5. If the improvement changes the thesis or a G1-locked decision, stop for the
    human. Otherwise return it to the builder within the approved handoff scope.
+6. A follow-up review names the latest review as `parent_review_id`. `yes` returns
+   one focused correction to the builder; `conditional` stops for human creative
+   judgement; `no` closes the internal loop. After two reviews still request
+   another iteration, stop for a human decision instead of looping.
 
 ## Done when
 

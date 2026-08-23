@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "id": "field-notes",
+      "name": "Field Notes",
+      "archetype": "simple editorial website",
+      "existing_project": false,
+      "request": "Create a restrained single-page editorial website for a neighbourhood walking journal. Readers should understand the current route, its three observations, and the next walk without accounts, a CMS, maps, or external services.",
+      "success_criteria": [
+        "A first-time reader can identify the current walk and its location within five seconds.",
+        "The page reads as one edited field note rather than a generic publication template.",
+        "The reading order and route relationship remain clear at 375px and 1280px."
+      ],
+      "creative_profile": {},
+      "references_supplied": false,
+      "alternatives_helpful": false,
+      "social_request": "",
+      "research_questions": [],
+      "expected_research_depth": "minimal",
+      "expected_selected_skills": [
+        "intake",
+        "design-direction",
+        "implementation-planning",
+        "QA",
+        "independent-review"
+      ],
+      "expected_branch": "minimal research; no optional visual or social capability is claimed",
+      "expected_human_boundary": "G1 creative direction"
+    },
+    {
+      "id": "kinetic-index",
+      "name": "Kinetic Index",
+      "archetype": "ambitious interactive portfolio-quality website",
+      "existing_project": false,
+      "request": "Build a portfolio-quality browser experience in which an archive of dance notation becomes a navigable field. The signature interaction must connect movement, text, and chronology; it must remain meaningful without pointer hover and preserve its hierarchy on mobile.",
+      "success_criteria": [
+        "The archive's organising idea is legible before interaction.",
+        "The signature movement-to-notation interaction is memorable and usable with pointer, keyboard, and touch.",
+        "Mobile preserves the concept through a designed transformation rather than a scaled desktop canvas.",
+        "Reduced-motion behaviour preserves meaning without the full transition."
+      ],
+      "creative_profile": {
+        "novelty": "high",
+        "uncertainty": "high",
+        "visual_dependence": "high",
+        "technical_uncertainty": "high",
+        "domain_complexity": "medium",
+        "reference_sensitivity": "high",
+        "generic_risk": "high",
+        "interaction_complexity": "high",
+        "asset_uncertainty": "high",
+        "motion_dependence": "high"
+      },
+      "references_supplied": false,
+      "alternatives_helpful": true,
+      "social_request": "",
+      "research_questions": [
+        {
+          "id": "rq-notation",
+          "question": "Which notation conventions may be transformed without misrepresenting their meaning?",
+          "reason": "The visual system depends on domain conventions that cannot be guessed.",
+          "strategy": "Inspect two authoritative notation sources and record agreements and conflicts.",
+          "kind": "domain",
+          "blocking": true
+        },
+        {
+          "id": "rq-motion",
+          "question": "Can the signature sequence be implemented with platform APIs before adding a timeline dependency?",
+          "reason": "The interaction is central but dependency cost must remain justified.",
+          "strategy": "Compare a platform technique with one maintained timeline option.",
+          "kind": "technical",
+          "blocking": false
+        }
+      ],
+      "expected_research_depth": "deep",
+      "expected_selected_skills": [
+        "intake",
+        "technical-research",
+        "reference-analysis",
+        "component-research",
+        "motion",
+        "asset-research",
+        "design-direction",
+        "implementation-planning",
+        "QA",
+        "visual-qa",
+        "creative-review",
+        "independent-review"
+      ],
+      "expected_branch": "blocked while selected research is unresolved; unavailable large-provider quota remains blocked",
+      "expected_human_boundary": "G1 creative direction after evidence-backed alternatives"
+    },
+    {
+      "id": "civic-calendar",
+      "name": "Civic Calendar",
+      "archetype": "existing messy project with incomplete requirements",
+      "existing_project": true,
+      "request": "Take over an existing half-built local events calendar. Preserve the current source and content, determine what is actually owned by the project, and clarify whether the requested result is a public information site or a stateful organiser before proposing a direction.",
+      "success_criteria": [
+        "Existing source and user-authored Builder OS entry documents are never overwritten.",
+        "The public-site versus stateful-product ambiguity is recorded as blocking.",
+        "No implementation route is selected until the object and persistence requirement are resolved."
+      ],
+      "creative_profile": {
+        "uncertainty": "high",
+        "technical_uncertainty": "high",
+        "domain_complexity": "medium",
+        "generic_risk": "medium",
+        "interaction_complexity": "medium"
+      },
+      "references_supplied": false,
+      "alternatives_helpful": false,
+      "social_request": "",
+      "research_questions": [
+        {
+          "id": "rq-ownership",
+          "question": "Which existing files and behaviours are authoritative and which are disposable experiments?",
+          "reason": "Adoption cannot safely replace or reinterpret unknown user work.",
+          "strategy": "Inventory the existing project without editing it and ask only the ownership question that changes scope.",
+          "kind": "technical",
+          "blocking": true
+        }
+      ],
+      "expected_research_depth": "standard",
+      "expected_selected_skills": [
+        "intake",
+        "technical-research",
+        "reference-analysis",
+        "component-research",
+        "design-direction",
+        "implementation-planning",
+        "QA",
+        "visual-qa",
+        "creative-review",
+        "independent-review"
+      ],
+      "expected_branch": "non-adoption start refuses unexpected source; explicit adoption preserves it",
+      "expected_human_boundary": "one blocking object/persistence clarification"
+    },
+    {
+      "id": "counter-archive",
+      "name": "Counter Archive",
+      "archetype": "reference research changes the design direction",
+      "existing_project": false,
+      "request": "Create an editorial exhibition site about two conflicting systems for cataloguing protest ephemera. Supplied reference material disagrees about whether chronology or physical provenance should organise the experience; inspect both and let that conflict change the proposed direction.",
+      "success_criteria": [
+        "Both reference systems are inspected rather than treated as mood-board surfaces.",
+        "The conflict and its design implication are explicit.",
+        "The retained direction differs in mechanism and experience from the rejected chronology-first direction."
+      ],
+      "creative_profile": {
+        "novelty": "high",
+        "uncertainty": "medium",
+        "visual_dependence": "high",
+        "reference_sensitivity": "high",
+        "generic_risk": "high"
+      },
+      "references_supplied": true,
+      "alternatives_helpful": true,
+      "social_request": "",
+      "research_questions": [],
+      "expected_research_depth": "deep",
+      "expected_selected_skills": [
+        "intake",
+        "reference-analysis",
+        "design-direction",
+        "implementation-planning",
+        "QA",
+        "visual-qa",
+        "creative-review",
+        "independent-review"
+      ],
+      "expected_branch": "two inspected references create a recorded conflict and a replacement direction",
+      "expected_human_boundary": "G1 chooses the replacement direction"
+    },
+    {
+      "id": "small-press-launch",
+      "name": "Small Press Launch",
+      "archetype": "project with an explicit social launch request",
+      "existing_project": false,
+      "request": "Create a one-page launch site and a restrained social launch strategy for a small press anthology. The social work must use the project's real editorial mechanism, select only relevant platforms, and mark copy as rough when no voice examples are supplied.",
+      "success_criteria": [
+        "The site and launch concepts share one project-specific editorial mechanism.",
+        "Every documented platform claim has an inspected dated source.",
+        "No unrequested platform, publishing action, or generic announcement copy is produced."
+      ],
+      "creative_profile": {
+        "visual_dependence": "medium",
+        "reference_sensitivity": "medium",
+        "generic_risk": "medium"
+      },
+      "references_supplied": false,
+      "alternatives_helpful": false,
+      "social_request": "Create a social launch strategy for this anthology project.",
+      "research_questions": [],
+      "expected_research_depth": "standard",
+      "expected_selected_skills": [
+        "intake",
+        "reference-analysis",
+        "design-direction",
+        "implementation-planning",
+        "QA",
+        "visual-qa",
+        "creative-review",
+        "independent-review",
+        "social-strategy"
+      ],
+      "expected_branch": "social activates explicitly; publication and unsupported platform claims remain blocked",
+      "expected_human_boundary": "G1 direction and later explicit publication authority"
+    }
+  ]
+}

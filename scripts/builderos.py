@@ -56,6 +56,10 @@ REVIEW_HEADINGS = [
     "Findings",
     "Review recommendation",
 ]
+HUMAN_INTERVENTION_CATEGORIES = (
+    "manual-setup", "file-movement", "prompt-discovery", "routine-confirmation",
+    "creative-decision", "external-provider-launch", "review-decision", "unclassified",
+)
 
 
 class RuntimeError_(RuntimeError):
@@ -230,11 +234,42 @@ def intervention_summary(state: dict) -> dict:
         )
         for classification in OPERATIONS.INTERVENTION_CLASSES
     }
+    def recorded_category(item: dict) -> str | None:
+        if item.get("category") in HUMAN_INTERVENTION_CATEGORIES:
+            return item["category"]
+        need = str(item.get("need", "")).lower()
+        if "decide the g1" in need:
+            return "creative-decision"
+        if "decide g3" in need:
+            return "review-decision"
+        if need.startswith("start the "):
+            return "external-provider-launch"
+        if "confirm the external provider" in need:
+            return "routine-confirmation"
+        return None
+
+    category_counts = {
+        category: sum(
+            recorded_category(item) == category and item.get("status") != "prevented"
+            for item in rows
+        )
+        for category in HUMAN_INTERVENTION_CATEGORIES
+    }
     return {
+        "total": sum(item.get("status") != "prevented" for item in rows),
         "necessary_decisions": counts["necessary"],
         "valuable_creative_choices": counts["valuable"],
         "avoidable_interruptions": counts["avoidable"],
         "system_maintenance_interruptions": counts["unacceptable"],
+        "by_category": category_counts,
+        "mechanical_work": sum(
+            category_counts[category]
+            for category in ("manual-setup", "file-movement", "prompt-discovery", "routine-confirmation")
+        ),
+        "external_actions": category_counts["external-provider-launch"],
+        "creative_authority": (
+            category_counts["creative-decision"] + category_counts["review-decision"]
+        ),
         "prevented_interruptions": sum(item.get("status") == "prevented" for item in rows),
         "pending": [item for item in rows if item.get("status") == "pending"],
     }
@@ -245,6 +280,7 @@ def ensure_intervention(
     classification: str,
     need: str,
     reason: str,
+    category: str = "unclassified",
     status: str = "pending",
     evidence: str = "",
 ) -> dict:
@@ -252,6 +288,8 @@ def ensure_intervention(
         raise RuntimeError_(f"Unsupported human intervention classification: {classification}")
     if status not in ("pending", "resolved", "observed", "prevented"):
         raise RuntimeError_(f"Unsupported human intervention status: {status}")
+    if category not in HUMAN_INTERVENTION_CATEGORIES:
+        raise RuntimeError_(f"Unsupported human intervention category: {category}")
     need = need.strip()
     reason = reason.strip()
     if not need or not reason:
@@ -262,12 +300,17 @@ def ensure_intervention(
     ]
     if matches:
         row = matches[-1]
+        if not row.get("category"):
+            row["category"] = category
+        elif row.get("category") != category:
+            raise RuntimeError_("That intervention already has a different effort category")
         if row.get("status") == "pending" and status == "resolved":
             row.update({"status": "resolved", "resolved_at": now(), "evidence": evidence})
         return row
     row = {
         "id": f"human-{len(state['human_interventions']) + 1}",
         "classification": classification,
+        "category": category,
         "need": need,
         "reason": reason,
         "status": status,
@@ -305,6 +348,11 @@ happens next. Canonical policies remain in Builder OS; this is project history.
 - **Valuable:** a creative choice where human judgement materially improves the work.
 - **Avoidable:** routine work Builder OS should have handled.
 - **Unacceptable:** the human had to repair Builder OS machinery.
+
+Each intervention also records what kind of effort it was: manual setup, file
+movement, prompt discovery, routine confirmation, creative decision, external
+provider launch, or review decision. Mechanical work and human authority stay
+separate even when both are unavoidable in a particular environment.
 
 Structured counts and pending decisions live in `{STATE_NAME}`. The purpose is
 to reduce interruption, not to turn it into a score.
@@ -745,6 +793,31 @@ def project_intelligence(
     operations_ledger = OPERATIONS.load_ledger(project)
     operations_summary = OPERATIONS.summary(operations_ledger)
     operations_problems = OPERATIONS.project_problems(project)
+    creative_quality = {
+        "state": "not-reviewed",
+        "strongest": "not yet observed",
+        "weakest": "not yet observed",
+        "highest_value_improvement": "not yet identified",
+        "iteration": "not reviewed",
+    }
+    if operations_ledger and operations_ledger.get("creative_reviews"):
+        latest_review = operations_ledger["creative_reviews"][-1]
+        creative_quality = {
+            "state": (
+                "ready"
+                if latest_review.get("iteration") == "no"
+                else "needs-human"
+                if latest_review.get("iteration") == "conditional"
+                else "needs-iteration"
+            ),
+            "strongest": latest_review.get("strongest", "not recorded"),
+            "weakest": latest_review.get("weakest", "not recorded"),
+            "highest_value_improvement": latest_review.get(
+                "highest_value_improvement", "not recorded"
+            ),
+            "iteration": latest_review.get("iteration", "not recorded"),
+            "review_id": latest_review.get("id", "not recorded"),
+        }
 
     open_rows = markdown_table_rows(safe_section(project_text, "Open questions"))
     blocking_questions = [
@@ -817,6 +890,19 @@ def project_intelligence(
                 f"{operations_summary['observed']} directly observed."
             ),
         )
+
+    if stage in ("S4B", "S5", "S6"):
+        review_problems = OPERATIONS.project_problems(project, "review")
+        if review_problems:
+            add("creative quality", "attention", review_problems[0])
+        else:
+            add(
+                "creative quality",
+                "ready",
+                "Rendered evidence, drift classification, and the latest internal review are complete.",
+            )
+    else:
+        add("creative quality", "not-needed", "Rendered creative review begins during implementation.")
 
     if g1_locked and design_value:
         add("direction", "ready", "The human-approved thesis is locked at G1.")
@@ -949,6 +1035,7 @@ def project_intelligence(
         "runtime_state": runtime,
         "creative": creative_summary,
         "creative_operations": operations_summary,
+        "creative_quality": creative_quality,
         "human_effort": intervention_summary(state),
         "health": health,
         "overall_health": overall,
@@ -993,6 +1080,18 @@ def status(args: argparse.Namespace) -> int:
         else:
             print("Direction: not yet proposed")
         print(f"Project health: {intelligence['overall_health'].replace('-', ' ')}")
+        quality = intelligence["creative_quality"]
+        if quality["state"] != "not-reviewed":
+            print(f"Strongest observed: {quality['strongest']}")
+            print(f"Weakest observed: {quality['weakest']}")
+            print(f"Creative iteration: {quality['iteration']}")
+        effort = intelligence["human_effort"]
+        print(
+            "Human effort: "
+            f"{effort['creative_authority']} creative/review decision(s), "
+            f"{effort['external_actions']} external action(s), "
+            f"{effort['mechanical_work']} mechanical interruption(s)."
+        )
         if attention:
             print("Attention: " + "; ".join(item["detail"] for item in attention))
         print(f"Next: {intelligence['next_recommended_action']}")
@@ -1124,6 +1223,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
             "necessary",
             "Confirm the external provider's available quota.",
             "A large external task cannot safely proceed from an unobserved capacity assumption.",
+            "routine-confirmation",
         )
     write_json(run_root / STATE_NAME, state)
     append_log(
@@ -1311,6 +1411,7 @@ def ingest_return(args: argparse.Namespace) -> int:
         "necessary",
         "Start the selected external implementation provider.",
         "The current provider boundary cannot execute without the human opening or authorising that external environment.",
+        "external-provider-launch",
         status="resolved",
         evidence=str(destination),
     )
@@ -1404,6 +1505,7 @@ def ingest_review(args: argparse.Namespace) -> int:
         "necessary",
         "Start the isolated independent review session.",
         "Creative judgement must remain separate from the build context.",
+        "external-provider-launch",
         status="resolved",
         evidence=str(raw_destination),
     )
@@ -1412,6 +1514,7 @@ def ingest_review(args: argparse.Namespace) -> int:
         "necessary",
         "Decide G3 from mechanical and independent review evidence.",
         "Only the human can accept the build and any recorded evidence exception.",
+        "review-decision",
     )
     write_json(run_root / STATE_NAME, state)
     append_log(
@@ -1664,6 +1767,7 @@ def record_intervention(args: argparse.Namespace) -> int:
         args.classification,
         args.need,
         args.reason,
+        args.category,
         status=args.status,
         evidence=args.evidence or "",
     )
@@ -1798,6 +1902,7 @@ def advance(args: argparse.Namespace) -> int:
                     "necessary",
                     "Decide the G1 creative direction.",
                     "Only the human can approve, reject, or redirect the proposed thesis.",
+                    "creative-decision",
                 )
                 state["next"] = "Review the proposed design direction at G1."
                 state["updated_at"] = now()
@@ -1962,6 +2067,7 @@ def prepare_next(args: argparse.Namespace) -> int:
             "necessary",
             "Decide the G1 creative direction.",
             "Only the human can approve, reject, or redirect the proposed thesis.",
+            "creative-decision",
             status="resolved",
             evidence="DESIGN.md locked at G1 and AGENTS.md records G1.",
         )
@@ -2008,6 +2114,7 @@ def prepare_next(args: argparse.Namespace) -> int:
             "necessary",
             "Start the selected external implementation provider.",
             "The current provider boundary cannot execute without the human opening or authorising that external environment.",
+            "external-provider-launch",
         )
     elif stage == "S5":
         ensure_intervention(
@@ -2015,6 +2122,7 @@ def prepare_next(args: argparse.Namespace) -> int:
             "necessary",
             "Start the isolated independent review session.",
             "Creative judgement must remain separate from the build context.",
+            "external-provider-launch",
         )
     write_json(run_root / STATE_NAME, state)
     append_log(
@@ -2699,19 +2807,93 @@ def self_test() -> int:
             and not OPERATIONS.ledger_problems(project, operations_ledger)
             and any(item["id"] == "signature-moment" for item in operations_ledger["requirements"]),
         )
+        status_observation = project / "status-observation.txt"
+        status_observation.write_text(
+            "Observed signature selection remains legible in the fixture.\n",
+            encoding="utf-8",
+        )
+        OPERATIONS.record_visual_evidence(operations_ledger, {
+            "id": "status-signature-observed", "requirement_id": "signature-moment",
+            "level": "observed", "kind": "interaction", "viewport": 375,
+            "observation": "The signature selection remained legible at the narrow fixture width.",
+            "evidence_path": str(status_observation),
+        })
+        status_dimensions = {
+            name: {
+                "judgement": f"Fixture judgement for {name}.",
+                "evidence_ids": ["status-signature-observed"],
+            }
+            for name in OPERATIONS.REVIEW_DIMENSIONS
+        }
+        OPERATIONS.record_creative_review(operations_ledger, {
+            "id": "status-review-1", "evidence_ids": ["status-signature-observed"],
+            "strongest": "The signature selection remains legible.",
+            "weakest": "The desktop state is not yet observed.",
+            "biggest_risk": "A narrow-only conclusion would overstate the result.",
+            "highest_value_improvement": "Observe the desktop state before independent review.",
+            "iteration": "yes", "do_not_change": "The approved signature mechanism.",
+            "dimensions": status_dimensions,
+        })
+        OPERATIONS.save_ledger(project, operations_ledger)
+        status_intelligence = project_intelligence(
+            run_root, load_state(run_root), s4b_entry, s4b_packet, s4b_manifest
+        )
+        case(
+            "project status exposes evidence-backed strongest and weakest aspects",
+            status_intelligence["creative_quality"]["strongest"]
+            == "The signature selection remains legible."
+            and status_intelligence["creative_quality"]["weakest"]
+            == "The desktop state is not yet observed."
+            and status_intelligence["creative_quality"]["iteration"] == "yes",
+        )
         effort = intervention_summary(state)
         case(
             "human effort separates authority from routine machinery",
             effort["necessary_decisions"] >= 1
             and effort["avoidable_interruptions"] == 0
-            and effort["system_maintenance_interruptions"] == 0,
+            and effort["system_maintenance_interruptions"] == 0
+            and effort["by_category"]["creative-decision"] >= 1
+            and effort["by_category"]["external-provider-launch"] >= 1
+            and effort["mechanical_work"] == 0,
+        )
+        legacy_effort_state = {
+            "human_interventions": [{
+                "id": "human-1", "classification": "necessary",
+                "need": "Decide the G1 creative direction.",
+                "reason": "Historical runtime row without the V1.5 category field.",
+                "status": "pending",
+            }]
+        }
+        legacy_summary = intervention_summary(legacy_effort_state)
+        ensure_intervention(
+            legacy_effort_state, "necessary", "Decide the G1 creative direction.",
+            "Only the human can approve the creative direction.", "creative-decision",
+            status="resolved",
+        )
+        case(
+            "legacy human-effort rows remain classifiable and migrate on update",
+            legacy_summary["by_category"]["creative-decision"] == 1
+            and legacy_effort_state["human_interventions"][0]["category"]
+            == "creative-decision",
         )
         try:
-            ensure_intervention(state, "routine", "Locate a packet.", "Fixture invalid class.")
+            ensure_intervention(
+                state, "routine", "Locate a packet.", "Fixture invalid class.",
+                "prompt-discovery",
+            )
             bad_intervention_allowed = True
         except RuntimeError_:
             bad_intervention_allowed = False
         case("unknown human intervention class is rejected", not bad_intervention_allowed)
+        try:
+            ensure_intervention(
+                state, "necessary", "Do an unknown thing.", "Fixture invalid category.",
+                "unknown-category",
+            )
+            bad_category_allowed = True
+        except RuntimeError_:
+            bad_category_allowed = False
+        case("unknown human intervention category is rejected", not bad_category_allowed)
         before_return_provider = project_intelligence(
             run_root, state, s4b_entry, s4b_packet, s4b_manifest
         )["provider_evidence"]
@@ -3007,6 +3189,11 @@ def parser() -> argparse.ArgumentParser:
     )
     run_selector(intervention_p)
     intervention_p.add_argument("--classification", required=True, choices=list(OPERATIONS.INTERVENTION_CLASSES))
+    intervention_p.add_argument(
+        "--category",
+        choices=list(HUMAN_INTERVENTION_CATEGORIES),
+        default="unclassified",
+    )
     intervention_p.add_argument("--status", required=True, choices=["pending", "resolved", "observed", "prevented"])
     intervention_p.add_argument("--need", required=True)
     intervention_p.add_argument("--reason", required=True)

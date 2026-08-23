@@ -2,6 +2,7 @@
 
 **Trigger** — a new project starts. S1.
 **Owner** — Strategist
+**Inputs** — the ordinary-language request, routed mode and constraints, plus existing project files only when adoption was explicitly selected
 **Output** — [`PROJECT.md`](../templates/PROJECT.md)
 
 Two passes that must stay separate: **collect**, then **challenge**. Doing both at once produces defensive answers.

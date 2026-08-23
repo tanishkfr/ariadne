@@ -50,6 +50,7 @@ REQUIRED = [
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
     "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
     "scripts/creative-operations.py",
+    "scripts/test-real-projects.py", "validation/fixtures/v1.5-real-projects.json",
     "scripts/install-builderos-skill.py",
     "scripts/build-release.py", "scripts/test-distribution.py",
     "scripts/test-wheel-install.py",
@@ -89,16 +90,45 @@ DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 GENERATED = ("validation/runs/",)
 EPHEMERAL_SELF_TEST = (
     re.compile(
-        r"^validation/(?:builderos|creative-intelligence|creative-operations|distribution|packet|release|skill-install|wheel)-self-test-[0-9a-f]{32}/"
+        r"^validation/(?:builderos|creative-intelligence|creative-operations|distribution|packet|real-projects|release|skill-install|wheel)-self-test-[0-9a-f]{32}/"
     ),
     re.compile(r"^validation/validate-self-test-[a-z0-9-]+/"),
 )
+
+SKILL_FILES = [
+    "skills/intake.md",
+    "skills/reference-analysis.md",
+    "skills/component-research.md",
+    "skills/design-direction.md",
+    "skills/visual-qa.md",
+    "skills/creative-review.md",
+    "skills/social-strategy.md",
+]
 
 
 def generated_markdown(relative_path):
     return relative_path.startswith(GENERATED) or any(
         pattern.match(relative_path) for pattern in EPHEMERAL_SELF_TEST
     )
+
+
+def check_skill_contract_texts(texts=None):
+    """Every executable skill declares its boundary and completion condition."""
+    values = dict(texts or {})
+    problems = []
+    for relative in SKILL_FILES:
+        text = values.get(relative)
+        if text is None:
+            text = open(os.path.join(ROOT, relative), encoding="utf-8").read()
+        expected_name = os.path.splitext(os.path.basename(relative))[0]
+        if not re.search(rf"(?m)^# SKILL:\s*{re.escape(expected_name)}\s*$", text):
+            problems.append(f"skill name/path mismatch: {relative}")
+        for field in ("Trigger", "Owner", "Inputs", "Output"):
+            if len(re.findall(rf"(?m)^\*\*{field}\*\*\s+—\s+\S", text)) != 1:
+                problems.append(f"skill contract missing or duplicates {field}: {relative}")
+        if not re.search(r"(?m)^## (?:Done when|Stop conditions)\s*$", text):
+            problems.append(f"skill contract has no completion or stop section: {relative}")
+    return problems
 
 
 def md_files():
@@ -769,6 +799,14 @@ def load_creative_operations_tool():
     return module
 
 
+def load_real_projects_tool():
+    path = os.path.join(ROOT, "scripts", "test-real-projects.py")
+    spec = importlib.util.spec_from_file_location("builder_os_real_projects", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_installer_tool():
     path = os.path.join(ROOT, INSTALLER_TOOL)
     spec = importlib.util.spec_from_file_location("builder_os_skill_installer", path)
@@ -1032,6 +1070,43 @@ def self_test_packet_tool():
     return 1 if failed else 0
 
 
+def self_test_skill_contracts():
+    """Positive control plus mutations for executable skill boundaries."""
+    actual = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in SKILL_FILES
+    }
+
+    def mutate(path, old, new):
+        texts = dict(actual)
+        if old not in texts[path]:
+            raise AssertionError(f"skill mutation source missing: {path}: {old}")
+        texts[path] = texts[path].replace(old, new, 1)
+        return texts
+
+    cases = [
+        ("repository skill contracts pass (positive control)", not check_skill_contract_texts(actual)),
+        ("unrelated skill prose passes (positive control)", not check_skill_contract_texts({
+            **actual,
+            "skills/intake.md": actual["skills/intake.md"] + "\n",
+        })),
+        ("skill without Inputs fails", bool(check_skill_contract_texts(mutate(
+            "skills/intake.md", "**Inputs**", "**Context**"
+        )))),
+        ("skill without Trigger fails", bool(check_skill_contract_texts(mutate(
+            "skills/visual-qa.md", "**Trigger**", "**When**"
+        )))),
+        ("skill without completion or stop boundary fails", bool(check_skill_contract_texts(mutate(
+            "skills/social-strategy.md", "## Stop conditions", "## Notes"
+        )))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def self_test_distribution_contract():
     """Positive controls and mutations for the installed-product boundary."""
     actual = {
@@ -1093,12 +1168,16 @@ def main():
         delivery_failed = self_test_delivery_contracts()
         print("\nStage-packet transport self-test")
         packet_failed = self_test_packet_tool()
+        print("\nExecutable skill-contract self-test")
+        skill_contract_failed = self_test_skill_contracts()
         print("\nRuntime controller self-test")
         runtime_failed = load_runtime_tool().self_test()
         print("\nCreative intelligence self-test")
         creative_failed = load_creative_tool().self_test()
         print("\nCreative operations self-test")
         operations_failed = load_creative_operations_tool().self_test()
+        print("\nReal-project fixture self-test")
+        real_projects_failed = load_real_projects_tool().main()
         print("\nEntry-skill installer self-test")
         installer_failed = load_installer_tool().self_test()
         print("\nDistribution contract self-test")
@@ -1108,8 +1187,8 @@ def main():
         print("\nInstalled-product lifecycle self-test")
         distribution_failed = load_distribution_tool().self_test()
         failed = (
-            agents_failed or delivery_failed or packet_failed or runtime_failed
-            or creative_failed or operations_failed or installer_failed
+            agents_failed or delivery_failed or packet_failed or skill_contract_failed or runtime_failed
+            or creative_failed or operations_failed or real_projects_failed or installer_failed
             or distribution_contract_failed or release_failed or distribution_failed
         )
         print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
@@ -1196,6 +1275,15 @@ def main():
             print(f"        {problem}")
     else:
         print("ok    stage packets: source parity, parent chain, and S5 isolation mapped")
+
+    skill_problems = check_skill_contract_texts()
+    if skill_problems:
+        failed = True
+        print(f"FAIL  skill contracts: {len(skill_problems)} problem(s)")
+        for problem in skill_problems:
+            print(f"        {problem}")
+    else:
+        print(f"ok    skill contracts: {len(SKILL_FILES)} executable boundaries declared")
 
     runtime_problems = check_runtime_tool()
     if runtime_problems:
