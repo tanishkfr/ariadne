@@ -33,7 +33,8 @@ python -m builderos doctor
 
 Rollback activates the previous verified runtime and matching skill. Projects
 and evidence remain unchanged. An unchanged managed Codex baseline follows the
-rollback version; edited instructions remain untouched.
+rollback version. If that older version predates the baseline, the unchanged
+owned file is removed; an edited file is preserved as user-owned.
 
 ## Repair
 

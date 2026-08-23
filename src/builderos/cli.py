@@ -424,6 +424,16 @@ def refresh_codex_baseline_if_managed(home: Path, root: Path) -> str | None:
     _target, marker_path, _override = codex_baseline_paths(root)
     if not marker_path.is_file():
         return None
+    current = current_install(home)
+    runtime = Path(current["runtime_root"]) if current is not None else None
+    if runtime is None or not codex_baseline_source(runtime).is_file():
+        _removed, preserved = remove_codex_baseline(home, root)
+        if preserved:
+            return (
+                "The active Builder OS version has no managed Codex baseline; "
+                "your edited instructions were preserved as user-owned."
+            )
+        return "The optional Codex baseline was removed because the active version does not provide it."
     try:
         marker = install_codex_baseline(home, root)
     except ProductError as exc:

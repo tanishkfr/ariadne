@@ -73,6 +73,13 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
             and (home / "versions" / baseline_version).is_dir()
             and not cli.runtime_problems(current_runtime),
         )
+        codex_home = root / "codex-home"
+        cli.install_codex_baseline(home, codex_home)
+        case(
+            "current optional Codex baseline installs only after opt-in",
+            (codex_home / "AGENTS.md").is_file()
+            and (codex_home / cli.CODEX_BASELINE_MARKER).is_file(),
+        )
 
         cli.configure_claude_reasoner(
             home, claude_skill, "install", require_cli=False
@@ -114,12 +121,20 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
         )
 
         rolled_back = cli.rollback(home, codex_skill, baseline_version)
+        baseline_downgrade = cli.refresh_codex_baseline_if_managed(home, codex_home)
         baseline_runtime = Path(rolled_back["runtime_root"])
         case(
             "rollback restores the exact baseline runtime and Codex skill",
             rolled_back["version"] == baseline_version
             and not cli.runtime_problems(baseline_runtime)
             and not cli.skill_problems(baseline_runtime, codex_skill),
+        )
+        case(
+            "rollback removes only the unchanged newer Codex baseline",
+            baseline_downgrade is not None
+            and "removed" in baseline_downgrade
+            and not (codex_home / "AGENTS.md").exists()
+            and not (codex_home / cli.CODEX_BASELINE_MARKER).exists(),
         )
 
         status = subprocess.run(
