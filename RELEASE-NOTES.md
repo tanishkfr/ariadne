@@ -15,6 +15,7 @@ V1.5.2 social capability.
   fail nondeterministically.
 - Release output includes one aggregate checksum inventory, versioned release
   notes and source-commit provenance.
+- Runtime and wheel distributions carry the human-approved Apache-2.0 licence.
 
 ## Compatibility
 
@@ -30,4 +31,3 @@ V1.5.2 social capability.
 Packaging and isolated lifecycle tests do not prove fresh external Codex skill
 discovery, native macOS/Linux behaviour, live Claude execution or public GitHub
 download availability. The release has not been published.
-

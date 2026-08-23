@@ -31,7 +31,7 @@ PYPROJECT_PATH = ROOT / "pyproject.toml"
 LICENSE_PATH = ROOT / "LICENSE"
 REPOSITORY_URL = "https://github.com/tanishkfr/builder-os"
 RUNTIME_TOP_LEVEL = [
-    "VERSION", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md", "DESIGN-MOTION.md",
+    "VERSION", "LICENSE", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md", "DESIGN-MOTION.md",
     "DESIGN-ASSETS.md", "QA-POLICY.md", "EVALUATION-RUBRICS.md",
     "LIBRARY-POLICY.md", "RESEARCH-POLICY.md", "PRIVACY-POLICY.md",
     "MODEL-ROUTING.md", "BUDGET-POLICY.md", "CONTENT-SYSTEM.md",
@@ -75,7 +75,7 @@ def git_head() -> str:
 
 def publication_state() -> dict:
     metadata = PYPROJECT_PATH.read_text(encoding="utf-8")
-    if "Private :: Do Not Upload" in metadata or not LICENSE_PATH.is_file():
+    if 'license = "Apache-2.0"' not in metadata or not LICENSE_PATH.is_file():
         return {
             "status": "blocked",
             "reason": "public licence not selected",
@@ -284,6 +284,11 @@ def self_test() -> int:
         with zipfile.ZipFile(one["launcher"]) as wheel:
             wheel_names = set(wheel.namelist())
         case("launcher wheel carries seed runtime and command", "builderos/seed-runtime.zip" in wheel_names and any(name.endswith("/entry_points.txt") for name in wheel_names))
+        case("runtime carries the approved licence", "LICENSE" in names)
+        case(
+            "launcher wheel carries the approved licence",
+            any(name.endswith(".dist-info/licenses/LICENSE") for name in wheel_names),
+        )
         case("runtime excludes developer validation and operations", not any(name.startswith(("validation/", "operations/", "tests/")) for name in names))
         case("runtime excludes maintainer machine paths", all("snprasad" not in archive_name.lower() and "testbed" not in archive_name.lower() for archive_name in names))
         case(

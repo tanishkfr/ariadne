@@ -27,6 +27,7 @@ import collections
 import copy
 import importlib.util
 import json
+import hashlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERBOSE = "--verbose" in sys.argv
@@ -39,7 +40,7 @@ REQUIRED = [
     "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md", "V1.5-READINESS.md",
     "V1.5.1-READINESS.md", "V1.5.2-READINESS.md", "V1.5.3-READINESS.md",
     "CODEX-ENVIRONMENT.md", "RELEASE-NOTES.md",
-    "VERSION", "pyproject.toml", "build_backend/builderos_backend.py",
+    "VERSION", "LICENSE", "pyproject.toml", "build_backend/builderos_backend.py",
     "src/builderos/__init__.py", "src/builderos/__main__.py", "src/builderos/cli.py",
     "templates/PROJECT.md", "templates/DESIGN.md",
     "templates/HANDOFF.md", "templates/QA.md", "templates/RETURN-HANDOFF.md",
@@ -200,6 +201,7 @@ def check_required():
 
 DISTRIBUTION_FILES = (
     "VERSION",
+    "LICENSE",
     "pyproject.toml",
     "build_backend/builderos_backend.py",
     "src/builderos/cli.py",
@@ -208,6 +210,8 @@ DISTRIBUTION_FILES = (
     "adapters/codex-baseline.md",
     "RELEASE-NOTES.md",
 )
+
+APACHE_2_LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
 
 
 def check_distribution_texts(texts):
@@ -220,14 +224,21 @@ def check_distribution_texts(texts):
     for token in (
         'requires = []', 'build-backend = "builderos_backend"',
         'dynamic = ["version"]', 'dependencies = []',
-        'builderos = "builderos.cli:main"', 'Private :: Do Not Upload',
+        'builderos = "builderos.cli:main"', 'license = "Apache-2.0"',
+        'License :: OSI Approved :: Apache Software License',
     ):
         if token not in pyproject:
             problems.append(f"pyproject.toml is missing the release contract: {token}")
     if re.search(r"(?m)^version\s*=", pyproject):
         problems.append("pyproject.toml duplicates the canonical VERSION value")
+    licence_sha = hashlib.sha256(texts["LICENSE"].encode("utf-8")).hexdigest()
+    if licence_sha != APACHE_2_LICENSE_SHA256:
+        problems.append("LICENSE is not the approved canonical Apache-2.0 text")
     backend = texts["build_backend/builderos_backend.py"]
-    for token in ("builderos/seed-runtime.zip", "scripts\" / \"build-release.py"):
+    for token in (
+        "builderos/seed-runtime.zip", "scripts\" / \"build-release.py",
+        "License-Expression: Apache-2.0", "licenses/LICENSE",
+    ):
         if token not in backend:
             problems.append(f"wheel backend is missing: {token}")
     cli = texts["src/builderos/cli.py"]
@@ -245,6 +256,7 @@ def check_distribution_texts(texts):
     release = texts["scripts/build-release.py"]
     for token in (
         "RUNTIME_TOP_LEVEL", "RUNTIME_TREES", "RUNTIME_SCRIPTS",
+        '"VERSION", "LICENSE"',
         "RELEASE-MANIFEST.json", "SHA256SUMS.txt", "release_notes",
         "publication_state", "PACKAGING CANDIDATE",
     ):
@@ -1200,6 +1212,10 @@ def self_test_distribution_contract():
         ("duplicated package version fails",
          bool(check_distribution_texts(mutate(
              "pyproject.toml", 'dynamic = ["version"]', 'version = "1.5.0"'
+         )))),
+        ("changed Apache licence text fails",
+         bool(check_distribution_texts(mutate(
+             "LICENSE", "Apache License", "Altered License"
          )))),
         ("wheel without embedded runtime fails",
          bool(check_distribution_texts(mutate(

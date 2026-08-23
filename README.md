@@ -189,8 +189,9 @@ Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 r
 **Status: V1.5.3 NEAR READY FOR PUBLIC RELEASE.** A clean Python environment exercised
 wheel build, install, `$builderos` runtime start, doctor and uninstall with no
 source checkout dependency. Windows executed; macOS/Linux path rules are
-simulated. Publishing is blocked on explicit licence selection and release
-authority; no GitHub release is live. V1.5 deliberately keeps internal creative-review readiness
+simulated. Apache-2.0 is approved and carried in the package; publishing still
+awaits the public-name decision and explicit release authority, and no GitHub
+release is live. V1.5 deliberately keeps internal creative-review readiness
 advisory rather than making it a new hard prerequisite for isolated S5. See
 [V1.5.3-READINESS.md](V1.5.3-READINESS.md).
 

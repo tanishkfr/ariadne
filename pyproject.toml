@@ -9,6 +9,7 @@ dynamic = ["version"]
 description = "Creative-production workflow runtime and managed Codex skill"
 readme = "README.md"
 requires-python = ">=3.8"
+license = "Apache-2.0"
 dependencies = []
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -16,7 +17,7 @@ classifiers = [
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "Private :: Do Not Upload",
+  "License :: OSI Approved :: Apache Software License",
 ]
 
 [project.scripts]

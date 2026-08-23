@@ -45,11 +45,11 @@ result. V1.5.2 -> V1.5.3 -> V1.5.2 now completes 9/9 without leaving fixture
 state behind, including opt-in baseline installation and safe removal when the
 rollback runtime predates that feature.
 
-The public licence is not silently selected. Apache-2.0 is the technical
-recommendation after inspecting the dependency-free first-party source and
-asset boundary, but repository policy keeps that legal decision human-owned.
-Until explicitly approved, `Private :: Do Not Upload` remains in package
-metadata and V1.5.3 is a packaging candidate, not a publishable release.
+The public licence was not silently selected. After inspection of the
+dependency-free first-party source and asset boundary, the human owner approved
+Apache-2.0. The canonical licence, package metadata, runtime bundle and launcher
+wheel now carry that decision, with deterministic drift and omission guards.
+Public naming and the final tag, push and GitHub Release remain human-owned.
 
 **Scope:** no change to `ROUTER.md`, `WORKFLOW.md`, prompts, modes, canonical
 design/research/QA/evaluation policy, templates, provider neutrality, gate

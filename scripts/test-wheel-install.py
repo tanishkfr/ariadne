@@ -85,11 +85,17 @@ def self_test() -> int:
         wheels = list(wheel_dir.glob("builder_os-*.whl"))
         case("source builds one platform-neutral wheel", len(wheels) == 1 and "py3-none-any" in wheels[0].name)
         with zipfile.ZipFile(wheels[0]) as wheel:
+            wheel_names = set(wheel.namelist())
             metadata_name = next(name for name in wheel.namelist() if name.endswith("/METADATA"))
             wheel_metadata = wheel.read(metadata_name).decode("utf-8")
         case(
             "package manager receives the minimum Python contract",
             "Requires-Python: >=3.8" in wheel_metadata,
+        )
+        case(
+            "wheel declares and carries Apache-2.0",
+            "License-Expression: Apache-2.0" in wheel_metadata
+            and any(name.endswith(".dist-info/licenses/LICENSE") for name in wheel_names),
         )
 
         environment = root / "clean-python"

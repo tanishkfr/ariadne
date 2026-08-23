@@ -28,17 +28,18 @@ def _dist_info() -> str:
 
 
 def _metadata() -> bytes:
-    value = f"""Metadata-Version: 2.3
+    value = f"""Metadata-Version: 2.4
 Name: {NAME}
 Version: {_version()}
 Summary: Creative-production workflow runtime and managed Codex skill
 Requires-Python: >=3.8
+License-Expression: Apache-2.0
 Classifier: Development Status :: 4 - Beta
 Classifier: Environment :: Console
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Private :: Do Not Upload
+Classifier: License :: OSI Approved :: Apache Software License
 Project-URL: Homepage, https://github.com/tanishkfr/builder-os
 Project-URL: Repository, https://github.com/tanishkfr/builder-os
 Project-URL: Changelog, https://github.com/tanishkfr/builder-os/blob/main/CHANGELOG.md
@@ -127,6 +128,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             f"{dist_info}/METADATA": _metadata(),
             f"{dist_info}/WHEEL": _wheel_metadata(),
             f"{dist_info}/entry_points.txt": _entry_points(),
+            f"{dist_info}/licenses/LICENSE": (ROOT / "LICENSE").read_bytes(),
         }
     )
     record_path = f"{dist_info}/RECORD"
@@ -152,6 +154,7 @@ def build_sdist(sdist_directory, config_settings=None):
     release = _release_module()
     paths = [
         ROOT / "VERSION",
+        ROOT / "LICENSE",
         ROOT / "README.md",
         ROOT / "pyproject.toml",
         ROOT / "scripts" / "build-release.py",
