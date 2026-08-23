@@ -2,7 +2,7 @@
 
 **Trigger** — project-specific rendered or observed evidence exists after implementation. Post-S4B, before independent S5.
 **Owner** — Creative director / orchestrator
-**Inputs** — approved requirement trace and recorded visual evidence in `.builderos/creative-operations.json`
+**Inputs** — approved requirement trace and recorded visual evidence in `.ariadne/creative-operations.json`
 **Output** — one actionable `creative-review` event in the same ledger
 
 This is an internal creative-direction pass, not independent S5 and not a gate.
@@ -33,5 +33,5 @@ cannot approve its own work or silently change the approved direction.
 The review cites rendered evidence, gives one prioritised action, distinguishes
 unknowns from defects, and records whether iteration is justified. It does not
 change `DESIGN.md`, grant G3, or enter the isolated reviewer packet.
-Run `builderos.py operations-check --require review` before presenting its
+Run `ariadne.py operations-check --require review` before presenting its
 result as complete.

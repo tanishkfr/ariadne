@@ -4,15 +4,15 @@ Read this after G1 is locked and before S4B is delivered. Canonical design and
 QA documents still own decisions and quality policy; the project-local ledger
 records trace and evidence only.
 
-Run `builderos.py operations-plan --project <project>` to derive approved
+Run `ariadne.py operations-plan --project <project>` to derive approved
 requirements and a project-specific visual-QA plan in
-`.builderos/creative-operations.json`. The controller also does this
+`.ariadne/creative-operations.json`. The controller also does this
 automatically when it prepares S4B.
 
 Record one event or `{"events": [...]}` with:
 
 ```text
-python <builder-os>/scripts/builderos.py record-operations --project <project> --input <events.json>
+python <ariadne>/scripts/ariadne.py record-operations --project <project> --input <events.json>
 ```
 
 Supported event types are:
@@ -29,7 +29,7 @@ Supported event types are:
 Use [visual-qa.md](../../../../skills/visual-qa.md),
 [creative-review.md](../../../../skills/creative-review.md), or
 [social-strategy.md](../../../../skills/social-strategy.md) for the event-specific
-method. Run `builderos.py operations-check --require plan|implementation|visual|review|social|social-learning`
+method. Run `ariadne.py operations-check --require plan|implementation|visual|review|social|social-learning`
 for the evidence level being claimed before relying on the ledger.
 
 Contract-version 2 social strategies prove their project story, current source

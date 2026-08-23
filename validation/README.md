@@ -1,8 +1,8 @@
 # VALIDATION HARNESS
 
-Instrument for answering one question: **does Builder OS actually make the work better?**
+Instrument for answering one question: **does Ariadne actually make the work better?**
 
-Not a Builder OS feature. A temporary measuring device, to be deleted if it stops earning its place.
+Not an Ariadne feature. A temporary measuring device, to be deleted if it stops earning its place.
 
 **The procedures live in [tests/validation-protocol.md](../tests/validation-protocol.md).** This directory records what happened when you ran them.
 
@@ -28,7 +28,7 @@ If this ever costs more effort than the thing it measures, it has failed and sho
 
 ## First run — Test A, with Codex only
 
-**1 · Capture the baseline first.** Before opening any Builder OS file, write into the run file's Baseline section what you would do with *"I want to make something with type that reacts to sound"* — layout, type, colour, your first three moves. **This is the only step that cannot be done later.** Once you have seen the Builder OS direction the control is gone.
+**1 · Capture the baseline first.** Before opening any Ariadne file, write into the run file's Baseline section what you would do with *"I want to make something with type that reacts to sound"* — layout, type, colour, your first three moves. **This is the only step that cannot be done later.** Once you have seen the Ariadne direction the control is gone.
 
 **2 · Set up Codex.** A short personal file at `~/.codex/AGENTS.md`: Indian English, pnpm, ask before installing, always end with a NEXT. Preferences only — not policies. *(Known issue: the Codex desktop app may not inject this when a project `AGENTS.md` exists. Note it in the run if the behaviour looks off.)*
 
@@ -55,7 +55,7 @@ If this ever costs more effort than the thing it measures, it has failed and sho
 python scripts/validate.py --run validation/runs/A1.md --project ../type-sound
 ```
 
-**7 · Fill in the report.** The recommendation must answer: *did this produce enough evidence to change Builder OS?* **After one run the answer is almost always no.**
+**7 · Fill in the report.** The recommendation must answer: *did this produce enough evidence to change Ariadne?* **After one run the answer is almost always no.**
 
 ---
 
@@ -91,7 +91,7 @@ Every metric the checker computes is a **count of failures** — B-questions, de
 
 A "quality score" would point the other way: it would reward a run that *looks* good. Value and friction are counted but **deliberately never summed**, because a number there rewards writing more events rather than building better projects.
 
-**One instance of *"Builder OS made me reject X before I built it, and the replacement was better"* outweighs every count in this directory.**
+**One instance of *"Ariadne made me reject X before I built it, and the replacement was better"* outweighs every count in this directory.**
 
 ---
 
@@ -100,12 +100,12 @@ A "quality score" would point the other way: it would reward a run that *looks* 
 Keep transcripts, screenshots and the project repo **outside** this repository — they contain project and client material ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)). Reference them by path in the run file. Run records here should carry findings, never client content.
 
 The packet helper enforces this boundary: real project packets are refused inside
-Builder OS and inside the project repository. `--synthetic-validation` is the
+Ariadne and inside the project repository. `--synthetic-validation` is the
 explicit exception for non-private fixtures and protocol runs.
 
 **Test A is the exception, and it is required.** Save the raw first reply to `runs/<id>/evidence/transcript.md`. `finish-test-a.py` reads the FRAME, the confidence, the question and the NEXT block straight out of that file, and checks them against the contract stated in `prompts/project-start.md`. Without the transcript there is no routing measurement. Test A uses a synthetic brief with no client material, so keeping it here is safe.
 
-## When a run justifies changing Builder OS
+## When a run justifies changing Ariadne
 
 Through the loop in [templates/RETROSPECTIVE.md](../templates/RETROSPECTIVE.md), never directly. All four qualification tests must pass, then your approval, then `check.py` plus the router suite if routing was touched.
 

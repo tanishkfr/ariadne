@@ -1,6 +1,6 @@
 # Reasoner contract
 
-This adapter contract translates a reasoning provider into canonical Builder OS
+This adapter contract translates a reasoning provider into canonical Ariadne
 state. It is transport, not policy. `ROUTER.md`, `WORKFLOW.md`, project
 documents, gates, stage prompts and evidence rules remain canonical.
 
@@ -40,8 +40,8 @@ evidence distinctions and handoff structure.
 | Social strategy | verified | externally unverified |
 | Social result learning | verified | externally unverified |
 | CLI non-interactive JSON/schema output | not applicable | verified in official documentation; not locally executed |
-| Session resume | task continuity uses Builder OS state | verified in official documentation; integration unverified |
-| Native skill entry | managed Builder OS skill verified | documented; optional Builder OS skill not live-tested |
+| Session resume | task continuity uses Ariadne state | verified in official documentation; integration unverified |
+| Native skill entry | managed Ariadne skill verified | documented; optional Ariadne skill not live-tested |
 
 Claude workflow rows remain externally unverified because `claude` is not
 installed in the validation environment. Structural packet compatibility is not
@@ -53,7 +53,7 @@ Provider self-report remains self-report. Stage output is recorded structurally
 or with a transcript; mechanical, observed and independent evidence remain
 separate. A provider switch or failure gets its own immutable parent evidence.
 A failed external reasoner may fall back to Codex automatically only when no
-material stage output exists. Otherwise Builder OS pauses for human judgement.
+material stage output exists. Otherwise Ariadne pauses for human judgement.
 
 ## Security
 

@@ -2,9 +2,9 @@
 
 Evidence checked: 2026-08-23.
 
-Builder OS uses two separate Codex mechanisms: a managed `$builderos` skill for
+Ariadne uses two separate Codex mechanisms: a managed `$ariadne` skill for
 the product workflow, and an optional generic user instruction baseline. The
-baseline never owns Builder OS stages, gates, policies, provider choices or
+baseline never owns Ariadne stages, gates, policies, provider choices or
 project decisions.
 
 ## Verified instruction order
@@ -27,8 +27,8 @@ user AGENTS instructions
   -> project and directory AGENTS instructions
   -> current user request
 
-$builderos skill
-  -> locates the installed Builder OS runtime
+$ariadne skill
+  -> locates the installed Ariadne runtime
   -> loads canonical workflow context only when invoked
 
 project documents
@@ -36,7 +36,7 @@ project documents
 ```
 
 The optional baseline supplies only the first line. Project `AGENTS.md` remains
-project-owned and is closer to the work. Builder OS policy remains in the
+project-owned and is closer to the work. Ariadne policy remains in the
 versioned runtime and reaches a task through the skill and generated stage
 context.
 
@@ -54,15 +54,15 @@ Source: [Codex skills](https://developers.openai.com/codex/skills).
 
 ## Optional baseline lifecycle
 
-Normal `builderos install` does not change global instructions. A user opts in
+Normal `ariadne install` does not change global instructions. A user opts in
 with either:
 
 ```bash
-python -m builderos install --codex-baseline
-python -m builderos codex-baseline install
+python -m ariadne install --codex-baseline
+python -m ariadne codex-baseline install
 ```
 
-Builder OS refuses to overwrite an existing `AGENTS.md`, an existing
+Ariadne refuses to overwrite an existing `AGENTS.md`, an existing
 `AGENTS.override.md`, or an edited managed baseline. Ownership is recorded in a
 separate hash-bearing marker. Update and rollback refresh only an unchanged
 managed copy. Removal deletes only an unchanged managed copy; an edited copy is
@@ -71,8 +71,8 @@ preserved and becomes user-owned.
 Status and removal:
 
 ```bash
-python -m builderos codex-baseline status
-python -m builderos codex-baseline remove
+python -m ariadne codex-baseline status
+python -m ariadne codex-baseline remove
 ```
 
 Restart Codex after installing or removing the baseline.
@@ -86,7 +86,7 @@ Restart Codex after installing or removing the baseline.
 - **REASONABLY ASSUMED:** a fresh supported Codex version will apply the same
   published discovery rules to the generated files.
 - **EXTERNALLY UNVERIFIED:** a genuinely new person's first external Codex task
-  discovering `$builderos` and applying both user and project instructions.
+  discovering `$ariadne` and applying both user and project instructions.
 - **BLOCKED:** no current blocker to packaging; live fresh-task evidence needs a
   human-opened external Codex task after publication or isolated candidate
   installation.

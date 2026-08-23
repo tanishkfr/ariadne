@@ -4,7 +4,7 @@
 
 Capability classes: **`R2`**, **`R3`**, **`R4`**, **`R6`**. See [MODEL-ROUTING.md](../MODEL-ROUTING.md).
 
-**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in the Builder OS changes. That is the portability test ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
+**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in the Ariadne changes. That is the portability test ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
 
 ---
 
@@ -21,12 +21,12 @@ Same as [cursor.md](cursor.md): S4 implementation, S5 mechanical QA, S6 git and 
 ## Setup
 
 **1. Delivered runtime state.** Claude Code reads `CLAUDE.md`, not `AGENTS.md`.
-Builder OS does not add a provider-specific `CLAUDE.md` to projects. The S4B
+Ariadne does not add a provider-specific `CLAUDE.md` to projects. The S4B
 packet explicitly transports the current project-root `AGENTS.md`, so Claude
 must follow that delivered runtime state rather than relying on automatic file
 discovery.
 
-**2. Precedence.** Canonical Builder OS policy and the verified stage packet
+**2. Precedence.** Canonical Ariadne policy and the verified stage packet
 outrank user-level Claude preferences. No claim is made about the contents of a
 particular machine's global `~/.claude/CLAUDE.md`.
 
@@ -38,7 +38,7 @@ particular machine's global `~/.claude/CLAUDE.md`.
 
 Verified present at `C:\Users\User\.claude\skills` on 2026-08-21. **Their existence is verified; their quality and behaviour are not — I have not run them.** Treat this table as a starting point to test, not a recommendation.
 
-| Builder OS skill | Candidate local skill | Notes |
+| Ariadne skill | Candidate local skill | Notes |
 |---|---|---|
 | [intake](../skills/intake.md) | `grill-me` | Closest direct match in the set |
 | [design-direction](../skills/design-direction.md) | `design-taste-frontend`, `high-end-visual-design`, `impeccable` | Three overlapping options — pick one and stay with it, or they will fight each other |

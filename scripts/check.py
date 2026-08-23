@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builder OS consistency check.
+Ariadne consistency check.
 
 Deterministic checks that caught real bugs during construction:
   1. Broken internal links
@@ -40,8 +40,8 @@ REQUIRED = [
     "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md", "V1.5-READINESS.md",
     "V1.5.1-READINESS.md", "V1.5.2-READINESS.md", "V1.5.3-READINESS.md",
     "CODEX-ENVIRONMENT.md", "RELEASE-NOTES.md",
-    "VERSION", "LICENSE", "pyproject.toml", "build_backend/builderos_backend.py",
-    "src/builderos/__init__.py", "src/builderos/__main__.py", "src/builderos/cli.py",
+    "VERSION", "LICENSE", "pyproject.toml", "build_backend/ariadne_backend.py",
+    "src/ariadne/__init__.py", "src/ariadne/__main__.py", "src/ariadne/cli.py",
     "templates/PROJECT.md", "templates/DESIGN.md",
     "templates/HANDOFF.md", "templates/QA.md", "templates/RETURN-HANDOFF.md",
     "templates/SOCIAL-STRATEGY.md",
@@ -54,20 +54,20 @@ REQUIRED = [
     "adapters/reasoner-contract.md", "adapters/reasoners.json",
     "adapters/claude-reasoner.md", "adapters/claude-reasoner-skill/SKILL.md",
     "adapters/codex-baseline.md",
-    "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
+    "scripts/prepare-stage.py", "scripts/ariadne.py", "scripts/creative-intelligence.py",
     "scripts/creative-operations.py", "scripts/reasoners.py",
     "scripts/install-claude-reasoner-skill.py",
     "scripts/test-reasoner-rollback.py",
     "scripts/test-real-projects.py", "validation/fixtures/v1.5-real-projects.json",
     "validation/fixtures/v1.5.1-reasoner-flows.json",
     "scripts/test-social-intelligence.py", "validation/fixtures/v1.5.2-social-flows.json",
-    "scripts/install-builderos-skill.py",
+    "scripts/install-ariadne-skill.py",
     "scripts/build-release.py", "scripts/test-distribution.py",
     "scripts/test-wheel-install.py",
-    ".agents/skills/builderos/SKILL.md",
-    ".agents/skills/builderos/agents/openai.yaml",
-    ".agents/skills/builderos/references/creative-intelligence.md",
-    ".agents/skills/builderos/references/creative-operations.md",
+    ".agents/skills/ariadne/SKILL.md",
+    ".agents/skills/ariadne/agents/openai.yaml",
+    ".agents/skills/ariadne/references/creative-intelligence.md",
+    ".agents/skills/ariadne/references/creative-operations.md",
     "skills/visual-qa.md", "skills/creative-review.md", "skills/social-strategy.md",
 ]
 
@@ -80,12 +80,12 @@ ALLOW_REPEAT = re.compile(
 
 # Files that legitimately restate rules because they LEAVE this repository:
 #   prompts/*        pasted into a tool that cannot follow a link
-#   templates/AGENTS.md  copied to a project root where Builder OS is absent
+#   templates/AGENTS.md  copied to a project root where Ariadne is absent
 # Everything else must have one home. Do not add to this list to silence a
 # real duplication -- fix the duplication instead.
 DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 
-# This script verifies BUILDER OS. validation/runs/ holds the OUTPUT of
+# This script verifies ARIADNE. validation/runs/ holds the OUTPUT of
 # experiments run with it -- generated artifacts, not canonical documentation.
 #
 # They are excluded here for a structural reason, not for convenience: while
@@ -100,7 +100,7 @@ DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 GENERATED = ("validation/runs/",)
 EPHEMERAL_SELF_TEST = (
     re.compile(
-        r"^validation/(?:builderos|creative-intelligence|creative-operations|distribution|packet|real-projects|release|skill-install|social|wheel)-self-test-[0-9a-f]{32}/"
+        r"^validation/(?:ariadne|creative-intelligence|creative-operations|distribution|packet|real-projects|release|skill-install|social|wheel)-self-test-[0-9a-f]{32}/"
     ),
     re.compile(r"^validation/validate-self-test-[a-z0-9-]+/"),
 )
@@ -203,10 +203,10 @@ DISTRIBUTION_FILES = (
     "VERSION",
     "LICENSE",
     "pyproject.toml",
-    "build_backend/builderos_backend.py",
-    "src/builderos/cli.py",
+    "build_backend/ariadne_backend.py",
+    "src/ariadne/cli.py",
     "scripts/build-release.py",
-    ".agents/skills/builderos/references/installation.example.json",
+    ".agents/skills/ariadne/references/installation.example.json",
     "adapters/codex-baseline.md",
     "RELEASE-NOTES.md",
 )
@@ -222,9 +222,9 @@ def check_distribution_texts(texts):
         problems.append("VERSION is not a supported release version")
     pyproject = texts["pyproject.toml"]
     for token in (
-        'requires = []', 'build-backend = "builderos_backend"',
+        'requires = []', 'build-backend = "ariadne_backend"',
         'dynamic = ["version"]', 'dependencies = []',
-        'builderos = "builderos.cli:main"', 'license = "Apache-2.0"',
+        'ariadne = "ariadne.cli:main"', 'license = "Apache-2.0"',
         'License :: OSI Approved :: Apache Software License',
     ):
         if token not in pyproject:
@@ -234,16 +234,16 @@ def check_distribution_texts(texts):
     licence_sha = hashlib.sha256(texts["LICENSE"].encode("utf-8")).hexdigest()
     if licence_sha != APACHE_2_LICENSE_SHA256:
         problems.append("LICENSE is not the approved canonical Apache-2.0 text")
-    backend = texts["build_backend/builderos_backend.py"]
+    backend = texts["build_backend/ariadne_backend.py"]
     for token in (
-        "builderos/seed-runtime.zip", "scripts\" / \"build-release.py",
+        "ariadne/seed-runtime.zip", "scripts\" / \"build-release.py",
         "License-Expression: Apache-2.0", "licenses/LICENSE",
     ):
         if token not in backend:
             problems.append(f"wheel backend is missing: {token}")
-    cli = texts["src/builderos/cli.py"]
+    cli = texts["src/ariadne/cli.py"]
     for token in (
-        "https://github.com/tanishkfr/builder-os/releases/latest/download/",
+        "https://github.com/tanishkfr/ariadne/releases/latest/download/",
         "def install_seed_runtime(", 'sub.add_parser("update"',
         'sub.add_parser("rollback"', 'sub.add_parser("doctor"',
         'sub.add_parser("uninstall"', 'sub.add_parser("enable-claude"',
@@ -275,20 +275,20 @@ def check_distribution_texts(texts):
     ):
         if token not in baseline:
             problems.append(f"Codex baseline is missing a general working default: {token}")
-    if re.search(r"(?i)\b(?:G[1-5]|S[0-6]|Builder OS|provider routing|social strategy)\b", baseline):
-        problems.append("Codex baseline contains Builder OS workflow or project policy")
+    if re.search(r"(?i)\b(?:G[1-5]|S[0-6]|Ariadne|provider routing|social strategy)\b", baseline):
+        problems.append("Codex baseline contains Ariadne workflow or project policy")
     release_notes = texts["RELEASE-NOTES.md"]
-    if not re.search(rf"(?m)^# Builder OS {re.escape(release_version)}\s*$", release_notes):
+    if not re.search(rf"(?m)^# Ariadne {re.escape(release_version)}\s*$", release_notes):
         problems.append("release notes do not name the authoritative VERSION")
     for token in ("not been published", "macOS", "Linux", "Codex"):
         if token not in release_notes:
             problems.append(f"release notes omit an evidence boundary: {token}")
     try:
-        example = json.loads(texts[".agents/skills/builderos/references/installation.example.json"])
+        example = json.loads(texts[".agents/skills/ariadne/references/installation.example.json"])
     except json.JSONDecodeError as exc:
         problems.append(f"installation example is malformed: {exc}")
     else:
-        for key in ("schema_version", "builder_os_root", "install_home", "version"):
+        for key in ("schema_version", "ariadne_root", "install_home", "version"):
             if not example.get(key):
                 problems.append(f"installation example is missing {key}")
     return problems
@@ -453,7 +453,7 @@ AGENTS_REQUIRED_FIELDS = [
 VALID_STAGES = ["S0", "S1", "S2", "S3", "S4", "S5", "S6"]
 VALID_GATES = ["G1", "G2", "G3", "G4", "G5"]
 
-# Sentences whose canonical home is a Builder OS policy file. If one appears
+# Sentences whose canonical home is an Ariadne policy file. If one appears
 # verbatim in the AGENTS template, the template has started owning a rule.
 CANON_MARKERS = [
     ("A gate is a full stop", "WORKFLOW.md"),
@@ -522,11 +522,11 @@ DELIVERY_CONTRACTS = [
         "block": 0,
         "tokens": [
             "REQUIRED INPUTS", "QUESTIONS", "RESEARCH-POLICY.md",
-            "templates/RESEARCH.md", ".builderos/creative-evidence.json", "IF MISSING",
+            "templates/RESEARCH.md", ".ariadne/creative-evidence.json", "IF MISSING",
             "RESOURCE EVIDENCE", "compatibility", "licence", "alternatives",
             "NEXT: S3 Design direction.",
         ],
-        "inputs": ["QUESTIONS", "RESEARCH-POLICY.md", "templates/RESEARCH.md", ".builderos/creative-evidence.json"],
+        "inputs": ["QUESTIONS", "RESEARCH-POLICY.md", "templates/RESEARCH.md", ".ariadne/creative-evidence.json"],
         "retry": "NEXT: S2 Research retry.",
         "forbidden_missing": ["NEXT: S3 Design direction."],
     },
@@ -536,11 +536,11 @@ DELIVERY_CONTRACTS = [
         "tokens": [
             "REQUIRED INPUTS", "PROJECT.md", "DESIGN-TASTE.md",
             "templates/DESIGN.md", "DESIGN-MOTION.md", "DESIGN-ASSETS.md",
-            ".builderos/creative-evidence.json", "IF MISSING", "NEXT: S4 Build.",
+            ".ariadne/creative-evidence.json", "IF MISSING", "NEXT: S4 Build.",
         ],
         "inputs": [
             "PROJECT.md", "DESIGN-TASTE.md", "templates/DESIGN.md",
-            "DESIGN-MOTION.md", "DESIGN-ASSETS.md", ".builderos/creative-evidence.json",
+            "DESIGN-MOTION.md", "DESIGN-ASSETS.md", ".ariadne/creative-evidence.json",
         ],
         "retry": "NEXT: S3 Design direction retry.",
         "forbidden_missing": ["NEXT: S4 Build."],
@@ -551,7 +551,7 @@ DELIVERY_CONTRACTS = [
         "tokens": [
             "REQUIRED INPUTS", "PROJECT.md", "DESIGN.md", "AGENTS.md",
             "templates/HANDOFF.md", "IF MISSING", "NEXT: S4 Build.",
-            "Return to Builder OS", "templates/RETURN-HANDOFF.md",
+            "Return to Ariadne", "templates/RETURN-HANDOFF.md",
         ],
         "inputs": ["PROJECT.md", "DESIGN.md", "AGENTS.md", "templates/HANDOFF.md"],
         "retry": "NEXT: S4 Handoff retry.",
@@ -564,14 +564,14 @@ DELIVERY_CONTRACTS = [
             "REQUIRED INPUTS", "HANDOFF.md", "DESIGN.md", "AGENTS.md",
             "QA-POLICY.md", "templates/QA.md", "IF MISSING",
             "templates/RETURN-HANDOFF.md", "BEGIN/END markers",
-            ".builderos/creative-operations.json", "skills/visual-qa.md",
+            ".ariadne/creative-operations.json", "skills/visual-qa.md",
             "feature-branch preview", "already connected",
             "NEXT: S5 Review.",
         ],
         "inputs": [
             "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
             "templates/QA.md", "templates/RETURN-HANDOFF.md",
-            ".builderos/creative-operations.json", "skills/visual-qa.md",
+            ".ariadne/creative-operations.json", "skills/visual-qa.md",
         ],
         "retry": "NEXT: S4 Build retry.",
         "forbidden_missing": ["NEXT: S5 Review."],
@@ -643,8 +643,8 @@ ADAPTER_DELIVERY = {
         "tokens": [
             "skills/intake.md", "RESEARCH-POLICY.md", "templates/RESEARCH.md",
             "DESIGN-TASTE.md", "templates/DESIGN.md", "DESIGN-MOTION.md",
-            "DESIGN-ASSETS.md", ".builderos/creative-evidence.json", "templates/HANDOFF.md",
-            ".builderos/creative-operations.json", "skills/visual-qa.md",
+            "DESIGN-ASSETS.md", ".ariadne/creative-evidence.json", "templates/HANDOFF.md",
+            ".ariadne/creative-operations.json", "skills/visual-qa.md",
             "EVALUATION-RUBRICS.md", "completed `QA.md`",
             "templates/RETROSPECTIVE.md",
         ],
@@ -655,7 +655,7 @@ ADAPTER_DELIVERY = {
         "tokens": [
             "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
             "templates/QA.md", "templates/RETURN-HANDOFF.md",
-            ".builderos/creative-operations.json", "skills/visual-qa.md",
+            ".ariadne/creative-operations.json", "skills/visual-qa.md",
             "explicit human G3 approval",
         ],
     },
@@ -790,13 +790,13 @@ def check_delivery_contracts():
 # Generated stage packets are transport artifacts. This loader lets the
 # repository checker validate the helper's transport map without restating it.
 PACKET_TOOL = "scripts/prepare-stage.py"
-RUNTIME_TOOL = "scripts/builderos.py"
-INSTALLER_TOOL = "scripts/install-builderos-skill.py"
+RUNTIME_TOOL = "scripts/ariadne.py"
+INSTALLER_TOOL = "scripts/install-ariadne-skill.py"
 
 
 def load_packet_tool():
     path = os.path.join(ROOT, PACKET_TOOL)
-    spec = importlib.util.spec_from_file_location("builder_os_prepare_stage", path)
+    spec = importlib.util.spec_from_file_location("ariadne_prepare_stage", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -813,7 +813,7 @@ def check_packet_tool():
 
 def load_runtime_tool():
     path = os.path.join(ROOT, RUNTIME_TOOL)
-    spec = importlib.util.spec_from_file_location("builder_os_runtime", path)
+    spec = importlib.util.spec_from_file_location("ariadne_runtime", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -821,7 +821,7 @@ def load_runtime_tool():
 
 def load_reasoner_tool():
     path = os.path.join(ROOT, "scripts", "reasoners.py")
-    spec = importlib.util.spec_from_file_location("builder_os_reasoners", path)
+    spec = importlib.util.spec_from_file_location("ariadne_reasoners", path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Could not load reasoner contract checker")
     module = importlib.util.module_from_spec(spec)
@@ -840,7 +840,7 @@ def check_runtime_tool():
 
 def load_creative_tool():
     path = os.path.join(ROOT, "scripts", "creative-intelligence.py")
-    spec = importlib.util.spec_from_file_location("builder_os_creative_intelligence", path)
+    spec = importlib.util.spec_from_file_location("ariadne_creative_intelligence", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -848,7 +848,7 @@ def load_creative_tool():
 
 def load_creative_operations_tool():
     path = os.path.join(ROOT, "scripts", "creative-operations.py")
-    spec = importlib.util.spec_from_file_location("builder_os_creative_operations", path)
+    spec = importlib.util.spec_from_file_location("ariadne_creative_operations", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -856,7 +856,7 @@ def load_creative_operations_tool():
 
 def load_real_projects_tool():
     path = os.path.join(ROOT, "scripts", "test-real-projects.py")
-    spec = importlib.util.spec_from_file_location("builder_os_real_projects", path)
+    spec = importlib.util.spec_from_file_location("ariadne_real_projects", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -864,7 +864,7 @@ def load_real_projects_tool():
 
 def load_social_tool():
     path = os.path.join(ROOT, "scripts", "test-social-intelligence.py")
-    spec = importlib.util.spec_from_file_location("builder_os_social_intelligence", path)
+    spec = importlib.util.spec_from_file_location("ariadne_social_intelligence", path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Could not load social intelligence self-test")
     module = importlib.util.module_from_spec(spec)
@@ -874,7 +874,7 @@ def load_social_tool():
 
 def load_installer_tool():
     path = os.path.join(ROOT, INSTALLER_TOOL)
-    spec = importlib.util.spec_from_file_location("builder_os_skill_installer", path)
+    spec = importlib.util.spec_from_file_location("ariadne_skill_installer", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -882,7 +882,7 @@ def load_installer_tool():
 
 def load_claude_installer_tool():
     path = os.path.join(ROOT, "scripts", "install-claude-reasoner-skill.py")
-    spec = importlib.util.spec_from_file_location("builder_os_claude_skill_installer", path)
+    spec = importlib.util.spec_from_file_location("ariadne_claude_skill_installer", path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Could not load optional Claude reasoner skill installer")
     module = importlib.util.module_from_spec(spec)
@@ -892,7 +892,7 @@ def load_claude_installer_tool():
 
 def load_release_tool():
     path = os.path.join(ROOT, "scripts", "build-release.py")
-    spec = importlib.util.spec_from_file_location("builder_os_release", path)
+    spec = importlib.util.spec_from_file_location("ariadne_release", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -900,7 +900,7 @@ def load_release_tool():
 
 def load_distribution_tool():
     path = os.path.join(ROOT, "scripts", "test-distribution.py")
-    spec = importlib.util.spec_from_file_location("builder_os_distribution", path)
+    spec = importlib.util.spec_from_file_location("ariadne_distribution", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -1080,10 +1080,10 @@ def self_test_delivery_contracts():
          bool(check_delivery_contract_texts(mutate(
              "prompts/build-kickoff.md", "- QA-POLICY.md.", "- QA rules."
          )))),
-        ("S4A transition without Builder OS handoff fails",
+        ("S4A transition without Ariadne handoff fails",
          bool(check_delivery_contract_texts(mutate(
             "prompts/build-kickoff.md",
-            "Return to Builder OS",
+            "Return to Ariadne",
             "assemble the next packet manually",
          )))),
         ("S5 G4 before explicit G3 fails",
@@ -1200,7 +1200,7 @@ def self_test_distribution_contract():
     future["VERSION"] = "9.8.7\n"
     release_version = actual["VERSION"].strip()
     future["RELEASE-NOTES.md"] = future["RELEASE-NOTES.md"].replace(
-        f"# Builder OS {release_version}", "# Builder OS 9.8.7", 1
+        f"# Ariadne {release_version}", "# Ariadne 9.8.7", 1
     )
     cases = [
         ("repository distribution contract passes (positive control)",
@@ -1219,38 +1219,38 @@ def self_test_distribution_contract():
          )))),
         ("wheel without embedded runtime fails",
          bool(check_distribution_texts(mutate(
-             "build_backend/builderos_backend.py",
-             "builderos/seed-runtime.zip", "builderos/runtime-reference.txt"
+             "build_backend/ariadne_backend.py",
+             "ariadne/seed-runtime.zip", "ariadne/runtime-reference.txt"
          )))),
         ("insecure update endpoint fails",
          bool(check_distribution_texts(mutate(
-             "src/builderos/cli.py", "https://github.com/tanishkfr/", "http://github.com/tanishkfr/"
+             "src/ariadne/cli.py", "https://github.com/tanishkfr/", "http://github.com/tanishkfr/"
          )))),
         ("missing rollback command fails",
          bool(check_distribution_texts(mutate(
-             "src/builderos/cli.py", 'sub.add_parser("rollback"', 'sub.add_parser("return"'
+             "src/ariadne/cli.py", 'sub.add_parser("rollback"', 'sub.add_parser("return"'
          )))),
         ("missing optional Claude disable command fails",
          bool(check_distribution_texts(mutate(
-              "src/builderos/cli.py", 'sub.add_parser("disable-claude"', 'sub.add_parser("disable-reasoner"'
+              "src/ariadne/cli.py", 'sub.add_parser("disable-claude"', 'sub.add_parser("disable-reasoner"'
           )))),
         ("missing optional Codex baseline command fails",
          bool(check_distribution_texts(mutate(
-             "src/builderos/cli.py", 'sub.add_parser("codex-baseline"', 'sub.add_parser("defaults"'
+             "src/ariadne/cli.py", 'sub.add_parser("codex-baseline"', 'sub.add_parser("defaults"'
          )))),
         ("legacy-only fresh skill target fails",
          bool(check_distribution_texts(mutate(
-             "src/builderos/cli.py", 'preferred = home / ".agents" / "skills"',
+             "src/ariadne/cli.py", 'preferred = home / ".agents" / "skills"',
              'preferred = home / ".codex" / "skills"'
          )))),
-        ("generic baseline cannot absorb Builder OS gates",
+        ("generic baseline cannot absorb Ariadne gates",
          bool(check_distribution_texts({
              **actual,
              "adapters/codex-baseline.md": actual["adapters/codex-baseline.md"] + "\nG1 is automatically approved.\n",
          }))),
         ("release notes with stale version fail",
          bool(check_distribution_texts(mutate(
-             "RELEASE-NOTES.md", f"# Builder OS {release_version}", "# Builder OS 0.0.0"
+             "RELEASE-NOTES.md", f"# Ariadne {release_version}", "# Ariadne 0.0.0"
          )))),
         ("release builder without aggregate checksum inventory fails",
          bool(check_distribution_texts(mutate(
@@ -1262,7 +1262,7 @@ def self_test_distribution_contract():
          )))),
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(
-             ".agents/skills/builderos/references/installation.example.json",
+             ".agents/skills/ariadne/references/installation.example.json",
              f'"version": "{release_version}"', f'"release": "{release_version}"'
          )))),
     ]

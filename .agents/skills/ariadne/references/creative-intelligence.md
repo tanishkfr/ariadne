@@ -1,7 +1,7 @@
 # Creative intelligence runtime contract
 
 Read this only while planning or recording S1-S3 creative work. The runtime
-owns the JSON schema; canonical Builder OS skills and policies still own method
+owns the JSON schema; canonical Ariadne skills and policies still own method
 and quality.
 
 ## Assessment
@@ -49,7 +49,7 @@ An empty question list is correct when research would not change a decision.
 Run:
 
 ```text
-python <builder-os>/scripts/builderos.py creative-plan --project <project> --input <assessment.json>
+python <ariadne>/scripts/ariadne.py creative-plan --project <project> --input <assessment.json>
 ```
 
 ## Evidence events

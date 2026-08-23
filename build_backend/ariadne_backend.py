@@ -1,4 +1,4 @@
-"""Dependency-free PEP 517 backend for the small Builder OS launcher wheel."""
+"""Dependency-free PEP 517 backend for the small Ariadne launcher wheel."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PACKAGE_ROOT = ROOT / "src" / "builderos"
+PACKAGE_ROOT = ROOT / "src" / "ariadne"
 FIXED_ZIP_TIME = (2020, 1, 1, 0, 0, 0)
-NAME = "builder-os"
-NORMALISED = "builder_os"
+NAME = "ariadne"
+NORMALISED = "ariadne"
 
 
 def _version() -> str:
@@ -40,21 +40,21 @@ Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
 Classifier: License :: OSI Approved :: Apache Software License
-Project-URL: Homepage, https://github.com/tanishkfr/builder-os
-Project-URL: Repository, https://github.com/tanishkfr/builder-os
-Project-URL: Changelog, https://github.com/tanishkfr/builder-os/blob/main/CHANGELOG.md
+Project-URL: Homepage, https://github.com/tanishkfr/ariadne
+Project-URL: Repository, https://github.com/tanishkfr/ariadne
+Project-URL: Changelog, https://github.com/tanishkfr/ariadne/blob/main/CHANGELOG.md
 
-Builder OS installs and maintains a user-local creative-production runtime and managed Codex skill.
+Ariadne installs and maintains a user-local creative-production runtime and managed Codex skill.
 """
     return value.encode("utf-8")
 
 
 def _wheel_metadata() -> bytes:
-    return b"Wheel-Version: 1.0\nGenerator: builderos-backend-1\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+    return b"Wheel-Version: 1.0\nGenerator: ariadne-backend-1\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
 
 
 def _entry_points() -> bytes:
-    return b"[console_scripts]\nbuilderos = builderos.cli:main\n"
+    return b"[console_scripts]\nariadne = ariadne.cli:main\n"
 
 
 def _package_files() -> dict[str, bytes]:
@@ -62,13 +62,13 @@ def _package_files() -> dict[str, bytes]:
         path.relative_to(PACKAGE_ROOT.parent).as_posix(): path.read_bytes()
         for path in sorted(PACKAGE_ROOT.rglob("*.py"))
     }
-    files["builderos/seed-runtime.zip"] = _seed_runtime()
+    files["ariadne/seed-runtime.zip"] = _seed_runtime()
     return files
 
 
 def _release_module():
     path = ROOT / "scripts" / "build-release.py"
-    spec = importlib.util.spec_from_file_location("builderos_release_builder", path)
+    spec = importlib.util.spec_from_file_location("ariadne_release_builder", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load the canonical release builder: {path}")
     module = importlib.util.module_from_spec(spec)

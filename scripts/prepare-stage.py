@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare and verify paste-ready Builder OS stage packets.
+"""Prepare and verify paste-ready Ariadne stage packets.
 
 This is transport tooling, not a policy owner. Canonical prompts, policies,
 templates, and project documents remain the sources recorded in manifest.json.
@@ -45,10 +45,10 @@ RECORD_NAME = "continuation.md"
 def load_reasoners():
     path = ROOT / "scripts" / "reasoners.py"
     spec = __import__("importlib.util").util.spec_from_file_location(
-        "builder_os_reasoners", path
+        "ariadne_reasoners", path
     )
     if spec is None or spec.loader is None:
-        raise RuntimeError("Builder OS reasoner helper could not be loaded")
+        raise RuntimeError("Ariadne reasoner helper could not be loaded")
     module = __import__("importlib.util").util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -73,7 +73,7 @@ STAGES = {
         "prompt": "prompts/research.md",
         "block": 0,
         "project_inputs": [],
-        "optional_project_inputs": [".builderos/creative-evidence.json"],
+        "optional_project_inputs": [".ariadne/creative-evidence.json"],
         "canonical_inputs": ["RESEARCH-POLICY.md", "templates/RESEARCH.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S1", "S2"],
@@ -85,7 +85,7 @@ STAGES = {
         "prompt": "prompts/design-direction.md",
         "block": 0,
         "project_inputs": ["PROJECT.md"],
-        "optional_project_inputs": [".builderos/creative-evidence.json"],
+        "optional_project_inputs": [".ariadne/creative-evidence.json"],
         "canonical_inputs": ["DESIGN-TASTE.md", "templates/DESIGN.md"],
         "conditional_inputs": [
             "project:RESEARCH.md",
@@ -112,7 +112,7 @@ STAGES = {
         "block": 1,
         "project_inputs": [
             "HANDOFF.md", "DESIGN.md", "AGENTS.md",
-            ".builderos/creative-operations.json",
+            ".ariadne/creative-operations.json",
         ],
         "optional_project_inputs": [],
         "canonical_inputs": [
@@ -378,7 +378,7 @@ def parameterise_prompt(stage: str, block: str, args: argparse.Namespace) -> tup
             )
             request = (
                 request.strip()
-                + "\n\nBUILDER OS EXISTING-PROJECT ADOPTION CONTEXT\n"
+                + "\n\nARIADNE EXISTING-PROJECT ADOPTION CONTEXT\n"
                 + "This is an opt-in adoption of an existing project, not a fresh build. "
                 + "Inspect the live project repository read-only before asking questions. "
                 + "Preserve current behaviour and every pre-existing file. Do not rewrite, "
@@ -466,7 +466,7 @@ def check_project_boundary(stage: str, project: Path, adopt_existing: bool = Fal
             owned = sorted(name for name in ("PROJECT.md", "AGENTS.md") if (project / name).exists())
             if owned:
                 raise PacketError(
-                    "existing project already contains Builder OS-owned entry documents: "
+                    "existing project already contains Ariadne-owned entry documents: "
                     + ", ".join(owned)
                     + "; resume its run or migrate those files deliberately"
                 )
@@ -673,19 +673,19 @@ def build_packet(stage: str, packet_id: str, provider: str, prompt: dict, source
                  parent: dict | None, omitted: list[str], return_target: Path | None = None) -> str:
     independent = stage == "S5"
     lines = [
-        f"BUILDER OS {stage} STAGE PACKET",
+        f"ARIADNE {stage} STAGE PACKET",
         f"Packet ID: {packet_id}",
         f"Provider: {provider}",
         "Status: PREPARED ONLY — THE STAGE HAS NOT RUN",
         "",
         "TRANSPORT NOTICE",
         "This packet is a generated transport artifact. The named source files remain canonical.",
-        "Do not copy Builder OS policies or templates permanently into the project repository.",
+        "Do not copy Ariadne policies or templates permanently into the project repository.",
     ]
     if not independent:
         lines.extend(
             [
-                f"Builder OS source commit: {git_head()}",
+                f"Ariadne source commit: {git_head()}",
                 f"Parent packet: {parent['packet_id'] if parent else 'none — initial stage'}",
             ]
         )
@@ -740,7 +740,7 @@ def prepare(args: argparse.Namespace) -> Path:
         raise PacketError("packet output may not live inside the project repository")
     if is_within(output, ROOT) and not args.synthetic_validation:
         raise PacketError(
-            "project transport may contain private material; output inside Builder OS requires "
+            "project transport may contain private material; output inside Ariadne requires "
             "--synthetic-validation and is reserved for synthetic validation"
         )
 
@@ -760,7 +760,7 @@ def prepare(args: argparse.Namespace) -> Path:
     if stage == "S4B" and provider == "claude":
         raise PacketError("Claude reasoner cannot be used as the S4B implementation provider")
     return_target = (
-        (project / ".builderos" / "returns" / f"{packet_id}.md").resolve()
+        (project / ".ariadne" / "returns" / f"{packet_id}.md").resolve()
         if stage == "S4B"
         else None
     )
@@ -782,7 +782,7 @@ def prepare(args: argparse.Namespace) -> Path:
         "packet_id": packet_id,
         "stage": stage,
         "provider": provider,
-        "builder_os_commit": git_head(),
+        "ariadne_commit": git_head(),
         "project": str(project),
         "parent_id": parent.get("packet_id") if parent else None,
         "parent_manifest": str((parent_dir / MANIFEST_NAME).resolve()) if parent_dir else None,
@@ -816,7 +816,7 @@ def prepare(args: argparse.Namespace) -> Path:
 **Stage:** `{stage}`
 **Provider:** `{provider}`
 **Parent:** `{manifest['parent_id'] or 'none — initial stage'}`
-**Builder OS commit:** `{manifest['builder_os_commit']}`
+**Ariadne commit:** `{manifest['ariadne_commit']}`
 **Project:** `{project}`
 **Status:** `PREPARED — NOT RUN`
 **Result:** `unfilled until the stage actually runs`
@@ -886,7 +886,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
     packet = read(packet_path)
     if sha256_file(packet_path) != manifest.get("packet_sha256"):
         problems.append("packet hash mismatch — packet changed after preparation")
-    if f"BUILDER OS {stage} STAGE PACKET" not in packet.splitlines()[:2]:
+    if f"ARIADNE {stage} STAGE PACKET" not in packet.splitlines()[:2]:
         problems.append("packet stage header does not match manifest stage")
     adopt_existing = manifest.get("adopt_existing", False)
     if not isinstance(adopt_existing, bool):
@@ -894,7 +894,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
     elif adopt_existing:
         if stage != "S1":
             problems.append("existing-project adoption is valid only at S1")
-        if "BUILDER OS EXISTING-PROJECT ADOPTION CONTEXT" not in packet:
+        if "ARIADNE EXISTING-PROJECT ADOPTION CONTEXT" not in packet:
             problems.append("S1 adoption packet is missing its non-destructive context")
 
     expected_labels = []
@@ -942,7 +942,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
     if stage == "S4B":
         expected_target = (
             Path(manifest.get("project", ""))
-            / ".builderos"
+            / ".ariadne"
             / "returns"
             / f"{manifest.get('packet_id')}.md"
         ).resolve()
@@ -952,7 +952,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
             actual_target = Path(return_target).resolve()
             if actual_target != expected_target:
                 problems.append("S4B structured return target does not match its packet ID")
-            if not is_within(actual_target, Path(manifest.get("project", "")) / ".builderos" / "returns"):
+            if not is_within(actual_target, Path(manifest.get("project", "")) / ".ariadne" / "returns"):
                 problems.append("S4B structured return target escapes the project return directory")
             target_line = f"Write the complete marked return handoff verbatim to: {actual_target}"
             if packet.count(target_line) != 1:
@@ -1018,7 +1018,7 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S1 packet must support a linked same-stage resume")
     if "templates/RETURN-HANDOFF.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
         problems.append("S4B packet must deliver the canonical return-handoff template")
-    if ".builderos/creative-operations.json" not in specs.get("S4B", {}).get(
+    if ".ariadne/creative-operations.json" not in specs.get("S4B", {}).get(
         "project_inputs", []
     ):
         problems.append("S4B packet must carry the generated creative-operations plan")
@@ -1206,7 +1206,7 @@ def self_test() -> int:
             "## Current state\n\n| **Stage** | `S1` |\n| **Last gate passed** | `none` |\n",
             encoding="utf-8",
         )
-        creative_dir = project / ".builderos"
+        creative_dir = project / ".ariadne"
         creative_dir.mkdir()
         creative_path = creative_dir / "creative-evidence.json"
         creative_path.write_text(
@@ -1219,7 +1219,7 @@ def self_test() -> int:
         case(
             "conditional S2 packet carries current creative plan",
             not verify_packet(s2_dir)
-            and any(item["label"] == ".builderos/creative-evidence.json" for item in s2_manifest["sources"]),
+            and any(item["label"] == ".ariadne/creative-evidence.json" for item in s2_manifest["sources"]),
         )
         (s2_dir / "evidence" / "transcript.md").write_text("S2 transcript\n", encoding="utf-8")
         (project / "RESEARCH.md").write_text(
@@ -1233,7 +1233,7 @@ def self_test() -> int:
         case(
             "fresh S3 continuation carries creative provenance",
             not verify_packet(s3_dir)
-            and any(item["label"] == ".builderos/creative-evidence.json" for item in s3_manifest["sources"]),
+            and any(item["label"] == ".ariadne/creative-evidence.json" for item in s3_manifest["sources"]),
         )
 
         (s3_dir / "evidence" / "transcript.md").write_text(
@@ -1415,7 +1415,7 @@ def self_test() -> int:
             "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n## Dependencies to install\n\nNone.\n",
             encoding="utf-8",
         )
-        operations_dir = project / ".builderos"
+        operations_dir = project / ".ariadne"
         operations_dir.mkdir(exist_ok=True)
         operations_path = operations_dir / "creative-operations.json"
         operations_path.write_text(
@@ -1434,7 +1434,7 @@ def self_test() -> int:
         prepare(ns(stage="S4B", project=str(project), output=str(s4b_dir), parent=str(s4a_dir)))
         s4b_manifest = json.loads(read(s4b_dir / MANIFEST_NAME))
         expected_return_target = (
-            project / ".builderos" / "returns" / f"{s4b_manifest['packet_id']}.md"
+            project / ".ariadne" / "returns" / f"{s4b_manifest['packet_id']}.md"
         ).resolve()
         case(
             "Cursor S4B packet verifies with trace and unique return target (positive control)",
@@ -1442,7 +1442,7 @@ def self_test() -> int:
             and s4b_manifest["provider"] == "cursor"
             and s4b_manifest["return_target"] == str(expected_return_target)
             and any(
-                item["label"] == ".builderos/creative-operations.json"
+                item["label"] == ".ariadne/creative-operations.json"
                 for item in s4b_manifest["sources"]
             ),
         )

@@ -1,12 +1,12 @@
-# Builder OS 1.5.3
+# Ariadne 1.5.3
 
-Builder OS 1.5.3 prepares the installed product for stranger-friendly use while
+Ariadne 1.5.3 prepares the installed product for stranger-friendly use while
 preserving the V1.5 creative workflow, V1.5.1 optional Claude boundary and
 V1.5.2 social capability.
 
 ## Highlights
 
-- Fresh installs register `$builderos` in Codex's documented user skill path.
+- Fresh installs register `$ariadne` in Codex's documented user skill path.
 - An optional, managed general Codex baseline can be installed without
   overwriting existing user or project instructions.
 - Update, rollback, doctor and uninstall understand that optional baseline and

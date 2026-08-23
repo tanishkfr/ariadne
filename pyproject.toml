@@ -1,10 +1,10 @@
 [build-system]
 requires = []
-build-backend = "builderos_backend"
+build-backend = "ariadne_backend"
 backend-path = ["build_backend"]
 
 [project]
-name = "builder-os"
+name = "ariadne"
 dynamic = ["version"]
 description = "Creative-production workflow runtime and managed Codex skill"
 readme = "README.md"
@@ -21,9 +21,9 @@ classifiers = [
 ]
 
 [project.scripts]
-builderos = "builderos.cli:main"
+ariadne = "ariadne.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/tanishkfr/builder-os"
-Repository = "https://github.com/tanishkfr/builder-os"
-Changelog = "https://github.com/tanishkfr/builder-os/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/tanishkfr/ariadne"
+Repository = "https://github.com/tanishkfr/ariadne"
+Changelog = "https://github.com/tanishkfr/ariadne/blob/main/CHANGELOG.md"

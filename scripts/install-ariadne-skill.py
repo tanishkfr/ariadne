@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install or verify the personal Builder OS Codex entry skill.
+"""Install or verify the personal Ariadne Codex entry skill.
 
 The repository copy remains canonical. The installed copy carries only one
 machine-local file, references/installation.json, so it can locate this Builder
@@ -19,9 +19,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / ".agents" / "skills" / "builderos"
+SOURCE = ROOT / ".agents" / "skills" / "ariadne"
 INSTALLATION = "references/installation.json"
-MANAGED_MARKER = ".builderos-managed.json"
+MANAGED_MARKER = ".ariadne-managed.json"
 
 
 class InstallError(RuntimeError):
@@ -54,8 +54,8 @@ def verify(target: Path) -> list[str]:
     else:
         try:
             location = json.loads(installation.read_text(encoding="utf-8"))
-            if Path(location.get("builder_os_root", "")).resolve() != ROOT.resolve():
-                problems.append("installed skill points at a different Builder OS checkout")
+            if Path(location.get("ariadne_root", "")).resolve() != ROOT.resolve():
+                problems.append("installed skill points at a different Ariadne checkout")
         except (json.JSONDecodeError, OSError):
             problems.append("installation location is malformed")
     for relative, expected in expected_hashes().items():
@@ -78,7 +78,7 @@ def verify(target: Path) -> list[str]:
 
 def install(target: Path) -> None:
     if not SOURCE.is_dir():
-        raise InstallError(f"canonical Builder OS skill is missing: {SOURCE}")
+        raise InstallError(f"canonical Ariadne skill is missing: {SOURCE}")
     if target.exists() and not (target / MANAGED_MARKER).is_file():
         raise InstallError(f"refusing to overwrite an unmanaged skill: {target}")
     target.mkdir(parents=True, exist_ok=True)
@@ -88,14 +88,14 @@ def install(target: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
     installation = {
-        "builder_os_root": str(ROOT),
+        "ariadne_root": str(ROOT),
         "installed_from_commit": git_head(),
     }
     location_path = target / INSTALLATION
     location_path.parent.mkdir(parents=True, exist_ok=True)
     location_path.write_text(json.dumps(installation, indent=2) + "\n", encoding="utf-8")
     (target / MANAGED_MARKER).write_text(
-        json.dumps({"owner": "Builder OS", "source": str(SOURCE)}, indent=2) + "\n",
+        json.dumps({"owner": "Ariadne", "source": str(SOURCE)}, indent=2) + "\n",
         encoding="utf-8",
     )
     problems = verify(target)
@@ -115,7 +115,7 @@ def git_head() -> str:
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("command", nargs="?", choices=["install", "verify"])
-    p.add_argument("--target", default=str(Path.home() / ".agents" / "skills" / "builderos"))
+    p.add_argument("--target", default=str(Path.home() / ".agents" / "skills" / "ariadne"))
     p.add_argument("--self-test", action="store_true")
     return p
 
@@ -156,7 +156,7 @@ def self_test() -> int:
         case("unmanaged installed files are detected", any("unmanaged" in item for item in verify(target)))
         extra.unlink()
         location = json.loads((target / INSTALLATION).read_text(encoding="utf-8"))
-        case("installed skill records the canonical checkout", Path(location["builder_os_root"]).resolve() == ROOT.resolve())
+        case("installed skill records the canonical checkout", Path(location["ariadne_root"]).resolve() == ROOT.resolve())
 
         unmanaged = workspace / "unmanaged-skill"
         unmanaged.mkdir()
@@ -168,7 +168,7 @@ def self_test() -> int:
             unmanaged_refused = True
         case("unmanaged skill is never overwritten", unmanaged_refused)
 
-    print("BUILDER OS SKILL INSTALL SELF-TEST\n")
+    print("ARIADNE SKILL INSTALL SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
     failed = [name for name, passed in cases if not passed]
@@ -187,7 +187,7 @@ def main() -> int:
         if args.command == "install":
             install(target)
             print(f"INSTALLED  {target}")
-            print("PASS       canonical skill copy and Builder OS location verified")
+            print("PASS       canonical skill copy and Ariadne location verified")
             return 0
         problems = verify(target)
         if problems:
@@ -195,7 +195,7 @@ def main() -> int:
             for problem in problems:
                 print(f"  {problem}")
             return 1
-        print(f"PASS  installed Builder OS skill matches {SOURCE}")
+        print(f"PASS  installed Ariadne skill matches {SOURCE}")
         return 0
     except InstallError as exc:
         print(f"STOPPED: {exc}")

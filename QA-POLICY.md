@@ -147,7 +147,7 @@ git status                 # BEFORE git add. Every time.
 
 ### Secret protection — set up once per repository, by you
 
-**Nothing in the Builder OS installs this.** It is a manual step, it is not automatic, and if you skip it there is no safety net — `git status` discipline is all that stands between you and a committed key.
+**Nothing in the Ariadne installs this.** It is a manual step, it is not automatic, and if you skip it there is no safety net — `git status` discipline is all that stands between you and a committed key.
 
 `.git/hooks/` is not committed, so a hook placed there does not travel with the repo and does not survive a fresh clone. The portable form keeps the hook **inside** the repository and points git at it:
 

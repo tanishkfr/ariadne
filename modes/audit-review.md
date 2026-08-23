@@ -26,7 +26,7 @@ If the request is "roast this", the honest reading is portfolio reviewer plus cr
 
 ## Documents
 
-`QA.md` (the findings) → `RETROSPECTIVE.md` (optional, only if it should change the Builder OS).
+`QA.md` (the findings) → `RETROSPECTIVE.md` (optional, only if it should change the Ariadne).
 
 Nothing else. No `PROJECT.md`, no `DESIGN.md`.
 

@@ -27,8 +27,8 @@ def load_module(name: str, relative: str):
     return module
 
 
-OPS = load_module("builder_os_social_operations", "scripts/creative-operations.py")
-CREATIVE = load_module("builder_os_social_creative", "scripts/creative-intelligence.py")
+OPS = load_module("ariadne_social_operations", "scripts/creative-operations.py")
+CREATIVE = load_module("ariadne_social_creative", "scripts/creative-intelligence.py")
 
 
 @contextlib.contextmanager
@@ -87,7 +87,7 @@ def source_ledger(project: Path) -> tuple[Path, Path]:
     source_b.write_text("<main>Research fixture observes audience response to process evidence.</main>\n", encoding="utf-8")
     blocked = project / "blocked-source.txt"
     blocked.write_text("403 Forbidden\n", encoding="utf-8")
-    OPS.write_json(project / ".builderos" / "creative-evidence.json", {
+    OPS.write_json(project / ".ariadne" / "creative-evidence.json", {
         "references": [
             {"id": "platform-official", "state": "inspected", "source": "https://platform.example.test/guidance", "evidence": OPS.evidence_record(source_a)},
             {"id": "platform-research", "state": "inspected", "source": "https://research.example.test/study", "evidence": OPS.evidence_record(source_b)},

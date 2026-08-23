@@ -98,7 +98,7 @@ def skill_contract_problems(text: str | None = None) -> list[str]:
     except OSError as exc:
         return [f"optional Claude reasoner skill is unreadable: {exc}"]
     for token in (
-        "scripts/builderos.py",
+        "scripts/ariadne.py",
         "reasoner-status",
         "select-reasoner",
         "record-reasoner-failure",
@@ -137,7 +137,7 @@ def fixture_problems(value: dict | None = None, runtime_text: str | None = None)
     directions = {(item.get("initial_reasoner"), item.get("next_reasoner")) for item in fixtures}
     if not {("codex", "claude"), ("claude", "codex")}.issubset(directions):
         problems.append("reasoner fixtures do not cover both provider switch directions")
-    runtime_text = runtime_text if runtime_text is not None else read(ROOT / "scripts" / "builderos.py")
+    runtime_text = runtime_text if runtime_text is not None else read(ROOT / "scripts" / "ariadne.py")
     for item in fixtures:
         label = str(item.get("runtime_test", "")).strip()
         if not label or label not in runtime_text:
@@ -163,7 +163,7 @@ def selected(state: dict, contract: dict | None = None) -> dict:
         "reason": "V1.5 default; legacy run has no explicit reasoner metadata.",
         "classification": "verified",
         "availability": "embedded",
-        "version": "Builder OS orchestrator",
+        "version": "Ariadne orchestrator",
     }
 
 
@@ -180,7 +180,7 @@ def detect(
             "id": identifier,
             "availability": "embedded",
             "classification": "verified",
-            "version": "Builder OS orchestrator",
+            "version": "Ariadne orchestrator",
             "executable": "not required",
             "execution": "available in the current orchestrator",
         }
@@ -226,7 +226,7 @@ def detect(
         "classification": "reasonably-assumed",
         "version": version[0],
         "executable": str(executable),
-        "execution": "CLI detected; authentication and Builder OS execution unverified",
+        "execution": "CLI detected; authentication and Ariadne execution unverified",
     }
 
 
@@ -346,7 +346,7 @@ def self_test() -> int:
         bool(skill_contract_problems(skill.replace("record-reasoner-failure", "continue-anyway", 1))),
     )
     fixture_value = json.loads(read(FLOW_FIXTURES))
-    runtime_text = read(ROOT / "scripts" / "builderos.py")
+    runtime_text = read(ROOT / "scripts" / "ariadne.py")
     case("five realistic reasoner fixtures map to executable controls", not fixture_problems(fixture_value, runtime_text))
     changed_fixtures = json.loads(json.dumps(fixture_value))
     changed_fixtures["fixtures"][0]["runtime_test"] = "nonexistent optimistic test"
@@ -394,7 +394,7 @@ def self_test() -> int:
         if temporary.exists():
             temporary.unlink()
 
-    print("BUILDER OS REASONER SELF-TEST\n")
+    print("ARIADNE REASONER SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
     failed = [name for name, passed in cases if not passed]

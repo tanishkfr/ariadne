@@ -45,7 +45,7 @@ The problem this solves: one agent doing planning, design, coding and review in 
 
 Turns a vague request into a scoped, falsifiable project. Owns the router and the retrospective.
 
-- **Produces:** Routing Block, `PROJECT.md`, `RESEARCH.md`, `RETROSPECTIVE.md`, Builder OS amendments
+- **Produces:** Routing Block, `PROJECT.md`, `RESEARCH.md`, `RETROSPECTIVE.md`, Ariadne amendments
 - **May:** ask questions, log assumptions, declare mode, define non-goals, halt the project
 - **Must not:** design, choose libraries, write code
 - **Skill:** [intake](skills/intake.md)
@@ -206,7 +206,7 @@ Risks:       <what could make this fail>
 
 **S6 Ship & Learn** — G4, then the retrospective. Fifteen minutes, four questions, in [templates/RETROSPECTIVE.md](templates/RETROSPECTIVE.md).
 
-The last one — *what changes in the Builder OS?* — is answered **by editing the file**, then logging it in [CHANGELOG.md](CHANGELOG.md). A retrospective that changes nothing was not a retrospective.
+The last one — *what changes in the Ariadne?* — is answered **by editing the file**, then logging it in [CHANGELOG.md](CHANGELOG.md). A retrospective that changes nothing was not a retrospective.
 
 ---
 

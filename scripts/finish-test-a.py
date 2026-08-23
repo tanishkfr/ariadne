@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builder OS -- Test A collection.
+Ariadne -- Test A collection.
 
 Run after Codex has finished. Validates the project and the run record,
 generates RESULT.md, and updates the benchmark.
@@ -307,7 +307,7 @@ def build_result(run_id, run_file, project, problems, events, observations, metr
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
     routing_manual = capture(text, "Routing result")
-    docs = capture(text, "Documents Builder OS created")
+    docs = capture(text, "Documents Ariadne created")
     state = capture(text, "Runtime state after the run")
     devs = capture(text, "Deviations from documented behaviour")
     comp = capture(text, "The comparison")
@@ -425,14 +425,14 @@ attempt these — a generated answer here would be fabricated evidence.*
 |---|---|
 | The baseline | It only exists if you wrote it before seeing the output |
 | Better than the baseline? | A comparison of two directions, not two strings |
-| Did Builder OS add value? | Requires knowing what you would otherwise have shipped |
+| Did Ariadne add value? | Requires knowing what you would otherwise have shipped |
 | Did anything feel like friction? | Only you were in the room |
 
 ### Baseline, captured before the run
 
-{baseline if filled(baseline) else "_**Missing.** Without a baseline captured beforehand there is no control, and this run cannot show what Builder OS changed._"}
+{baseline if filled(baseline) else "_**Missing.** Without a baseline captured beforehand there is no control, and this run cannot show what Ariadne changed._"}
 
-### Baseline vs Builder OS
+### Baseline vs Ariadne
 
 {comp if filled(comp) else "_Not filled in._"}
 
@@ -440,7 +440,7 @@ Three questions only you can answer:
 
 1. **Was the direction meaningfully different from your baseline?**
 2. **Was the difference desirable** — or merely different?
-3. **Did Builder OS prevent a default solution you would otherwise have shipped?**
+3. **Did Ariadne prevent a default solution you would otherwise have shipped?**
 
 > One instance of *"it made me reject X before I built it, and the replacement was
 > better"* outweighs every count above.
@@ -467,7 +467,7 @@ than it showed.*
 
 ## Recommendation
 
-**Did this run produce enough evidence to change Builder OS?**
+**Did this run produce enough evidence to change Ariadne?**
 
 `<NO — FREEZE>` or `<YES — smallest change: …>`
 
@@ -493,7 +493,7 @@ def main():
 
     print()
     print(BAR)
-    print(f"BUILDER OS  --  TEST A COLLECTION  ({run_id})")
+    print(f"ARIADNE  --  TEST A COLLECTION  ({run_id})")
     print(BAR)
     print()
 

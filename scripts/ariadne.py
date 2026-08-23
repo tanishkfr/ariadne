@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Calm runtime controller for Builder OS.
+"""Calm runtime controller for Ariadne.
 
 This script hides packet IDs, parent discovery, evidence paths, provider
 preflight, and continuation mechanics from the operator. It delegates canonical
 transport to prepare-stage.py and never owns routing or gate policy.
 
-Run `python scripts/builderos.py --self-test` for deterministic positive and
+Run `python scripts/ariadne.py --self-test` for deterministic positive and
 negative controls.
 """
 
@@ -33,7 +33,7 @@ sys.dont_write_bytecode = True
 
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE_NAME = "builderos-run.json"
+STATE_NAME = "ariadne-run.json"
 LOG_NAME = "OPERATIONS.md"
 PREFLIGHT_NAME = "provider-preflight.json"
 RUNTIME_SCHEMA = 1
@@ -73,9 +73,9 @@ class RuntimeError_(RuntimeError):
 
 def load_transport():
     path = ROOT / "scripts" / "prepare-stage.py"
-    spec = importlib.util.spec_from_file_location("builder_os_transport", path)
+    spec = importlib.util.spec_from_file_location("ariadne_transport", path)
     if spec is None or spec.loader is None:
-        raise RuntimeError_("Builder OS transport helper could not be loaded")
+        raise RuntimeError_("Ariadne transport helper could not be loaded")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -86,9 +86,9 @@ TRANSPORT = load_transport()
 
 def load_reasoners():
     path = ROOT / "scripts" / "reasoners.py"
-    spec = importlib.util.spec_from_file_location("builder_os_reasoners", path)
+    spec = importlib.util.spec_from_file_location("ariadne_reasoners", path)
     if spec is None or spec.loader is None:
-        raise RuntimeError_("Builder OS reasoner helper could not be loaded")
+        raise RuntimeError_("Ariadne reasoner helper could not be loaded")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -99,9 +99,9 @@ REASONERS = load_reasoners()
 
 def load_creative_intelligence():
     path = ROOT / "scripts" / "creative-intelligence.py"
-    spec = importlib.util.spec_from_file_location("builder_os_creative_intelligence", path)
+    spec = importlib.util.spec_from_file_location("ariadne_creative_intelligence", path)
     if spec is None or spec.loader is None:
-        raise RuntimeError_("Builder OS creative-intelligence helper could not be loaded")
+        raise RuntimeError_("Ariadne creative-intelligence helper could not be loaded")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -112,9 +112,9 @@ CREATIVE = load_creative_intelligence()
 
 def load_creative_operations():
     path = ROOT / "scripts" / "creative-operations.py"
-    spec = importlib.util.spec_from_file_location("builder_os_creative_operations", path)
+    spec = importlib.util.spec_from_file_location("ariadne_creative_operations", path)
     if spec is None or spec.loader is None:
-        raise RuntimeError_("Builder OS creative-operations helper could not be loaded")
+        raise RuntimeError_("Ariadne creative-operations helper could not be loaded")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -171,7 +171,7 @@ def write_json(path: Path, value: dict) -> None:
 def load_state(run_root: Path) -> dict:
     path = run_root / STATE_NAME
     if not path.is_file():
-        raise RuntimeError_(f"No Builder OS run found at {run_root}")
+        raise RuntimeError_(f"No Ariadne run found at {run_root}")
     try:
         state = json.loads(read(path))
     except json.JSONDecodeError as exc:
@@ -187,7 +187,7 @@ def slug(value: str) -> str:
 
 
 def default_run_root(project: Path) -> Path:
-    return project.parent / f"{project.name}-builderos"
+    return project.parent / f"{project.name}-ariadne"
 
 
 def discover_run_roots(project: Path) -> list[Path]:
@@ -222,10 +222,10 @@ def resolve_run_root(args: argparse.Namespace) -> Path:
     project = Path(project_arg).resolve()
     matches = discover_run_roots(project)
     if not matches:
-        raise RuntimeError_(f"No Builder OS run records this project: {project}")
+        raise RuntimeError_(f"No Ariadne run records this project: {project}")
     if len(matches) > 1:
         raise RuntimeError_(
-            "More than one Builder OS run records this project; choose one explicitly: "
+            "More than one Ariadne run records this project; choose one explicitly: "
             + ", ".join(str(path) for path in matches)
         )
     return matches[0]
@@ -367,14 +367,14 @@ def ensure_intervention(
 
 
 def initial_log(run_id: str, project: Path, request: str) -> str:
-    return f"""# Builder OS operations — {run_id}
+    return f"""# Ariadne operations — {run_id}
 
 **Project:** `{project}`  
 **Started:** {now()}  
-**Builder OS:** `{git_head()}`
+**Ariadne:** `{git_head()}`
 
 This log answers what happened, why, what changed, what was verified, and what
-happens next. Canonical policies remain in Builder OS; this is project history.
+happens next. Canonical policies remain in Ariadne; this is project history.
 
 ## Brief
 
@@ -391,8 +391,8 @@ happens next. Canonical policies remain in Builder OS; this is project history.
 
 - **Necessary:** human authority or an unavoidable external action.
 - **Valuable:** a creative choice where human judgement materially improves the work.
-- **Avoidable:** routine work Builder OS should have handled.
-- **Unacceptable:** the human had to repair Builder OS machinery.
+- **Avoidable:** routine work Ariadne should have handled.
+- **Unacceptable:** the human had to repair Ariadne machinery.
 
 Each intervention also records what kind of effort it was: manual setup, file
 movement, prompt discovery, routine confirmation, creative decision, external
@@ -412,7 +412,7 @@ def ensure_project(project: Path, adopt_existing: bool = False) -> list[str]:
     unexpected = sorted(item.name for item in project.iterdir() if item.name not in allowed)
     if unexpected and not adopt_existing:
         raise RuntimeError_(
-            "A new Builder OS run needs a fresh project. Existing files found: "
+            "A new Ariadne run needs a fresh project. Existing files found: "
             + ", ".join(unexpected)
             + ". Use --adopt-existing only when preserving this repository is intentional."
         )
@@ -420,7 +420,7 @@ def ensure_project(project: Path, adopt_existing: bool = False) -> list[str]:
         owned = sorted(name for name in ("PROJECT.md", "AGENTS.md") if (project / name).exists())
         if owned:
             raise RuntimeError_(
-                "Existing project already has Builder OS entry documents: "
+                "Existing project already has Ariadne entry documents: "
                 + ", ".join(owned)
                 + ". Resume its recorded run or migrate those files deliberately; they will not be overwritten."
             )
@@ -589,7 +589,7 @@ def start(args: argparse.Namespace) -> int:
         ),
         [str(project / ".gitignore"), str(output / "packet.txt"), str(output / "manifest.json")],
         f"Packet source parity passed; reasoner selected: {reasoner_id}; no provider stage has run.",
-        "Builder OS should read and run the prepared project-brief packet.",
+        "Ariadne should read and run the prepared project-brief packet.",
     )
     print("Done. The project is ready for its brief and discovery pass.")
     print("From you: nothing to locate or assemble; describe the project normally.")
@@ -1077,7 +1077,7 @@ def project_intelligence(
     elif stage == "S5" and review_recorded:
         human_need = "Decide whether the combined build and review evidence is acceptable at G3."
     else:
-        human_need = "Nothing right now; Builder OS can continue the current work."
+        human_need = "Nothing right now; Ariadne can continue the current work."
 
     notes = state.get("notes", [])
     return_sections = return_record.get("sections", {})
@@ -1421,18 +1421,18 @@ def discover(args: argparse.Namespace) -> int:
     project = Path(args.project).resolve()
     matches = discover_run_roots(project)
     if not matches:
-        raise RuntimeError_(f"No Builder OS run records this project: {project}")
+        raise RuntimeError_(f"No Ariadne run records this project: {project}")
     payload = {"project": str(project), "runs": [str(path) for path in matches]}
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         if len(matches) == 1:
-            print(f"Found the Builder OS run for {project.name}: {matches[0]}")
+            print(f"Found the Ariadne run for {project.name}: {matches[0]}")
         else:
-            print(f"Found {len(matches)} Builder OS runs for {project.name}:")
+            print(f"Found {len(matches)} Ariadne runs for {project.name}:")
             for path in matches:
                 print(f"  {path}")
-            print("Choose the intended run explicitly; Builder OS will not guess between histories.")
+            print("Choose the intended run explicitly; Ariadne will not guess between histories.")
     return 0 if len(matches) == 1 else 2
 
 
@@ -1683,8 +1683,8 @@ def ingest_return(args: argparse.Namespace) -> int:
     if not source.is_file():
         raise RuntimeError_(f"Return handoff input is missing: {source}")
     text = read(source)
-    begin = "BEGIN BUILDER OS RETURN HANDOFF"
-    end = "END BUILDER OS RETURN HANDOFF"
+    begin = "BEGIN ARIADNE RETURN HANDOFF"
+    end = "END ARIADNE RETURN HANDOFF"
     if text.count(begin) == 1 and text.count(end) == 1:
         text = text.split(begin, 1)[1].split(end, 1)[0].strip() + "\n"
     problems = TRANSPORT.return_handoff_problems(text)
@@ -1737,7 +1737,7 @@ def ingest_return(args: argparse.Namespace) -> int:
     append_log(
         run_root,
         "Implementation return ingested",
-        "Builder OS needs durable implementation state without relying on provider conversation history.",
+        "Ariadne needs durable implementation state without relying on provider conversation history.",
         f"Validated structured return with status {return_status}.",
         [str(destination), str(machine_destination)],
         "Structured provider report; not a verbatim transcript and not independent QA.",
@@ -2216,7 +2216,7 @@ def restart_direction(args: argparse.Namespace) -> int:
     append_log(
         run_root,
         "Design direction restart prepared",
-        "The human rejected the pre-G1 direction; Builder OS must preserve it without making them reconstruct context.",
+        "The human rejected the pre-G1 direction; Ariadne must preserve it without making them reconstruct context.",
         "Rejected DESIGN.md and the human reason were preserved verbatim; G1 remains unresolved.",
         [str(context_path)],
         f"SHA-256 {sha256(context_path)}",
@@ -2249,7 +2249,7 @@ def structured_return_target(packet: Path) -> Path | None:
     target = Path(value).resolve()
     project = Path(manifest.get("project", "")).resolve()
     expected = (
-        project / ".builderos" / "returns" / f"{manifest.get('packet_id')}.md"
+        project / ".ariadne" / "returns" / f"{manifest.get('packet_id')}.md"
     ).resolve()
     if target != expected:
         raise RuntimeError_("The S4B structured return target does not match this packet")
@@ -2321,7 +2321,7 @@ def advance(args: argparse.Namespace) -> int:
                 append_log(
                     run_root,
                     "Creative decision requested",
-                    "The design direction exists, but Builder OS cannot grant G1 for the human.",
+                    "The design direction exists, but Ariadne cannot grant G1 for the human.",
                     "No continuation or stage evidence was created.",
                     next_action=state["next"],
                 )
@@ -2592,7 +2592,7 @@ def transport_provider(preflight: dict | None) -> str | None:
 
 def operations_log_problems(text: str) -> list[str]:
     problems = []
-    for token in ("# Builder OS operations", "## Brief", "## Evidence language", "## Timeline"):
+    for token in ("# Ariadne operations", "## Brief", "## Evidence language", "## Timeline"):
         if token not in text:
             problems.append(f"operations log missing: {token}")
     return problems
@@ -2603,9 +2603,9 @@ def skill_contract_problems(
     interface_text: str | None = None,
     installation_example: str | None = None,
 ) -> list[str]:
-    skill_path = ROOT / ".agents" / "skills" / "builderos" / "SKILL.md"
-    interface_path = ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml"
-    example_path = ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json"
+    skill_path = ROOT / ".agents" / "skills" / "ariadne" / "SKILL.md"
+    interface_path = ROOT / ".agents" / "skills" / "ariadne" / "agents" / "openai.yaml"
+    example_path = ROOT / ".agents" / "skills" / "ariadne" / "references" / "installation.example.json"
     if skill_text is None:
         skill_text = read(skill_path)
     if interface_text is None:
@@ -2615,29 +2615,29 @@ def skill_contract_problems(
     problems = []
     frontmatter = re.match(r"(?s)^---\s*\n(.*?)\n---\s*\n", skill_text)
     if not frontmatter:
-        problems.append("builderos skill has no YAML frontmatter")
+        problems.append("ariadne skill has no YAML frontmatter")
     else:
         header = frontmatter.group(1)
         name = re.search(r"(?m)^name:\s*(.+?)\s*$", header)
         description = re.search(r"(?m)^description:\s*(.+?)\s*$", header)
-        if not name or name.group(1).strip() != "builderos":
-            problems.append("builderos skill name must be builderos")
+        if not name or name.group(1).strip() != "ariadne":
+            problems.append("ariadne skill name must be ariadne")
         if not description or not all(
-            token in description.group(1).lower() for token in ("builder os", "start", "resume")
+            token in description.group(1).lower() for token in ("ariadne", "start", "resume")
         ):
-            problems.append("builderos skill description must advertise start and resume triggers")
-    for token in ("display_name:", "short_description:", "default_prompt:", "Builder OS"):
+            problems.append("ariadne skill description must advertise start and resume triggers")
+    for token in ("display_name:", "short_description:", "default_prompt:", "Ariadne"):
         if token not in interface_text:
-            problems.append(f"builderos skill interface missing: {token}")
+            problems.append(f"ariadne skill interface missing: {token}")
     try:
         example = json.loads(installation_example)
-        if not example.get("builder_os_root"):
-            problems.append("builderos installation example has no builder_os_root")
+        if not example.get("ariadne_root"):
+            problems.append("ariadne installation example has no ariadne_root")
     except json.JSONDecodeError:
-        problems.append("builderos installation example is malformed")
+        problems.append("ariadne installation example is malformed")
     for token in (
-        "scripts/builderos.py", "discover --project", "provider preflight",
-        "handoff-readiness", "builderos.py advance", "record-note",
+        "scripts/ariadne.py", "discover --project", "provider preflight",
+        "handoff-readiness", "ariadne.py advance", "record-note",
         "restart-direction",
         "ingest-return", "ingest-review", "same-stage retry", "--adopt-existing",
         "creative-plan", "record-creative", "creative-check",
@@ -2648,25 +2648,25 @@ def skill_contract_problems(
         "Never grant a gate",
     ):
         if token not in skill_text:
-            problems.append(f"builderos skill missing runtime boundary: {token}")
+            problems.append(f"ariadne skill missing runtime boundary: {token}")
     return problems
 
 
 def repository_contract_problems() -> list[str]:
     problems = []
     required = [
-        ROOT / ".agents" / "skills" / "builderos" / "SKILL.md",
+        ROOT / ".agents" / "skills" / "ariadne" / "SKILL.md",
         ROOT / "templates" / "RETURN-HANDOFF.md",
         ROOT / "templates" / "HANDOFF.md",
         ROOT / "prompts" / "build-kickoff.md",
-        ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml",
-        ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json",
-        ROOT / "scripts" / "install-builderos-skill.py",
+        ROOT / ".agents" / "skills" / "ariadne" / "agents" / "openai.yaml",
+        ROOT / ".agents" / "skills" / "ariadne" / "references" / "installation.example.json",
+        ROOT / "scripts" / "install-ariadne-skill.py",
         ROOT / "prompts" / "project-review.md",
         ROOT / "scripts" / "creative-intelligence.py",
-        ROOT / ".agents" / "skills" / "builderos" / "references" / "creative-intelligence.md",
+        ROOT / ".agents" / "skills" / "ariadne" / "references" / "creative-intelligence.md",
         ROOT / "scripts" / "creative-operations.py",
-        ROOT / ".agents" / "skills" / "builderos" / "references" / "creative-operations.md",
+        ROOT / ".agents" / "skills" / "ariadne" / "references" / "creative-operations.md",
         ROOT / "skills" / "visual-qa.md",
         ROOT / "skills" / "creative-review.md",
         ROOT / "skills" / "social-strategy.md",
@@ -2720,7 +2720,7 @@ def repository_contract_problems() -> list[str]:
 
 @contextlib.contextmanager
 def self_test_workspace():
-    path = ROOT / "validation" / f"builderos-self-test-{uuid.uuid4().hex}"
+    path = ROOT / "validation" / f"ariadne-self-test-{uuid.uuid4().hex}"
     path.mkdir()
     try:
         yield path
@@ -2798,7 +2798,7 @@ def filled_handoff() -> str:
 
 ## Project summary
 
-A small typographic interaction for testing the Builder OS runtime.
+A small typographic interaction for testing the Ariadne runtime.
 
 ## Outcome and acceptance criteria
 
@@ -2940,12 +2940,12 @@ def self_test() -> int:
             "independent runtime self-test workspaces do not collide",
             first_workspace != second_workspace and first_workspace.exists() and second_workspace.exists(),
         )
-    canonical_skill = read(ROOT / ".agents" / "skills" / "builderos" / "SKILL.md")
-    canonical_interface = read(ROOT / ".agents" / "skills" / "builderos" / "agents" / "openai.yaml")
-    canonical_install = read(ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json")
+    canonical_skill = read(ROOT / ".agents" / "skills" / "ariadne" / "SKILL.md")
+    canonical_interface = read(ROOT / ".agents" / "skills" / "ariadne" / "agents" / "openai.yaml")
+    canonical_install = read(ROOT / ".agents" / "skills" / "ariadne" / "references" / "installation.example.json")
     case("skill discovery contract passes (positive control)", not skill_contract_problems(canonical_skill, canonical_interface, canonical_install))
     case("skill trigger drift is detected", bool(skill_contract_problems(canonical_skill.replace("resume", "continue", 1), canonical_interface, canonical_install)))
-    case("skill name drift is detected", bool(skill_contract_problems(canonical_skill.replace("name: builderos", "name: builder-os", 1), canonical_interface, canonical_install)))
+    case("skill name drift is detected", bool(skill_contract_problems(canonical_skill.replace("name: ariadne", "name: wrong-name", 1), canonical_interface, canonical_install)))
     case("skill UI drift is detected", bool(skill_contract_problems(canonical_skill, canonical_interface.replace("default_prompt:", "prompt:"), canonical_install)))
     case(
         "skill adoption boundary drift is detected",
@@ -3071,7 +3071,7 @@ def self_test() -> int:
             protected_entry_refused = False
         except RuntimeError_ as exc:
             protected_entry_refused = "PROJECT.md" in str(exc)
-        case("runtime refuses to overwrite existing Builder OS entry documents", protected_entry_refused)
+        case("runtime refuses to overwrite existing Ariadne entry documents", protected_entry_refused)
 
         start(
             argparse.Namespace(
@@ -3610,7 +3610,7 @@ def self_test() -> int:
             and retry_manifest["parent_id"] == s4b_entry["id"]
             and retry_manifest["parent_evidence_kind"] == "structured-return-handoff",
         )
-        unexpected_return = project / ".builderos" / "returns" / "wrong-packet.md"
+        unexpected_return = project / ".ariadne" / "returns" / "wrong-packet.md"
         unexpected_return.parent.mkdir(parents=True, exist_ok=True)
         unexpected_return.write_text(filled_return(), encoding="utf-8")
         advance_result = advance(runtime_args())
@@ -3698,7 +3698,7 @@ def self_test() -> int:
         case("operations log remains readable after full dry run", not operations_log_problems(read(run_root / LOG_NAME)))
 
         auto_project = workspace / "ordinary-idea"
-        auto_run = workspace / "ordinary-idea-builderos"
+        auto_run = workspace / "ordinary-idea-ariadne"
         start(
             argparse.Namespace(
                 project=str(auto_project), run_root=str(auto_run), run_id="ordinary-idea",
@@ -3775,7 +3775,7 @@ def self_test() -> int:
             and discover_run_roots(auto_project) == [auto_run.resolve()],
         )
 
-    print("BUILDER OS RUNTIME SELF-TEST\n")
+    print("ARIADNE RUNTIME SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
     failed = [name for name, passed in cases if not passed]
@@ -3788,7 +3788,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--self-test", action="store_true")
     sub = p.add_subparsers(dest="command")
 
-    start_p = sub.add_parser("start", help="start a new Builder OS project and prepare its brief")
+    start_p = sub.add_parser("start", help="start a new Ariadne project and prepare its brief")
     start_p.add_argument("--project", required=True)
     start_p.add_argument("--run-root")
     start_p.add_argument("--run-id")

@@ -24,12 +24,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from builderos import cli  # noqa: E402
+from ariadne import cli  # noqa: E402
 
 
 def load_release_tool():
     path = ROOT / "scripts" / "build-release.py"
-    spec = importlib.util.spec_from_file_location("builderos_release_tool", path)
+    spec = importlib.util.spec_from_file_location("ariadne_release_tool", path)
     if spec is None or spec.loader is None:
         raise RuntimeError("release tool could not be loaded")
     module = importlib.util.module_from_spec(spec)
@@ -70,7 +70,7 @@ def make_bundle(output: Path, version: str, minimum_bootstrap: str = "1.4.0") ->
     file_bytes["VERSION"] = (version + "\n").encode("utf-8")
     manifest = {
         "schema_version": 1,
-        "product": "Builder OS",
+        "product": "Ariadne",
         "version": version,
         "source_commit": f"fixture-{version}",
         "minimum_bootstrap_version": minimum_bootstrap,
@@ -80,7 +80,7 @@ def make_bundle(output: Path, version: str, minimum_bootstrap: str = "1.4.0") ->
             for relative, content in sorted(file_bytes.items())
         },
     }
-    bundle = output / f"builder-os-runtime-{version}.zip"
+    bundle = output / f"ariadne-runtime-{version}.zip"
     with zipfile.ZipFile(bundle, "w") as archive:
         for relative, content in sorted(file_bytes.items()):
             RELEASE.zip_entry(archive, relative, content)
@@ -97,7 +97,7 @@ def local_descriptor(path: Path, bundle: Path, version: str) -> Path:
         json.dumps(
             {
                 "schema_version": 1,
-                "product": "Builder OS",
+                "product": "Ariadne",
                 "version": version,
                 "artifact": bundle.name,
                 "sha256": cli.sha256(bundle),
@@ -120,25 +120,25 @@ def self_test() -> int:
     path_env = {"LOCALAPPDATA": "C:/Users/Person/AppData/Local"}
     case(
         "Windows uses a user-local data directory",
-        cli.user_data_home("Windows", path_env, Path("C:/Users/Person")).as_posix().endswith("AppData/Local/BuilderOS"),
+        cli.user_data_home("Windows", path_env, Path("C:/Users/Person")).as_posix().endswith("AppData/Local/Ariadne"),
     )
     case(
         "macOS uses Application Support",
         cli.user_data_home("Darwin", {}, Path("/Users/person")).as_posix().endswith(
-            "/Users/person/Library/Application Support/BuilderOS"
+            "/Users/person/Library/Application Support/Ariadne"
         ),
     )
     case(
         "Linux honours XDG data home",
         cli.user_data_home(
             "Linux", {"XDG_DATA_HOME": "/data/person"}, Path("/home/person")
-        ).as_posix().endswith("/data/person/builderos"),
+        ).as_posix().endswith("/data/person/ariadne"),
     )
     fresh_person = Path("C:/fixture/person")
     case(
         "fresh skill discovery uses the documented user skill directory",
         cli.skill_target({}, fresh_person).as_posix().endswith(
-            "/fixture/person/.agents/skills/builderos"
+            "/fixture/person/.agents/skills/ariadne"
         ),
     )
 
@@ -200,7 +200,7 @@ def self_test() -> int:
             ),
         )
         home = root / "user-data"
-        target = root / "personal-skills" / "builderos"
+        target = root / "personal-skills" / "ariadne"
         project = root / "person-project"
         project.mkdir()
         sentinel = project / "existing-site.txt"
@@ -211,7 +211,7 @@ def self_test() -> int:
         runtime_140 = Path(pointer_140["runtime_root"])
         case("fresh user installs a self-contained runtime", not cli.runtime_problems(runtime_140))
         runtime_help = subprocess.run(
-            [sys.executable, str(runtime_140 / "scripts" / "builderos.py"), "--help"],
+            [sys.executable, str(runtime_140 / "scripts" / "ariadne.py"), "--help"],
             capture_output=True,
             text=True,
         )
@@ -279,7 +279,7 @@ def self_test() -> int:
             "optional baseline leaves project instructions untouched",
             cli.sha256(project_agents) == project_agents_hash,
         )
-        claude_target = root / "optional-claude-skills" / "builderos"
+        claude_target = root / "optional-claude-skills" / "ariadne"
         case("normal installation does not enable Claude", not claude_target.exists())
         cli.configure_claude_reasoner(
             home, claude_target, "install", require_cli=False
@@ -413,15 +413,15 @@ def self_test() -> int:
             network_failure_clear = "Could not read release source" in str(exc)
         case("unavailable update source fails clearly", network_failure_clear and cli.current_install(home)["version"] == before_failure)
 
-        run_root = root / "person-project-builderos"
+        run_root = root / "person-project-ariadne"
         run_root.mkdir()
-        (run_root / "builderos-run.json").write_text(
+        (run_root / "ariadne-run.json").write_text(
             json.dumps({"schema_version": 1, "project": str(project.resolve())}) + "\n",
             encoding="utf-8",
         )
         code, checks = cli.doctor(home, target, project)
         case("doctor recognises compatible existing project state", code == 0 and any(label == "Project" and status == "ok" for status, label, _ in checks))
-        (run_root / "builderos-run.json").write_text(
+        (run_root / "ariadne-run.json").write_text(
             json.dumps({"schema_version": 99, "project": str(project.resolve())}) + "\n",
             encoding="utf-8",
         )
@@ -487,10 +487,10 @@ def self_test() -> int:
             and not (codex_directory / cli.CODEX_BASELINE_MARKER).exists()
             and project_agents.is_file(),
         )
-        case("uninstall preserves every project file", cli.sha256(sentinel) == sentinel_hash and (run_root / "builderos-run.json").is_file())
+        case("uninstall preserves every project file", cli.sha256(sentinel) == sentinel_hash and (run_root / "ariadne-run.json").is_file())
 
         modified_home = root / "modified-user-data"
-        modified_target = root / "modified-skills" / "builderos"
+        modified_target = root / "modified-skills" / "ariadne"
         modified_codex = root / "modified-codex-home"
         cli.install_bundle(bundle_140, modified_home, modified_target)
         cli.install_codex_baseline(modified_home, modified_codex)
@@ -505,7 +505,7 @@ def self_test() -> int:
         )
 
         unmanaged_home = root / "unmanaged-home"
-        unmanaged_target = root / "unmanaged-skills" / "builderos"
+        unmanaged_target = root / "unmanaged-skills" / "ariadne"
         unmanaged_target.mkdir(parents=True)
         (unmanaged_target / "SKILL.md").write_text("person-owned\n", encoding="utf-8")
         try:
@@ -515,7 +515,7 @@ def self_test() -> int:
             unmanaged_blocked = True
         case("installer refuses to overwrite an unmanaged skill", unmanaged_blocked and (unmanaged_target / "SKILL.md").read_text(encoding="utf-8") == "person-owned\n")
 
-    print("BUILDER OS DISTRIBUTION SELF-TEST\n")
+    print("ARIADNE DISTRIBUTION SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
     failed = [name for name, passed in cases if not passed]

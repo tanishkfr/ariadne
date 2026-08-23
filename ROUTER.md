@@ -347,7 +347,7 @@ The Design director may argue against an acceptance. It may not override one.
 
 ```
 Project AGENTS.md → Project DESIGN.md → Project PROJECT.md
-  → mode file → Builder OS core → global CLAUDE.md
+  → mode file → Ariadne core → global CLAUDE.md
 ```
 
 If a conflict survives this chain, **stop and ask.** Do not average two instructions into a compromise neither party wanted.

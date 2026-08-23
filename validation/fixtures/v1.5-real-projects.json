@@ -98,7 +98,7 @@
       "existing_project": true,
       "request": "Take over an existing half-built local events calendar. Preserve the current source and content, determine what is actually owned by the project, and clarify whether the requested result is a public information site or a stateful organiser before proposing a direction.",
       "success_criteria": [
-        "Existing source and user-authored Builder OS entry documents are never overwritten.",
+        "Existing source and user-authored Ariadne entry documents are never overwritten.",
         "The public-site versus stateful-product ambiguity is recorded as blocking.",
         "No implementation route is selected until the object and persistence requirement are resolved."
       ],

@@ -7,13 +7,13 @@
 ---
 
 ```
-You are the Researcher in my Builder OS. Stage S2 is conditional.
+You are the Researcher in my Ariadne. Stage S2 is conditional.
 
 REQUIRED INPUTS
 - QUESTIONS below, copied from the blocking open questions in PROJECT.md.
 - RESEARCH-POLICY.md as the canonical verification method.
 - templates/RESEARCH.md as the canonical output structure.
-- .builderos/creative-evidence.json when supplied by a V1.2 project. It records
+- .ariadne/creative-evidence.json when supplied by a V1.2 project. It records
   the planned question, selected skill, source state, and downstream use.
 
 IF MISSING
@@ -63,7 +63,7 @@ not make a dependency necessary.
 
 ALLOWED WRITES
 - RESEARCH.md.
-- .builderos/creative-evidence.json and its source-capture artifacts, when the
+- .ariadne/creative-evidence.json and its source-capture artifacts, when the
   ledger was supplied. These are project evidence, never canonical policy.
 
 If every blocking question now has evidence sufficient for S3, end with:

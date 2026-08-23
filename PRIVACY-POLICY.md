@@ -1,14 +1,14 @@
 # PRIVACY POLICY
 
-What stays out of the Builder OS, what stays off third-party services, and what an agent is allowed to believe.
+What stays out of the Ariadne, what stays off third-party services, and what an agent is allowed to believe.
 
 ---
 
 ## 1. The separation
 
-The Builder OS is **generic and shareable**. Projects are **specific and private**. Nothing crosses that line except anonymised lessons.
+The Ariadne is **generic and shareable**. Projects are **specific and private**. Nothing crosses that line except anonymised lessons.
 
-| Belongs in the Builder OS | Never in the Builder OS |
+| Belongs in the Ariadne | Never in the Ariadne |
 |---|---|
 | Policies, templates, skills, rubrics | Client names, contracts, rates, briefs |
 | Public reference URLs | Private or unlaunched client URLs |
@@ -16,7 +16,7 @@ The Builder OS is **generic and shareable**. Projects are **specific and private
 | Anonymised lessons | The project that produced them |
 | Adapter instructions | API keys, tokens, `.env` files |
 
-**Why it matters practically:** the Builder OS is the thing you would put on GitHub, hand to a collaborator, or paste into a new tool. Every private detail in it is a detail you cannot share, and a repo you cannot share stops getting used.
+**Why it matters practically:** the Ariadne is the thing you would put on GitHub, hand to a collaborator, or paste into a new tool. Every private detail in it is a detail you cannot share, and a repo you cannot share stops getting used.
 
 ### Anonymising a lesson
 

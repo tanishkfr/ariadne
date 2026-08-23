@@ -20,9 +20,9 @@ That is it. Everything else is detail.
 
 ## Step 1 — Prerequisites
 
-Builder OS itself needs Python 3.8 or newer and Codex. Git, Node.js, pnpm,
+Ariadne itself needs Python 3.8 or newer and Codex. Git, Node.js, pnpm,
 hosting accounts and external build tools are not first-run requirements. If a
-project later needs one, Builder OS explains why and waits for the relevant
+project later needs one, Ariadne explains why and waits for the relevant
 approval.
 
 ```bash
@@ -31,28 +31,28 @@ python --version
 
 ---
 
-## Step 2 — Install Builder OS
+## Step 2 — Install Ariadne
 
-After the `v1.5.3` public release is available:
+Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.3/builder_os-1.5.3-py3-none-any.whl"
-python -m builderos install
-python -m builderos doctor
+python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
+python -m ariadne install
+python -m ariadne doctor
 ```
 
-This installs one user-local runtime and registers `$builderos`; no source
+This installs one user-local runtime and registers `$ariadne`; no source
 checkout or manual skill copy is needed. See [INSTALL.md](INSTALL.md) for
 platform locations and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if doctor finds
 a problem.
 
 The optional generic Codex baseline is not installed by default. If you want
-it, run `python -m builderos codex-baseline install`; existing user instructions
+it, run `python -m ariadne codex-baseline install`; existing user instructions
 are never overwritten. Restart Codex afterwards.
 
 Codex remains the default and Claude is not installed or enabled by this
 process. If Claude Code is already installed and you explicitly want it as the
-reasoner, run `python -m builderos enable-claude`. Use `disable-claude` to
+reasoner, run `python -m ariadne enable-claude`. Use `disable-claude` to
 remove only that optional entry. Cursor/Grok still owns external S4B work.
 
 ---
@@ -62,12 +62,12 @@ remove only that optional entry. Cursor/Grok still owns external S4B work.
 Open a clean Codex task and write:
 
 ```text
-$builderos
+$ariadne
 I want to make ...
 ```
 
-Natural language such as “Use Builder OS for this project” also triggers it.
-Builder OS creates or finds the durable run, reads the current packet itself,
+Natural language such as “Use Ariadne for this project” also triggers it.
+Ariadne creates or finds the durable run, reads the current packet itself,
 and performs same-session reasoning work. It asks you only for a real decision
 or an unavoidable external action.
 
@@ -81,9 +81,9 @@ do not subscribe merely to complete installation.
 
 This is the tool that **builds**. It does not decide direction.
 
-1. Sign in only when Builder OS has selected an external implementation handoff.
-2. Open the project directory and paste the one verified handoff Builder OS gives you.
-3. Return the generated implementation-return block. Builder OS validates and stores it.
+1. Sign in only when Ariadne has selected an external implementation handoff.
+2. Open the project directory and paste the one verified handoff Ariadne gives you.
+3. Return the generated implementation-return block. Ariadne validates and stores it.
 
 You do not need to copy project rules or canonical QA files manually; they are
 inside the verified handoff packet. Let the project-brief pass create root
@@ -99,16 +99,16 @@ Do not read the rest of the documentation first. Run something small and real.
 
 **Pick a [game-experiment](modes/game-experiment.md).** It is the lightest mode: three questions, two documents, and it finishes in a day.
 
-1. Choose or create an empty project directory. Builder OS will initialise its
+1. Choose or create an empty project directory. Ariadne will initialise its
    local Git repository if required. For an existing repository, say explicitly
-   that you want to adopt it; Builder OS uses its non-destructive adoption path
+   that you want to adopt it; Ariadne uses its non-destructive adoption path
    instead of pretending the repository is empty.
-2. Invoke `$builderos` and describe the idea normally.
+2. Invoke `$ariadne` and describe the idea normally.
 3. Answer the one batched set of material questions. Accept all proposed
    defaults in one line when they are right.
 4. Review the design direction at G1. This is the first intentional pause.
 
-Behind the scenes, Builder OS creates the run outside the project, transports
+Behind the scenes, Ariadne creates the run outside the project, transports
 only the current stage's inputs, verifies their hashes, records available
 evidence, and chooses research depth and only the methods the project actually
 needs. A URL remains merely found until a retrieval or visual artefact exists;
@@ -117,7 +117,7 @@ failure resumes from the last valid boundary; it does not overwrite history or
 restart the project.
 
 When external references or technical resources would change the direction,
-Builder OS records what it inspected, what it rejected, what it used, and the
+Ariadne records what it inspected, what it rejected, what it used, and the
 exact downstream decision. When research would not change a decision, it skips
 the extra pass instead of manufacturing a bibliography.
 
@@ -125,7 +125,7 @@ When you reach **G1**, the system will present a design direction and stop. **Th
 
 ### What happens after G1
 
-Once you approve the direction, Builder OS turns its thesis, signature moment,
+Once you approve the direction, Ariadne turns its thesis, signature moment,
 responsive transformations, interactions and fixed handoff decisions into a
 project-local implementation and visual-QA plan. You do not need to rewrite the
 direction as a checklist or tell a fresh builder which canonical QA files to
@@ -133,13 +133,13 @@ find; the verified S4B packet carries the plan and the selected visual-QA
 method.
 
 Every S4B packet names one unique return file under
-`.builderos/returns/<packet-id>.md`. A builder that can write project files puts
+`.ariadne/returns/<packet-id>.md`. A builder that can write project files puts
 the complete marked return there; `advance` ingests only the return belonging
 to the current packet. If the provider cannot write the file, use the existing
 manual return-ingestion path as recovery. Retries get new targets and preserve
 the earlier evidence.
 
-After implementation, Builder OS checks the actual rendered thesis, signature,
+After implementation, Ariadne checks the actual rendered thesis, signature,
 responsive transformations and important states. It records source inference,
 rendered evidence, observed interaction, drift and environmental gaps as
 different claims. An internal creative review gives one prioritised correction
@@ -148,31 +148,31 @@ before the isolated independent review. Neither review approves G3 for you.
 The recovery commands are:
 
 ```bash
-python scripts/builderos.py operations-plan --project <project>
-python scripts/builderos.py record-operations --project <project> --input <events.json>
-python scripts/builderos.py operations-check --project <project> --require review
+python scripts/ariadne.py operations-plan --project <project>
+python scripts/ariadne.py record-operations --project <project> --input <events.json>
+python scripts/ariadne.py operations-check --project <project> --require review
 ```
 
-Normal `$builderos` progression runs the planning step automatically. Use these
+Normal `$ariadne` progression runs the planning step automatically. Use these
 commands only when diagnosing or recovering a run.
 
-If you explicitly ask for a social strategy, Builder OS may add the conditional
+If you explicitly ask for a social strategy, Ariadne may add the conditional
 `SOCIAL-STRATEGY.md`. It reads the current project and real assets first, then
 inspects current platform evidence where needed. Recommendations show what the
 source said and what decision changed; voice-unsupported writing remains a
-rough draft. If you later paste or attach performance results, Builder OS keeps
+rough draft. If you later paste or attach performance results, Ariadne keeps
 the plan, supplied result, bounded interpretation and next test in project-local
 `CONTENT-LEARNINGS.md`. It never posts, authenticates or changes a build gate.
 
 ### Bringing in an existing project
 
-Invoke `$builderos` from the repository and say what outcome you want from the
-existing project. Builder OS inspects the live repository during S1 but does not
+Invoke `$ariadne` from the repository and say what outcome you want from the
+existing project. Ariadne inspects the live repository during S1 but does not
 rewrite implementation, delete files, or reset current behaviour. The runtime's
 explicit recovery command is:
 
 ```bash
-python scripts/builderos.py start --project <project> --adopt-existing --request "<outcome>"
+python scripts/ariadne.py start --project <project> --adopt-existing --request "<outcome>"
 ```
 
 This is intentionally opt-in. Ordinary `start` still refuses a non-empty
@@ -183,7 +183,7 @@ directory. Adoption also refuses to overwrite an existing `PROJECT.md` or
 
 ## Step 6 — Run one review
 
-After implementation and mechanical QA, Builder OS generates one isolated
+After implementation and mechanical QA, Ariadne generates one isolated
 review handoff for a **fresh independent session**. It extracts only intent,
 success criteria, accepted patterns, the target, and the canonical rubric. It
 excludes project documents, source, QA, and build history.
@@ -199,7 +199,7 @@ Do not read all of it now. Read each file the first time you hit its stage.
 | When | Read |
 |---|---|
 | Right now | This file, then [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md) |
-| Starting any project | Invoke `$builderos`; it loads [ROUTER.md](ROUTER.md) when needed |
+| Starting any project | Invoke `$ariadne`; it loads [ROUTER.md](ROUTER.md) when needed |
 | Debugging transport | [scripts/prepare-stage.py](scripts/prepare-stage.py) |
 | At your first G1 | [DESIGN-TASTE.md](DESIGN-TASTE.md) — the most valuable file here |
 | First time an agent wants to install something | [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |

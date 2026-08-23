@@ -1,27 +1,27 @@
 ---
-name: builderos
-description: Run or resume a Builder OS creative-production project through the optional Claude reasoner adapter. Use only when the user explicitly chooses Claude or invokes Builder OS from Claude Code.
+name: ariadne
+description: Run or resume an Ariadne creative-production project through the optional Claude reasoner adapter. Use only when the user explicitly chooses Claude or invokes Ariadne from Claude Code.
 ---
 
-# Builder OS — Claude reasoner entry
+# Ariadne — Claude reasoner entry
 
 This is a thin provider entry adapter. Canonical policy, project meaning, gates,
-prompts and output formats remain in Builder OS. Do not restate them here and do
+prompts and output formats remain in Ariadne. Do not restate them here and do
 not create a project `CLAUDE.md`.
 
 ## Locate and verify
 
 Read `references/installation.json` beside this skill. It names the active
-Builder OS runtime. Stop if it is missing, its root is unavailable, or
-`scripts/builderos.py`, `adapters/reasoners.json`, `ROUTER.md` or `WORKFLOW.md`
+Ariadne runtime. Stop if it is missing, its root is unavailable, or
+`scripts/ariadne.py`, `adapters/reasoners.json`, `ROUTER.md` or `WORKFLOW.md`
 is missing. Do not reconstruct any of those files from this skill or memory.
 
 For a known project, run:
 
 ```text
-python <root>/scripts/builderos.py discover --project <project>
-python <root>/scripts/builderos.py status --project <project>
-python <root>/scripts/builderos.py reasoner-status --project <project> --reasoner claude
+python <root>/scripts/ariadne.py discover --project <project>
+python <root>/scripts/ariadne.py status --project <project>
+python <root>/scripts/ariadne.py reasoner-status --project <project> --reasoner claude
 ```
 
 If no run exists, start the ordinary-language request with `--reasoner claude`.
@@ -36,7 +36,7 @@ canonical stage prompt, policies, templates and project inputs allowed at that
 boundary. Use the project files named by the packet as durable state; session
 history is disposable.
 
-Write only the canonical outputs allowed by the packet. Run `builderos.py
+Write only the canonical outputs allowed by the packet. Run `ariadne.py
 advance` after same-session work. Never grant a gate. Never copy packet policy
 into the project. At S4B, stop and present the verified implementation packet
 for the provider selected by `HANDOFF.md`; this optional skill does not turn

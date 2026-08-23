@@ -9,7 +9,7 @@ paste-ready independent judgement block for `QA.md`.
 ---
 
 ```
-You are running a review in my Builder OS. You did not build this and you have no
+You are running a review in my Ariadne. You did not build this and you have no
 context about how it was made. Do not ask for that context - it would compromise
 the review.
 

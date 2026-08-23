@@ -1,8 +1,8 @@
 # RETROSPECTIVE: <name>
 
 > Template. Owner: Strategist · Stage: S6 · 15 minutes.
-> **This is the stage that makes the Builder OS improve instead of ossify.**
-> A retrospective that changes no Builder OS file was not a retrospective.
+> **This is the stage that makes the Ariadne improve instead of ossify.**
+> A retrospective that changes no Ariadne file was not a retrospective.
 
 **Project:** <> · **Mode:** <> · **Shipped:** <date> · **Elapsed:** <>
 
@@ -44,9 +44,9 @@
 |---|---|---|
 | | | `modes/<mode>.md` |
 
-### 4. What changes in the Builder OS as a result?
+### 4. What changes in the Ariadne as a result?
 
-> **A retrospective does not edit Builder OS.** It produces *proposals*; Tanishk approves them.
+> **A retrospective does not edit Ariadne.** It produces *proposals*; Tanishk approves them.
 > Direct mutation is how a system grows back to seventy files.
 
 #### 4a. Qualification — all four must hold
@@ -72,7 +72,7 @@ CHANGE PROPOSAL <n>
 Observation:  <what happened>
 Evidence:     <when, how often, what it cost>
 Why systemic: <why this is not just this project>
-File:         <the ONE Builder OS file that changes>
+File:         <the ONE Ariadne file that changes>
 Change:       <exact edit - quote current text and replacement>
 Prevents:     <the specific behaviour this stops next time>
 Replaces:     <rule superseded, or "nothing - additive">
@@ -134,7 +134,7 @@ Complexity:   <+N words, +N files>
 
 | Mistake | Cost | Prevention |
 |---|---|---|
-| | | <which Builder OS rule, new or amended> |
+| | | <which Ariadne rule, new or amended> |
 
 > Write the **lesson**, not the case ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md) section 1).
 > Not: "Client X's font was personal-use only."

@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "adapters" / "claude-reasoner-skill"
 INSTALLATION = Path("references") / "installation.json"
-MARKER = ".builderos-managed-claude-reasoner.json"
+MARKER = ".ariadne-managed-claude-reasoner.json"
 
 
 class InstallError(RuntimeError):
@@ -54,14 +54,14 @@ def verify(target: Path) -> list[str]:
     if not marker.is_file():
         problems.append("managed Claude reasoner marker is missing")
     if not installation.is_file():
-        problems.append("Builder OS runtime location is missing")
+        problems.append("Ariadne runtime location is missing")
     else:
         try:
             value = json.loads(installation.read_text(encoding="utf-8"))
-            if Path(value.get("builder_os_root", "")).resolve() != ROOT.resolve():
-                problems.append("Claude reasoner skill points at a different Builder OS runtime")
+            if Path(value.get("ariadne_root", "")).resolve() != ROOT.resolve():
+                problems.append("Claude reasoner skill points at a different Ariadne runtime")
         except (json.JSONDecodeError, OSError):
-            problems.append("Builder OS runtime location is malformed")
+            problems.append("Ariadne runtime location is malformed")
     for relative, expected in expected_hashes().items():
         path = target / relative
         if not path.is_file():
@@ -96,14 +96,14 @@ def install(target: Path, require_cli: bool = True) -> None:
     installation.parent.mkdir(parents=True, exist_ok=True)
     installation.write_text(
         json.dumps(
-            {"schema_version": 1, "builder_os_root": str(ROOT), "installed_from_commit": git_head()},
+            {"schema_version": 1, "ariadne_root": str(ROOT), "installed_from_commit": git_head()},
             indent=2,
         )
         + "\n",
         encoding="utf-8",
     )
     (target / MARKER).write_text(
-        json.dumps({"owner": "Builder OS", "capability": "optional Claude reasoner"}, indent=2)
+        json.dumps({"owner": "Ariadne", "capability": "optional Claude reasoner"}, indent=2)
         + "\n",
         encoding="utf-8",
     )
@@ -141,7 +141,7 @@ def self_test() -> int:
         cases.append((name, passed))
 
     with self_test_workspace() as workspace:
-        target = workspace / "skill-self-test-target" / "builderos"
+        target = workspace / "skill-self-test-target" / "ariadne"
         install(target, require_cli=False)
         case("optional Claude skill installs and verifies (positive control)", not verify(target))
         skill = target / "SKILL.md"
@@ -149,9 +149,9 @@ def self_test() -> int:
         case("optional skill drift is detected", any("drifted" in item for item in verify(target)))
         install(target, require_cli=False)
         uninstall(target)
-        case("optional skill can be removed without touching Builder OS", not target.exists() and ROOT.is_dir())
+        case("optional skill can be removed without touching Ariadne", not target.exists() and ROOT.is_dir())
 
-        unavailable = workspace / "unavailable" / "builderos"
+        unavailable = workspace / "unavailable" / "ariadne"
         original = cli_available
         try:
             globals()["cli_available"] = lambda which=shutil.which: False
@@ -164,7 +164,7 @@ def self_test() -> int:
             globals()["cli_available"] = original
         case("missing Claude CLI blocks the optional install", missing_cli_blocked and not unavailable.exists())
 
-        unmanaged = workspace / "unmanaged" / "builderos"
+        unmanaged = workspace / "unmanaged" / "ariadne"
         unmanaged.mkdir(parents=True)
         (unmanaged / "SKILL.md").write_text("personal skill\n", encoding="utf-8")
         try:
@@ -185,7 +185,7 @@ def self_test() -> int:
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser(description=__doc__)
     value.add_argument("command", choices=["install", "verify", "uninstall"], nargs="?")
-    value.add_argument("--target", default=str(Path.home() / ".claude" / "skills" / "builderos"))
+    value.add_argument("--target", default=str(Path.home() / ".claude" / "skills" / "ariadne"))
     value.add_argument("--self-test", action="store_true")
     return value
 
@@ -201,12 +201,12 @@ def main() -> int:
         if args.command == "install":
             install(target)
             print(f"INSTALLED  {target}")
-            print("PASS       optional Claude entry matches the active Builder OS runtime")
+            print("PASS       optional Claude entry matches the active Ariadne runtime")
             return 0
         if args.command == "uninstall":
             uninstall(target)
             print(f"REMOVED  {target}")
-            print("Builder OS, Codex support, projects, and evidence were not changed.")
+            print("Ariadne, Codex support, projects, and evidence were not changed.")
             return 0
         problems = verify(target)
         if problems:

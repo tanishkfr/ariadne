@@ -10,25 +10,25 @@ Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](WORKFLOW.
 
 | Situation | Open | Why |
 |---|---|---|
-| New idea, nothing exists | **Codex**, invoke `$builderos` | It starts, routes, and records the run |
-| Returning to a project | **Codex**, invoke `$builderos` | It discovers the run and resumes from durable state |
-| Existing project, no Builder OS run | **Codex**, invoke `$builderos` and ask to adopt it | It preserves the repository and starts a non-destructive intake |
-| Builder OS requests external implementation | **The named build tool** | The complete verified handoff is ready |
+| New idea, nothing exists | **Codex**, invoke `$ariadne` | It starts, routes, and records the run |
+| Returning to a project | **Codex**, invoke `$ariadne` | It discovers the run and resumes from durable state |
+| Existing project, no Ariadne run | **Codex**, invoke `$ariadne` and ask to adopt it | It preserves the repository and starts a non-destructive intake |
+| Ariadne requests external implementation | **The named build tool** | The complete verified handoff is ready |
 | Mid-build, a decision came up | Depends — see below | |
 | A bug | **Build tool** | Bugs are `R2` work |
 | Same bug, twice failed | Reasoning tool | Escalation signal |
 | Something needs checking | **Terminal** | Free, definitive, instant |
 | Reviewing finished work | Reasoning tool, **fresh session** | Independence |
 
-**Default: if you are unsure, invoke Builder OS in the project.** It reads the
+**Default: if you are unsure, invoke Ariadne in the project.** It reads the
 state instead of making you infer it. Most implementation hours can still
 belong in the build tool without making the operator choose a stage manually.
 
 ---
 
-## What Builder OS handles
+## What Ariadne handles
 
-| Human-facing moment | Builder OS action |
+| Human-facing moment | Ariadne action |
 |---|---|---|
 | “I have an idea” | Creates/fetches the run, routes it, asks one batched question set, writes the brief |
 | Facts block direction | Plans the project-specific question, retrieves evidence, and prepares only the focused research needed |
@@ -41,21 +41,21 @@ belong in the build tool without making the operator choose a stage manually.
 | Review is recorded | Presents G3; shipping still requires explicit G4 |
 
 Prompts, packet IDs, manifests, hashes, parent records, evidence paths, and stage
-names are debugging details. Builder OS manages them. The low-level commands in
+names are debugging details. Ariadne manages them. The low-level commands in
 [adapters/codex.md](adapters/codex.md) remain available for recovery.
 
 The same applies to creative evidence machinery. You should see a concise
 summary of useful research and its effect on the direction, not a skill matrix
-or evidence graph. If the evidence is missing or stale, Builder OS pauses before
+or evidence graph. If the evidence is missing or stale, Ariadne pauses before
 G1 and names the unsupported claim.
 
 ## By situation
 
 ### "I have an idea"
 
-1. Invoke `$builderos` in Codex.
+1. Invoke `$ariadne` in Codex.
 2. Describe the idea and project directory normally.
-3. Answer the batched material questions; Builder OS prepares the next valid work.
+3. Answer the batched material questions; Ariadne prepares the next valid work.
 
 Do not start implementation or pick a framework. The repository stays empty until S1 writes its project documents.
 
@@ -68,9 +68,9 @@ Check: is `HANDOFF.md` written and was **G1** approved?
 
 ### "I already have a project"
 
-Invoke `$builderos` from that repository and say you want to adopt it. Builder
+Invoke `$ariadne` from that repository and say you want to adopt it. Builder
 OS uses the existing source as read-only intake context, preserves every file,
-and writes no implementation during S1. Existing Builder OS entry documents are
+and writes no implementation during S1. Existing Ariadne entry documents are
 never overwritten: if `PROJECT.md` or `AGENTS.md` is present, the runtime asks
 you to resume or migrate deliberately.
 
@@ -110,10 +110,10 @@ Anything you will check twice becomes a Playwright test. Writing it costs about 
 
 1. The implementation provider runs the mechanical checklist ([QA-POLICY.md](QA-POLICY.md) section 3) and returns its structured handoff.
 2. Capture screenshots — **and look at them yourself**.
-3. Give Builder OS's isolated review handoff to a **fresh independent session**.
+3. Give Ariadne's isolated review handoff to a **fresh independent session**.
 4. Present G3.
 5. On approval: G4 to ship.
-6. Fifteen minutes on `RETROSPECTIVE.md`. Record proposals; edit Builder OS only after human approval, then log the approved change in [CHANGELOG.md](CHANGELOG.md).
+6. Fifteen minutes on `RETROSPECTIVE.md`. Record proposals; edit Ariadne only after human approval, then log the approved change in [CHANGELOG.md](CHANGELOG.md).
 
 ### "I want to write a post"
 
@@ -127,7 +127,7 @@ If there is no only-you element, do not post it.
 
 ### "I was interrupted"
 
-Invoke `$builderos` from the project again. It discovers the matching run,
+Invoke `$ariadne` from the project again. It discovers the matching run,
 verifies the current packet and evidence, and resumes from the last valid
 boundary. If more than one history claims the project, it stops and asks which
 one is authoritative rather than guessing.
@@ -188,7 +188,7 @@ The five that matter most ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 8):
 
 - Re-verify anything in [BUDGET-POLICY.md](BUDGET-POLICY.md) older than 30 days.
 - Which subscription earned its cost this month?
-- Which Builder OS documents did you actually open? **Delete the ones you did not.**
+- Which Ariadne documents did you actually open? **Delete the ones you did not.**
 - At 30 days: [CHANGELOG.md](CHANGELOG.md) "30-day check".
 
 ---

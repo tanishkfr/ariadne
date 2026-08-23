@@ -18,8 +18,8 @@ Fill this in **as you go**, not afterwards. Reconstructed notes are optimistic.
 | Questions asked | Against the cap of 5 |
 | Documents created vs **actually reopened** | The only real test of whether a document has a consumer |
 | Context loaded, where measurable | Against the budgets |
-| **Moments you had to search Builder OS docs** | Every one is friction, and the V1 backlog |
-| **Moments Builder OS prevented a bad decision** | Every one is the value, and the reason to keep it |
+| **Moments you had to search Ariadne docs** | Every one is friction, and the V1 backlog |
+| **Moments Ariadne prevented a bad decision** | Every one is the value, and the reason to keep it |
 | Defects caught by the system | |
 | Defects the system missed | More informative than the ones it caught |
 | Unnecessary ceremony | Documents or steps that produced nothing |
@@ -65,7 +65,7 @@ A **real** project. Do not invent success criteria — use the actual ones.
 
 > "scrap this direction and start over"
 
-Do not quote any Builder OS rule. The router must recognise it unaided.
+Do not quote any Ariadne rule. The router must recognise it unaided.
 
 **Restart passes when:** the intent is recognised without special phrasing · only the rejected layer is discarded · **research, references and assets survive** · you are asked which layer restarts · the replacement direction is *actually different*, not the same idea restyled.
 
@@ -129,9 +129,9 @@ For Test B, the **independent reviewer** (fresh session, given only the URL and 
 
 ### The evidence that actually counts
 
-Not: *"Builder OS scored 43/50."*
+Not: *"Ariadne scored 43/50."*
 
-But: **"Builder OS caused us to reject X before implementation, and the replacement was demonstrably better."**
+But: **"Ariadne caused us to reject X before implementation, and the replacement was demonstrably better."**
 
 **One instance of that is worth more than every passing scorecard.** If three real projects produce zero such instances, the anti-generic apparatus is decoration and should be cut back to the four rules that are mechanically checkable — the 4× type ratio, the five motion purposes, the research-only library default, and the three-reference minimum.
 
@@ -139,7 +139,7 @@ But: **"Builder OS caused us to reject X before implementation, and the replacem
 
 ## After the tests
 
-Run [prompts/retrospective.md](../prompts/retrospective.md) on each. Proposals go through approval; nothing edits Builder OS directly.
+Run [prompts/retrospective.md](../prompts/retrospective.md) on each. Proposals go through approval; nothing edits Ariadne directly.
 
 Then decide, with evidence rather than impression:
 

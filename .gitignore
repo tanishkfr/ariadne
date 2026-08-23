@@ -10,3 +10,8 @@ private/
 client-assets/
 __pycache__/
 *.pyc
+
+# Local validation evidence is private operator material. Canonical fixtures and
+# the validation protocol remain tracked; individual run records do not.
+validation/runs/*
+!validation/runs/_README.md

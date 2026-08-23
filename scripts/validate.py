@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Builder OS validation harness.
+Ariadne validation harness.
 
-check.py verifies the Builder OS repository. THIS verifies a validation RUN:
-the project Builder OS produced, and the run record you kept while producing it.
+check.py verifies the Ariadne repository. THIS verifies a validation RUN:
+the project Ariadne produced, and the run record you kept while producing it.
 
   python scripts/validate.py --run validation/runs/A1.md
   python scripts/validate.py --run validation/runs/A1.md --project ../my-project
@@ -50,7 +50,7 @@ EVENT_TYPES = ["VALUE", "FRICTION", "FAILURE", "DECISION", "INTERVENTION",
 QUESTION_CLASSES = ["A", "B", "C"]
 
 RUN_SECTIONS = ["## Run", "## Baseline", "## Events", "## Metrics", "## Report"]
-RUN_FIELDS = ["Run ID", "Date", "Builder OS version", "Test", "Mode",
+RUN_FIELDS = ["Run ID", "Date", "Ariadne version", "Test", "Mode",
               "Provider", "Model", "Result"]
 
 
@@ -273,14 +273,14 @@ def check_run_file(text, path):
     problems.extend(f"{name}: {problem}" for problem in test_b_restart_problems(text, events))
 
     # Baseline must be captured, and for Test A it must be captured FIRST or
-    # it is contaminated by having seen the Builder OS output.
+    # it is contaminated by having seen the Ariadne output.
     if "## Baseline" in text:
         bl = re.search(r"##\s+Baseline(.*?)(?=\n##\s|\Z)", text, re.S)
         if len(prose(bl.group(1) if bl else "").split()) < 20:
             problems.append(f"{name}: Baseline section is empty -- "
                             f"without it the run cannot show what changed")
         # The old check searched the whole section, so the template's own
-        # instruction ("Captured before running Builder OS") satisfied it and
+        # instruction ("Captured before running Ariadne") satisfied it and
         # an entirely blank baseline passed. The attestation has to be an act.
         attest = field(text, "Captured before opening Codex").lower()
         if attest not in ("yes", "y"):
@@ -291,7 +291,7 @@ def check_run_file(text, path):
 
 
 def check_project(project, expected_mode, expected_stage):
-    """The project directory Builder OS produced."""
+    """The project directory Ariadne produced."""
     problems, observations = [], {}
     if not os.path.isdir(project):
         return [f"project path not found: {project}"], observations
@@ -463,7 +463,7 @@ def benchmark():
         rows.append({
             "run": field(t, "Run ID") or os.path.basename(f)[:-3],
             "test": field(t, "Test"),
-            "ver": field(t, "Builder OS version"),
+            "ver": field(t, "Ariadne version"),
             "prov": field(t, "Provider"),
             "model": field(t, "Model"),
             "result": field(t, "Result"),

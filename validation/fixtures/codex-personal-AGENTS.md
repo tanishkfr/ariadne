@@ -1,7 +1,7 @@
 # Personal defaults
 
 > Fixture. Copied to `~/.codex/AGENTS.md` by `scripts/setup-test-a.py`.
-> **Preferences only — never policies.** Builder OS policy lives in the Builder OS
+> **Preferences only — never policies.** Ariadne policy lives in the Ariadne
 > repository and reaches a session through the pasted stage prompt, not through here.
 > Edit this file, not the script, if you want different defaults.
 

@@ -1,33 +1,29 @@
-# Builder OS
+# Ariadne
 
-Builder OS takes a creative project from an ordinary-language idea through
+**The thread through creative production.**
+
+Ariadne takes a creative project from an ordinary-language idea through
 research, design direction, implementation and independent review. It keeps the
 workflow moving and pauses only when your judgement or permission is needed.
 
 It is for designers, developers and independent makers who want AI assistance
 without surrendering creative direction, dependency choices or shipping
-authority. Builder OS is installed once for your user account; your projects do
-not contain or depend on its source repository.
-
-**V1.5.3 release candidate:** the installed product now uses Codex's documented
-personal-skill location for fresh users, offers a non-destructive optional
-general Codex baseline, reports Codex/Claude/baseline health, and generates a
-source-bound release set with aggregate checksums. V1.5.1's optional Claude
-boundary and V1.5.2's opt-in social capability remain unchanged. Public
-publication and fresh external Codex discovery are not claimed. See
-[RELEASE-NOTES.md](RELEASE-NOTES.md).
+authority. The name comes from the Greek figure whose thread made a difficult
+maze navigable. Ariadne is installed once for your user account; your projects
+do not contain or depend on its source repository.
 
 ## Quick start
 
-After the `v1.5.3` GitHub release is published:
+Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.3/builder_os-1.5.3-py3-none-any.whl"
-python -m builderos install
+python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
+python -m ariadne install
+python -m ariadne doctor
 ```
 
-Then open Codex in the project you want to make, type `$builderos`, and describe
-it normally. Builder OS finds an unfinished project, safely adopts an existing
+Then open Codex in the project you want to make, type `$ariadne`, and describe
+it normally. Ariadne finds an unfinished project, safely adopts an existing
 one, or starts a new one without making you choose a mode or stage.
 
 [Short quickstart](QUICKSTART.md) · [Installation](INSTALL.md) ·
@@ -37,7 +33,7 @@ Normal installation does not change global Codex instructions. The optional
 recommended baseline is documented in [CODEX-ENVIRONMENT.md](CODEX-ENVIRONMENT.md).
 
 You still approve the design direction, dependencies, completed build, shipping
-and publishing. Builder OS never pushes, deploys or installs project packages
+and publishing. Ariadne never pushes, deploys or installs project packages
 without the relevant approval.
 
 ---
@@ -59,8 +55,8 @@ without the relevant approval.
 
 ```
 Your request
-  -> builderos skill        starts or resumes the right run
-  -> builderos.py           discovers state and prepares the next boundary
+  -> ariadne skill        starts or resumes the right run
+  -> ariadne.py           discovers state and prepares the next boundary
   -> creative evidence      selects only useful methods and verifies source/use traces
   -> ROUTER.md              detects the mode, asks up to 5 questions
   -> WORKFLOW.md            runs S0-S6, assigns a role, enforces the gates
@@ -77,14 +73,13 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 **Never used it:** [QUICKSTART.md](QUICKSTART.md) — install once, then describe one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
-**Current productization evidence:** [V1.5.3-READINESS.md](V1.5.3-READINESS.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
-**Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
+**Starting now:** in a clean Codex task, invoke `$ariadne` (or say “Use Ariadne”) and describe the project normally. Ariadne locates prompts, packets, evidence, and the next valid boundary.
 
-**Existing project:** say that you want Builder OS to adopt the current
+**Existing project:** say that you want Ariadne to adopt the current
 repository. The entry skill uses the opt-in `--adopt-existing` path: it inspects
 the live repository read-only during intake, preserves every existing file and
-current behaviour, and creates only the missing Builder OS entry documents. If
+current behaviour, and creates only the missing Ariadne entry documents. If
 `PROJECT.md` or `AGENTS.md` already exists, it stops instead of overwriting it.
 
 ## The five modes
@@ -100,7 +95,7 @@ current behaviour, and creates only the missing Builder OS entry documents. If
 ## Map
 
 ```
-Builder OS/
+Ariadne/
 ├─ ROUTER.md               Interpretation frame, routing rules, restarts   <- start
 ├─ WORKFLOW.md             Stages, gates, 5 roles, what agents may do
 ├─ DESIGN-TASTE.md         The quality bar and anti-generic rules
@@ -116,7 +111,7 @@ Builder OS/
 ├─ CONTENT-SYSTEM.md       Writing, analytics, learning loop
 ├─ CHANGELOG.md            How this system changed + the 30-day check
 ├─ GETTING-STARTED.md · DAILY-PLAYBOOK.md · MIGRATION-CHECKLIST.md
-├─ .agents/skills/   Builder OS Codex entry point
+├─ .agents/skills/ariadne/  managed Codex entry point
 ├─ skills/       7   project-specific methods selected only when useful
 ├─ templates/   13   4 required, the rest conditional or transport
 ├─ modes/        5
@@ -124,9 +119,8 @@ Builder OS/
 ├─ references/   2   visual references, UI libraries
 ├─ prompts/      8   start, conditional research, direction, build, review,
 │                    portfolio, content, retrospective
-├─ tests/            router-cases.md (regression suite),
-│                    validation-protocol.md (Test A exercised; B/C unrun)
-└─ scripts/          builderos.py · prepare-stage.py · check.py · validate.py
+├─ tests/            deterministic contract and regression checks
+└─ scripts/          ariadne.py · prepare-stage.py · check.py · validate.py
 ```
 
 ## Principles
@@ -151,7 +145,7 @@ judgement remain separate records, and none grants a gate.
 
 **Four documents, not eleven.** `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. The rest exist when they earn it — a document nobody reads is worse than none, because it manufactures the appearance of process.
 
-**The system learns under human control.** A retrospective proposes a specific change; the human approves, defers, or rejects it before any Builder OS file changes.
+**The system learns under human control.** A retrospective proposes a specific change; the human approves, defers, or rejects it before any Ariadne file changes.
 
 ## What it will not do
 
@@ -163,43 +157,20 @@ judgement remain separate records, and none grants a gate.
 
 ---
 
-## Status
+## Development
 
-**v1.5.3 release candidate.** The product installs from one self-contained
-Python wheel into a versioned user-local runtime, registers its managed Codex
-skill, verifies file parity, and supports `update`, `rollback`, `doctor` and
-`uninstall` without touching projects. Its optional general Codex baseline is
-explicit, hash-owned and safe around existing instructions. The optional
-distribution method grounds a small launch plan in current project and visual evidence, preserves
-source-to-decision trace, drafts platform-native treatments and learns only
-from results supplied by the project owner. It adds no account connection,
-scheduler or analytics integration. The V1.5.1 Claude adapter remains opt-in;
-ordinary installation is still Codex-only.
+The maintained repository checks are:
 
-V1.3 carried approved design decisions into hashed
-implementation mappings, project-specific rendered QA, drift records and an
-evidence-backed creative review. It classifies human interventions, gives each
-S4B packet a unique non-overwriting project return target, and can produce an
-explicitly requested current-evidence social strategy without posting. A
-managed Codex entry skill still starts or resumes the project and the router
-still routes on **intent**, not keywords.
+```bash
+python scripts/check.py
+python scripts/check.py --self-test
+python scripts/validate.py --self-test
+```
 
-Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
+Generated runtime bundles exclude validation runs, fixtures, maintainer notes,
+operations logs and machine-specific paths. See [RELEASING.md](RELEASING.md)
+for the deterministic packaging boundary.
 
-**Status: V1.5.3 NEAR READY FOR PUBLIC RELEASE.** A clean Python environment exercised
-wheel build, install, `$builderos` runtime start, doctor and uninstall with no
-source checkout dependency. Windows executed; macOS/Linux path rules are
-simulated. Apache-2.0 is approved and carried in the package; publishing still
-awaits the public-name decision and explicit release authority, and no GitHub
-release is live. V1.5 deliberately keeps internal creative-review readiness
-advisory rather than making it a new hard prerequisite for isolated S5. See
-[V1.5.3-READINESS.md](V1.5.3-READINESS.md).
+## Licence
 
-V1.3 was ready for private use. A local rendered fixture exercised the
-new visual evidence and creative-review loop and exposed a real tablet drift;
-unsupported reduced-motion observation remained unverified. External provider
-automation, a complete V1.3 provider return and independent S5 remain
-externally unverified, not presented as live passes. See
-[V1.3-READINESS.md](V1.3-READINESS.md).
-
-Run `python scripts/check.py` after any edit.
+Ariadne is available under the [Apache License 2.0](LICENSE).

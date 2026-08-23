@@ -4,7 +4,7 @@
 > System: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md)
 > **This file is where the loop closes.** A weekly review that does not change this file means the system is producing, not learning.
 >
-> Lives in the content project, **never** in the Builder OS ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)).
+> Lives in the content project, **never** in the Ariadne ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)).
 
 **Started:** <date> · **Last review:** <date>
 

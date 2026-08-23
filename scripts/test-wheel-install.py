@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline wheel-to-project stranger test for the public Builder OS product."""
+"""Offline wheel-to-project stranger test for the public Ariadne product."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def self_test() -> int:
             ROOT,
             environment=environment_vars,
         )
-        wheels = list(wheel_dir.glob("builder_os-*.whl"))
+        wheels = list(wheel_dir.glob("ariadne-*.whl"))
         case("source builds one platform-neutral wheel", len(wheels) == 1 and "py3-none-any" in wheels[0].name)
         with zipfile.ZipFile(wheels[0]) as wheel:
             wheel_names = set(wheel.namelist())
@@ -107,32 +107,32 @@ def self_test() -> int:
             environment=environment_vars,
         )
         version_result = run(
-            [str(python), "-m", "builderos", "--version"],
+            [str(python), "-m", "ariadne", "--version"],
             root,
             environment=environment_vars,
         )
-        case("fresh Python environment exposes Builder OS version", version_result.stdout.strip() == f"Builder OS {VERSION}")
+        case("fresh Python environment exposes Ariadne version", version_result.stdout.strip() == f"Ariadne {VERSION}")
 
         data_home = root / "person-data"
-        skill = root / "person-codex-skills" / "builderos"
+        skill = root / "person-codex-skills" / "ariadne"
         codex_home = root / "person-codex-home"
         install_result = run(
             [
-                str(python), "-m", "builderos", "--data-home", str(data_home),
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
                 "--skill-home", str(skill), "--codex-home", str(codex_home),
                 "install", "--codex-baseline",
             ],
             root,
             environment=environment_vars,
         )
-        case("stranger install gives one plain next action", "type $builderos" in install_result.stdout and "S1" not in install_result.stdout)
+        case("stranger install gives one plain next action", "type $ariadne" in install_result.stdout and "S1" not in install_result.stdout)
         baseline = codex_home / "AGENTS.md"
-        baseline_marker = codex_home / ".builderos-managed-agents.json"
+        baseline_marker = codex_home / ".ariadne-managed-agents.json"
         case(
             "stranger can explicitly install the owned generic Codex baseline",
             baseline.is_file()
             and baseline_marker.is_file()
-            and "Builder OS" not in baseline.read_text(encoding="utf-8")
+            and "Ariadne" not in baseline.read_text(encoding="utf-8")
             and "G1" not in baseline.read_text(encoding="utf-8"),
         )
         current = json.loads((data_home / "current.json").read_text(encoding="utf-8"))
@@ -142,13 +142,13 @@ def self_test() -> int:
         case(
             "wheel carries a canonical runtime with no source-checkout dependency",
             runtime.resolve() == expected_runtime
-            and Path(installation["builder_os_root"]).resolve() == expected_runtime
+            and Path(installation["ariadne_root"]).resolve() == expected_runtime
             and runtime != ROOT,
         )
 
         doctor_result = run(
             [
-                str(python), "-m", "builderos", "--data-home", str(data_home),
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
                 "--skill-home", str(skill), "--codex-home", str(codex_home), "doctor",
             ],
             root,
@@ -165,28 +165,28 @@ def self_test() -> int:
         (runtime / "ROUTER.md").unlink()
         repair_result = run(
             [
-                str(python), "-m", "builderos", "--data-home", str(data_home),
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
                 "--skill-home", str(skill), "install",
             ],
             root,
             environment=environment_vars,
         )
         repaired_doctor = run(
-            [str(python), "-m", "builderos", "--data-home", str(data_home), "--skill-home", str(skill), "doctor"],
+            [str(python), "-m", "ariadne", "--data-home", str(data_home), "--skill-home", str(skill), "doctor"],
             root,
             environment=environment_vars,
         )
         case(
             "reinstall repairs a damaged runtime from the self-contained wheel",
             (runtime / "ROUTER.md").is_file()
-            and f"Builder OS {VERSION} is installed" in repair_result.stdout
+            and f"Ariadne {VERSION} is installed" in repair_result.stdout
             and "[OK] Runtime" in repaired_doctor.stdout,
         )
 
         project = root / "ordinary-project"
         start_result = run(
             [
-                str(python), str(runtime / "scripts" / "builderos.py"), "start",
+                str(python), str(runtime / "scripts" / "ariadne.py"), "start",
                 "--project", str(project), "--request",
                 "Make a small editorial site about neighbourhood signs.",
             ],
@@ -194,28 +194,28 @@ def self_test() -> int:
             environment=environment_vars,
         )
         case("installed runtime starts an ordinary-language project", project.is_dir() and "ready for its brief" in start_result.stdout)
-        runs = list(root.glob("ordinary-project-builderos"))
-        case("project start creates durable external run state", len(runs) == 1 and (runs[0] / "builderos-run.json").is_file())
+        runs = list(root.glob("ordinary-project-ariadne"))
+        case("project start creates durable external run state", len(runs) == 1 and (runs[0] / "ariadne-run.json").is_file())
 
         project_sentinel = project / "person-owned.txt"
         project_sentinel.write_text("keep\n", encoding="utf-8")
         uninstall_result = run(
             [
-                str(python), "-m", "builderos", "--data-home", str(data_home),
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
                 "--skill-home", str(skill), "--codex-home", str(codex_home),
                 "uninstall", "--yes",
             ],
             root,
             environment=environment_vars,
         )
-        case("uninstall preserves project and run history", project_sentinel.is_file() and (runs[0] / "builderos-run.json").is_file())
+        case("uninstall preserves project and run history", project_sentinel.is_file() and (runs[0] / "ariadne-run.json").is_file())
         case(
             "uninstall removes only the managed global baseline",
             not baseline.exists() and not baseline_marker.exists(),
         )
         case("uninstall explains the remaining launcher", "launcher remains" in uninstall_result.stdout)
 
-    print("BUILDER OS WHEEL STRANGER SELF-TEST\n")
+    print("ARIADNE WHEEL STRANGER SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
     failed = [name for name, passed in cases if not passed]

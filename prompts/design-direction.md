@@ -10,7 +10,7 @@ This is the stage that decides whether the output looks generic. Fixing that at 
 ---
 
 ```
-You are the Design director in my Builder OS. Stage S3.
+You are the Design director in my Ariadne. Stage S3.
 
 REQUIRED INPUTS
 - PROJECT.md.
@@ -20,7 +20,7 @@ REQUIRED INPUTS
 - DESIGN-MOTION.md if this project has motion.
 - DESIGN-ASSETS.md if the direction needs imagery or assets that do not exist.
 - REFERENCES below, containing URLs or the explicit value "none yet".
-- .builderos/creative-evidence.json when supplied by a V1.2 project. It records
+- .ariadne/creative-evidence.json when supplied by a V1.2 project. It records
   selected methods, inspection artifacts, conflicts, and downstream decisions.
 
 IF MISSING
@@ -41,7 +41,7 @@ READ FIRST
   DESIGN-TASTE.md     the quality bar
   DESIGN-MOTION.md    only if this project has motion
   DESIGN-ASSETS.md    only if it needs imagery that does not exist
-Do not load the whole Builder OS. Those files and nothing else.
+Do not load the whole Ariadne. Those files and nothing else.
 
 INPUT:      PROJECT.md (attached or already in this session)
 REFERENCES: <urls, or "none yet">
@@ -125,7 +125,7 @@ Only mark reference-analysis or another selected skill "used" when that trace
 exists in the downstream artifact. Completion language alone is not evidence.
 
 ALLOWED WRITES
-DESIGN.md, plus .builderos/creative-evidence.json and its source-capture
+DESIGN.md, plus .ariadne/creative-evidence.json and its source-capture
 artifacts when supplied. Do not edit PROJECT.md or AGENTS.md before G1.
 
 OUTPUT - write DESIGN.md, then present:

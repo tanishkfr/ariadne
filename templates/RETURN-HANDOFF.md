@@ -1,6 +1,6 @@
 # IMPLEMENTATION RETURN HANDOFF: <project>
 
-> Transport output from an external implementer back to Builder OS. This is an
+> Transport output from an external implementer back to Ariadne. This is an
 > evidence summary, not a substitute for a verbatim provider transcript or an
 > independent review. Fill every section; use `none` or `not run` rather than
 > leaving a blank.
@@ -72,12 +72,12 @@
 
 ## Next inspection
 
-<The first thing Builder OS should verify, and why.>
+<The first thing Ariadne should verify, and why.>
 
 ---
 
 End the provider response with this complete document between exact markers:
 
-`BEGIN BUILDER OS RETURN HANDOFF`
+`BEGIN ARIADNE RETURN HANDOFF`
 
-`END BUILDER OS RETURN HANDOFF`
+`END ARIADNE RETURN HANDOFF`

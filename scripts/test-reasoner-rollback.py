@@ -20,12 +20,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from builderos import cli  # noqa: E402
+from ariadne import cli  # noqa: E402
 
 
 @contextlib.contextmanager
 def workspace():
-    path = Path(tempfile.mkdtemp(prefix=f"builder-os-reasoner-rollback-{uuid.uuid4().hex}-"))
+    path = Path(tempfile.mkdtemp(prefix=f"ariadne-reasoner-rollback-{uuid.uuid4().hex}-"))
     try:
         yield path
     finally:
@@ -53,10 +53,10 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
 
     with workspace() as root:
         home = root / "user-data"
-        codex_skill = root / "codex-skills" / "builderos"
-        claude_skill = root / "claude-skills" / "builderos"
+        codex_skill = root / "codex-skills" / "ariadne"
+        claude_skill = root / "claude-skills" / "ariadne"
         project = root / "project"
-        run_root = root / "project-builderos"
+        run_root = root / "project-ariadne"
 
         baseline = cli.install_bundle(baseline_bundle, home, codex_skill)
         case(
@@ -93,7 +93,7 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
         start = subprocess.run(
             [
                 sys.executable,
-                str(current_runtime / "scripts" / "builderos.py"),
+                str(current_runtime / "scripts" / "ariadne.py"),
                 "start",
                 "--project", str(project),
                 "--run-root", str(run_root),
@@ -104,7 +104,7 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
             capture_output=True,
             text=True,
         )
-        state = json.loads((run_root / "builderos-run.json").read_text(encoding="utf-8"))
+        state = json.loads((run_root / "ariadne-run.json").read_text(encoding="utf-8"))
         case(
             "Codex default still starts a project while Claude support exists",
             start.returncode == 0
@@ -140,7 +140,7 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
         status = subprocess.run(
             [
                 sys.executable,
-                str(baseline_runtime / "scripts" / "builderos.py"),
+                str(baseline_runtime / "scripts" / "ariadne.py"),
                 "status",
                 "--run-root", str(run_root),
                 "--json",
@@ -153,7 +153,7 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
             status.returncode == 0
             and status_payload.get("current_boundary") == "S1"
             and not (project / "CLAUDE.md").exists()
-            and (run_root / "builderos-run.json").is_file()
+            and (run_root / "ariadne-run.json").is_file()
         )
         if not compatible:
             print(
@@ -164,7 +164,7 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
                         "stdout": status.stdout,
                         "stderr": status.stderr,
                         "claude_file": (project / "CLAUDE.md").exists(),
-                        "run_state": (run_root / "builderos-run.json").is_file(),
+                        "run_state": (run_root / "ariadne-run.json").is_file(),
                     },
                     sort_keys=True,
                 )
@@ -186,7 +186,7 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = parser().parse_args()
     cases = exercise(Path(args.baseline_bundle).resolve(), Path(args.current_bundle).resolve())
-    print("BUILDER OS REASONER ROLLBACK TEST\n")
+    print("ARIADNE REASONER ROLLBACK TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
     failed = [name for name, passed in cases if not passed]

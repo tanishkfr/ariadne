@@ -13,7 +13,7 @@ Two halves. Run part A in the reasoning tool if `HANDOFF.md` does not exist. Run
 ## A — Write the handoff (reasoning tool, only if `HANDOFF.md` is missing)
 
 ```
-You are the Architect in my Builder OS. G1 has been approved.
+You are the Architect in my Ariadne. G1 has been approved.
 
 REQUIRED INPUTS
 - PROJECT.md.
@@ -61,7 +61,7 @@ Include:
   - definition of done
   - implementation routing: capability class, provider recommendation, model
     if known, effort, workload, any split, and the reason. Do not guess live
-    availability or quota; Builder OS checks those immediately before handoff.
+    availability or quota; Ariadne checks those immediately before handoff.
 
 UPDATE AGENTS.md - Implementation constraints section only:
 commands, environment assumptions, token system path, project-specific
@@ -76,7 +76,7 @@ Do not create the others. A document nobody reads is worse than none.
 END YOUR RESPONSE WITH THIS, FILLED IN:
 
   NEXT: S4 Build.
-  Return to Builder OS. It will check provider availability, generate and verify
+  Return to Ariadne. It will check provider availability, generate and verify
   the fresh build packet, and tell me the one external action required.
   Carry forward: HANDOFF.md, DESIGN.md, AGENTS.md, QA-POLICY.md,
   templates/QA.md, templates/RETURN-HANDOFF.md
@@ -90,7 +90,7 @@ Then STOP.
 ## B — Build (build tool, fresh session)
 
 ```
-You are the Implementer in my Builder OS. Stage S4.
+You are the Implementer in my Ariadne. Stage S4.
 
 REQUIRED INPUTS
 - The project repository and its source files.
@@ -100,7 +100,7 @@ REQUIRED INPUTS
 - QA-POLICY.md.
 - templates/QA.md.
 - templates/RETURN-HANDOFF.md.
-- .builderos/creative-operations.json, containing the approved requirement trace
+- .ariadne/creative-operations.json, containing the approved requirement trace
   and project-specific visual-QA plan.
 - skills/visual-qa.md.
 
@@ -157,7 +157,7 @@ from the token system - signature moment works on mobile - acceptance criteria
 met. Not "it renders on the dev server".
 
 When the build is done, create or fill QA.md from templates/QA.md, follow the
-project-specific targets in .builderos/creative-operations.json through
+project-specific targets in .ariadne/creative-operations.json through
 skills/visual-qa.md, and run the mechanical half of QA-POLICY.md yourself:
 build, types, lint, console on every route, responsive at 375/768/900/1280/1920
 with screenshots, keyboard walk, contrast on rendered pixels, reduced-motion
@@ -168,7 +168,7 @@ A check you did not run is recorded as NOT RUN, never as passed.
 
 Before ending for any reason - complete, partial, blocked, or provider limit -
 fill templates/RETURN-HANDOFF.md and emit it between its exact BEGIN/END markers.
-This is how Builder OS resumes without this conversation. A partial return must
+This is how Ariadne resumes without this conversation. A partial return must
 name the exact resume point. The return handoff does not replace the verbatim
 transcript or independent review evidence.
 
@@ -180,7 +180,7 @@ BEFORE YOU FINISH, update AGENTS.md ## Current state:
 END YOUR RESPONSE WITH THE COMPLETE RETURN HANDOFF BLOCK, THEN THIS, FILLED IN:
 
   NEXT: S5 Review.
-  Return the handoff to Builder OS. It will ingest the implementation evidence
+  Return the handoff to Ariadne. It will ingest the implementation evidence
   and prepare the isolated review packet for a fresh reviewer.
   QA evidence: <where QA.md is>
   Blocked on: <G3, or what else you need from me>

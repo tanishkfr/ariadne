@@ -1,4 +1,4 @@
-# RELEASING BUILDER OS
+# RELEASING ARIADNE
 
 This is a maintainer procedure, not part of normal use.
 

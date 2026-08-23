@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Post-G1 creative trace, visual evidence, review, and social provenance.
 
-Canonical Builder OS documents and policies still own decisions and quality.
+Canonical Ariadne documents and policies still own decisions and quality.
 This module derives a project-local execution trace from approved documents and
 records what was implemented, rendered, observed, reviewed, and used. It never
 approves a gate or treats expected prose as execution evidence.
@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_VERSION = 1
-LEDGER_RELATIVE = Path(".builderos") / "creative-operations.json"
+LEDGER_RELATIVE = Path(".ariadne") / "creative-operations.json"
 EVIDENCE_LEVELS = ("code-suggests", "rendered", "observed", "verified", "unverified")
 EVIDENCE_KINDS = ("source", "screenshot", "browser", "dom", "measurement", "interaction")
 DRIFT_STATES = ("approved", "allowed", "drift", "unknown")
@@ -474,7 +474,7 @@ def record_creative_review(ledger: dict, event: dict) -> None:
 
 
 def _creative_references(project: Path) -> dict[str, dict]:
-    path = project / ".builderos" / "creative-evidence.json"
+    path = project / ".ariadne" / "creative-evidence.json"
     if not path.is_file():
         return {}
     value = read_json(path)
@@ -1085,7 +1085,7 @@ def repository_contract_problems(texts: dict[str, str] | None = None) -> list[st
         "review": ROOT / "skills" / "creative-review.md",
         "social": ROOT / "skills" / "social-strategy.md",
         "social_template": ROOT / "templates" / "SOCIAL-STRATEGY.md",
-        "runtime_reference": ROOT / ".agents" / "skills" / "builderos" / "references" / "creative-operations.md",
+        "runtime_reference": ROOT / ".agents" / "skills" / "ariadne" / "references" / "creative-operations.md",
     }
     problems = []
     values = dict(texts or {})
@@ -1356,7 +1356,7 @@ def self_test() -> int:
 
         social_artifact = project / "SOCIAL-STRATEGY.md"
         social_artifact.write_text("# Social strategy\n\nShow the archive thread before explaining the project.\n", encoding="utf-8")
-        creative_dir = project / ".builderos"
+        creative_dir = project / ".ariadne"
         creative_dir.mkdir(exist_ok=True)
         source_capture = project / "platform-source.html"
         source_capture.write_text("Official platform format guidance.\n", encoding="utf-8")

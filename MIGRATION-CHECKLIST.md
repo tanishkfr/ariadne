@@ -99,7 +99,7 @@ Each "yes" points at a specific fix: tighten the adapter instructions, improve t
 ## What NOT to migrate
 
 - **Do not** rebuild existing projects to fit this system. Apply it to new work.
-- **Do not** move private material into the Builder OS repo ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
+- **Do not** move private material into the Ariadne repo ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 - **Do not** encode design judgement into a plugin or a skill — the thesis is per-project ([adapters/cursor.md](adapters/cursor.md)).
 - **Do not** subscribe to anything until Phase 0 is done.
 

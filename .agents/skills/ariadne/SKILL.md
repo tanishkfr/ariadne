@@ -1,37 +1,37 @@
 ---
-name: builderos
-description: Start, run, resume, or recover a Builder OS creative-production project from an ordinary-language brief. Use when the user invokes Builder OS, asks to build a website/app/game/content project through Builder OS, or returns to an existing Builder OS project. Do not use for unrelated repository maintenance or a one-off code edit.
+name: ariadne
+description: Start, run, resume, or recover an Ariadne creative-production project from an ordinary-language brief. Use when the user invokes Ariadne, asks to build a website/app/game/content project through Ariadne, or returns to an existing Ariadne project. Do not use for unrelated repository maintenance or a one-off code edit.
 ---
 
-# Builder OS
+# Ariadne
 
 Make the workflow feel like creative direction, not stage administration.
-Canonical policy remains in the Builder OS repository; this skill operates its
+Canonical policy remains in the Ariadne repository; this skill operates its
 runtime and never restates or replaces routing, gate, design, QA, or privacy
 policy.
 
 ## Locate the runtime
 
-Resolve the Builder OS root in this order:
+Resolve the Ariadne root in this order:
 
-1. `BUILDER_OS_HOME` when set.
+1. `ARIADNE_HOME` when set.
 2. `references/installation.json` beside this skill when installed personally.
 3. The repository root containing this skill when it is loaded from
-   `.agents/skills/builderos` in Builder OS itself.
+   `.agents/skills/ariadne` in Ariadne itself.
 
-For a personal installation, run `builderos doctor` before first use after an
+For a personal installation, run `ariadne doctor` before first use after an
 install, update or rollback. The root is valid only when its release manifest,
-version, file hashes and this managed skill agree, and `scripts/builderos.py`,
+version, file hashes and this managed skill agree, and `scripts/ariadne.py`,
 `ROUTER.md`, and `WORKFLOW.md` exist. For a repository-local development skill,
 the three files are the minimum check. If validation fails, stop with one
-action: run `builderos install` to repair it. Do not reconstruct policies from
+action: run `ariadne install` to repair it. Do not reconstruct policies from
 this skill or from conversation history.
 
 ## Start or resume
 
 1. Identify the project directory from the active workspace or the user's
    explicit path. Keep runtime packets and evidence outside the project.
-2. Run `python <root>/scripts/builderos.py discover --project <project>` first.
+2. Run `python <root>/scripts/ariadne.py discover --project <project>` first.
    Resume the single matching run with `status --project <project>`. Treat its
    goal, approved direction, health, attention items, and next action as the
    opening briefing. If more
@@ -39,7 +39,7 @@ this skill or from conversation history.
    create a second run merely because conversation history is absent.
 3. If no run exists, inspect the project top level. Start an empty project from
    the ordinary-language request. When the project already contains unrelated
-   work and the user asked Builder OS to work on that project, use the runtime's
+   work and the user asked Ariadne to work on that project, use the runtime's
    safe adoption path (`--adopt-existing` internally) without making the user
    know its implementation flag. Adoption
    is non-destructive: preserve current behaviour and every existing file. If
@@ -49,23 +49,23 @@ this skill or from conversation history.
    stage in this task when independence does not require a fresh task. The user
    must not locate prompts, policies, templates, packet IDs, or transcript paths.
 5. After a same-session stage produces its project files, run
-   `builderos.py advance`. It records the obvious outputs and prepares routine
+   `ariadne.py advance`. It records the obvious outputs and prepares routine
    continuation without making the user operate evidence or packet commands.
    Supply only semantic choices the controller cannot derive, such as whether
    motion/assets apply or the independent-review lens. Use the lower-level
    evidence and preparation commands only for diagnosis or recovery.
 6. When the human rejects a proposed direction before G1, run
-   `builderos.py restart-direction --project <project> --reason <their words>`.
+   `ariadne.py restart-direction --project <project> --reason <their words>`.
    It preserves the rejected `DESIGN.md` and reason verbatim, keeps G1
    unresolved, and prepares the linked same-stage retry without making the
-   human reconstruct context. Use `builderos.py record-note` for other durable
+   human reconstruct context. Use `ariadne.py record-note` for other durable
    risks, lessons, decisions, or non-blocking evidence gaps. Project documents
    remain canonical for active decisions.
 
 ## Optional reasoner choice
 
 Codex remains the default. When the user explicitly says to use Claude, first
-run `builderos.py reasoner-status --project <project> --reasoner claude`. If the
+run `ariadne.py reasoner-status --project <project> --reasoner claude`. If the
 CLI is unavailable, stop without changing the project. Otherwise use
 `select-reasoner --reasoner claude --reason <their choice>` for an existing run,
 or `start --reasoner claude` for a new run. Use the same commands with `codex`
@@ -82,13 +82,13 @@ preflight, and S5 still receives only its isolated packet.
 When S1 has produced `PROJECT.md`, read
 `references/creative-intelligence.md`. Interpret the project across its stated
 characteristics, write the temporary assessment it defines, and run
-`builderos.py creative-plan` before `advance`. This is internal machinery: tell
+`ariadne.py creative-plan` before `advance`. This is internal machinery: tell
 the user only what focused work you chose and why, not the matrix or stage IDs.
 
 Before executing a selected method, record it as invoked with the current packet
 or tool transcript as evidence. After it produces a real artifact, record it as
 completed. Record it as used only after a downstream decision trace exists. Use
-`builderos.py record-creative` for these events and `creative-check` before G1.
+`ariadne.py record-creative` for these events and `creative-check` before G1.
 Recommended, invoked, completed, and used are never synonyms.
 
 For external research, preserve an actual retrieval, screenshot, or provider
@@ -110,7 +110,7 @@ provider/account access, shipping, or publishing. Never grant a gate.
 When an external implementer is appropriate, run provider preflight first. It
 reads provider, model, effort, workload, split, and reason from `HANDOFF.md`;
 only live availability/quota facts may need an external check. Do not generate
-the external build handoff when `builderos.py handoff-readiness` or preflight is
+the external build handoff when `ariadne.py handoff-readiness` or preflight is
 blocked. Present the recommendation in plain language. When ready, give the user
 one clickable packet artifact to attach or paste after they open the selected
 provider; never make them search for it. Keep hashes and stage mechanics in
@@ -120,16 +120,16 @@ provider; never make them search for it. Keep hashes and stage mechanics in
 
 The S4B packet names a unique project-local return target. Ask the external
 implementer to write the complete marked return block there as well as emitting
-it in the response. `builderos.py advance` ingests only the target belonging to
+it in the response. `ariadne.py advance` ingests only the target belonging to
 the current packet; a retry gets a new target and cannot overwrite prior
 evidence. If the provider cannot write that target, save the returned block to a
-temporary file and use `builderos.py ingest-return` as recovery. Do not turn a
+temporary file and use `ariadne.py ingest-return` as recovery. Do not turn a
 summary into a verbatim transcript. The return handoff can support continuation,
 but it does not prove unobserved provider behaviour or independent QA.
 
 For independent review, give the reviewer only the generated isolated packet.
 When its marked QA judgement returns, save the response temporarily and run
-`builderos.py ingest-review`. The controller preserves the raw response and
+`ariadne.py ingest-review`. The controller preserves the raw response and
 updates only QA.md's judgement region. Never paraphrase a score, verdict,
 finding, or evidence limitation.
 
@@ -142,9 +142,9 @@ creative-review methods to record rendered evidence and material drift before
 independent review. These internal observations never enter the isolated S5
 packet and never grant G3.
 
-The recovery-level commands are `builderos.py operations-plan`,
-`builderos.py record-operations`, and `builderos.py operations-check`; normal
-progression should use `builderos.py advance` wherever it can derive the action.
+The recovery-level commands are `ariadne.py operations-plan`,
+`ariadne.py record-operations`, and `ariadne.py operations-check`; normal
+progression should use `ariadne.py advance` wherever it can derive the action.
 
 After implementation returns, inspect the recorded files and run the applicable
 local checks from the delivered QA policy before independent review. Fix work

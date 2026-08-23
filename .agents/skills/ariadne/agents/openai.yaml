@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ariadne"
+  short_description: "Run or resume a Ariadne creative project"
+  default_prompt: "Use Ariadne to run this project from the current state."

@@ -113,7 +113,7 @@
 | Split | <what stays with the orchestrator, or `none`> |
 | Reason | <why this route fits the work> |
 
-Before an external build packet is created, Builder OS runs provider preflight.
+Before an external build packet is created, Ariadne runs provider preflight.
 Availability and quota are runtime facts; do not invent them in this document.
 
 ## Motion requirements

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic Builder OS runtime release bundle.
+"""Build a deterministic Ariadne runtime release bundle.
 
 The repository remains canonical. This script copies an explicit runtime
 allowlist into a generated immutable transport artifact and records every hash.
@@ -29,7 +29,7 @@ VERSION_PATH = ROOT / "VERSION"
 RELEASE_NOTES_PATH = ROOT / "RELEASE-NOTES.md"
 PYPROJECT_PATH = ROOT / "pyproject.toml"
 LICENSE_PATH = ROOT / "LICENSE"
-REPOSITORY_URL = "https://github.com/tanishkfr/builder-os"
+REPOSITORY_URL = "https://github.com/tanishkfr/ariadne"
 RUNTIME_TOP_LEVEL = [
     "VERSION", "LICENSE", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md", "DESIGN-MOTION.md",
     "DESIGN-ASSETS.md", "QA-POLICY.md", "EVALUATION-RUBRICS.md",
@@ -38,12 +38,12 @@ RUNTIME_TOP_LEVEL = [
 ]
 RUNTIME_TREES = ["prompts", "templates", "modes", "skills", "adapters", "references"]
 RUNTIME_SCRIPTS = [
-    "scripts/builderos.py", "scripts/prepare-stage.py",
+    "scripts/ariadne.py", "scripts/prepare-stage.py",
     "scripts/creative-intelligence.py", "scripts/creative-operations.py",
     "scripts/reasoners.py",
-    "scripts/install-builderos-skill.py", "scripts/install-claude-reasoner-skill.py",
+    "scripts/install-ariadne-skill.py", "scripts/install-claude-reasoner-skill.py",
 ]
-RUNTIME_SKILL = ".agents/skills/builderos"
+RUNTIME_SKILL = ".agents/skills/ariadne"
 FIXED_ZIP_TIME = (2020, 1, 1, 0, 0, 0)
 
 
@@ -120,7 +120,7 @@ def runtime_manifest(source_commit: str | None = None) -> dict:
     files = {relative: digest(path) for relative, path in runtime_sources()}
     return {
         "schema_version": 1,
-        "product": "Builder OS",
+        "product": "Ariadne",
         "version": version(),
         "source_commit": source_commit or git_head(),
         "minimum_bootstrap_version": "1.4.0",
@@ -137,8 +137,8 @@ def zip_entry(archive: zipfile.ZipFile, name: str, content: bytes) -> None:
 
 
 def build_launcher(output: Path) -> Path:
-    backend_path = ROOT / "build_backend" / "builderos_backend.py"
-    spec = importlib.util.spec_from_file_location("builderos_release_backend", backend_path)
+    backend_path = ROOT / "build_backend" / "ariadne_backend.py"
+    spec = importlib.util.spec_from_file_location("ariadne_release_backend", backend_path)
     if spec is None or spec.loader is None:
         raise ReleaseError(f"could not load launcher build backend: {backend_path}")
     backend = importlib.util.module_from_spec(spec)
@@ -153,7 +153,7 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
     output.mkdir(parents=True, exist_ok=True)
     manifest = runtime_manifest(source_commit)
     release_version = manifest["version"]
-    artifact_name = f"builder-os-runtime-{release_version}.zip"
+    artifact_name = f"ariadne-runtime-{release_version}.zip"
     artifact = output / artifact_name
     manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
     with zipfile.ZipFile(artifact, "w") as archive:
@@ -163,13 +163,13 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
     artifact_sha = digest(artifact)
     launcher = build_launcher(output)
     launcher_sha = digest(launcher)
-    release_notes_name = f"builder-os-{release_version}-release-notes.md"
+    release_notes_name = f"ariadne-{release_version}-release-notes.md"
     release_notes = output / release_notes_name
     release_notes.write_bytes(RELEASE_NOTES_PATH.read_bytes())
     release_notes_sha = digest(release_notes)
     descriptor = {
         "schema_version": 1,
-        "product": "Builder OS",
+        "product": "Ariadne",
         "version": release_version,
         "artifact": f"{REPOSITORY_URL}/releases/download/v{release_version}/{artifact_name}",
         "sha256": artifact_sha,
@@ -186,7 +186,7 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
         "project_state_schema": manifest["project_state_schema"],
         "publication": publication_state(),
     }
-    descriptor_path = output / "builder-os-release.json"
+    descriptor_path = output / "ariadne-release.json"
     descriptor_path.write_text(json.dumps(descriptor, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (output / f"{artifact_name}.sha256").write_text(
         f"{artifact_sha}  {artifact_name}\n", encoding="utf-8"
@@ -276,14 +276,14 @@ def self_test() -> int:
         case("release carries its internal file manifest", embedded["source_commit"] == "fixture-commit")
         case(
             "runtime includes managed skill, controller, and optional reasoner adapter",
-            ".agents/skills/builderos/SKILL.md" in names
-            and "scripts/builderos.py" in names
+            ".agents/skills/ariadne/SKILL.md" in names
+            and "scripts/ariadne.py" in names
             and "scripts/reasoners.py" in names
             and "adapters/reasoners.json" in names,
         )
         with zipfile.ZipFile(one["launcher"]) as wheel:
             wheel_names = set(wheel.namelist())
-        case("launcher wheel carries seed runtime and command", "builderos/seed-runtime.zip" in wheel_names and any(name.endswith("/entry_points.txt") for name in wheel_names))
+        case("launcher wheel carries seed runtime and command", "ariadne/seed-runtime.zip" in wheel_names and any(name.endswith("/entry_points.txt") for name in wheel_names))
         case("runtime carries the approved licence", "LICENSE" in names)
         case(
             "launcher wheel carries the approved licence",
@@ -294,7 +294,7 @@ def self_test() -> int:
         case(
             "runtime content excludes maintainer-specific paths and private test data",
             not any(token in runtime_bytes for token in (
-                b"snprasad", b"c:\\testbed", b"builder os tests",
+                b"snprasad", b"c:\\testbed", b"builder os tests", b"ariadne tests",
             ))
             and not any(
                 part in name.lower()
@@ -305,10 +305,10 @@ def self_test() -> int:
         case("VERSION is the release authority", descriptor["version"] == VERSION_PATH.read_text(encoding="utf-8").strip())
         case(
             "release notes name the authoritative version",
-            f"Builder OS {descriptor['version']}" in one["release_notes"].read_text(encoding="utf-8"),
+            f"Ariadne {descriptor['version']}" in one["release_notes"].read_text(encoding="utf-8"),
         )
 
-    print("BUILDER OS RELEASE SELF-TEST\n")
+    print("ARIADNE RELEASE SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
     failed = [name for name, passed in cases if not passed]

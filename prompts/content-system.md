@@ -9,7 +9,7 @@ System: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). **Nothing publishes automatic
 ## Prompt 1 — Setup (run once)
 
 ```
-You are the Content strategist role in my Builder OS. We are setting up my
+You are the Content strategist role in my Ariadne. We are setting up my
 content system for X and LinkedIn. This is setup, not drafting — do not write
 any posts yet.
 
@@ -47,7 +47,7 @@ almost every time. Push on it. An unresolved answer here produces generic posts
 forever.
 
 OUTPUT: voice-profile.md (voice + anti-voice) and a pillars list.
-These live in my content project, never in the Builder OS repo.
+These live in my content project, never in the Ariadne repo.
 
 Do not write any posts. Stop here.
 ```
@@ -57,7 +57,7 @@ Do not write any posts. Stop here.
 ## Prompt 2 — Drafting (per post)
 
 ```
-You are the Content strategist role in my Builder OS. Draft one post.
+You are the Content strategist role in my Ariadne. Draft one post.
 
 REQUIRED INPUTS
 - voice-profile.md, including the current anti-voice list.

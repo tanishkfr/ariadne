@@ -1,15 +1,15 @@
 # PROMPT: Retrospective (S6)
 
 **Paste into:** your reasoning tool, after the project ships or stops.
-**Produces:** `RETROSPECTIVE.md`, and **zero or more change proposals** for Builder OS.
-**Gate:** none for the retrospective. **Your approval is required before any Builder OS file changes.**
+**Produces:** `RETROSPECTIVE.md`, and **zero or more change proposals** for Ariadne.
+**Gate:** none for the retrospective. **Your approval is required before any Ariadne file changes.**
 
 Fifteen minutes. This is the stage that makes the system improve instead of ossify — and the stage that, done carelessly, regrows it into seventy files.
 
 ---
 
 ```
-You are the Strategist in my Builder OS. Stage S6.
+You are the Strategist in my Ariadne. Stage S6.
 
 REQUIRED INPUTS
 - PROJECT.md.
@@ -43,9 +43,9 @@ PART 1 - WHAT HAPPENED
 3. Which questions should the router have asked and did not?
 4. Did the handoff work? How many questions did the build session ask that
    HANDOFF.md should have answered? A number, not an impression.
-5. Where did I have to think about Builder OS instead of the project?
+5. Where did I have to think about Ariadne instead of the project?
    Every one of those is friction and worth more than any score.
-6. Where did Builder OS prevent a bad decision? Be specific or say none.
+6. Where did Ariadne prevent a bad decision? Be specific or say none.
 
 PART 2 - LESSON CANDIDATES
 
@@ -74,7 +74,7 @@ CHANGE PROPOSAL <n>
 Observation:  <what happened>
 Evidence:     <when, how often, what it cost>
 Why systemic: <why this is not just this project>
-File:         <the ONE Builder OS file that changes>
+File:         <the ONE Ariadne file that changes>
 Change:       <the exact edit - quote the current text and the replacement>
 Prevents:     <the specific behaviour this stops, next time>
 Replaces:     <existing rule this supersedes, or "nothing - this is additive">
@@ -99,7 +99,7 @@ FINALLY, update AGENTS.md ## Current state:
 That is the last write. The repository is now readable by any future session
 without this conversation.
 
-THEN STOP. Do not edit any Builder OS file. I approve, defer, or reject each
+THEN STOP. Do not edit any Ariadne file. I approve, defer, or reject each
 proposal. A deferred proposal stays in RETROSPECTIVE.md - if the same lesson
 gets deferred three times, that repetition is itself the evidence.
 ```

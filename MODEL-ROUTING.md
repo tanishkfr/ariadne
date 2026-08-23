@@ -2,7 +2,7 @@
 
 Which tool does which job, and how to not burn your subscription limits doing it.
 
-**Provider-neutrality rule:** this file routes by *capability class*, never by brand. The capability classes are stable; the products filling them are not. When a product changes, you edit the one mapping table in section 3 and nothing else in the Builder OS changes.
+**Provider-neutrality rule:** this file routes by *capability class*, never by brand. The capability classes are stable; the products filling them are not. When a product changes, you edit the one mapping table in section 3 and nothing else in the Ariadne changes.
 
 Related: [adapters/](adapters/) for tool-specific mechanics · [BUDGET-POLICY.md](BUDGET-POLICY.md) for cost.
 
@@ -62,7 +62,7 @@ Route work to a *class* first. This is the layer that does not change.
 - **Cursor (`R2`/`R3`/`R4`)** — builds. Implements the handoff, refactors, runs the browser, fixes QA findings. Reads documents. Writes most code.
 - **Claude Code (`R2` fallback, `R4`)** — implements during the transition, and handles agentic multi-file work in a terminal. Interchangeable with Cursor by design. See [adapters/claude-code.md](adapters/claude-code.md).
 
-If any one of these disappears tomorrow, the other two absorb its classes and the system still runs. That is the test of provider-neutrality, and it is the reason no Builder OS document outside [adapters/](adapters/) names a product.
+If any one of these disappears tomorrow, the other two absorb its classes and the system still runs. That is the test of provider-neutrality, and it is the reason no Ariadne document outside [adapters/](adapters/) names a product.
 
 ### Runtime routing record and preflight
 
@@ -160,7 +160,7 @@ Build output. Test output. Lint errors with an obvious fix. File listings. Git o
 
 Enforced by four rules:
 
-1. Builder OS documents outside [adapters/](adapters/) refer to `R1`-`R6` and role names, never product names. Section 3 is the single exception, by design.
+1. Ariadne documents outside [adapters/](adapters/) refer to `R1`-`R6` and role names, never product names. Section 3 is the single exception, by design.
 2. Every adapter implements the same contract: read `HANDOFF.md`, respect `AGENTS.md`, honour gates, report in the `QA.md` format.
 3. Handoffs are plain markdown files, readable by any tool and by you.
 4. Nothing depends on a proprietary feature. If a tool offers a shortcut, it goes in that tool's adapter as an *optimisation*, never as a requirement.

@@ -2,11 +2,27 @@
 
 How this system has changed, and why.
 
-**Every retrospective that changes a Builder OS file logs it here.** A retrospective that changes nothing was not a retrospective ([WORKFLOW.md](WORKFLOW.md) S6).
+**Every retrospective that changes an Ariadne file logs it here.** A retrospective that changes nothing was not a retrospective ([WORKFLOW.md](WORKFLOW.md) S6).
 
 **Name the cause, not just the change.** "Added a check for X" is useless in six months. "Added a check for X because a font licence was discovered at S5 and cost a day" tells you whether the rule still earns its place.
 
 Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
+
+---
+
+## 1.5.3 — 2026-08-23 · PUBLIC NAME: ARIADNE
+
+Before its first public release, Builder OS was renamed **Ariadne**: the thread
+that makes a difficult creative-production maze navigable. The public product,
+Python module, command, managed Codex skill, runtime paths, release artefacts
+and repository URLs now use one name. Canonical workflow and gate semantics are
+unchanged.
+
+The public README now installs directly from the GitHub default branch, leads
+with the first-use path, and no longer links internal readiness or validation
+reports as user documentation. Local validation-run directories are ignored;
+deterministic source checks remain maintained and public. Historical validation
+records were not rewritten or added to this change.
 
 ---
 

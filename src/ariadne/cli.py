@@ -1,6 +1,6 @@
-"""Install, diagnose, update, roll back, and remove Builder OS.
+"""Install, diagnose, update, roll back, and remove Ariadne.
 
-The launcher is deliberately dependency-free. Canonical Builder OS sources are
+The launcher is deliberately dependency-free. Canonical Ariadne sources are
 delivered as immutable release bundles, not copied into user projects. A small
 current.json pointer activates one verified user-local runtime at a time.
 """
@@ -31,23 +31,23 @@ from pathlib import Path, PurePosixPath
 from . import package_version
 
 
-PRODUCT = "Builder OS"
+PRODUCT = "Ariadne"
 INSTALL_SCHEMA = 1
 RELEASE_SCHEMA = 1
 MIN_PYTHON = (3, 8)
 DEFAULT_RELEASE_MANIFEST = (
-    "https://github.com/tanishkfr/builder-os/releases/latest/download/"
-    "builder-os-release.json"
+    "https://github.com/tanishkfr/ariadne/releases/latest/download/"
+    "ariadne-release.json"
 )
 CURRENT_NAME = "current.json"
 RUNTIME_MANIFEST = "RELEASE-MANIFEST.json"
-SKILL_RELATIVE = Path(".agents") / "skills" / "builderos"
-SKILL_MARKER = ".builderos-managed.json"
+SKILL_RELATIVE = Path(".agents") / "skills" / "ariadne"
+SKILL_MARKER = ".ariadne-managed.json"
 SKILL_INSTALLATION = Path("references") / "installation.json"
-CLAUDE_SKILL_MARKER = ".builderos-managed-claude-reasoner.json"
+CLAUDE_SKILL_MARKER = ".ariadne-managed-claude-reasoner.json"
 CODEX_BASELINE_RELATIVE = Path("adapters") / "codex-baseline.md"
 CODEX_BASELINE_NAME = "AGENTS.md"
-CODEX_BASELINE_MARKER = ".builderos-managed-agents.json"
+CODEX_BASELINE_MARKER = ".ariadne-managed-agents.json"
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?$")
 BASE_REQUIRED_RUNTIME_FILES = {
     "VERSION",
@@ -61,12 +61,12 @@ BASE_REQUIRED_RUNTIME_FILES = {
     "templates/DESIGN.md",
     "templates/HANDOFF.md",
     "templates/QA.md",
-    "scripts/builderos.py",
+    "scripts/ariadne.py",
     "scripts/prepare-stage.py",
     "scripts/creative-intelligence.py",
     "scripts/creative-operations.py",
-    ".agents/skills/builderos/SKILL.md",
-    ".agents/skills/builderos/agents/openai.yaml",
+    ".agents/skills/ariadne/SKILL.md",
+    ".agents/skills/ariadne/agents/openai.yaml",
 }
 V151_REQUIRED_RUNTIME_FILES = {
     "scripts/reasoners.py",
@@ -146,12 +146,12 @@ def append_history(home: Path, event: str, details: dict) -> None:
         "repair": "managed installation files were restored to canonical parity",
         "rollback": "a previously installed verified runtime was reactivated",
         "codex-baseline-install": "the user explicitly enabled or refreshed the optional baseline",
-        "codex-baseline-remove": "Builder OS ownership of the optional baseline was removed",
+        "codex-baseline-remove": "Ariadne ownership of the optional baseline was removed",
     }
     next_actions = {
-        "activate": "run builderos doctor",
-        "repair": "run builderos doctor",
-        "rollback": "run builderos doctor",
+        "activate": "run ariadne doctor",
+        "repair": "run ariadne doctor",
+        "rollback": "run ariadne doctor",
         "codex-baseline-install": "restart Codex",
         "codex-baseline-remove": "restart Codex",
     }
@@ -161,7 +161,7 @@ def append_history(home: Path, event: str, details: dict) -> None:
         "event": event,
         "outcome": "succeeded",
         "why": reasons.get(event, "the requested managed operation completed"),
-        "next": next_actions.get(event, "run builderos doctor"),
+        "next": next_actions.get(event, "run ariadne doctor"),
         **details,
     }
     with (home / "install-history.jsonl").open("a", encoding="utf-8", newline="\n") as handle:
@@ -171,7 +171,7 @@ def append_history(home: Path, event: str, details: dict) -> None:
 def version_key(value: str) -> tuple:
     match = VERSION_RE.fullmatch(value)
     if not match:
-        raise ProductError(f"Unsupported Builder OS version: {value}")
+        raise ProductError(f"Unsupported Ariadne version: {value}")
     major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
     label = match.group(4)
     number = int(match.group(5) or 0)
@@ -186,17 +186,17 @@ def user_data_home(
 ) -> Path:
     environ = os.environ if environ is None else environ
     home = Path.home() if home is None else home
-    override = environ.get("BUILDER_OS_DATA_HOME")
+    override = environ.get("ARIADNE_DATA_HOME")
     if override:
         return Path(override).expanduser().resolve()
     system = platform.system() if system is None else system
     if system == "Windows":
         base = Path(environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
-        return (base / "BuilderOS").resolve()
+        return (base / "Ariadne").resolve()
     if system == "Darwin":
-        return (home / "Library" / "Application Support" / "BuilderOS").resolve()
+        return (home / "Library" / "Application Support" / "Ariadne").resolve()
     base = Path(environ.get("XDG_DATA_HOME", home / ".local" / "share"))
-    return (base / "builderos").resolve()
+    return (base / "ariadne").resolve()
 
 
 def skill_target(
@@ -205,9 +205,9 @@ def skill_target(
 ) -> Path:
     environ = os.environ if environ is None else environ
     home = Path.home() if home is None else home
-    override = environ.get("BUILDER_OS_SKILL_HOME")
+    override = environ.get("ARIADNE_SKILL_HOME")
     if override:
-        return (Path(override).expanduser().resolve() / "builderos")
+        return (Path(override).expanduser().resolve() / "ariadne")
     preferred = home / ".agents" / "skills"
     legacy_roots = []
     codex_home = environ.get("CODEX_HOME")
@@ -215,10 +215,10 @@ def skill_target(
         legacy_roots.append(Path(codex_home).expanduser().resolve() / "skills")
     legacy_roots.append(home / ".codex" / "skills")
     for parent in (preferred, *legacy_roots):
-        candidate = parent / "builderos"
+        candidate = parent / "ariadne"
         if (candidate / SKILL_MARKER).is_file():
             return candidate.resolve()
-    return (preferred / "builderos").resolve()
+    return (preferred / "ariadne").resolve()
 
 
 def codex_root(
@@ -259,23 +259,23 @@ def current_install(home: Path) -> dict | None:
         return None
     value = read_json(path)
     if value.get("schema_version") != INSTALL_SCHEMA:
-        raise ProductError("The Builder OS installation pointer uses an unsupported schema")
+        raise ProductError("The Ariadne installation pointer uses an unsupported schema")
     root = Path(str(value.get("runtime_root", ""))).resolve()
     if not is_within(root, home / "versions"):
-        raise ProductError("The Builder OS installation pointer escapes its version directory")
+        raise ProductError("The Ariadne installation pointer escapes its version directory")
     return value
 
 
 def claude_skill_target() -> Path:
-    return Path.home() / ".claude" / "skills" / "builderos"
+    return Path.home() / ".claude" / "skills" / "ariadne"
 
 
 def load_claude_skill_installer(runtime: Path):
     path = runtime / "scripts" / "install-claude-reasoner-skill.py"
     if not path.is_file():
-        raise ProductError("This Builder OS runtime has no optional Claude reasoner adapter")
+        raise ProductError("This Ariadne runtime has no optional Claude reasoner adapter")
     try:
-        return types.SimpleNamespace(**runpy.run_path(str(path), run_name="builder_os_optional_claude_installer"))
+        return types.SimpleNamespace(**runpy.run_path(str(path), run_name="ariadne_optional_claude_installer"))
     except (OSError, RuntimeError) as exc:
         raise ProductError(f"The optional Claude reasoner installer could not be loaded: {exc}") from exc
 
@@ -285,7 +285,7 @@ def configure_claude_reasoner(
 ) -> None:
     current = current_install(home)
     if current is None:
-        raise ProductError("Builder OS is not installed yet")
+        raise ProductError("Ariadne is not installed yet")
     runtime = Path(current["runtime_root"])
     problems = runtime_problems(runtime)
     if problems:
@@ -332,7 +332,7 @@ def codex_baseline_state(runtime: Path | None, root: Path) -> tuple[str, str]:
     managed_digest = str(marker.get("sha256", ""))
     actual_digest = sha256(target)
     if actual_digest != managed_digest:
-        return "modified", "managed baseline was edited; Builder OS will preserve it"
+        return "modified", "managed baseline was edited; Ariadne will preserve it"
     if runtime is None:
         return "managed", "managed baseline is present"
     source = codex_baseline_source(runtime)
@@ -341,20 +341,20 @@ def codex_baseline_state(runtime: Path | None, root: Path) -> tuple[str, str]:
     version = read_json(runtime / RUNTIME_MANIFEST).get("version")
     if actual_digest != sha256(source) or marker.get("version") != version:
         return "stale", "managed baseline does not match the active runtime"
-    return "current", f"optional managed baseline matches Builder OS {version}"
+    return "current", f"optional managed baseline matches Ariadne {version}"
 
 
 def install_codex_baseline(home: Path, root: Path) -> dict:
     current = current_install(home)
     if current is None:
-        raise ProductError("Builder OS is not installed yet")
+        raise ProductError("Ariadne is not installed yet")
     runtime = Path(current["runtime_root"])
     problems = runtime_problems(runtime)
     if problems:
         raise ProductError("The active runtime is damaged: " + "; ".join(problems))
     source = codex_baseline_source(runtime)
     if not source.is_file():
-        raise ProductError("This Builder OS runtime has no optional Codex baseline")
+        raise ProductError("This Ariadne runtime has no optional Codex baseline")
     target, marker_path, override = codex_baseline_paths(root)
     if override.exists():
         raise ProductError(
@@ -430,7 +430,7 @@ def refresh_codex_baseline_if_managed(home: Path, root: Path) -> str | None:
         _removed, preserved = remove_codex_baseline(home, root)
         if preserved:
             return (
-                "The active Builder OS version has no managed Codex baseline; "
+                "The active Ariadne version has no managed Codex baseline; "
                 "your edited instructions were preserved as user-owned."
             )
         return "The optional Codex baseline was removed because the active version does not provide it."
@@ -438,7 +438,7 @@ def refresh_codex_baseline_if_managed(home: Path, root: Path) -> str | None:
         marker = install_codex_baseline(home, root)
     except ProductError as exc:
         return f"Codex baseline was preserved without update: {exc}"
-    return f"Optional Codex baseline now matches Builder OS {marker['version']}."
+    return f"Optional Codex baseline now matches Ariadne {marker['version']}."
 
 
 def validate_release_manifest(value: dict) -> list[str]:
@@ -558,7 +558,7 @@ def skill_source(runtime: Path) -> Path:
 def skill_expected(runtime: Path) -> dict[str, str]:
     source = skill_source(runtime)
     if not (source / "SKILL.md").is_file():
-        raise ProductError("The runtime does not contain the managed $builderos skill")
+        raise ProductError("The runtime does not contain the managed $ariadne skill")
     return {
         path.relative_to(source).as_posix(): sha256(path)
         for path in sorted(source.rglob("*"))
@@ -571,21 +571,21 @@ def skill_problems(runtime: Path, target: Path) -> list[str]:
     marker_path = target / SKILL_MARKER
     installation_path = target / SKILL_INSTALLATION
     if not marker_path.is_file():
-        return ["managed $builderos skill marker is missing"]
+        return ["managed $ariadne skill marker is missing"]
     try:
         marker = read_json(marker_path)
         installation = read_json(installation_path)
     except ProductError as exc:
         return [str(exc)]
     if marker.get("owner") != PRODUCT:
-        problems.append("$builderos skill is not owned by Builder OS")
+        problems.append("$ariadne skill is not owned by Ariadne")
     expected = skill_expected(runtime)
     if marker.get("managed_files") != expected:
-        problems.append("$builderos skill metadata does not match the active runtime")
-    if Path(str(installation.get("builder_os_root", ""))).resolve() != runtime.resolve():
-        problems.append("$builderos skill points to a different runtime")
+        problems.append("$ariadne skill metadata does not match the active runtime")
+    if Path(str(installation.get("ariadne_root", ""))).resolve() != runtime.resolve():
+        problems.append("$ariadne skill points to a different runtime")
     if installation.get("version") != read_json(runtime / RUNTIME_MANIFEST).get("version"):
-        problems.append("$builderos skill version does not match the active runtime")
+        problems.append("$ariadne skill version does not match the active runtime")
     allowed = set(expected) | {SKILL_MARKER, SKILL_INSTALLATION.as_posix()}
     actual = {
         path.relative_to(target).as_posix()
@@ -594,13 +594,13 @@ def skill_problems(runtime: Path, target: Path) -> list[str]:
     }
     extras = sorted(actual - allowed)
     if extras:
-        problems.append("$builderos skill contains unmanaged files: " + ", ".join(extras))
+        problems.append("$ariadne skill contains unmanaged files: " + ", ".join(extras))
     for relative, digest_value in expected.items():
         path = target.joinpath(*PurePosixPath(relative).parts)
         if not path.is_file():
-            problems.append(f"$builderos skill file is missing: {relative}")
+            problems.append(f"$ariadne skill file is missing: {relative}")
         elif sha256(path) != digest_value:
-            problems.append(f"$builderos skill file changed: {relative}")
+            problems.append(f"$ariadne skill file changed: {relative}")
     return problems
 
 
@@ -636,7 +636,7 @@ def prepare_skill(runtime: Path, target: Path, install_home: Path) -> Path:
             + ", ".join(extras)
         )
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.parent / f".{target.name}.builderos-{uuid.uuid4().hex}"
+    temporary = target.parent / f".{target.name}.ariadne-{uuid.uuid4().hex}"
     shutil.copytree(skill_source(runtime), temporary)
     example = temporary / "references" / "installation.example.json"
     if example.exists():
@@ -646,7 +646,7 @@ def prepare_skill(runtime: Path, target: Path, install_home: Path) -> Path:
         temporary / SKILL_INSTALLATION,
         {
             "schema_version": INSTALL_SCHEMA,
-            "builder_os_root": str(runtime.resolve()),
+            "ariadne_root": str(runtime.resolve()),
             "install_home": str(install_home.resolve()),
             "version": manifest["version"],
         },
@@ -713,7 +713,7 @@ def _install_extracted(
     minimum = str(manifest.get("minimum_bootstrap_version", "1.4.0"))
     if version_key(package_version()) < version_key(minimum):
         raise ProductError(
-            f"This release needs Builder OS launcher {minimum} or newer; update the launcher first"
+            f"This release needs Ariadne launcher {minimum} or newer; update the launcher first"
         )
     versions = home / "versions"
     versions.mkdir(parents=True, exist_ok=True)
@@ -791,7 +791,7 @@ def _open_bytes(source: str) -> bytes:
     parsed = urllib.parse.urlparse(source)
     if parsed.scheme in ("http", "https"):
         if parsed.scheme != "https":
-            raise ProductError("Builder OS downloads require HTTPS")
+            raise ProductError("Ariadne downloads require HTTPS")
         request = urllib.request.Request(source, headers={"User-Agent": "Builder-OS-installer"})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -850,7 +850,7 @@ def install_from_descriptor(source: str, home: Path, target: Path) -> tuple[dict
 
 @contextlib.contextmanager
 def seed_runtime_bundle():
-    resource = importlib.resources.files("builderos").joinpath("seed-runtime.zip")
+    resource = importlib.resources.files("ariadne").joinpath("seed-runtime.zip")
     if not resource.is_file():
         yield None
         return
@@ -882,7 +882,7 @@ def repair_damaged_runtime(current: dict, home: Path, target: Path, descriptor: 
 def repair_current(home: Path, target: Path) -> dict:
     current = current_install(home)
     if current is None:
-        raise ProductError("Builder OS is not installed yet")
+        raise ProductError("Ariadne is not installed yet")
     runtime = Path(current["runtime_root"])
     problems = runtime_problems(runtime)
     if problems:
@@ -897,10 +897,10 @@ def repair_current(home: Path, target: Path) -> dict:
 def rollback(home: Path, target: Path, requested: str | None = None) -> dict:
     current = current_install(home)
     if current is None:
-        raise ProductError("Builder OS is not installed yet")
+        raise ProductError("Ariadne is not installed yet")
     version = requested or current.get("previous_version")
     if not version:
-        raise ProductError("No previous Builder OS version is available")
+        raise ProductError("No previous Ariadne version is available")
     version_key(str(version))
     if version == current.get("version"):
         raise ProductError("The requested rollback version is already active")
@@ -946,7 +946,7 @@ def project_compatibility(project: Path, manifest: dict) -> tuple[str, str]:
     project = project.resolve()
     if not project.exists():
         return "problem", "Project path does not exist"
-    run_files = sorted(project.parent.glob("*/builderos-run.json"))
+    run_files = sorted(project.parent.glob("*/ariadne-run.json"))
     matching = []
     for path in run_files:
         try:
@@ -956,14 +956,14 @@ def project_compatibility(project: Path, manifest: dict) -> tuple[str, str]:
         except ProductError:
             continue
     if not matching:
-        return "ok", "No existing Builder OS run; the project can be started or safely adopted"
+        return "ok", "No existing Ariadne run; the project can be started or safely adopted"
     if len(matching) > 1:
-        return "problem", "More than one Builder OS history names this project"
+        return "problem", "More than one Ariadne history names this project"
     schema = matching[0][1].get("schema_version")
     compatibility = manifest["project_state_schema"]
     if not isinstance(schema, int) or not compatibility["min"] <= schema <= compatibility["max"]:
         return "problem", f"Project state schema {schema!r} is not supported by this runtime"
-    return "ok", f"Existing Builder OS project state is compatible (schema {schema})"
+    return "ok", f"Existing Ariadne project state is compatible (schema {schema})"
 
 
 def doctor(
@@ -983,7 +983,7 @@ def doctor(
     except ProductError as exc:
         checks.append(("problem", "Installation", str(exc)))
     if current is None and not any(label == "Installation" for _, label, _ in checks):
-        checks.append(("problem", "Installation", "Builder OS is not installed"))
+        checks.append(("problem", "Installation", "Ariadne is not installed"))
     manifest = None
     if current is not None:
         runtime = Path(current["runtime_root"])
@@ -992,7 +992,7 @@ def doctor(
             checks.append(("problem", "Runtime", "; ".join(problems)))
         else:
             manifest = read_json(runtime / RUNTIME_MANIFEST)
-            checks.append(("ok", "Runtime", f"Builder OS {manifest['version']}"))
+            checks.append(("ok", "Runtime", f"Ariadne {manifest['version']}"))
         skill_issues = skill_problems(runtime, target) if not problems else ["runtime must be repaired first"]
         checks.append(("problem" if skill_issues else "ok", "Codex skill", "; ".join(skill_issues) or "managed and current"))
         history = home / "install-history.jsonl"
@@ -1026,7 +1026,7 @@ def doctor(
 def uninstall(home: Path, target: Path, codex_directory: Path | None = None) -> list[str]:
     current = current_install(home)
     if current is None:
-        raise ProductError("Builder OS is not installed")
+        raise ProductError("Ariadne is not installed")
     resolved_home = home.resolve()
     if resolved_home in (Path.home().resolve(), Path(resolved_home.anchor)) or len(resolved_home.parts) < 3:
         raise ProductError(f"Refusing to remove unsafe installation path: {resolved_home}")
@@ -1053,43 +1053,43 @@ def uninstall(home: Path, target: Path, codex_directory: Path | None = None) -> 
 
 
 def print_doctor(checks: list[tuple[str, str, str]]) -> None:
-    print("Builder OS health\n")
+    print("Ariadne health\n")
     symbols = {"ok": "[OK]", "warning": "[!]", "problem": "[X]"}
     for status_value, label, detail in checks:
         print(f"{symbols[status_value]} {label}: {detail}")
     if any(status_value == "problem" for status_value, _, _ in checks):
         print("\nAction needed: repair the failed item before starting a project.")
     elif any(status_value == "warning" and label == "Codex" for status_value, label, _ in checks):
-        print("\nBuilder OS is healthy. Next: install or open Codex, then invoke $builderos in a project.")
+        print("\nAriadne is healthy. Next: install or open Codex, then invoke $ariadne in a project.")
     elif any(status_value == "warning" and label == "Codex baseline" for status_value, label, _ in checks):
-        print("\nBuilder OS is healthy. Next: run builderos codex-baseline status for the optional baseline.")
+        print("\nAriadne is healthy. Next: run ariadne codex-baseline status for the optional baseline.")
     else:
-        print("\nBuilder OS is healthy. Next: invoke $builderos in your project.")
+        print("\nAriadne is healthy. Next: invoke $ariadne in your project.")
 
 
 def first_run_message(pointer: dict, codex_available: bool) -> None:
-    print(f"Builder OS {pointer['version']} is installed.\n")
+    print(f"Ariadne {pointer['version']} is installed.\n")
     print(
-        "Builder OS can take a project from an idea through research, design, "
+        "Ariadne can take a project from an idea through research, design, "
         "implementation and review. It handles the workflow and asks only when "
         "your judgement or permission is needed."
     )
     print("\nYou remain in control of creative direction, dependencies, shipping and publishing.")
     if codex_available:
-        print("\nNext: open Codex in your project, type $builderos, and describe what you want to make.")
+        print("\nNext: open Codex in your project, type $ariadne, and describe what you want to make.")
     else:
-        print("\nNext: install or open Codex, then type $builderos in your project.")
+        print("\nNext: install or open Codex, then type $ariadne in your project.")
 
 
 def parser() -> argparse.ArgumentParser:
-    value = argparse.ArgumentParser(prog="builderos", description="Install and maintain Builder OS.")
-    value.add_argument("--version", action="store_true", help="show the active Builder OS version")
+    value = argparse.ArgumentParser(prog="ariadne", description="Install and maintain Ariadne.")
+    value.add_argument("--version", action="store_true", help="show the active Ariadne version")
     value.add_argument("--data-home", help=argparse.SUPPRESS)
     value.add_argument("--skill-home", help=argparse.SUPPRESS)
     value.add_argument("--claude-skill-home", help=argparse.SUPPRESS)
     value.add_argument("--codex-home", help=argparse.SUPPRESS)
     sub = value.add_subparsers(dest="command")
-    install = sub.add_parser("install", help="install or repair Builder OS for this user")
+    install = sub.add_parser("install", help="install or repair Ariadne for this user")
     install.add_argument("--bundle", help="use a local verified runtime bundle")
     install.add_argument("--manifest", default=DEFAULT_RELEASE_MANIFEST, help=argparse.SUPPRESS)
     install.add_argument(
@@ -1097,13 +1097,13 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also add the optional recommended Codex working defaults",
     )
-    update = sub.add_parser("update", help="install the latest verified Builder OS release")
+    update = sub.add_parser("update", help="install the latest verified Ariadne release")
     update.add_argument("--manifest", default=DEFAULT_RELEASE_MANIFEST, help=argparse.SUPPRESS)
     rollback_parser = sub.add_parser("rollback", help="return to the previous installed version")
     rollback_parser.add_argument("--to", dest="rollback_to", help="activate a specific installed version")
     doctor_parser = sub.add_parser("doctor", help="check installation health in plain language")
     doctor_parser.add_argument("--project", help="also check one project's compatibility")
-    uninstall_parser = sub.add_parser("uninstall", help="remove Builder OS while preserving projects")
+    uninstall_parser = sub.add_parser("uninstall", help="remove Ariadne while preserving projects")
     uninstall_parser.add_argument("--yes", action="store_true", help="confirm removal without a prompt")
     sub.add_parser("enable-claude", help="enable the optional Claude reasoner entry")
     sub.add_parser("disable-claude", help="remove the optional Claude reasoner entry")
@@ -1127,7 +1127,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.version:
         current = current_install(home)
-        print(f"Builder OS {current['version'] if current else package_version()}")
+        print(f"Ariadne {current['version'] if current else package_version()}")
         return 0
     try:
         if args.command == "install":
@@ -1155,35 +1155,35 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "update":
             current = current_install(home)
             if current is None:
-                raise ProductError("Builder OS is not installed; run builderos install first")
+                raise ProductError("Ariadne is not installed; run ariadne install first")
             descriptor, _ = release_descriptor(args.manifest)
             if version_key(str(descriptor["version"])) < version_key(str(current["version"])):
                 raise ProductError("The available release is older than the active installation")
             if descriptor["version"] == current["version"]:
                 repair_current(home, target)
                 baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
-                print(f"Builder OS {current['version']} is current and verified.")
+                print(f"Ariadne {current['version']} is current and verified.")
                 if baseline_message:
                     print(baseline_message)
-                print("Next: use $builderos in your project.")
+                print("Next: use $ariadne in your project.")
                 return 0
             pointer, available = install_from_descriptor(args.manifest, home, target)
             baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
-            print(f"Updated Builder OS {current['version']} → {available}.")
+            print(f"Updated Ariadne {current['version']} → {available}.")
             if baseline_message:
                 print(baseline_message)
-            print(f"Rollback available: builderos rollback returns to {current['version']}.")
-            print("Next: use $builderos in your project.")
+            print(f"Rollback available: ariadne rollback returns to {current['version']}.")
+            print("Next: use $ariadne in your project.")
             return 0
         if args.command == "rollback":
             before = current_install(home)
             pointer = rollback(home, target, args.rollback_to)
             baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
-            print(f"Rolled back Builder OS {before['version']} → {pointer['version']}.")
+            print(f"Rolled back Ariadne {before['version']} → {pointer['version']}.")
             if baseline_message:
                 print(baseline_message)
             print("Projects and project evidence were not changed.")
-            print("Next: run builderos doctor.")
+            print("Next: run ariadne doctor.")
             return 0
         if args.command == "doctor":
             code, checks = doctor(
@@ -1195,45 +1195,45 @@ def main(argv: list[str] | None = None) -> int:
             configure_claude_reasoner(home, claude_target, "install")
             print("Optional Claude reasoner entry enabled.")
             print("Codex remains the default; projects and gates were not changed.")
-            print("Next: open Claude Code in a project and invoke $builderos.")
+            print("Next: open Claude Code in a project and invoke $ariadne.")
             return 0
         if args.command == "disable-claude":
             configure_claude_reasoner(home, claude_target, "uninstall", require_cli=False)
             print("Optional Claude reasoner entry removed.")
-            print("Builder OS, Codex support, projects, and evidence were not changed.")
-            print("Next: continue with Codex, or run builderos rollback if restoring V1.5.")
+            print("Ariadne, Codex support, projects, and evidence were not changed.")
+            print("Next: continue with Codex, or run ariadne rollback if restoring V1.5.")
             return 0
         if args.command == "codex-baseline":
             if args.action == "install":
                 marker = install_codex_baseline(home, codex_directory)
-                print(f"Optional Codex baseline installed for Builder OS {marker['version']}.")
+                print(f"Optional Codex baseline installed for Ariadne {marker['version']}.")
                 print("Existing project instructions remain separate and take precedence by directory.")
                 print("Next: restart Codex so it discovers the new instructions.")
                 return 0
             if args.action == "remove":
                 removed, preserved = remove_codex_baseline(home, codex_directory)
                 if preserved:
-                    print("Builder OS ownership was removed; your edited Codex instructions were preserved.")
+                    print("Ariadne ownership was removed; your edited Codex instructions were preserved.")
                 elif removed:
-                    print("The optional Builder OS-managed Codex baseline was removed.")
+                    print("The optional Ariadne-managed Codex baseline was removed.")
                 else:
-                    print("No Builder OS-managed Codex baseline was installed.")
+                    print("No Ariadne-managed Codex baseline was installed.")
                 print("Next: restart Codex so it rediscovers your instruction environment.")
                 return 0
             current = current_install(home)
             runtime = Path(current["runtime_root"]) if current is not None else None
             status_value, detail = codex_baseline_state(runtime, codex_directory)
             print(f"Codex baseline: {status_value} — {detail}")
-            print("Next: use 'builderos codex-baseline install' or 'remove' if you want to change it.")
+            print("Next: use 'ariadne codex-baseline install' or 'remove' if you want to change it.")
             return 2 if status_value == "problem" else 0
         if args.command == "uninstall":
             if not args.yes:
-                answer = input("Remove Builder OS runtime and its managed Codex skill? Projects remain untouched. [y/N] ")
+                answer = input("Remove Ariadne runtime and its managed Codex skill? Projects remain untouched. [y/N] ")
                 if answer.strip().lower() not in ("y", "yes"):
                     print("No changes made.")
                     return 0
             removed = uninstall(home, target, codex_directory)
-            print("Builder OS runtime and managed Codex skill were removed.")
+            print("Ariadne runtime and managed Codex skill were removed.")
             print("Your projects, project documents, evidence and source files remain untouched.")
             print("The small Python launcher remains managed by pip/pipx and may be removed there if desired.")
             print("Removed: " + ", ".join(removed))
@@ -1244,10 +1244,10 @@ def main(argv: list[str] | None = None) -> int:
         parser().print_help()
         return 0
     except ProductError as exc:
-        print(f"Builder OS stopped safely: {exc}")
+        print(f"Ariadne stopped safely: {exc}")
         print("No project files were changed.")
         return 2
     except (PermissionError, OSError) as exc:
-        print(f"Builder OS stopped safely: a permission or filesystem error occurred: {exc}")
+        print(f"Ariadne stopped safely: a permission or filesystem error occurred: {exc}")
         print("The active installation and project files were not intentionally changed.")
         return 2

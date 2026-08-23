@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builder OS -- Test A setup.
+Ariadne -- Test A setup.
 
 Prepares one controlled validation run. Creates a clean project OUTSIDE this
 repository, a run record from the existing template, and the exact prompt to
@@ -28,7 +28,7 @@ PROTOCOL = os.path.join(ROOT, "tests", "validation-protocol.md")
 START_PROMPT = os.path.join(ROOT, "prompts", "project-start.md")
 PERSONAL_FIXTURE = os.path.join(ROOT, "validation", "fixtures", "codex-personal-AGENTS.md")
 
-PROJECTS_ROOT = os.path.join(os.path.expanduser("~"), "Builder OS Tests")
+PROJECTS_ROOT = os.path.join(os.path.expanduser("~"), "Ariadne Tests")
 CODEX_HOME = os.path.join(os.path.expanduser("~"), ".codex")
 
 DRY = "--dry-run" in sys.argv
@@ -61,11 +61,11 @@ def read(p):
 # ------------------------------------------------------------------ checks
 
 def confirm_repo():
-    """Refuse to run from anywhere that is not the Builder OS repository."""
+    """Refuse to run from anywhere that is not the Ariadne repository."""
     markers = ["ROUTER.md", "WORKFLOW.md", "scripts/check.py", "scripts/validate.py"]
     missing = [m for m in markers if not os.path.exists(os.path.join(ROOT, m))]
     if missing:
-        die(f"this does not look like the Builder OS repository (missing {missing}). "
+        die(f"this does not look like the Ariadne repository (missing {missing}). "
             f"Run from the repo root: python scripts/setup-test-a.py")
     return "OK"
 
@@ -75,7 +75,7 @@ def core_checks():
                        capture_output=True, text=True, cwd=ROOT)
     if r.returncode != 0:
         say(r.stdout)
-        die("Builder OS structural checks FAILED. Fix the repository before validating "
+        die("Ariadne structural checks FAILED. Fix the repository before validating "
             "with it -- a run against a broken core proves nothing.")
     return "PASS"
 
@@ -161,7 +161,7 @@ def next_run_id():
 
 def make_project(run_id):
     """
-    Clean and EMPTY. Builder OS generates PROJECT.md and AGENTS.md itself --
+    Clean and EMPTY. Ariadne generates PROJECT.md and AGENTS.md itself --
     pre-creating them would rig the very thing the run measures.
     """
     path = os.path.join(PROJECTS_ROOT, f"type-sound-{run_id}")
@@ -200,7 +200,7 @@ def make_run_record(run_id, version, commit, project, prompt):
 
     t = setfield(t, "Run ID", run_id)
     t = setfield(t, "Date", now.strftime("%Y-%m-%d"))
-    t = setfield(t, "Builder OS version", f"{version} / {commit}")
+    t = setfield(t, "Ariadne version", f"{version} / {commit}")
     t = setfield(t, "Test", "A")
     t = setfield(t, "Provider", "Codex")
     t = setfield(t, "Project type", "audio-reactive typography -- object deliberately unresolved")
@@ -213,7 +213,7 @@ def make_run_record(run_id, version, commit, project, prompt):
         f.write(t)
     with open(os.path.join(run_dir, "evidence", "_README.md"), "w", encoding="utf-8") as f:
         f.write("# Raw evidence\n\nPaste the Codex transcript here as `transcript.md`, plus any "
-                "screenshots.\n\n**Keep client or project material out of the Builder OS "
+                "screenshots.\n\n**Keep client or project material out of the Ariadne "
                 "repository** (PRIVACY-POLICY.md). For Test A there is none, so the transcript "
                 "is safe to keep here.\n")
     return run_dir, run_file
@@ -257,7 +257,7 @@ TEST_A_CAPTURE = """
 
 **Your answer to the clarifying question:** `<verbatim>`
 
-### Documents Builder OS created
+### Documents Ariadne created
 
 | Document | Created? | Should it have been? |
 |---|---|---|
@@ -282,7 +282,7 @@ TEST_A_CAPTURE = """
 
 ### The comparison
 
-| | Baseline (written first) | Builder OS |
+| | Baseline (written first) | Ariadne |
 |---|---|---|
 | Direction | | |
 | What it refused | | |
@@ -292,7 +292,7 @@ TEST_A_CAPTURE = """
 
 `<>`
 
-**Was the Builder OS version actually better?** `<better / the same / worse>` — "the same" is
+**Was the Ariadne version actually better?** `<better / the same / worse>` — "the same" is
 an important result, not a failure to report.
 
 > Project: `{project}`
@@ -335,7 +335,7 @@ def verify_personal(path):
 def main():
     say()
     say(BAR)
-    say("BUILDER OS  --  TEST A SETUP")
+    say("ARIADNE  --  TEST A SETUP")
     say(BAR)
     say()
 
@@ -372,7 +372,7 @@ def main():
     say("CLEAN TEST PROJECT")
     say(BAR)
     say(f"  {project}")
-    say("  Empty by design. Builder OS generates PROJECT.md and AGENTS.md itself --")
+    say("  Empty by design. Ariadne generates PROJECT.md and AGENTS.md itself --")
     say("  pre-creating them would rig the thing this run measures.")
     say()
     say(BAR)
@@ -386,7 +386,7 @@ def main():
     say("=" * 64)
     say()
     say("  Write your baseline. In the run record, under '## Baseline', answer")
-    say("  this WITHOUT opening any Builder OS file and WITHOUT Codex:")
+    say("  this WITHOUT opening any Ariadne file and WITHOUT Codex:")
     say()
     say(f'      "{request}"')
     say()
@@ -396,7 +396,7 @@ def main():
     say("      - why would you make it that way?")
     say()
     say("  This is the only step that cannot be done afterwards. Once you have seen")
-    say("  the Builder OS direction, the control is gone and the run proves nothing.")
+    say("  the Ariadne direction, the control is gone and the run proves nothing.")
     say()
     say("  Do NOT paste your baseline into Codex.")
     say()
@@ -417,7 +417,7 @@ def main():
 
     say("WHILE YOU RUN IT")
     say("  - Log events in the run record as they happen. You will not remember them.")
-    say("  - Do NOT modify Builder OS during the experiment.")
+    say("  - Do NOT modify Ariadne during the experiment.")
     say()
     say("  REQUIRED before you finish -- save the raw Codex reply to:")
     say()

@@ -12,7 +12,7 @@
 |---|---|
 | **Run ID** | `<A1 \| B1 \| B2 …>` |
 | **Date** | `<YYYY-MM-DD>` |
-| **Builder OS version** | `<v0.3.3 / commit>` |
+| **Ariadne version** | `<v0.3.3 / commit>` |
 | **Test** | `<A \| B \| C>` |
 | **Project type** | `<one line — what you actually built>` |
 | **Mode** | `<client-or-portfolio \| product-app \| game-experiment \| content-system \| audit-review>` |
@@ -29,8 +29,8 @@
 
 ## Baseline
 
-> **Captured before running Builder OS.** Write this first, from the same brief, without
-> opening any Builder OS file. A baseline written afterwards is not a control — you will
+> **Captured before running Ariadne.** Write this first, from the same brief, without
+> opening any Ariadne file. A baseline written afterwards is not a control — you will
 > have already seen the answer.
 
 **Captured before opening Codex:** `<yes>`
@@ -47,7 +47,7 @@ first three moves you would make>
 
 ### After the run — comparison
 
-| | Baseline | Builder OS |
+| | Baseline | Ariadne |
 |---|---|---|
 | First direction | | |
 | What it rejected | | |
@@ -56,7 +56,7 @@ first three moves you would make>
 
 **What changed, and which mechanism caused it:** <name the rule, or "nothing changed">
 
-**Honest read:** <was the Builder OS version actually better, the same, or worse? "The same"
+**Honest read:** <was the Ariadne version actually better, the same, or worse? "The same"
 is a valid and important result.>
 
 ---
@@ -67,7 +67,7 @@ is a valid and important result.>
 > file, a screenshot. An event with no evidence is a memory, and the checker rejects it.
 >
 > `QUESTION` rows **must** carry `class A/B/C`:
-> **A** = a genuinely unresolved human decision · **B** = information Builder OS should
+> **A** = a genuinely unresolved human decision · **B** = information Ariadne should
 > already have supplied · **C** = legitimately unavailable.
 > **B is the primary handoff metric.** Do not classify a real open decision as B.
 
@@ -94,7 +94,7 @@ is a valid and important result.>
 | Wall-clock by stage | `<S1 … S3 … S4 …>` |
 | Documents created | `<>` |
 | Documents actually reopened | `<the honest number>` |
-| Times you searched Builder OS docs | `<each one is friction>` |
+| Times you searched Ariadne docs | `<each one is friction>` |
 
 **HUMAN-JUDGED** *(never aggregated into a score)*
 
@@ -137,10 +137,10 @@ is a valid and important result.>
 <what only you could see>
 
 ### Value
-<moments Builder OS prevented or improved something — empty is a valid result>
+<moments Ariadne prevented or improved something — empty is a valid result>
 
 ### Friction
-<moments you thought about Builder OS instead of the project — empty is valid>
+<moments you thought about Ariadne instead of the project — empty is valid>
 
 ### Failures
 <what did not work>
@@ -159,7 +159,7 @@ is a valid and important result.>
 
 ### Recommendation
 
-**Did this run produce enough evidence to change Builder OS?**
+**Did this run produce enough evidence to change Ariadne?**
 
 `<NO — FREEZE>` or `<YES — smallest change: …>`
 

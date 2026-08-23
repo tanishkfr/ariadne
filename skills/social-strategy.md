@@ -3,11 +3,11 @@
 **Trigger** — the user explicitly asks for launch strategy, social strategy, distribution help, post ideas, content planning, or analysis of supplied social results
 **Owner** — Content strategist
 **Inputs** — current project documents, approved thesis when one exists, implementation and rendered evidence when available, real assets, the user's social request, supplied voice examples, inspected current platform sources when behaviour matters, and user-provided performance evidence for learning
-**Output** — conditional [`SOCIAL-STRATEGY.md`](../templates/SOCIAL-STRATEGY.md), conditional [`CONTENT-LEARNINGS.md`](../templates/CONTENT-LEARNINGS.md) after results exist, and hashed strategy/result/learning events in `.builderos/creative-operations.json`
+**Output** — conditional [`SOCIAL-STRATEGY.md`](../templates/SOCIAL-STRATEGY.md), conditional [`CONTENT-LEARNINGS.md`](../templates/CONTENT-LEARNINGS.md) after results exist, and hashed strategy/result/learning events in `.ariadne/creative-operations.json`
 
 This optional method turns the actual project into a small distribution system.
 It never publishes, authenticates, schedules, connects an account, buys reach,
-changes a build gate, or promotes one project's results into Builder OS policy.
+changes a build gate, or promotes one project's results into Ariadne policy.
 Use the existing reasoner boundary: Codex is verified; Claude remains externally
 unverified until live execution exists.
 
@@ -57,7 +57,7 @@ unverified until live execution exists.
     invented achievements, engagement bait and promises of performance. Prefer
     an actual decision, number, failure, tension or observation from the work.
 11. Fill `SOCIAL-STRATEGY.md`, record a contract-version 2 `social-strategy`
-    event, then run `builderos.py operations-check --require social`. A revised
+    event, then run `ariadne.py operations-check --require social`. A revised
     strategy gets a new ID and names its prior `revises` ID.
 
 ## Performance and learning method
@@ -72,7 +72,7 @@ unverified until live execution exists.
    produce an `inconclusive` learning. A durable rule needs at least three
    distinct recorded results; otherwise keep the pattern under observation.
 4. Update project-local `CONTENT-LEARNINGS.md`, record a `social-learning`
-   event, and run `builderos.py operations-check --require social-learning`.
+   event, and run `ariadne.py operations-check --require social-learning`.
    Change one variable in the next test and retain uncertainty explicitly.
 5. In a fresh task, reload the project ledger and current strategy/learnings;
    do not reconstruct the result history from conversation memory.

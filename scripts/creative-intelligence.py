@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_VERSION = 1
-LEDGER_RELATIVE = Path(".builderos") / "creative-evidence.json"
+LEDGER_RELATIVE = Path(".ariadne") / "creative-evidence.json"
 LEVELS = ("low", "medium", "high")
 DIMENSIONS = (
     "novelty",
@@ -271,7 +271,7 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
                "Rendered project-specific behaviour needs evidence." if visual_qa_selected else
                "No visual, interaction, motion, or genericness risk currently justifies a visual pass.",
                "Which thesis-critical behaviours and responsive transformations need rendered evidence?",
-               ["locked DESIGN.md", "rendered target", ".builderos/creative-operations.json"],
+               ["locked DESIGN.md", "rendered target", ".ariadne/creative-operations.json"],
                "visual evidence and drift findings", visual_qa_selected),
         _skill("creative-review", "S4B", c["generic_risk"]["level"] == "high",
                "The rendered result needs an actionable creative-quality judgement." if creative_review_selected else

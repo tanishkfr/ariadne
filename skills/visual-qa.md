@@ -2,8 +2,8 @@
 
 **Trigger** — an approved direction has been implemented and a rendered target can be inspected. Post-S4B, before independent S5.
 **Owner** — Builder / orchestrator
-**Inputs** — locked `DESIGN.md`, `HANDOFF.md`, `PROJECT.md`, `AGENTS.md`, rendered target, `.builderos/creative-operations.json`
-**Output** — hashed visual evidence and drift findings in `.builderos/creative-operations.json`; mechanical results remain in `QA.md`
+**Inputs** — locked `DESIGN.md`, `HANDOFF.md`, `PROJECT.md`, `AGENTS.md`, rendered target, `.ariadne/creative-operations.json`
+**Output** — hashed visual evidence and drift findings in `.ariadne/creative-operations.json`; mechanical results remain in `QA.md`
 
 This skill applies [QA-POLICY.md](../QA-POLICY.md) to the project-specific
 requirements derived from the approved direction. It does not replace that
@@ -11,7 +11,7 @@ policy, grant G3, or enter the independent S5 review context.
 
 ## Method
 
-1. Run `builderos.py operations-plan` if the creative-operations ledger does
+1. Run `ariadne.py operations-plan` if the creative-operations ledger does
    not exist. Stop if `DESIGN.md` is not locked at G1 or its required sources
    are missing.
 2. Read `visual_qa_plan.targets` in priority order. Inspect the signature
@@ -50,8 +50,8 @@ policy, grant G3, or enter the independent S5 review context.
 }
 ```
 
-Record with `builderos.py record-operations --input <events.json>`, then run
-`builderos.py operations-check --require visual` before creative review.
+Record with `ariadne.py record-operations --input <events.json>`, then run
+`ariadne.py operations-check --require visual` before creative review.
 
 ## Stop conditions
 

@@ -32,8 +32,8 @@ def load_module(name: str, relative: str):
     return module
 
 
-CREATIVE = load_module("builder_os_v15_creative", "scripts/creative-intelligence.py")
-BUILDER = load_module("builder_os_v15_runtime", "scripts/builderos.py")
+CREATIVE = load_module("ariadne_v15_creative", "scripts/creative-intelligence.py")
+BUILDER = load_module("ariadne_v15_runtime", "scripts/ariadne.py")
 
 
 def fixture_source_sha256() -> str:

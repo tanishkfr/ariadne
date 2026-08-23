@@ -27,7 +27,7 @@ Human writing is lumpier. One point gets four sentences, the next gets three wor
 
 ## 2. Voice discovery
 
-Done once, refined quarterly. Output: `voice-profile.md`, kept in the content project, **not** in the Builder OS ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
+Done once, refined quarterly. Output: `voice-profile.md`, kept in the content project, **not** in the Ariadne ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 Collect 10-20 things you have actually written — DMs, commit messages, notes, old posts — and extract:
 
