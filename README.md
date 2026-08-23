@@ -42,7 +42,7 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 **Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — install the entry skill, then describe one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
-**Current productization evidence:** [V1.2-READINESS.md](V1.2-READINESS.md).
+**Current productization evidence:** [V1.3-READINESS.md](V1.3-READINESS.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
 **Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
 
@@ -82,9 +82,8 @@ Builder OS/
 ├─ CHANGELOG.md            How this system changed + the 30-day check
 ├─ GETTING-STARTED.md · DAILY-PLAYBOOK.md · MIGRATION-CHECKLIST.md
 ├─ .agents/skills/   Builder OS Codex entry point
-├─ skills/       4   intake, reference-analysis, design-direction,
-│                    component-research
-├─ templates/   11   4 required, 7 conditional
+├─ skills/       7   project-specific methods selected only when useful
+├─ templates/   13   4 required, the rest conditional or transport
 ├─ modes/        5
 ├─ adapters/     3   codex / cursor / claude-code
 ├─ references/   2   visual references, UI libraries
@@ -110,6 +109,11 @@ is not an inspected reference, and a selected provider is not an executed one.
 New projects retain those distinctions in a hashed project-local evidence
 ledger; generated packets transport it only to the stages that need it.
 
+**Rendered, not inferred.** After G1, approved decisions become traceable
+implementation and visual-QA requirements. Source code may suggest a state; it
+does not prove the rendered experience. Drift, environmental gaps and creative
+judgement remain separate records, and none grants a gate.
+
 **Four documents, not eleven.** `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. The rest exist when they earn it — a document nobody reads is worse than none, because it manufactures the appearance of process.
 
 **The system learns under human control.** A retrospective proposes a specific change; the human approves, defers, or rejects it before any Builder OS file changes.
@@ -126,22 +130,21 @@ ledger; generated packets transport it only to the stages that need it.
 
 ## Status
 
-**v1.2.0-rc.1.** Builder OS now chooses adaptive research and project-specific
-methods, records actual source inspection and resource comparison, traces
-reference observations into design decisions, and blocks unsupported creative
-claims before G1. A managed Codex entry skill starts or resumes a project,
-discovers its durable state, prepares verified boundaries, records evidence,
-checks provider readiness, ingests structured implementation returns, and keeps
-a plain-language operations log. The router still routes on **intent**, not
-keywords.
+**v1.3.0-rc.1.** Builder OS now carries approved design decisions into hashed
+implementation mappings, project-specific rendered QA, drift records and an
+evidence-backed creative review. It classifies human interventions, gives each
+S4B packet a unique non-overwriting project return target, and can produce an
+explicitly requested current-evidence social strategy without posting. A
+managed Codex entry skill still starts or resumes the project and the router
+still routes on **intent**, not keywords.
 
 Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
-**Status: V1.2 READY FOR PRIVATE USE.** Test B proved the fresh-session handoff through the
-start of implementation; provider quota prevented full build/return observation.
-The return path is therefore structurally verified and externally unverified,
-not presented as a live pass. The V1.2 creative-evidence pass additionally ran
-three real visual/interaction reference inspections and stopped at G1 without
-self-approval. See [V1.2-READINESS.md](V1.2-READINESS.md).
+**Status: V1.3 READY FOR PRIVATE USE.** A local rendered fixture exercised the
+new visual evidence and creative-review loop and exposed a real tablet drift;
+unsupported reduced-motion observation remained unverified. External provider
+automation, a complete V1.3 provider return and independent S5 remain
+externally unverified, not presented as live passes. See
+[V1.3-READINESS.md](V1.3-READINESS.md).
 
 Run `python scripts/check.py` after any edit.

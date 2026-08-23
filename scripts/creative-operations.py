@@ -850,7 +850,7 @@ def self_test() -> int:
         write_json(creative_dir / "creative-evidence.json", {
             "references": [{"id": "social-source", "state": "inspected", "source": "https://platform.example.test", "evidence": evidence_record(source_capture)}]
         })
-        record_social_strategy(project, ledger, {
+        social_event = {
             "id": "social-1", "activated_by": "Create a social strategy for this project.",
             "audience": "People interested in public-memory archives.",
             "platforms": [{"name": "LinkedIn", "why": "The project has a concrete process story."}],
@@ -868,8 +868,40 @@ def self_test() -> int:
             "iteration": "Compare saves and qualified replies after three posts; change one variable at a time.",
             "example_post": "The archive only became legible when one red thread stopped being decoration and started carrying provenance.",
             "voice_basis": "project-context", "draft_status": "rough-draft", "artifact_path": str(social_artifact),
-        })
+        }
+        record_social_strategy(project, ledger, social_event)
         case("optional social strategy uses inspected current evidence", summary(ledger)["social_strategies"] == 1)
+
+        revised_artifact = project / "SOCIAL-STRATEGY-REVISION.md"
+        revised_artifact.write_text(
+            "# Social strategy revision\n\nLead with the failed index before revealing the red thread.\n",
+            encoding="utf-8",
+        )
+        revised_event = json.loads(json.dumps(social_event))
+        revised_event.update({
+            "id": "social-2",
+            "revises": "social-1",
+            "artifact_path": str(revised_artifact),
+            "example_post": "The first archive index was legible and forgettable. The red thread changed what each fragment meant.",
+        })
+        record_social_strategy(project, ledger, revised_event)
+        case(
+            "social strategy revision retains its explicit parent (positive control)",
+            summary(ledger)["social_strategies"] == 2
+            and ledger["social_strategies"][-1]["revises"] == "social-1",
+        )
+        unknown_parent_event = json.loads(json.dumps(social_event))
+        unknown_parent_event.update({
+            "id": "social-bad-parent",
+            "revises": "social-missing",
+            "artifact_path": str(revised_artifact),
+        })
+        try:
+            record_social_strategy(project, ledger, unknown_parent_event)
+            unknown_parent_blocked = False
+        except OperationsError:
+            unknown_parent_blocked = True
+        case("social strategy revision cannot name an unknown parent", unknown_parent_blocked)
         try:
             record_social_strategy(project, ledger, {
                 "id": "social-generic", "activated_by": "Promote this.", "audience": "designers",

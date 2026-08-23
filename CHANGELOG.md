@@ -10,6 +10,55 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.3.0-rc.1 — 2026-08-23 · CREATIVE OPERATIONS WITH RENDERED EVIDENCE
+
+V1.2 could prove research inspection and trace it into a locked design, but it
+did not carry that design through implementation and rendered behaviour. A
+technically complete build could therefore preserve the files while losing the
+thesis, responsive transformation or signature interaction. Operator effort
+also still mixed necessary human authority with avoidable return handling.
+
+New projects now gain one post-G1 project-local creative-operations ledger. It
+derives testable requirements from approved project documents, hashes their
+source anchors, maps them to implementation, generates a thesis-first visual-QA
+plan and records source inference, rendered evidence, observed interaction,
+verification and environmental blockers separately. Drift is independently
+classified as approved, allowed, drift or unknown.
+
+An internal creative-review method judges ten project-quality dimensions from
+recorded evidence and produces one highest-value improvement plus a do-not-
+change boundary. It cannot change the locked direction, approve G3 or enter the
+isolated S5 packet. The S4B contract and provider adapters now deliver the
+operations plan and canonical visual-QA method.
+
+Every S4B packet also names a unique project-local structured-return target.
+The manifest verifier rejects missing, duplicated, stale, escaped or wrong-ID
+targets; retries cannot overwrite earlier evidence. The controller ingests only
+the current packet's return, while manual ingestion remains a recovery path.
+Runtime state separately classifies necessary, valuable, avoidable,
+unacceptable and prevented human interventions.
+
+An optional social-strategy skill and template activate only on an explicit
+request. Documented platform advice needs a dated inspected source; inferred
+and speculative recommendations remain labelled. The method requires three
+project-specific concepts, timing as a test, measurement and revision lineage,
+rejects common generic AI openers, and never posts or authenticates.
+
+The isolated Signal Atlas fixture was actually rendered and interacted with at
+1280px, 768px and 375px. It preserved the approved signature at wide and narrow
+widths, exposed a real tablet drift, and kept reduced-motion behaviour
+unverified because the available browser could not emulate it. A LinkedIn-only
+social strategy used two inspected current help pages and the observed drift;
+no platform result was fabricated.
+
+**Scope:** `ROUTER.md`, `WORKFLOW.md`, modes, gates, canonical design/research/
+QA/evaluation policies, human authority and S5 isolation are unchanged. Limited
+subagents and provider automation are recommendations only. Cursor was
+unavailable; no provider automation, dependency install, remote push,
+deployment, credential access or historical-evidence rewrite occurred.
+
+---
+
 ## 1.2.0-rc.1 — 2026-08-23 · CREATIVE INTELLIGENCE WITH OBSERVED EVIDENCE
 
 V1.1 could reliably route, transport, resume and preserve stage evidence, but it

@@ -122,6 +122,44 @@ the extra pass instead of manufacturing a bibliography.
 
 When you reach **G1**, the system will present a design direction and stop. **This is the moment that matters.** Read it. If it says "clean, modern, minimal", reject it — that is a mood, not a direction, and the system is meant to catch that. Ask for a thesis specific enough that a template would fail it.
 
+### What happens after G1
+
+Once you approve the direction, Builder OS turns its thesis, signature moment,
+responsive transformations, interactions and fixed handoff decisions into a
+project-local implementation and visual-QA plan. You do not need to rewrite the
+direction as a checklist or tell a fresh builder which canonical QA files to
+find; the verified S4B packet carries the plan and the selected visual-QA
+method.
+
+Every S4B packet names one unique return file under
+`.builderos/returns/<packet-id>.md`. A builder that can write project files puts
+the complete marked return there; `advance` ingests only the return belonging
+to the current packet. If the provider cannot write the file, use the existing
+manual return-ingestion path as recovery. Retries get new targets and preserve
+the earlier evidence.
+
+After implementation, Builder OS checks the actual rendered thesis, signature,
+responsive transformations and important states. It records source inference,
+rendered evidence, observed interaction, drift and environmental gaps as
+different claims. An internal creative review gives one prioritised correction
+before the isolated independent review. Neither review approves G3 for you.
+
+The recovery commands are:
+
+```bash
+python scripts/builderos.py operations-plan --project <project>
+python scripts/builderos.py record-operations --project <project> --input <events.json>
+python scripts/builderos.py operations-check --project <project> --require review
+```
+
+Normal `$builderos` progression runs the planning step automatically. Use these
+commands only when diagnosing or recovering a run.
+
+If you explicitly ask for a social strategy, Builder OS may add the conditional
+`SOCIAL-STRATEGY.md`. It uses the real project and current inspected platform
+sources, labels inference, and keeps voice-unsupported copy as a rough draft.
+It never posts, authenticates or changes a build gate.
+
 ### Bringing in an existing project
 
 Invoke `$builderos` from the repository and say what outcome you want from the
