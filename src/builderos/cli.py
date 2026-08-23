@@ -45,6 +45,9 @@ SKILL_RELATIVE = Path(".agents") / "skills" / "builderos"
 SKILL_MARKER = ".builderos-managed.json"
 SKILL_INSTALLATION = Path("references") / "installation.json"
 CLAUDE_SKILL_MARKER = ".builderos-managed-claude-reasoner.json"
+CODEX_BASELINE_RELATIVE = Path("adapters") / "codex-baseline.md"
+CODEX_BASELINE_NAME = "AGENTS.md"
+CODEX_BASELINE_MARKER = ".builderos-managed-agents.json"
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?$")
 BASE_REQUIRED_RUNTIME_FILES = {
     "VERSION",
@@ -70,6 +73,9 @@ V151_REQUIRED_RUNTIME_FILES = {
     "scripts/install-claude-reasoner-skill.py",
     "adapters/reasoners.json",
     "adapters/claude-reasoner-skill/SKILL.md",
+}
+V153_REQUIRED_RUNTIME_FILES = {
+    CODEX_BASELINE_RELATIVE.as_posix(),
 }
 
 
@@ -180,18 +186,41 @@ def skill_target(
     override = environ.get("BUILDER_OS_SKILL_HOME")
     if override:
         return (Path(override).expanduser().resolve() / "builderos")
+    preferred = home / ".agents" / "skills"
+    legacy_roots = []
     codex_home = environ.get("CODEX_HOME")
     if codex_home:
-        return (Path(codex_home).expanduser().resolve() / "skills" / "builderos")
-    legacy = home / ".agents" / "skills"
-    standard = home / ".codex" / "skills"
-    for parent in (legacy, standard):
+        legacy_roots.append(Path(codex_home).expanduser().resolve() / "skills")
+    legacy_roots.append(home / ".codex" / "skills")
+    for parent in (preferred, *legacy_roots):
         candidate = parent / "builderos"
         if (candidate / SKILL_MARKER).is_file():
             return candidate.resolve()
-    if legacy.is_dir():
-        return (legacy / "builderos").resolve()
-    return (standard / "builderos").resolve()
+    return (preferred / "builderos").resolve()
+
+
+def codex_root(
+    environ: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> Path:
+    environ = os.environ if environ is None else environ
+    home = Path.home() if home is None else home
+    configured = environ.get("CODEX_HOME")
+    return (Path(configured).expanduser() if configured else home / ".codex").resolve()
+
+
+def atomic_bytes(path: Path, value: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_bytes(value)
+        replace_with_retry(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def atomic_text(path: Path, value: str) -> None:
+    atomic_bytes(path, value.encode("utf-8"))
 
 
 def is_within(path: Path, parent: Path) -> bool:
@@ -251,6 +280,135 @@ def configure_claude_reasoner(
         raise ProductError(str(exc)) from exc
 
 
+def codex_baseline_paths(root: Path) -> tuple[Path, Path, Path]:
+    root = root.resolve()
+    return (
+        root / CODEX_BASELINE_NAME,
+        root / CODEX_BASELINE_MARKER,
+        root / "AGENTS.override.md",
+    )
+
+
+def codex_baseline_source(runtime: Path) -> Path:
+    return runtime / CODEX_BASELINE_RELATIVE
+
+
+def codex_baseline_state(runtime: Path | None, root: Path) -> tuple[str, str]:
+    target, marker_path, override = codex_baseline_paths(root)
+    if not marker_path.is_file():
+        if override.exists() or target.exists():
+            return "preserved", "existing Codex instructions are user-owned and unchanged"
+        return "not-installed", "optional recommended baseline is not installed"
+    try:
+        marker = read_json(marker_path)
+    except ProductError as exc:
+        return "problem", str(exc)
+    if marker.get("owner") != PRODUCT:
+        return "problem", "baseline ownership marker belongs to another tool"
+    if not target.is_file():
+        return "problem", "managed Codex baseline file is missing"
+    managed_digest = str(marker.get("sha256", ""))
+    actual_digest = sha256(target)
+    if actual_digest != managed_digest:
+        return "modified", "managed baseline was edited; Builder OS will preserve it"
+    if runtime is None:
+        return "managed", "managed baseline is present"
+    source = codex_baseline_source(runtime)
+    if not source.is_file():
+        return "problem", "active runtime has no Codex baseline source"
+    version = read_json(runtime / RUNTIME_MANIFEST).get("version")
+    if actual_digest != sha256(source) or marker.get("version") != version:
+        return "stale", "managed baseline does not match the active runtime"
+    return "current", f"optional managed baseline matches Builder OS {version}"
+
+
+def install_codex_baseline(home: Path, root: Path) -> dict:
+    current = current_install(home)
+    if current is None:
+        raise ProductError("Builder OS is not installed yet")
+    runtime = Path(current["runtime_root"])
+    problems = runtime_problems(runtime)
+    if problems:
+        raise ProductError("The active runtime is damaged: " + "; ".join(problems))
+    source = codex_baseline_source(runtime)
+    if not source.is_file():
+        raise ProductError("This Builder OS runtime has no optional Codex baseline")
+    target, marker_path, override = codex_baseline_paths(root)
+    if override.exists():
+        raise ProductError(
+            f"Codex already has {override.name}; existing instructions were left untouched"
+        )
+    marker = read_json(marker_path) if marker_path.is_file() else None
+    if marker is not None and marker.get("owner") != PRODUCT:
+        raise ProductError("Codex baseline marker belongs to another tool; nothing was changed")
+    if target.exists():
+        if marker is None:
+            raise ProductError(
+                f"Codex already has {target.name}; existing instructions were left untouched"
+            )
+        if not target.is_file() or sha256(target) != marker.get("sha256"):
+            raise ProductError("The managed Codex baseline was edited; it was left untouched")
+    root.mkdir(parents=True, exist_ok=True)
+    previous_target = target.read_bytes() if target.is_file() else None
+    previous_marker = marker_path.read_text(encoding="utf-8") if marker_path.is_file() else None
+    content = source.read_bytes()
+    digest_value = hashlib.sha256(content).hexdigest()
+    marker_value = {
+        "schema_version": INSTALL_SCHEMA,
+        "owner": PRODUCT,
+        "managed_file": CODEX_BASELINE_NAME,
+        "source": CODEX_BASELINE_RELATIVE.as_posix(),
+        "version": current["version"],
+        "sha256": digest_value,
+        "installed_at": now(),
+    }
+    try:
+        atomic_bytes(target, content)
+        atomic_json(marker_path, marker_value)
+    except Exception:
+        if previous_target is None:
+            target.unlink(missing_ok=True)
+        else:
+            atomic_bytes(target, previous_target)
+        if previous_marker is None:
+            marker_path.unlink(missing_ok=True)
+        else:
+            atomic_text(marker_path, previous_marker)
+        raise
+    append_history(home, "codex-baseline-install", {"version": current["version"]})
+    return marker_value
+
+
+def remove_codex_baseline(home: Path | None, root: Path) -> tuple[bool, bool]:
+    target, marker_path, _override = codex_baseline_paths(root)
+    if not marker_path.is_file():
+        return False, target.exists()
+    marker = read_json(marker_path)
+    if marker.get("owner") != PRODUCT:
+        raise ProductError("Refusing to remove a Codex baseline marker owned by another tool")
+    preserved = False
+    if target.exists():
+        if target.is_file() and sha256(target) == marker.get("sha256"):
+            target.unlink()
+        else:
+            preserved = True
+    marker_path.unlink()
+    if home is not None and home.exists():
+        append_history(home, "codex-baseline-remove", {"preserved_modified_file": preserved})
+    return True, preserved
+
+
+def refresh_codex_baseline_if_managed(home: Path, root: Path) -> str | None:
+    _target, marker_path, _override = codex_baseline_paths(root)
+    if not marker_path.is_file():
+        return None
+    try:
+        marker = install_codex_baseline(home, root)
+    except ProductError as exc:
+        return f"Codex baseline was preserved without update: {exc}"
+    return f"Optional Codex baseline now matches Builder OS {marker['version']}."
+
+
 def validate_release_manifest(value: dict) -> list[str]:
     problems = []
     if value.get("schema_version") != RELEASE_SCHEMA:
@@ -277,6 +435,8 @@ def validate_release_manifest(value: dict) -> list[str]:
         try:
             if version_key(release_version) >= version_key("1.5.1"):
                 required.update(V151_REQUIRED_RUNTIME_FILES)
+            if version_key(release_version) >= version_key("1.5.3"):
+                required.update(V153_REQUIRED_RUNTIME_FILES)
         except ProductError:
             pass
         missing = sorted(required - set(files))
@@ -743,6 +903,13 @@ def codex_state() -> tuple[str, str]:
     return "not-detected", "Codex was not found on PATH; the desktop app may still be installed"
 
 
+def claude_state() -> tuple[str, str]:
+    executable = shutil.which("claude")
+    if executable:
+        return "detected", executable
+    return "not-detected", "optional Claude CLI was not found on PATH"
+
+
 def project_compatibility(project: Path, manifest: dict) -> tuple[str, str]:
     project = project.resolve()
     if not project.exists():
@@ -767,7 +934,12 @@ def project_compatibility(project: Path, manifest: dict) -> tuple[str, str]:
     return "ok", f"Existing Builder OS project state is compatible (schema {schema})"
 
 
-def doctor(home: Path, target: Path, project: Path | None = None) -> tuple[int, list[tuple[str, str, str]]]:
+def doctor(
+    home: Path,
+    target: Path,
+    project: Path | None = None,
+    codex_directory: Path | None = None,
+) -> tuple[int, list[tuple[str, str, str]]]:
     checks: list[tuple[str, str, str]] = []
     if sys.version_info >= MIN_PYTHON:
         checks.append(("ok", "Python", f"{sys.version_info.major}.{sys.version_info.minor}"))
@@ -793,6 +965,17 @@ def doctor(home: Path, target: Path, project: Path | None = None) -> tuple[int, 
         checks.append(("problem" if skill_issues else "ok", "Codex skill", "; ".join(skill_issues) or "managed and current"))
     codex_status, codex_detail = codex_state()
     checks.append(("ok" if codex_status == "detected" else "warning", "Codex", codex_detail))
+    claude_status, claude_detail = claude_state()
+    checks.append(("ok" if claude_status == "detected" else "warning", "Claude", claude_detail))
+    baseline_status, baseline_detail = codex_baseline_state(
+        Path(current["runtime_root"]) if current is not None and manifest is not None else None,
+        codex_directory or codex_root(),
+    )
+    checks.append((
+        "warning" if baseline_status in ("problem", "modified", "stale") else "ok",
+        "Codex baseline",
+        baseline_detail,
+    ))
     if project is not None and manifest is not None:
         status_value, detail = project_compatibility(project, manifest)
         checks.append((status_value, "Project", detail))
@@ -801,22 +984,33 @@ def doctor(home: Path, target: Path, project: Path | None = None) -> tuple[int, 
     return (2 if any(status_value == "problem" for status_value, _, _ in checks) else 0), checks
 
 
-def uninstall(home: Path, target: Path) -> list[str]:
+def uninstall(home: Path, target: Path, codex_directory: Path | None = None) -> list[str]:
     current = current_install(home)
     if current is None:
         raise ProductError("Builder OS is not installed")
+    resolved_home = home.resolve()
+    if resolved_home in (Path.home().resolve(), Path(resolved_home.anchor)) or len(resolved_home.parts) < 3:
+        raise ProductError(f"Refusing to remove unsafe installation path: {resolved_home}")
     if target.exists():
         marker = target / SKILL_MARKER
         if not marker.is_file() or read_json(marker).get("owner") != PRODUCT:
             raise ProductError(f"Refusing to remove an unmanaged skill: {target}")
+    baseline_removed = False
+    baseline_preserved = False
+    if codex_directory is not None:
+        baseline_removed, baseline_preserved = remove_codex_baseline(home, codex_directory)
+    if target.exists():
         shutil.rmtree(target)
-    resolved_home = home.resolve()
-    if resolved_home in (Path.home().resolve(), Path(resolved_home.anchor)) or len(resolved_home.parts) < 3:
-        raise ProductError(f"Refusing to remove unsafe installation path: {resolved_home}")
     tombstone = resolved_home.parent / f".{resolved_home.name}.uninstall-{uuid.uuid4().hex}"
     resolved_home.replace(tombstone)
     shutil.rmtree(tombstone)
-    return [str(target), str(resolved_home)]
+    removed = [str(target), str(resolved_home)]
+    if baseline_removed:
+        removed.append(
+            f"{codex_directory / CODEX_BASELINE_MARKER}"
+            + (" (instructions preserved because they were edited)" if baseline_preserved else " and managed AGENTS.md")
+        )
+    return removed
 
 
 def print_doctor(checks: list[tuple[str, str, str]]) -> None:
@@ -852,10 +1046,16 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--data-home", help=argparse.SUPPRESS)
     value.add_argument("--skill-home", help=argparse.SUPPRESS)
     value.add_argument("--claude-skill-home", help=argparse.SUPPRESS)
+    value.add_argument("--codex-home", help=argparse.SUPPRESS)
     sub = value.add_subparsers(dest="command")
     install = sub.add_parser("install", help="install or repair Builder OS for this user")
     install.add_argument("--bundle", help="use a local verified runtime bundle")
     install.add_argument("--manifest", default=DEFAULT_RELEASE_MANIFEST, help=argparse.SUPPRESS)
+    install.add_argument(
+        "--codex-baseline",
+        action="store_true",
+        help="also add the optional recommended Codex working defaults",
+    )
     update = sub.add_parser("update", help="install the latest verified Builder OS release")
     update.add_argument("--manifest", default=DEFAULT_RELEASE_MANIFEST, help=argparse.SUPPRESS)
     rollback_parser = sub.add_parser("rollback", help="return to the previous installed version")
@@ -866,6 +1066,8 @@ def parser() -> argparse.ArgumentParser:
     uninstall_parser.add_argument("--yes", action="store_true", help="confirm removal without a prompt")
     sub.add_parser("enable-claude", help="enable the optional Claude reasoner entry")
     sub.add_parser("disable-claude", help="remove the optional Claude reasoner entry")
+    baseline = sub.add_parser("codex-baseline", help="install, inspect, or remove optional Codex defaults")
+    baseline.add_argument("action", choices=("install", "status", "remove"))
     sub.add_parser("paths", help=argparse.SUPPRESS)
     return value
 
@@ -877,6 +1079,10 @@ def main(argv: list[str] | None = None) -> int:
     claude_target = (
         Path(args.claude_skill_home).expanduser().resolve()
         if args.claude_skill_home else claude_skill_target().resolve()
+    )
+    codex_directory = (
+        Path(args.codex_home).expanduser().resolve()
+        if args.codex_home else codex_root()
     )
     if args.version:
         current = current_install(home)
@@ -897,6 +1103,12 @@ def main(argv: list[str] | None = None) -> int:
                 pointer = install_seed_runtime(home, target)
                 if pointer is None:
                     pointer, _ = install_from_descriptor(args.manifest, home, target)
+            if args.codex_baseline:
+                try:
+                    install_codex_baseline(home, codex_directory)
+                    print("Optional Codex baseline installed. Restart Codex to load it.")
+                except ProductError as exc:
+                    print(f"Optional Codex baseline skipped: {exc}")
             first_run_message(pointer, codex_state()[0] == "detected")
             return 0
         if args.command == "update":
@@ -908,23 +1120,34 @@ def main(argv: list[str] | None = None) -> int:
                 raise ProductError("The available release is older than the active installation")
             if descriptor["version"] == current["version"]:
                 repair_current(home, target)
+                baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
                 print(f"Builder OS {current['version']} is current and verified.")
+                if baseline_message:
+                    print(baseline_message)
                 print("Next: use $builderos in your project.")
                 return 0
             pointer, available = install_from_descriptor(args.manifest, home, target)
+            baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
             print(f"Updated Builder OS {current['version']} → {available}.")
+            if baseline_message:
+                print(baseline_message)
             print(f"Rollback available: builderos rollback returns to {current['version']}.")
             print("Next: use $builderos in your project.")
             return 0
         if args.command == "rollback":
             before = current_install(home)
             pointer = rollback(home, target, args.rollback_to)
+            baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
             print(f"Rolled back Builder OS {before['version']} → {pointer['version']}.")
+            if baseline_message:
+                print(baseline_message)
             print("Projects and project evidence were not changed.")
             print("Next: run builderos doctor.")
             return 0
         if args.command == "doctor":
-            code, checks = doctor(home, target, Path(args.project) if args.project else None)
+            code, checks = doctor(
+                home, target, Path(args.project) if args.project else None, codex_directory
+            )
             print_doctor(checks)
             return code
         if args.command == "enable-claude":
@@ -939,13 +1162,36 @@ def main(argv: list[str] | None = None) -> int:
             print("Builder OS, Codex support, projects, and evidence were not changed.")
             print("Next: continue with Codex, or run builderos rollback if restoring V1.5.")
             return 0
+        if args.command == "codex-baseline":
+            if args.action == "install":
+                marker = install_codex_baseline(home, codex_directory)
+                print(f"Optional Codex baseline installed for Builder OS {marker['version']}.")
+                print("Existing project instructions remain separate and take precedence by directory.")
+                print("Next: restart Codex so it discovers the new instructions.")
+                return 0
+            if args.action == "remove":
+                removed, preserved = remove_codex_baseline(home, codex_directory)
+                if preserved:
+                    print("Builder OS ownership was removed; your edited Codex instructions were preserved.")
+                elif removed:
+                    print("The optional Builder OS-managed Codex baseline was removed.")
+                else:
+                    print("No Builder OS-managed Codex baseline was installed.")
+                print("Next: restart Codex so it rediscovers your instruction environment.")
+                return 0
+            current = current_install(home)
+            runtime = Path(current["runtime_root"]) if current is not None else None
+            status_value, detail = codex_baseline_state(runtime, codex_directory)
+            print(f"Codex baseline: {status_value} — {detail}")
+            print("Next: use 'builderos codex-baseline install' or 'remove' if you want to change it.")
+            return 2 if status_value == "problem" else 0
         if args.command == "uninstall":
             if not args.yes:
                 answer = input("Remove Builder OS runtime and its managed Codex skill? Projects remain untouched. [y/N] ")
                 if answer.strip().lower() not in ("y", "yes"):
                     print("No changes made.")
                     return 0
-            removed = uninstall(home, target)
+            removed = uninstall(home, target, codex_directory)
             print("Builder OS runtime and managed Codex skill were removed.")
             print("Your projects, project documents, evidence and source files remain untouched.")
             print("The small Python launcher remains managed by pip/pipx and may be removed there if desired.")

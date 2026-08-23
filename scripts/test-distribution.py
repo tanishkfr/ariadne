@@ -134,6 +134,13 @@ def self_test() -> int:
             "Linux", {"XDG_DATA_HOME": "/data/person"}, Path("/home/person")
         ).as_posix().endswith("/data/person/builderos"),
     )
+    fresh_person = Path("C:/fixture/person")
+    case(
+        "fresh skill discovery uses the documented user skill directory",
+        cli.skill_target({}, fresh_person).as_posix().endswith(
+            "/fixture/person/.agents/skills/builderos"
+        ),
+    )
 
     replace_attempts = []
 
@@ -203,6 +210,49 @@ def self_test() -> int:
             runtime_help.returncode == 0 and not cli.runtime_problems(runtime_140),
         )
         case("fresh install registers one managed skill", not cli.skill_problems(runtime_140, target))
+        codex_directory = root / "codex-home"
+        user_instructions = root / "existing-codex-home"
+        user_instructions.mkdir()
+        (user_instructions / "AGENTS.md").write_text("person-owned\n", encoding="utf-8")
+        try:
+            cli.install_codex_baseline(home, user_instructions)
+            existing_instructions_blocked = False
+        except cli.ProductError:
+            existing_instructions_blocked = True
+        case(
+            "optional baseline never overwrites existing user instructions",
+            existing_instructions_blocked
+            and (user_instructions / "AGENTS.md").read_text(encoding="utf-8") == "person-owned\n"
+            and not (user_instructions / cli.CODEX_BASELINE_MARKER).exists(),
+        )
+        override_instructions = root / "override-codex-home"
+        override_instructions.mkdir()
+        (override_instructions / "AGENTS.override.md").write_text("person override\n", encoding="utf-8")
+        try:
+            cli.install_codex_baseline(home, override_instructions)
+            existing_override_blocked = False
+        except cli.ProductError:
+            existing_override_blocked = True
+        case(
+            "optional baseline does not install beneath an existing override",
+            existing_override_blocked
+            and not (override_instructions / "AGENTS.md").exists(),
+        )
+        baseline = cli.install_codex_baseline(home, codex_directory)
+        baseline_target = codex_directory / "AGENTS.md"
+        case(
+            "explicit opt-in installs one owned generic Codex baseline",
+            baseline_target.is_file()
+            and baseline["owner"] == cli.PRODUCT
+            and cli.codex_baseline_state(runtime_140, codex_directory)[0] == "current",
+        )
+        project_agents = project / "AGENTS.md"
+        project_agents.write_text("project-owned\n", encoding="utf-8")
+        project_agents_hash = cli.sha256(project_agents)
+        case(
+            "optional baseline leaves project instructions untouched",
+            cli.sha256(project_agents) == project_agents_hash,
+        )
         claude_target = root / "optional-claude-skills" / "builderos"
         case("normal installation does not enable Claude", not claude_target.exists())
         cli.configure_claude_reasoner(
@@ -221,7 +271,11 @@ def self_test() -> int:
             "Claude disable restores the Codex-only installed state",
             not claude_target.exists() and not cli.skill_problems(runtime_140, target),
         )
-        case("installation does not contaminate a project", cli.sha256(sentinel) == sentinel_hash and len(list(project.iterdir())) == 1)
+        case(
+            "installation does not contaminate a project",
+            cli.sha256(sentinel) == sentinel_hash
+            and {path.name for path in project.iterdir()} == {"existing-site.txt", "AGENTS.md"},
+        )
         case("installed runtime does not depend on the source checkout", str(ROOT).lower() not in (target / cli.SKILL_INSTALLATION).read_text(encoding="utf-8").lower())
 
         (target / "SKILL.md").unlink()
@@ -264,10 +318,16 @@ def self_test() -> int:
 
         pointer_141 = cli.install_bundle(bundle_141, home, target)
         runtime_141 = Path(pointer_141["runtime_root"])
+        baseline_update = cli.refresh_codex_baseline_if_managed(home, codex_directory)
         case("update activates the new verified runtime", pointer_141["version"] == "1.4.1" and not cli.runtime_problems(runtime_141))
         case("update keeps the rollback version", runtime_140.is_dir())
         case("update preserves user configuration", config.read_text(encoding="utf-8") == '{"voice":"calm"}\n')
         case("updated skill points to the new runtime", not cli.skill_problems(runtime_141, target))
+        case(
+            "update refreshes only an unchanged managed Codex baseline",
+            baseline_update is not None
+            and cli.codex_baseline_state(runtime_141, codex_directory)[0] == "current",
+        )
 
         hidden_runtime = runtime_141.with_name("1.4.1-hidden")
         runtime_141.replace(hidden_runtime)
@@ -291,8 +351,14 @@ def self_test() -> int:
         )
 
         rolled_back = cli.rollback(home, target)
+        baseline_rollback = cli.refresh_codex_baseline_if_managed(home, codex_directory)
         case("rollback restores the previous runtime and skill", rolled_back["version"] == "1.4.0" and not cli.skill_problems(runtime_140, target))
         case("rollback preserves project files", cli.sha256(sentinel) == sentinel_hash)
+        case(
+            "rollback restores managed baseline parity",
+            baseline_rollback is not None
+            and cli.codex_baseline_state(runtime_140, codex_directory)[0] == "current",
+        )
 
         bad_checksum = root / "bad-checksum.zip"
         shutil.copyfile(bundle_141, bad_checksum)
@@ -387,9 +453,30 @@ def self_test() -> int:
         case("repair never deletes a user file from the skill directory", user_file_preserved)
         user_extra.unlink()
 
-        removed = cli.uninstall(home, target)
-        case("uninstall removes runtime and managed skill", not home.exists() and not target.exists() and len(removed) == 2)
+        removed = cli.uninstall(home, target, codex_directory)
+        case("uninstall removes runtime and managed skill", not home.exists() and not target.exists() and len(removed) == 3)
+        case(
+            "uninstall removes only the unchanged managed Codex baseline",
+            not baseline_target.exists()
+            and not (codex_directory / cli.CODEX_BASELINE_MARKER).exists()
+            and project_agents.is_file(),
+        )
         case("uninstall preserves every project file", cli.sha256(sentinel) == sentinel_hash and (run_root / "builderos-run.json").is_file())
+
+        modified_home = root / "modified-user-data"
+        modified_target = root / "modified-skills" / "builderos"
+        modified_codex = root / "modified-codex-home"
+        cli.install_bundle(bundle_140, modified_home, modified_target)
+        cli.install_codex_baseline(modified_home, modified_codex)
+        modified_agents = modified_codex / "AGENTS.md"
+        modified_agents.write_text("person changed this\n", encoding="utf-8")
+        modified_removed = cli.uninstall(modified_home, modified_target, modified_codex)
+        case(
+            "uninstall preserves an edited baseline and relinquishes ownership",
+            modified_agents.read_text(encoding="utf-8") == "person changed this\n"
+            and not (modified_codex / cli.CODEX_BASELINE_MARKER).exists()
+            and len(modified_removed) == 3,
+        )
 
         unmanaged_home = root / "unmanaged-home"
         unmanaged_target = root / "unmanaged-skills" / "builderos"

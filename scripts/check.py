@@ -51,6 +51,7 @@ REQUIRED = [
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
     "adapters/reasoner-contract.md", "adapters/reasoners.json",
     "adapters/claude-reasoner.md", "adapters/claude-reasoner-skill/SKILL.md",
+    "adapters/codex-baseline.md",
     "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
     "scripts/creative-operations.py", "scripts/reasoners.py",
     "scripts/install-claude-reasoner-skill.py",
@@ -203,6 +204,7 @@ DISTRIBUTION_FILES = (
     "src/builderos/cli.py",
     "scripts/build-release.py",
     ".agents/skills/builderos/references/installation.example.json",
+    "adapters/codex-baseline.md",
 )
 
 
@@ -232,7 +234,9 @@ def check_distribution_texts(texts):
         "def install_seed_runtime(", 'sub.add_parser("update"',
         'sub.add_parser("rollback"', 'sub.add_parser("doctor"',
         'sub.add_parser("uninstall"', 'sub.add_parser("enable-claude"',
-        'sub.add_parser("disable-claude"',
+        'sub.add_parser("disable-claude"', 'sub.add_parser("codex-baseline"',
+        'preferred = home / ".agents" / "skills"', "def install_codex_baseline(",
+        "def remove_codex_baseline(", "def refresh_codex_baseline_if_managed(",
     ):
         if token not in cli:
             problems.append(f"launcher is missing: {token}")
@@ -246,6 +250,15 @@ def check_distribution_texts(texts):
         release,
     ):
         problems.append("release allowlist includes maintainer-only trees")
+    baseline = texts["adapters/codex-baseline.md"]
+    for token in (
+        "Inspect existing instructions", "smallest reversible change",
+        "Avoid destructive actions", "Distinguish verified facts",
+    ):
+        if token not in baseline:
+            problems.append(f"Codex baseline is missing a general working default: {token}")
+    if re.search(r"(?i)\b(?:G[1-5]|S[0-6]|Builder OS|provider routing|social strategy)\b", baseline):
+        problems.append("Codex baseline contains Builder OS workflow or project policy")
     try:
         example = json.loads(texts[".agents/skills/builderos/references/installation.example.json"])
     except json.JSONDecodeError as exc:
@@ -1188,8 +1201,22 @@ def self_test_distribution_contract():
          )))),
         ("missing optional Claude disable command fails",
          bool(check_distribution_texts(mutate(
-             "src/builderos/cli.py", 'sub.add_parser("disable-claude"', 'sub.add_parser("disable-reasoner"'
+              "src/builderos/cli.py", 'sub.add_parser("disable-claude"', 'sub.add_parser("disable-reasoner"'
+          )))),
+        ("missing optional Codex baseline command fails",
+         bool(check_distribution_texts(mutate(
+             "src/builderos/cli.py", 'sub.add_parser("codex-baseline"', 'sub.add_parser("defaults"'
          )))),
+        ("legacy-only fresh skill target fails",
+         bool(check_distribution_texts(mutate(
+             "src/builderos/cli.py", 'preferred = home / ".agents" / "skills"',
+             'preferred = home / ".codex" / "skills"'
+         )))),
+        ("generic baseline cannot absorb Builder OS gates",
+         bool(check_distribution_texts({
+             **actual,
+             "adapters/codex-baseline.md": actual["adapters/codex-baseline.md"] + "\nG1 is automatically approved.\n",
+         }))),
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(
              ".agents/skills/builderos/references/installation.example.json",
