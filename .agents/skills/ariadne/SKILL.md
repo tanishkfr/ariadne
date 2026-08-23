@@ -1,0 +1,177 @@
+---
+name: ariadne
+description: Start, run, resume, or recover an Ariadne creative-production project from an ordinary-language brief. Use when the user invokes Ariadne, asks to build a website/app/game/content project through Ariadne, or returns to an existing Ariadne project. Do not use for unrelated repository maintenance or a one-off code edit.
+---
+
+# Ariadne
+
+Make the workflow feel like creative direction, not stage administration.
+Canonical policy remains in the Ariadne repository; this skill operates its
+runtime and never restates or replaces routing, gate, design, QA, or privacy
+policy.
+
+## Locate the runtime
+
+Resolve the Ariadne root in this order:
+
+1. `ARIADNE_HOME` when set.
+2. `references/installation.json` beside this skill when installed personally.
+3. The repository root containing this skill when it is loaded from
+   `.agents/skills/ariadne` in Ariadne itself.
+
+For a personal installation, run `ariadne doctor` before first use after an
+install, update or rollback. The root is valid only when its release manifest,
+version, file hashes and this managed skill agree, and `scripts/ariadne.py`,
+`ROUTER.md`, and `WORKFLOW.md` exist. For a repository-local development skill,
+the three files are the minimum check. If validation fails, stop with one
+action: run `ariadne install` to repair it. Do not reconstruct policies from
+this skill or from conversation history.
+
+## Start or resume
+
+1. Identify the project directory from the active workspace or the user's
+   explicit path. Keep runtime packets and evidence outside the project.
+2. Run `python <root>/scripts/ariadne.py discover --project <project>` first.
+   Resume the single matching run with `status --project <project>`. Treat its
+   goal, approved direction, health, attention items, and next action as the
+   opening briefing. If more
+   than one history matches, ask which history is authoritative; never guess or
+   create a second run merely because conversation history is absent.
+3. If no run exists, inspect the project top level. Start an empty project from
+   the ordinary-language request. When the project already contains unrelated
+   work and the user asked Ariadne to work on that project, use the runtime's
+   safe adoption path (`--adopt-existing` internally) without making the user
+   know its implementation flag. Adoption
+   is non-destructive: preserve current behaviour and every existing file. If
+   `PROJECT.md` or `AGENTS.md` already exists, do not overwrite it; discover the
+   prior run or stop for a deliberate migration.
+4. Read the generated `packet.txt` yourself and perform the current reasoning
+   stage in this task when independence does not require a fresh task. The user
+   must not locate prompts, policies, templates, packet IDs, or transcript paths.
+5. After a same-session stage produces its project files, run
+   `ariadne.py advance`. It records the obvious outputs and prepares routine
+   continuation without making the user operate evidence or packet commands.
+   Supply only semantic choices the controller cannot derive, such as whether
+   motion/assets apply or the independent-review lens. Use the lower-level
+   evidence and preparation commands only for diagnosis or recovery.
+6. When the human rejects a proposed direction before G1, run
+   `ariadne.py restart-direction --project <project> --reason <their words>`.
+   It preserves the rejected `DESIGN.md` and reason verbatim, keeps G1
+   unresolved, and prepares the linked same-stage retry without making the
+   human reconstruct context. Use `ariadne.py record-note` for other durable
+   risks, lessons, decisions, or non-blocking evidence gaps. Project documents
+   remain canonical for active decisions.
+
+## Optional reasoner choice
+
+Codex remains the default. When the user explicitly says to use Claude, first
+run `ariadne.py reasoner-status --project <project> --reasoner claude`. If the
+CLI is unavailable, stop without changing the project. Otherwise use
+`select-reasoner --reasoner claude --reason <their choice>` for an existing run,
+or `start --reasoner claude` for a new run. Use the same commands with `codex`
+to switch back. Never edit reasoner metadata or packet provider labels by hand.
+
+A switch before material current-stage output creates a linked same-stage child.
+A switch after material output applies at the next reasoning boundary. If a
+reasoner fails, use `record-reasoner-failure`; automatic Codex fallback is safe
+only before material output exists. S4B still follows `HANDOFF.md` and provider
+preflight, and S5 still receives only its isolated packet.
+
+## Creative intelligence
+
+When S1 has produced `PROJECT.md`, read
+`references/creative-intelligence.md`. Interpret the project across its stated
+characteristics, write the temporary assessment it defines, and run
+`ariadne.py creative-plan` before `advance`. This is internal machinery: tell
+the user only what focused work you chose and why, not the matrix or stage IDs.
+
+Before executing a selected method, record it as invoked with the current packet
+or tool transcript as evidence. After it produces a real artifact, record it as
+completed. Record it as used only after a downstream decision trace exists. Use
+`ariadne.py record-creative` for these events and `creative-check` before G1.
+Recommended, invoked, completed, and used are never synonyms.
+
+For external research, preserve an actual retrieval, screenshot, or provider
+transcript artifact before marking a source inspected. A found URL is found;
+failed access is inaccessible; neither may be described as inspected or used.
+Do not let expected prose prove its own execution.
+
+When research compares a resource or dependency, record the resource decision
+defined in the same reference file: capability, fit, compatibility, licence,
+cost, alternatives, necessity, inspected source, and downstream anchor. Do not
+convert a comparison into an install request; G2 remains human-owned.
+
+## Human boundaries
+
+Pause only for a decision or external action the canonical workflow reserves to
+the human: creative direction, a material scope tradeoff, dependency approval,
+provider/account access, shipping, or publishing. Never grant a gate.
+
+When an external implementer is appropriate, run provider preflight first. It
+reads provider, model, effort, workload, split, and reason from `HANDOFF.md`;
+only live availability/quota facts may need an external check. Do not generate
+the external build handoff when `ariadne.py handoff-readiness` or preflight is
+blocked. Present the recommendation in plain language. When ready, give the user
+one clickable packet artifact to attach or paste after they open the selected
+provider; never make them search for it. Keep hashes and stage mechanics in
+`OPERATIONS.md`.
+
+## External return
+
+The S4B packet names a unique project-local return target. Ask the external
+implementer to write the complete marked return block there as well as emitting
+it in the response. `ariadne.py advance` ingests only the target belonging to
+the current packet; a retry gets a new target and cannot overwrite prior
+evidence. If the provider cannot write that target, save the returned block to a
+temporary file and use `ariadne.py ingest-return` as recovery. Do not turn a
+summary into a verbatim transcript. The return handoff can support continuation,
+but it does not prove unobserved provider behaviour or independent QA.
+
+For independent review, give the reviewer only the generated isolated packet.
+When its marked QA judgement returns, save the response temporarily and run
+`ariadne.py ingest-review`. The controller preserves the raw response and
+updates only QA.md's judgement region. Never paraphrase a score, verdict,
+finding, or evidence limitation.
+
+## QA and recovery
+
+After G1, read `references/creative-operations.md`. The controller derives the
+approved design-to-implementation trace and project-specific visual-QA plan
+automatically before S4B. After implementation, use the selected visual-QA and
+creative-review methods to record rendered evidence and material drift before
+independent review. These internal observations never enter the isolated S5
+packet and never grant G3.
+
+The recovery-level commands are `ariadne.py operations-plan`,
+`ariadne.py record-operations`, and `ariadne.py operations-check`; normal
+progression should use `ariadne.py advance` wherever it can derive the action.
+
+After implementation returns, inspect the recorded files and run the applicable
+local checks from the delivered QA policy before independent review. Fix work
+retained in the orchestrator when it is within the approved handoff. For work
+owned by an external implementer, diagnose the failure and generate a
+same-stage retry from the partial/blocked return; do not ask the user to rebuild packet
+lineage. A retry never overwrites prior evidence and never reopens G1 unless the
+finding changes the approved direction.
+
+When the user explicitly requests social strategy, use
+`<root>/skills/social-strategy.md` and the conditional
+`<root>/templates/SOCIAL-STRATEGY.md`. Inspect the richest current project
+state and real visual assets before researching platforms. Record current
+SOURCE -> FINDING -> DECISION evidence and the finished artifact through the
+creative-operations contract. When intake previously skipped this optional
+method, first preserve the later request through the documented
+`skill-activation` evidence event. If the user later supplies performance evidence,
+use the same method with `<root>/templates/CONTENT-LEARNINGS.md`; preserve
+PLAN -> RESULT -> INTERPRETATION -> NEXT TEST in project-local evidence.
+Do not activate social work by default, publish, authenticate, schedule, invent
+metrics, or imply that distribution changes the build gates.
+
+## Communication
+
+Say what completed or what you found, what happens next, and whether the user
+needs to act. Never expose recovery flags, packet construction, source paths or
+stage codes unless the user asked for diagnostics. Use
+plain stage names such as “project brief”, “design direction”, “implementation
+handoff”, and “independent review”. Put internal IDs, manifests, hashes, and
+diagnostic details in the operations log unless they affect a decision.
