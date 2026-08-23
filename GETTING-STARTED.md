@@ -33,10 +33,10 @@ python --version
 
 ## Step 2 — Install Builder OS
 
-After the `v1.5.1` public release is available:
+After the `v1.5.2` public release is available:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.1/builder_os-1.5.1-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.2/builder_os-1.5.2-py3-none-any.whl"
 python -m builderos install
 python -m builderos doctor
 ```
@@ -153,9 +153,12 @@ Normal `$builderos` progression runs the planning step automatically. Use these
 commands only when diagnosing or recovering a run.
 
 If you explicitly ask for a social strategy, Builder OS may add the conditional
-`SOCIAL-STRATEGY.md`. It uses the real project and current inspected platform
-sources, labels inference, and keeps voice-unsupported copy as a rough draft.
-It never posts, authenticates or changes a build gate.
+`SOCIAL-STRATEGY.md`. It reads the current project and real assets first, then
+inspects current platform evidence where needed. Recommendations show what the
+source said and what decision changed; voice-unsupported writing remains a
+rough draft. If you later paste or attach performance results, Builder OS keeps
+the plan, supplied result, bounded interpretation and next test in project-local
+`CONTENT-LEARNINGS.md`. It never posts, authenticates or changes a build gate.
 
 ### Bringing in an existing project
 

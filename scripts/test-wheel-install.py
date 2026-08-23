@@ -16,6 +16,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
 class StrangerTestError(RuntimeError):
@@ -104,7 +105,7 @@ def self_test() -> int:
             root,
             environment=environment_vars,
         )
-        case("fresh Python environment exposes Builder OS version", version_result.stdout.strip() == "Builder OS 1.5.1")
+        case("fresh Python environment exposes Builder OS version", version_result.stdout.strip() == f"Builder OS {VERSION}")
 
         data_home = root / "person-data"
         skill = root / "person-codex-skills" / "builderos"
@@ -120,7 +121,7 @@ def self_test() -> int:
         current = json.loads((data_home / "current.json").read_text(encoding="utf-8"))
         runtime = Path(current["runtime_root"])
         installation = json.loads((skill / "references" / "installation.json").read_text(encoding="utf-8"))
-        expected_runtime = (data_home / "versions" / "1.5.1").resolve()
+        expected_runtime = (data_home / "versions" / VERSION).resolve()
         case(
             "wheel carries a canonical runtime with no source-checkout dependency",
             runtime.resolve() == expected_runtime
@@ -152,7 +153,7 @@ def self_test() -> int:
         case(
             "reinstall repairs a damaged runtime from the self-contained wheel",
             (runtime / "ROUTER.md").is_file()
-            and "Builder OS 1.5.1 is installed" in repair_result.stdout
+            and f"Builder OS {VERSION} is installed" in repair_result.stdout
             and "[OK] Runtime" in repaired_doctor.stdout,
         )
 

@@ -9,18 +9,19 @@ without surrendering creative direction, dependency choices or shipping
 authority. Builder OS is installed once for your user account; your projects do
 not contain or depend on its source repository.
 
-**V1.5.1 release candidate:** V1.5 remains the production baseline. This
-additive release adds an optional, feature-detected Claude reasoner while Codex
-stays the default; projects, gates, handoffs and evidence remain provider
-neutral. Claude execution is not yet live-validated. See
-[V1.5.1-READINESS.md](V1.5.1-READINESS.md).
+**V1.5.2 release candidate:** V1.5 remains the production baseline. The new
+optional social method reads the real project, traces current evidence into a
+small platform-specific launch plan, records only user-supplied results and
+preserves bounded next tests. It never posts or connects accounts. V1.5.1's
+optional Claude boundary remains unchanged and live execution is still
+unverified. See [V1.5.2-READINESS.md](V1.5.2-READINESS.md).
 
 ## Quick start
 
-After the `v1.5.1` GitHub release is published:
+After the `v1.5.2` GitHub release is published:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.1/builder_os-1.5.1-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.2/builder_os-1.5.2-py3-none-any.whl"
 python -m builderos install
 ```
 
@@ -72,7 +73,7 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 **Never used it:** [QUICKSTART.md](QUICKSTART.md) — install once, then describe one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
-**Current productization evidence:** [V1.5.1-READINESS.md](V1.5.1-READINESS.md).
+**Current productization evidence:** [V1.5.2-READINESS.md](V1.5.2-READINESS.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
 **Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
 
@@ -160,15 +161,15 @@ judgement remain separate records, and none grants a gate.
 
 ## Status
 
-**v1.5.1 release candidate.** The product installs from one self-contained
+**v1.5.2 release candidate.** The product installs from one self-contained
 Python wheel into a versioned user-local runtime, registers its managed Codex
 skill, verifies file parity, and supports `update`, `rollback`, `doctor` and
-`uninstall` without touching projects. V1.5.1 keeps that path unchanged and
-adds explicit reasoner status/selection, provider-switch/failure evidence, safe
-Codex fallback before material output, and an optional managed Claude entry
-skill. `builderos enable-claude` is opt-in; normal installation remains
-Codex-only. Public release publication, live Claude execution and fresh
-macOS/Linux execution remain outstanding.
+`uninstall` without touching projects. The optional distribution method now
+grounds a small launch plan in current project and visual evidence, preserves
+source-to-decision trace, drafts platform-native treatments and learns only
+from results supplied by the project owner. It adds no account connection,
+scheduler or analytics integration. The V1.5.1 Claude adapter remains opt-in;
+ordinary installation is still Codex-only.
 
 V1.3 carried approved design decisions into hashed
 implementation mappings, project-specific rendered QA, drift records and an
@@ -180,13 +181,13 @@ still routes on **intent**, not keywords.
 
 Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
-**Status: V1.5.1 NEAR READY FOR PUBLIC USE.** A clean Python environment exercised
+**Status: V1.5.2 NEAR READY FOR PUBLIC USE.** A clean Python environment exercised
 wheel build, install, `$builderos` runtime start, doctor and uninstall with no
 source checkout dependency. Windows executed; macOS/Linux path rules are
 simulated. Publishing is blocked on a human licence decision and explicit
 release authority. V1.5 deliberately keeps internal creative-review readiness
 advisory rather than making it a new hard prerequisite for isolated S5. See
-[V1.5.1-READINESS.md](V1.5.1-READINESS.md).
+[V1.5.2-READINESS.md](V1.5.2-READINESS.md).
 
 V1.3 was ready for private use. A local rendered fixture exercised the
 new visual evidence and creative-review loop and exposed a real tablet drift;

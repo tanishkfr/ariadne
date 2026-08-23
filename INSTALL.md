@@ -17,10 +17,10 @@ dependency is installed.
 
 ## Public release install
 
-Once `v1.5.1` is published, run these as your normal user:
+Once `v1.5.2` is published, run these as your normal user:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.1/builder_os-1.5.1-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.2/builder_os-1.5.2-py3-none-any.whl"
 python -m builderos install
 python -m builderos doctor
 ```
@@ -32,6 +32,9 @@ The first command installs the launcher. The second verifies the wheel's
 embedded runtime, creates a versioned user-local installation, and registers the
 managed Codex skill. A separate activation command is intentional: Python
 packages have no safe portable post-install hook for writing Codex skills.
+
+Social intelligence needs no additional installation or account connection.
+It remains dormant until the user explicitly asks for distribution help.
 
 ## Optional Claude reasoner
 

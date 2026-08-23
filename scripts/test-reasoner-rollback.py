@@ -34,6 +34,8 @@ def workspace():
 
 def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, bool]]:
     cases = []
+    baseline_version = cli.bundle_manifest(baseline_bundle)["version"]
+    current_version = cli.bundle_manifest(current_bundle)["version"]
 
     def case(name: str, passed: bool) -> None:
         cases.append((name, bool(passed)))
@@ -48,16 +50,16 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
         baseline = cli.install_bundle(baseline_bundle, home, codex_skill)
         case(
             "exact baseline bundle installs first",
-            baseline["version"] == "1.5.0"
+            baseline["version"] == baseline_version
             and not cli.runtime_problems(Path(baseline["runtime_root"])),
         )
 
         current = cli.install_bundle(current_bundle, home, codex_skill)
         current_runtime = Path(current["runtime_root"])
         case(
-            "V1.5.1 experiment activates without damaging the baseline",
-            current["version"] == "1.5.1"
-            and (home / "versions" / "1.5.0").is_dir()
+            "current additive release activates without damaging the baseline",
+            current["version"] == current_version
+            and (home / "versions" / baseline_version).is_dir()
             and not cli.runtime_problems(current_runtime),
         )
 
@@ -100,11 +102,11 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
             not claude_skill.exists() and run_root.is_dir() and project.is_dir(),
         )
 
-        rolled_back = cli.rollback(home, codex_skill, "1.5.0")
+        rolled_back = cli.rollback(home, codex_skill, baseline_version)
         baseline_runtime = Path(rolled_back["runtime_root"])
         case(
-            "rollback restores the exact V1.5 runtime and Codex skill",
-            rolled_back["version"] == "1.5.0"
+            "rollback restores the exact baseline runtime and Codex skill",
+            rolled_back["version"] == baseline_version
             and not cli.runtime_problems(baseline_runtime)
             and not cli.skill_problems(baseline_runtime, codex_skill),
         )
@@ -142,7 +144,7 @@ def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, boo
                 )
             )
         case(
-            "V1.5 reads the existing project without Claude files or migration",
+            "baseline reads the existing project without Claude files or migration",
             compatible,
         )
     return cases

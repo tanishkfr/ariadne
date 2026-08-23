@@ -37,7 +37,7 @@ REQUIRED = [
     "QA-POLICY.md", "EVALUATION-RUBRICS.md", "LIBRARY-POLICY.md",
     "CHANGELOG.md", "QUICKSTART.md", "INSTALL.md", "UPDATE.md",
     "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md", "V1.5-READINESS.md",
-    "V1.5.1-READINESS.md",
+    "V1.5.1-READINESS.md", "V1.5.2-READINESS.md",
     "VERSION", "pyproject.toml", "build_backend/builderos_backend.py",
     "src/builderos/__init__.py", "src/builderos/__main__.py", "src/builderos/cli.py",
     "templates/PROJECT.md", "templates/DESIGN.md",
@@ -1161,6 +1161,7 @@ def self_test_distribution_contract():
 
     future = dict(actual)
     future["VERSION"] = "9.8.7\n"
+    release_version = actual["VERSION"].strip()
     cases = [
         ("repository distribution contract passes (positive control)",
          not check_distribution_texts(actual)),
@@ -1192,7 +1193,7 @@ def self_test_distribution_contract():
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(
              ".agents/skills/builderos/references/installation.example.json",
-             '"version": "1.5.1"', '"release": "1.5.1"'
+             f'"version": "{release_version}"', f'"release": "{release_version}"'
          )))),
     ]
     for name, passed in cases:

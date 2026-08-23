@@ -10,6 +10,41 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.5.2 — 2026-08-23 · SOCIAL INTELLIGENCE AND DISTRIBUTION
+
+The earlier optional social method could record a small strategy, but its
+project story and visuals were not artifact-backed, voice matching could be
+asserted without writing examples, and no durable event connected a planned
+post to user-supplied results and a bounded next test. A project that skipped
+social work during intake also could not activate the method later without
+rewriting evidence history.
+
+V1.5.2 extends the existing content-strategist owner and project-local creative
+operations ledger. Contract-version 2 strategies now record research depth,
+project evidence, real or explicitly missing visuals, selected and rejected
+platforms, current SOURCE -> FINDING -> DECISION trace, optional project-specific
+pillars, three to six complete post treatments, voice evidence and falsifiable
+hypotheses. Recommendations distinguish documented, observed, researched,
+inferred and speculative claims; time-sensitive evidence expires rather than
+silently becoming current knowledge.
+
+New `social-result` records accept only artifact-backed, user-provided metrics
+or qualitative signals. `social-learning` connects plan, result, bounded
+interpretation and one-variable next test in project-local
+`CONTENT-LEARNINGS.md`. One result remains inconclusive, a rule needs three
+distinct posts, corrections preserve the old result, and dependent learning is
+made stale. Five realistic fixture archetypes and negative controls cover weak
+assets, late activation, inaccessible or outdated sources, unsupported voice,
+generic copy, performance promises, invented metrics and fresh-task recovery.
+
+No platform account, publishing API, scheduler, analytics integration,
+database, workflow stage, gate or provider-specific project format was added.
+Codex remains the default reasoner; Claude remains optional and externally
+unverified. Cursor/Grok implementation routing, S5 isolation and V1.5 human
+authority are unchanged.
+
+---
+
 ## 1.5.1 — 2026-08-23 · OPTIONAL CLAUDE REASONER
 
 V1.5 had one verified reasoning path and provider-neutral project documents,
