@@ -246,6 +246,7 @@ def check_distribution_texts(texts):
     for token in (
         "RUNTIME_TOP_LEVEL", "RUNTIME_TREES", "RUNTIME_SCRIPTS",
         "RELEASE-MANIFEST.json", "SHA256SUMS.txt", "release_notes",
+        "publication_state", "PACKAGING CANDIDATE",
     ):
         if token not in release:
             problems.append(f"release builder is missing: {token}")
@@ -1238,6 +1239,10 @@ def self_test_distribution_contract():
         ("release builder without aggregate checksum inventory fails",
          bool(check_distribution_texts(mutate(
              "scripts/build-release.py", '"SHA256SUMS.txt"', '"checksums.txt"'
+         )))),
+        ("release builder without publication blocker fails",
+         bool(check_distribution_texts(mutate(
+             "scripts/build-release.py", '"PACKAGING CANDIDATE', '"BUILD COMPLETE'
          )))),
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(

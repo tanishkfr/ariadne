@@ -34,7 +34,9 @@ reports Python, runtime, skill, Codex, optional Claude, optional baseline and
 project health without inspecting credentials. Release generation adds
 versioned release notes and one `SHA256SUMS.txt` inventory covering the runtime,
 wheel, descriptor and notes, while retaining source-commit provenance and the
-existing clean-tree boundary.
+existing clean-tree boundary. The descriptor carries the current publication
+state, and the builder cannot emit a publish transition while the licence
+boundary is unresolved.
 
 The public licence is not silently selected. Apache-2.0 is the technical
 recommendation after inspecting the dependency-free first-party source and

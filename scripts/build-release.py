@@ -27,6 +27,8 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_PATH = ROOT / "VERSION"
 RELEASE_NOTES_PATH = ROOT / "RELEASE-NOTES.md"
+PYPROJECT_PATH = ROOT / "pyproject.toml"
+LICENSE_PATH = ROOT / "LICENSE"
 REPOSITORY_URL = "https://github.com/tanishkfr/builder-os"
 RUNTIME_TOP_LEVEL = [
     "VERSION", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md", "DESIGN-MOTION.md",
@@ -69,6 +71,19 @@ def git_head() -> str:
         ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True
     )
     return result.stdout.strip() if result.returncode == 0 else "unknown"
+
+
+def publication_state() -> dict:
+    metadata = PYPROJECT_PATH.read_text(encoding="utf-8")
+    if "Private :: Do Not Upload" in metadata or not LICENSE_PATH.is_file():
+        return {
+            "status": "blocked",
+            "reason": "public licence not selected",
+        }
+    return {
+        "status": "candidate",
+        "reason": "licence files are present; human release authority is still required",
+    }
 
 
 def tracked_dirty() -> list[str]:
@@ -169,6 +184,7 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
         "source_commit": manifest["source_commit"],
         "requires_python": ">=3.8",
         "project_state_schema": manifest["project_state_schema"],
+        "publication": publication_state(),
     }
     descriptor_path = output / "builder-os-release.json"
     descriptor_path.write_text(json.dumps(descriptor, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -233,6 +249,10 @@ def self_test() -> int:
         case("release description authenticates the exact bundle", descriptor["sha256"] == digest(one["artifact"]))
         case("release description authenticates the launcher", descriptor["launcher"]["sha256"] == digest(one["launcher"]))
         case("release description authenticates the release notes", descriptor["release_notes"]["sha256"] == digest(one["release_notes"]))
+        case(
+            "release description preserves the repository publication boundary",
+            descriptor["publication"] == publication_state(),
+        )
         checksum_rows = {
             name: value
             for value, name in (
@@ -313,7 +333,13 @@ def main() -> int:
     print(f"INDEX  {result['descriptor']}")
     print(f"NOTES  {result['release_notes']}")
     print(f"SHA256 {result['checksums']}")
-    print("NEXT   publish these generated files together in the matching GitHub release")
+    publication = publication_state()
+    if publication["status"] == "blocked":
+        print("STATUS PACKAGING CANDIDATE — public release blocked: " + publication["reason"])
+        print("NEXT   obtain explicit human licence selection; do not publish these files")
+    else:
+        print("STATUS RELEASE CANDIDATE — not published")
+        print("NEXT   obtain explicit human tag and GitHub release authority")
     return 0
 
 
