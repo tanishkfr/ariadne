@@ -38,6 +38,12 @@ existing clean-tree boundary. The descriptor carries the current publication
 state, and the builder cannot emit a publish transition while the licence
 boundary is unresolved.
 
+The exact installed-product compatibility fixture now runs in an isolated
+system temporary directory because Windows repeatedly held its repository-local
+project directory open during cleanup and discarded an otherwise completed
+result. V1.5.2 -> V1.5.3 -> V1.5.2 now completes 7/7 without leaving fixture
+state behind.
+
 The public licence is not silently selected. Apache-2.0 is the technical
 recommendation after inspecting the dependency-free first-party source and
 asset boundary, but repository policy keeps that legal decision human-owned.

@@ -9,6 +9,8 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -23,13 +25,22 @@ from builderos import cli  # noqa: E402
 
 @contextlib.contextmanager
 def workspace():
-    path = ROOT / "validation" / f"reasoner-rollback-self-test-{uuid.uuid4().hex}"
-    path.mkdir()
+    path = Path(tempfile.mkdtemp(prefix=f"builder-os-reasoner-rollback-{uuid.uuid4().hex}-"))
     try:
         yield path
     finally:
         if path.exists():
-            shutil.rmtree(path)
+            last_error = None
+            for attempt in range(12):
+                try:
+                    shutil.rmtree(path)
+                    last_error = None
+                    break
+                except OSError as exc:
+                    last_error = exc
+                    time.sleep(0.1 * (attempt + 1))
+            if last_error is not None:
+                raise last_error
 
 
 def exercise(baseline_bundle: Path, current_bundle: Path) -> list[tuple[str, bool]]:
