@@ -1242,7 +1242,7 @@ def self_test_distribution_contract():
          )))),
         ("release builder without publication blocker fails",
          bool(check_distribution_texts(mutate(
-             "scripts/build-release.py", '"PACKAGING CANDIDATE', '"BUILD COMPLETE'
+             "scripts/build-release.py", '"STATUS PACKAGING CANDIDATE', '"STATUS BUILD COMPLETE'
          )))),
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(
