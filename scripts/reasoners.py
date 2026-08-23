@@ -17,6 +17,8 @@ EVIDENCE_CLASSES = (
     "verified", "reasonably-assumed", "externally-unverified", "blocked"
 )
 CONTINUITY_KINDS = ("reasoner-switch", "reasoner-failure")
+CLAUDE_SKILL = ROOT / "adapters" / "claude-reasoner-skill" / "SKILL.md"
+FLOW_FIXTURES = ROOT / "validation" / "fixtures" / "v1.5.1-reasoner-flows.json"
 
 
 class ReasonerError(RuntimeError):
@@ -83,6 +85,63 @@ def contract_problems(value: dict | None = None) -> list[str]:
         or claude.get("version_args") != ["--version"]
     ):
         problems.append("Claude must remain an opt-in detected CLI adapter")
+    if set(codex.get("capabilities", {})) != set(claude.get("capabilities", {})):
+        problems.append("reasoner capability matrix rows do not match")
+    problems.extend(skill_contract_problems())
+    return problems
+
+
+def skill_contract_problems(text: str | None = None) -> list[str]:
+    problems = []
+    try:
+        text = text if text is not None else read(CLAUDE_SKILL)
+    except OSError as exc:
+        return [f"optional Claude reasoner skill is unreadable: {exc}"]
+    for token in (
+        "scripts/builderos.py",
+        "reasoner-status",
+        "select-reasoner",
+        "record-reasoner-failure",
+        "Never grant a gate",
+        "S4B",
+        "isolated S5",
+        "not create a project `CLAUDE.md`",
+        "## Stop conditions",
+    ):
+        if token not in text:
+            problems.append(f"optional Claude reasoner skill missing boundary: {token}")
+    return problems
+
+
+def fixture_problems(value: dict | None = None, runtime_text: str | None = None) -> list[str]:
+    problems = []
+    if value is None:
+        try:
+            value = json.loads(read(FLOW_FIXTURES))
+        except (OSError, json.JSONDecodeError) as exc:
+            return [f"reasoner flow fixtures are unreadable: {exc}"]
+    fixtures = value.get("fixtures", [])
+    expected = {
+        "simple website",
+        "portfolio-quality interactive experience",
+        "existing messy project",
+        "project with a rejected design direction",
+        "project with a partial implementation return",
+    }
+    if value.get("schema_version") != 1:
+        problems.append("reasoner flow fixture schema is wrong")
+    if value.get("evidence_class") != "structural fixture; no live Claude execution":
+        problems.append("reasoner fixtures overstate their evidence class")
+    if len(fixtures) != 5 or {item.get("archetype") for item in fixtures} != expected:
+        problems.append("reasoner fixtures do not cover the five required project shapes")
+    directions = {(item.get("initial_reasoner"), item.get("next_reasoner")) for item in fixtures}
+    if not {("codex", "claude"), ("claude", "codex")}.issubset(directions):
+        problems.append("reasoner fixtures do not cover both provider switch directions")
+    runtime_text = runtime_text if runtime_text is not None else read(ROOT / "scripts" / "builderos.py")
+    for item in fixtures:
+        label = str(item.get("runtime_test", "")).strip()
+        if not label or label not in runtime_text:
+            problems.append(f"reasoner fixture has no executable runtime control: {item.get('id')}")
     return problems
 
 
@@ -277,6 +336,21 @@ def self_test() -> int:
     changed = json.loads(json.dumps(contract))
     changed["providers"]["claude"]["capabilities"]["handoff"] = "magic"
     case("unknown capability evidence state is rejected", bool(contract_problems(changed)))
+    changed = json.loads(json.dumps(contract))
+    del changed["providers"]["claude"]["capabilities"]["handoff"]
+    case("capability matrix row drift is rejected", bool(contract_problems(changed)))
+    skill = read(CLAUDE_SKILL)
+    case("optional Claude skill contract passes (positive control)", not skill_contract_problems(skill))
+    case(
+        "optional Claude skill cannot lose the failure boundary",
+        bool(skill_contract_problems(skill.replace("record-reasoner-failure", "continue-anyway", 1))),
+    )
+    fixture_value = json.loads(read(FLOW_FIXTURES))
+    runtime_text = read(ROOT / "scripts" / "builderos.py")
+    case("five realistic reasoner fixtures map to executable controls", not fixture_problems(fixture_value, runtime_text))
+    changed_fixtures = json.loads(json.dumps(fixture_value))
+    changed_fixtures["fixtures"][0]["runtime_test"] = "nonexistent optimistic test"
+    case("fixture without an executable control is rejected", bool(fixture_problems(changed_fixtures, runtime_text)))
 
     missing = detect("claude", contract, which=lambda _name: None)
     case("missing Claude CLI is blocked", not selectable(missing) and missing["classification"] == "blocked")

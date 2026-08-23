@@ -49,10 +49,12 @@ REQUIRED = [
     "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
     "adapters/reasoner-contract.md", "adapters/reasoners.json",
-    "adapters/claude-reasoner.md",
+    "adapters/claude-reasoner.md", "adapters/claude-reasoner-skill/SKILL.md",
     "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
     "scripts/creative-operations.py", "scripts/reasoners.py",
+    "scripts/install-claude-reasoner-skill.py",
     "scripts/test-real-projects.py", "validation/fixtures/v1.5-real-projects.json",
+    "validation/fixtures/v1.5.1-reasoner-flows.json",
     "scripts/install-builderos-skill.py",
     "scripts/build-release.py", "scripts/test-distribution.py",
     "scripts/test-wheel-install.py",
@@ -226,7 +228,8 @@ def check_distribution_texts(texts):
         "https://github.com/tanishkfr/builder-os/releases/latest/download/",
         "def install_seed_runtime(", 'sub.add_parser("update"',
         'sub.add_parser("rollback"', 'sub.add_parser("doctor"',
-        'sub.add_parser("uninstall"',
+        'sub.add_parser("uninstall"', 'sub.add_parser("enable-claude"',
+        'sub.add_parser("disable-claude"',
     ):
         if token not in cli:
             problems.append(f"launcher is missing: {token}")
@@ -827,6 +830,16 @@ def load_installer_tool():
     return module
 
 
+def load_claude_installer_tool():
+    path = os.path.join(ROOT, "scripts", "install-claude-reasoner-skill.py")
+    spec = importlib.util.spec_from_file_location("builder_os_claude_skill_installer", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Could not load optional Claude reasoner skill installer")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_release_tool():
     path = os.path.join(ROOT, "scripts", "build-release.py")
     spec = importlib.util.spec_from_file_location("builder_os_release", path)
@@ -1159,6 +1172,10 @@ def self_test_distribution_contract():
          bool(check_distribution_texts(mutate(
              "src/builderos/cli.py", 'sub.add_parser("rollback"', 'sub.add_parser("return"'
          )))),
+        ("missing optional Claude disable command fails",
+         bool(check_distribution_texts(mutate(
+             "src/builderos/cli.py", 'sub.add_parser("disable-claude"', 'sub.add_parser("disable-reasoner"'
+         )))),
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(
              ".agents/skills/builderos/references/installation.example.json",
@@ -1194,6 +1211,8 @@ def main():
         real_projects_failed = load_real_projects_tool().main()
         print("\nEntry-skill installer self-test")
         installer_failed = load_installer_tool().self_test()
+        print("\nOptional Claude entry-skill installer self-test")
+        claude_installer_failed = load_claude_installer_tool().self_test()
         print("\nDistribution contract self-test")
         distribution_contract_failed = self_test_distribution_contract()
         print("\nRelease-bundle self-test")
@@ -1204,6 +1223,7 @@ def main():
             agents_failed or delivery_failed or packet_failed or skill_contract_failed or runtime_failed
             or reasoner_failed
             or creative_failed or operations_failed or real_projects_failed or installer_failed
+            or claude_installer_failed
             or distribution_contract_failed or release_failed or distribution_failed
         )
         print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
@@ -1309,7 +1329,8 @@ def main():
     else:
         print("ok    runtime controller: entry skill, preflight, return handoff, and log contracts")
 
-    reasoner_problems = load_reasoner_tool().contract_problems()
+    reasoner_tool = load_reasoner_tool()
+    reasoner_problems = reasoner_tool.contract_problems() + reasoner_tool.fixture_problems()
     if reasoner_problems:
         failed = True
         print(f"FAIL  reasoner adapters: {len(reasoner_problems)} problem(s)")

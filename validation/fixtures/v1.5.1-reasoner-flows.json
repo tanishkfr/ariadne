@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "evidence_class": "structural fixture; no live Claude execution",
+  "fixtures": [
+    {
+      "id": "simple-site",
+      "archetype": "simple website",
+      "boundary": "S1",
+      "initial_reasoner": "codex",
+      "next_reasoner": "claude",
+      "runtime_test": "Codex to Claude creates a linked provider-neutral S1 child"
+    },
+    {
+      "id": "interactive-experience",
+      "archetype": "portfolio-quality interactive experience",
+      "boundary": "S1",
+      "initial_reasoner": "claude",
+      "next_reasoner": "codex",
+      "runtime_test": "Claude to Codex continues from durable S1 state"
+    },
+    {
+      "id": "messy-adoption",
+      "archetype": "existing messy project",
+      "boundary": "S1 adoption",
+      "initial_reasoner": "codex",
+      "next_reasoner": "claude",
+      "runtime_test": "runtime adopts an existing project without destructive overwrite"
+    },
+    {
+      "id": "rejected-direction",
+      "archetype": "project with a rejected design direction",
+      "boundary": "S3 retry",
+      "initial_reasoner": "codex",
+      "next_reasoner": "claude",
+      "runtime_test": "reasoner switch preserves rejected-direction context and restart boundary"
+    },
+    {
+      "id": "partial-build-return",
+      "archetype": "project with a partial implementation return",
+      "boundary": "S4B",
+      "initial_reasoner": "codex",
+      "next_reasoner": "claude",
+      "runtime_test": "reasoner switch cannot rewrite a partial Cursor implementation boundary"
+    }
+  ]
+}

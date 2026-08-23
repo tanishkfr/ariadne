@@ -62,6 +62,21 @@ this skill or from conversation history.
    risks, lessons, decisions, or non-blocking evidence gaps. Project documents
    remain canonical for active decisions.
 
+## Optional reasoner choice
+
+Codex remains the default. When the user explicitly says to use Claude, first
+run `builderos.py reasoner-status --project <project> --reasoner claude`. If the
+CLI is unavailable, stop without changing the project. Otherwise use
+`select-reasoner --reasoner claude --reason <their choice>` for an existing run,
+or `start --reasoner claude` for a new run. Use the same commands with `codex`
+to switch back. Never edit reasoner metadata or packet provider labels by hand.
+
+A switch before material current-stage output creates a linked same-stage child.
+A switch after material output applies at the next reasoning boundary. If a
+reasoner fails, use `record-reasoner-failure`; automatic Codex fallback is safe
+only before material output exists. S4B still follows `HANDOFF.md` and provider
+preflight, and S5 still receives only its isolated packet.
+
 ## Creative intelligence
 
 When S1 has produced `PROJECT.md`, read

@@ -38,7 +38,7 @@ RUNTIME_SCRIPTS = [
     "scripts/builderos.py", "scripts/prepare-stage.py",
     "scripts/creative-intelligence.py", "scripts/creative-operations.py",
     "scripts/reasoners.py",
-    "scripts/install-builderos-skill.py",
+    "scripts/install-builderos-skill.py", "scripts/install-claude-reasoner-skill.py",
 ]
 RUNTIME_SKILL = ".agents/skills/builderos"
 FIXED_ZIP_TIME = (2020, 1, 1, 0, 0, 0)

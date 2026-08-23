@@ -152,6 +152,24 @@ def self_test() -> int:
         runtime_140 = Path(pointer_140["runtime_root"])
         case("fresh user installs a self-contained runtime", not cli.runtime_problems(runtime_140))
         case("fresh install registers one managed skill", not cli.skill_problems(runtime_140, target))
+        claude_target = root / "optional-claude-skills" / "builderos"
+        case("normal installation does not enable Claude", not claude_target.exists())
+        cli.configure_claude_reasoner(
+            home, claude_target, "install", require_cli=False
+        )
+        case(
+            "explicit Claude enable installs only the optional entry skill",
+            (claude_target / cli.CLAUDE_SKILL_MARKER).is_file()
+            and not (project / "CLAUDE.md").exists()
+            and not cli.runtime_problems(runtime_140),
+        )
+        cli.configure_claude_reasoner(
+            home, claude_target, "uninstall", require_cli=False
+        )
+        case(
+            "Claude disable restores the Codex-only installed state",
+            not claude_target.exists() and not cli.skill_problems(runtime_140, target),
+        )
         case("installation does not contaminate a project", cli.sha256(sentinel) == sentinel_hash and len(list(project.iterdir())) == 1)
         case("installed runtime does not depend on the source checkout", str(ROOT).lower() not in (target / cli.SKILL_INSTALLATION).read_text(encoding="utf-8").lower())
 

@@ -2608,6 +2608,7 @@ def skill_contract_problems(
         "ingest-return", "ingest-review", "same-stage retry", "--adopt-existing",
         "creative-plan", "record-creative", "creative-check",
         "operations-plan", "record-operations", "operations-check",
+        "reasoner-status", "select-reasoner", "record-reasoner-failure",
         "references/creative-operations.md",
         "Never grant a gate",
     ):

@@ -15,10 +15,12 @@ import json
 import os
 import platform
 import re
+import runpy
 import shutil
 import stat
 import sys
 import tempfile
+import types
 import urllib.parse
 import urllib.request
 import uuid
@@ -42,6 +44,7 @@ RUNTIME_MANIFEST = "RELEASE-MANIFEST.json"
 SKILL_RELATIVE = Path(".agents") / "skills" / "builderos"
 SKILL_MARKER = ".builderos-managed.json"
 SKILL_INSTALLATION = Path("references") / "installation.json"
+CLAUDE_SKILL_MARKER = ".builderos-managed-claude-reasoner.json"
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?$")
 REQUIRED_RUNTIME_FILES = {
     "VERSION",
@@ -59,6 +62,10 @@ REQUIRED_RUNTIME_FILES = {
     "scripts/prepare-stage.py",
     "scripts/creative-intelligence.py",
     "scripts/creative-operations.py",
+    "scripts/reasoners.py",
+    "scripts/install-claude-reasoner-skill.py",
+    "adapters/reasoners.json",
+    "adapters/claude-reasoner-skill/SKILL.md",
     ".agents/skills/builderos/SKILL.md",
     ".agents/skills/builderos/agents/openai.yaml",
 }
@@ -177,6 +184,42 @@ def current_install(home: Path) -> dict | None:
     if not is_within(root, home / "versions"):
         raise ProductError("The Builder OS installation pointer escapes its version directory")
     return value
+
+
+def claude_skill_target() -> Path:
+    return Path.home() / ".claude" / "skills" / "builderos"
+
+
+def load_claude_skill_installer(runtime: Path):
+    path = runtime / "scripts" / "install-claude-reasoner-skill.py"
+    if not path.is_file():
+        raise ProductError("This Builder OS runtime has no optional Claude reasoner adapter")
+    try:
+        return types.SimpleNamespace(**runpy.run_path(str(path), run_name="builder_os_optional_claude_installer"))
+    except (OSError, RuntimeError) as exc:
+        raise ProductError(f"The optional Claude reasoner installer could not be loaded: {exc}") from exc
+
+
+def configure_claude_reasoner(
+    home: Path, target: Path, action: str, require_cli: bool = True
+) -> None:
+    current = current_install(home)
+    if current is None:
+        raise ProductError("Builder OS is not installed yet")
+    runtime = Path(current["runtime_root"])
+    problems = runtime_problems(runtime)
+    if problems:
+        raise ProductError("The active runtime is damaged: " + "; ".join(problems))
+    installer = load_claude_skill_installer(runtime)
+    try:
+        if action == "install":
+            installer.install(target, require_cli=require_cli)
+        elif action == "uninstall":
+            installer.uninstall(target)
+        else:
+            raise ProductError(f"Unknown Claude reasoner action: {action}")
+    except installer.InstallError as exc:
+        raise ProductError(str(exc)) from exc
 
 
 def validate_release_manifest(value: dict) -> list[str]:
@@ -772,6 +815,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--version", action="store_true", help="show the active Builder OS version")
     value.add_argument("--data-home", help=argparse.SUPPRESS)
     value.add_argument("--skill-home", help=argparse.SUPPRESS)
+    value.add_argument("--claude-skill-home", help=argparse.SUPPRESS)
     sub = value.add_subparsers(dest="command")
     install = sub.add_parser("install", help="install or repair Builder OS for this user")
     install.add_argument("--bundle", help="use a local verified runtime bundle")
@@ -784,6 +828,8 @@ def parser() -> argparse.ArgumentParser:
     doctor_parser.add_argument("--project", help="also check one project's compatibility")
     uninstall_parser = sub.add_parser("uninstall", help="remove Builder OS while preserving projects")
     uninstall_parser.add_argument("--yes", action="store_true", help="confirm removal without a prompt")
+    sub.add_parser("enable-claude", help="enable the optional Claude reasoner entry")
+    sub.add_parser("disable-claude", help="remove the optional Claude reasoner entry")
     sub.add_parser("paths", help=argparse.SUPPRESS)
     return value
 
@@ -792,6 +838,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     home = Path(args.data_home).expanduser().resolve() if args.data_home else user_data_home()
     target = Path(args.skill_home).expanduser().resolve() if args.skill_home else skill_target()
+    claude_target = (
+        Path(args.claude_skill_home).expanduser().resolve()
+        if args.claude_skill_home else claude_skill_target().resolve()
+    )
     if args.version:
         current = current_install(home)
         print(f"Builder OS {current['version'] if current else package_version()}")
@@ -841,6 +891,18 @@ def main(argv: list[str] | None = None) -> int:
             code, checks = doctor(home, target, Path(args.project) if args.project else None)
             print_doctor(checks)
             return code
+        if args.command == "enable-claude":
+            configure_claude_reasoner(home, claude_target, "install")
+            print("Optional Claude reasoner entry enabled.")
+            print("Codex remains the default; projects and gates were not changed.")
+            print("Next: open Claude Code in a project and invoke $builderos.")
+            return 0
+        if args.command == "disable-claude":
+            configure_claude_reasoner(home, claude_target, "uninstall", require_cli=False)
+            print("Optional Claude reasoner entry removed.")
+            print("Builder OS, Codex support, projects, and evidence were not changed.")
+            print("Next: continue with Codex, or run builderos rollback if restoring V1.5.")
+            return 0
         if args.command == "uninstall":
             if not args.yes:
                 answer = input("Remove Builder OS runtime and its managed Codex skill? Projects remain untouched. [y/N] ")
