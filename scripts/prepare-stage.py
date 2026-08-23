@@ -405,6 +405,7 @@ def parameterise_prompt(stage: str, block: str, args: argparse.Namespace) -> tup
                 "path": str(project_path),
                 "kind": "project-derived",
                 "source_sha256": sha256_file(project_path),
+                "content_sha256": sha256_text(read(project_path)),
                 "delivered": False,
             }
         )
@@ -441,6 +442,7 @@ def parameterise_prompt(stage: str, block: str, args: argparse.Namespace) -> tup
                 "path": str(project_path),
                 "kind": "project-derived",
                 "source_sha256": sha256_file(project_path),
+                "content_sha256": sha256_text(read(project_path)),
                 "delivered": False,
             }
         )
@@ -511,6 +513,7 @@ def check_project_boundary(stage: str, project: Path, adopt_existing: bool = Fal
 
 
 def source_entry(label: str, path: Path, kind: str, content: str, delivered: bool = True) -> dict:
+    delivered_content = content.rstrip()
     return {
         "label": label,
         "path": (
@@ -520,9 +523,13 @@ def source_entry(label: str, path: Path, kind: str, content: str, delivered: boo
         ),
         "kind": kind,
         "source_sha256": sha256_file(path),
-        "content_sha256": sha256_text(content),
+        # `content_sha256` is the backward-compatible, newline-normalised hash
+        # of the complete source file. Older runtimes use it when raw checkout
+        # bytes differ only by line endings.
+        "content_sha256": sha256_text(read(path)),
+        "delivered_content_sha256": sha256_text(delivered_content),
         "delivered": delivered,
-        "content": content,
+        "content": delivered_content,
     }
 
 
@@ -911,6 +918,10 @@ def verify_packet(packet_dir: Path) -> list[str]:
             footer = f"===== END {entry['label']} ====="
             if packet.count(header) != 1 or packet.count(footer) != 1:
                 problems.append(f"missing or duplicate packet section: {entry['label']}")
+            elif entry.get("delivered_content_sha256"):
+                body = packet.split(header + "\n", 1)[1].split("\n" + footer, 1)[0]
+                if sha256_text(body) != entry["delivered_content_sha256"]:
+                    problems.append(f"packet section content hash mismatch: {entry['label']}")
 
     actual_labels = re.findall(r"(?m)^===== BEGIN (.*?) \| SOURCE ", packet)
     if actual_labels != expected_labels:
@@ -1323,6 +1334,38 @@ def self_test() -> int:
         case(
             "tampered canonical source declaration is detected",
             any("section" in problem for problem in verify_packet(s3_dir)),
+        )
+        manifest_path.write_text(manifest_original, encoding="utf-8")
+
+        manifest = json.loads(manifest_original)
+        canonical = next(source for source in manifest["sources"] if source["path"] == "DESIGN-TASTE.md")
+        original_header = section_header(canonical)
+        canonical["source_sha256"] = "0" * 64
+        fallback_header = section_header(canonical)
+        fallback_packet = packet_original.replace(original_header, fallback_header, 1)
+        packet_path.write_text(fallback_packet, encoding="utf-8")
+        manifest["packet_sha256"] = sha256_file(packet_path)
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        case(
+            "normalised full-source hash tolerates raw checkout byte drift (positive control)",
+            not verify_packet(s3_dir),
+        )
+
+        canonical["content_sha256"] = "f" * 64
+        stale_packet = fallback_packet.replace(fallback_header, section_header(canonical), 1)
+        packet_path.write_text(stale_packet, encoding="utf-8")
+        manifest["packet_sha256"] = sha256_file(packet_path)
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        case("changed normalised canonical source is stale", any("stale source" in p for p in verify_packet(s3_dir)))
+
+        packet_path.write_text(packet_original, encoding="utf-8")
+        manifest = json.loads(manifest_original)
+        canonical = next(source for source in manifest["sources"] if source["path"] == "DESIGN-TASTE.md")
+        canonical["delivered_content_sha256"] = "0" * 64
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        case(
+            "delivered packet section hash cannot be ignored",
+            any("section content hash mismatch" in p for p in verify_packet(s3_dir)),
         )
         manifest_path.write_text(manifest_original, encoding="utf-8")
 
