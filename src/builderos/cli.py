@@ -141,7 +141,29 @@ def atomic_json(path: Path, value: dict) -> None:
 
 def append_history(home: Path, event: str, details: dict) -> None:
     home.mkdir(parents=True, exist_ok=True)
-    record = {"at": now(), "event": event, **details}
+    reasons = {
+        "activate": "a verified runtime and matching skill were activated",
+        "repair": "managed installation files were restored to canonical parity",
+        "rollback": "a previously installed verified runtime was reactivated",
+        "codex-baseline-install": "the user explicitly enabled or refreshed the optional baseline",
+        "codex-baseline-remove": "Builder OS ownership of the optional baseline was removed",
+    }
+    next_actions = {
+        "activate": "run builderos doctor",
+        "repair": "run builderos doctor",
+        "rollback": "run builderos doctor",
+        "codex-baseline-install": "restart Codex",
+        "codex-baseline-remove": "restart Codex",
+    }
+    record = {
+        "schema_version": INSTALL_SCHEMA,
+        "at": now(),
+        "event": event,
+        "outcome": "succeeded",
+        "why": reasons.get(event, "the requested managed operation completed"),
+        "next": next_actions.get(event, "run builderos doctor"),
+        **details,
+    }
     with (home / "install-history.jsonl").open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
 
@@ -963,6 +985,13 @@ def doctor(
             checks.append(("ok", "Runtime", f"Builder OS {manifest['version']}"))
         skill_issues = skill_problems(runtime, target) if not problems else ["runtime must be repaired first"]
         checks.append(("problem" if skill_issues else "ok", "Codex skill", "; ".join(skill_issues) or "managed and current"))
+        history = home / "install-history.jsonl"
+        checks.append((
+            "ok" if history.is_file() else "warning",
+            "Install log",
+            "available for install/update/rollback diagnosis" if history.is_file()
+            else "no installation history is available",
+        ))
     codex_status, codex_detail = codex_state()
     checks.append(("ok" if codex_status == "detected" else "warning", "Codex", codex_detail))
     claude_status, claude_detail = claude_state()
@@ -1020,10 +1049,12 @@ def print_doctor(checks: list[tuple[str, str, str]]) -> None:
         print(f"{symbols[status_value]} {label}: {detail}")
     if any(status_value == "problem" for status_value, _, _ in checks):
         print("\nAction needed: repair the failed item before starting a project.")
-    elif any(status_value == "warning" for status_value, _, _ in checks):
-        print("\nBuilder OS is healthy. One optional environment check needs attention.")
+    elif any(status_value == "warning" and label == "Codex" for status_value, label, _ in checks):
+        print("\nBuilder OS is healthy. Next: install or open Codex, then invoke $builderos in a project.")
+    elif any(status_value == "warning" and label == "Codex baseline" for status_value, label, _ in checks):
+        print("\nBuilder OS is healthy. Next: run builderos codex-baseline status for the optional baseline.")
     else:
-        print("\nBuilder OS is healthy. No action needed right now.")
+        print("\nBuilder OS is healthy. Next: invoke $builderos in your project.")
 
 
 def first_run_message(pointer: dict, codex_available: bool) -> None:

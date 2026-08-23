@@ -37,7 +37,8 @@ REQUIRED = [
     "QA-POLICY.md", "EVALUATION-RUBRICS.md", "LIBRARY-POLICY.md",
     "CHANGELOG.md", "QUICKSTART.md", "INSTALL.md", "UPDATE.md",
     "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md", "V1.5-READINESS.md",
-    "V1.5.1-READINESS.md", "V1.5.2-READINESS.md",
+    "V1.5.1-READINESS.md", "V1.5.2-READINESS.md", "V1.5.3-READINESS.md",
+    "CODEX-ENVIRONMENT.md", "RELEASE-NOTES.md",
     "VERSION", "pyproject.toml", "build_backend/builderos_backend.py",
     "src/builderos/__init__.py", "src/builderos/__main__.py", "src/builderos/cli.py",
     "templates/PROJECT.md", "templates/DESIGN.md",
@@ -205,6 +206,7 @@ DISTRIBUTION_FILES = (
     "scripts/build-release.py",
     ".agents/skills/builderos/references/installation.example.json",
     "adapters/codex-baseline.md",
+    "RELEASE-NOTES.md",
 )
 
 
@@ -241,7 +243,10 @@ def check_distribution_texts(texts):
         if token not in cli:
             problems.append(f"launcher is missing: {token}")
     release = texts["scripts/build-release.py"]
-    for token in ("RUNTIME_TOP_LEVEL", "RUNTIME_TREES", "RUNTIME_SCRIPTS", "RELEASE-MANIFEST.json"):
+    for token in (
+        "RUNTIME_TOP_LEVEL", "RUNTIME_TREES", "RUNTIME_SCRIPTS",
+        "RELEASE-MANIFEST.json", "SHA256SUMS.txt", "release_notes",
+    ):
         if token not in release:
             problems.append(f"release builder is missing: {token}")
     if re.search(
@@ -259,6 +264,12 @@ def check_distribution_texts(texts):
             problems.append(f"Codex baseline is missing a general working default: {token}")
     if re.search(r"(?i)\b(?:G[1-5]|S[0-6]|Builder OS|provider routing|social strategy)\b", baseline):
         problems.append("Codex baseline contains Builder OS workflow or project policy")
+    release_notes = texts["RELEASE-NOTES.md"]
+    if not re.search(rf"(?m)^# Builder OS {re.escape(release_version)}\s*$", release_notes):
+        problems.append("release notes do not name the authoritative VERSION")
+    for token in ("not been published", "macOS", "Linux", "Codex"):
+        if token not in release_notes:
+            problems.append(f"release notes omit an evidence boundary: {token}")
     try:
         example = json.loads(texts[".agents/skills/builderos/references/installation.example.json"])
     except json.JSONDecodeError as exc:
@@ -1175,10 +1186,13 @@ def self_test_distribution_contract():
     future = dict(actual)
     future["VERSION"] = "9.8.7\n"
     release_version = actual["VERSION"].strip()
+    future["RELEASE-NOTES.md"] = future["RELEASE-NOTES.md"].replace(
+        f"# Builder OS {release_version}", "# Builder OS 9.8.7", 1
+    )
     cases = [
         ("repository distribution contract passes (positive control)",
          not check_distribution_texts(actual)),
-        ("canonical VERSION can advance alone (positive control)",
+        ("VERSION and its release-note transport label can advance together (positive control)",
          not check_distribution_texts(future)),
         ("invalid VERSION fails",
          bool(check_distribution_texts({**actual, "VERSION": "version-next\n"}))),
@@ -1217,6 +1231,14 @@ def self_test_distribution_contract():
              **actual,
              "adapters/codex-baseline.md": actual["adapters/codex-baseline.md"] + "\nG1 is automatically approved.\n",
          }))),
+        ("release notes with stale version fail",
+         bool(check_distribution_texts(mutate(
+             "RELEASE-NOTES.md", f"# Builder OS {release_version}", "# Builder OS 0.0.0"
+         )))),
+        ("release builder without aggregate checksum inventory fails",
+         bool(check_distribution_texts(mutate(
+             "scripts/build-release.py", '"SHA256SUMS.txt"', '"checksums.txt"'
+         )))),
         ("installation example without version fails",
          bool(check_distribution_texts(mutate(
              ".agents/skills/builderos/references/installation.example.json",

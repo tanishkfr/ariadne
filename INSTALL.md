@@ -17,10 +17,10 @@ dependency is installed.
 
 ## Public release install
 
-Once `v1.5.2` is published, run these as your normal user:
+Once `v1.5.3` is published, run these as your normal user:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.2/builder_os-1.5.2-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.3/builder_os-1.5.3-py3-none-any.whl"
 python -m builderos install
 python -m builderos doctor
 ```
@@ -33,8 +33,37 @@ embedded runtime, creates a versioned user-local installation, and registers the
 managed Codex skill. A separate activation command is intentional: Python
 packages have no safe portable post-install hook for writing Codex skills.
 
+Fresh installs place the skill under `~/.agents/skills/builderos`, the current
+documented Codex user-skill location. An earlier Builder OS-managed skill under
+`$CODEX_HOME/skills` or `~/.codex/skills` is reused in place so update does not
+create a duplicate.
+
 Social intelligence needs no additional installation or account connection.
 It remains dormant until the user explicitly asks for distribution help.
+
+## Optional recommended Codex baseline
+
+Normal installation does not change your global Codex instructions. To opt in
+to a short set of generic working defaults, use either:
+
+```bash
+python -m builderos install --codex-baseline
+python -m builderos codex-baseline install
+```
+
+The command states what it changes. It will not overwrite or merge an existing
+`AGENTS.md` or `AGENTS.override.md`. Project instructions remain separate and
+closer to the project. Inspect or remove the managed baseline with:
+
+```bash
+python -m builderos codex-baseline status
+python -m builderos codex-baseline remove
+```
+
+If you edit an installed baseline, update and uninstall preserve it and give up
+ownership rather than deleting your work. Restart Codex after changing the
+baseline. See [CODEX-ENVIRONMENT.md](CODEX-ENVIRONMENT.md) for the verified
+instruction hierarchy.
 
 ## Optional Claude reasoner
 

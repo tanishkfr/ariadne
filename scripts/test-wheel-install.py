@@ -109,15 +109,26 @@ def self_test() -> int:
 
         data_home = root / "person-data"
         skill = root / "person-codex-skills" / "builderos"
+        codex_home = root / "person-codex-home"
         install_result = run(
             [
                 str(python), "-m", "builderos", "--data-home", str(data_home),
-                "--skill-home", str(skill), "install",
+                "--skill-home", str(skill), "--codex-home", str(codex_home),
+                "install", "--codex-baseline",
             ],
             root,
             environment=environment_vars,
         )
         case("stranger install gives one plain next action", "type $builderos" in install_result.stdout and "S1" not in install_result.stdout)
+        baseline = codex_home / "AGENTS.md"
+        baseline_marker = codex_home / ".builderos-managed-agents.json"
+        case(
+            "stranger can explicitly install the owned generic Codex baseline",
+            baseline.is_file()
+            and baseline_marker.is_file()
+            and "Builder OS" not in baseline.read_text(encoding="utf-8")
+            and "G1" not in baseline.read_text(encoding="utf-8"),
+        )
         current = json.loads((data_home / "current.json").read_text(encoding="utf-8"))
         runtime = Path(current["runtime_root"])
         installation = json.loads((skill / "references" / "installation.json").read_text(encoding="utf-8"))
@@ -130,11 +141,20 @@ def self_test() -> int:
         )
 
         doctor_result = run(
-            [str(python), "-m", "builderos", "--data-home", str(data_home), "--skill-home", str(skill), "doctor"],
+            [
+                str(python), "-m", "builderos", "--data-home", str(data_home),
+                "--skill-home", str(skill), "--codex-home", str(codex_home), "doctor",
+            ],
             root,
             environment=environment_vars,
         )
-        case("doctor verifies the isolated installed product", "[OK] Runtime" in doctor_result.stdout and "[OK] Codex skill" in doctor_result.stdout)
+        case(
+            "doctor verifies runtime, skill, providers, and baseline",
+            "[OK] Runtime" in doctor_result.stdout
+            and "[OK] Codex skill" in doctor_result.stdout
+            and "Claude:" in doctor_result.stdout
+            and "[OK] Codex baseline" in doctor_result.stdout,
+        )
 
         (runtime / "ROUTER.md").unlink()
         repair_result = run(
@@ -176,12 +196,17 @@ def self_test() -> int:
         uninstall_result = run(
             [
                 str(python), "-m", "builderos", "--data-home", str(data_home),
-                "--skill-home", str(skill), "uninstall", "--yes",
+                "--skill-home", str(skill), "--codex-home", str(codex_home),
+                "uninstall", "--yes",
             ],
             root,
             environment=environment_vars,
         )
         case("uninstall preserves project and run history", project_sentinel.is_file() and (runs[0] / "builderos-run.json").is_file())
+        case(
+            "uninstall removes only the managed global baseline",
+            not baseline.exists() and not baseline_marker.exists(),
+        )
         case("uninstall explains the remaining launcher", "launcher remains" in uninstall_result.stdout)
 
     print("BUILDER OS WHEEL STRANGER SELF-TEST\n")

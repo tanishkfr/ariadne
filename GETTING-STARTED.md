@@ -33,10 +33,10 @@ python --version
 
 ## Step 2 — Install Builder OS
 
-After the `v1.5.2` public release is available:
+After the `v1.5.3` public release is available:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.2/builder_os-1.5.2-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.3/builder_os-1.5.3-py3-none-any.whl"
 python -m builderos install
 python -m builderos doctor
 ```
@@ -45,6 +45,10 @@ This installs one user-local runtime and registers `$builderos`; no source
 checkout or manual skill copy is needed. See [INSTALL.md](INSTALL.md) for
 platform locations and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if doctor finds
 a problem.
+
+The optional generic Codex baseline is not installed by default. If you want
+it, run `python -m builderos codex-baseline install`; existing user instructions
+are never overwritten. Restart Codex afterwards.
 
 Codex remains the default and Claude is not installed or enabled by this
 process. If Claude Code is already installed and you explicitly want it as the

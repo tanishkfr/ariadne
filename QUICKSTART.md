@@ -4,11 +4,12 @@ Requires Python 3.8 or newer and Codex.
 
 ## Install
 
-After the `v1.5.2` release is published:
+After the `v1.5.3` release is published:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.2/builder_os-1.5.2-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.5.3/builder_os-1.5.3-py3-none-any.whl"
 python -m builderos install
+python -m builderos doctor
 ```
 
 ## Start
@@ -24,6 +25,10 @@ $builderos
 Tell Builder OS what you want to make in ordinary language. It handles setup,
 context and continuation. You keep control of direction, dependencies and
 release decisions.
+
+The general Codex baseline is optional. Install it with
+`python -m builderos codex-baseline install`; Builder OS leaves any existing
+Codex instructions untouched.
 
 For a finished project, you can later say: `Help me launch this project on
 social.` Builder OS reads the project first, prepares a small evidence-labelled

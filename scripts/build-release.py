@@ -26,6 +26,7 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_PATH = ROOT / "VERSION"
+RELEASE_NOTES_PATH = ROOT / "RELEASE-NOTES.md"
 REPOSITORY_URL = "https://github.com/tanishkfr/builder-os"
 RUNTIME_TOP_LEVEL = [
     "VERSION", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md", "DESIGN-MOTION.md",
@@ -147,6 +148,10 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
     artifact_sha = digest(artifact)
     launcher = build_launcher(output)
     launcher_sha = digest(launcher)
+    release_notes_name = f"builder-os-{release_version}-release-notes.md"
+    release_notes = output / release_notes_name
+    release_notes.write_bytes(RELEASE_NOTES_PATH.read_bytes())
+    release_notes_sha = digest(release_notes)
     descriptor = {
         "schema_version": 1,
         "product": "Builder OS",
@@ -157,7 +162,13 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
             "artifact": f"{REPOSITORY_URL}/releases/download/v{release_version}/{launcher.name}",
             "sha256": launcher_sha,
         },
+        "release_notes": {
+            "artifact": f"{REPOSITORY_URL}/releases/download/v{release_version}/{release_notes_name}",
+            "sha256": release_notes_sha,
+        },
         "source_commit": manifest["source_commit"],
+        "requires_python": ">=3.8",
+        "project_state_schema": manifest["project_state_schema"],
     }
     descriptor_path = output / "builder-os-release.json"
     descriptor_path.write_text(json.dumps(descriptor, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -167,10 +178,20 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
     (output / f"{launcher.name}.sha256").write_text(
         f"{launcher_sha}  {launcher.name}\n", encoding="utf-8"
     )
+    checksum_inventory = output / "SHA256SUMS.txt"
+    checksum_inventory.write_text(
+        "".join(
+            f"{digest(path)}  {path.name}\n"
+            for path in (artifact, launcher, descriptor_path, release_notes)
+        ),
+        encoding="utf-8",
+    )
     return {
         "artifact": artifact,
         "launcher": launcher,
         "descriptor": descriptor_path,
+        "release_notes": release_notes,
+        "checksums": checksum_inventory,
         "manifest": manifest,
     }
 
@@ -211,9 +232,27 @@ def self_test() -> int:
         descriptor = json.loads(one["descriptor"].read_text(encoding="utf-8"))
         case("release description authenticates the exact bundle", descriptor["sha256"] == digest(one["artifact"]))
         case("release description authenticates the launcher", descriptor["launcher"]["sha256"] == digest(one["launcher"]))
+        case("release description authenticates the release notes", descriptor["release_notes"]["sha256"] == digest(one["release_notes"]))
+        checksum_rows = {
+            name: value
+            for value, name in (
+                line.split("  ", 1)
+                for line in one["checksums"].read_text(encoding="utf-8").splitlines()
+            )
+        }
+        case(
+            "aggregate checksums authenticate every publishable input",
+            len(checksum_rows) == 4
+            and all(checksum_rows.get(one[key].name) == digest(one[key]) for key in (
+                "artifact", "launcher", "descriptor", "release_notes"
+            )),
+        )
         with zipfile.ZipFile(one["artifact"]) as archive:
             names = set(archive.namelist())
             embedded = json.loads(archive.read("RELEASE-MANIFEST.json"))
+            runtime_bytes = b"\n".join(
+                archive.read(name) for name in sorted(names) if not name.endswith("/")
+            ).lower()
         case("release carries its internal file manifest", embedded["source_commit"] == "fixture-commit")
         case(
             "runtime includes managed skill, controller, and optional reasoner adapter",
@@ -227,7 +266,22 @@ def self_test() -> int:
         case("launcher wheel carries seed runtime and command", "builderos/seed-runtime.zip" in wheel_names and any(name.endswith("/entry_points.txt") for name in wheel_names))
         case("runtime excludes developer validation and operations", not any(name.startswith(("validation/", "operations/", "tests/")) for name in names))
         case("runtime excludes maintainer machine paths", all("snprasad" not in archive_name.lower() and "testbed" not in archive_name.lower() for archive_name in names))
+        case(
+            "runtime content excludes maintainer-specific paths and private test data",
+            not any(token in runtime_bytes for token in (
+                b"snprasad", b"c:\\testbed", b"builder os tests",
+            ))
+            and not any(
+                part in name.lower()
+                for name in names
+                for part in ("transcript", "validation/runs", ".env", "credential")
+            ),
+        )
         case("VERSION is the release authority", descriptor["version"] == VERSION_PATH.read_text(encoding="utf-8").strip())
+        case(
+            "release notes name the authoritative version",
+            f"Builder OS {descriptor['version']}" in one["release_notes"].read_text(encoding="utf-8"),
+        )
 
     print("BUILDER OS RELEASE SELF-TEST\n")
     for name, passed in cases:
@@ -257,6 +311,8 @@ def main() -> int:
     print(f"BUILT  {result['artifact']}")
     print(f"WHEEL  {result['launcher']}")
     print(f"INDEX  {result['descriptor']}")
+    print(f"NOTES  {result['release_notes']}")
+    print(f"SHA256 {result['checksums']}")
     print("NEXT   publish these generated files together in the matching GitHub release")
     return 0
 

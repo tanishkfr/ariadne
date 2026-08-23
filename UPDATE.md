@@ -11,6 +11,10 @@ verifies every canonical file, installs a new immutable version directory, then
 atomically moves the active pointer and managed skill. It never rewrites a
 project document.
 
+If the optional Codex baseline is installed and unchanged, update refreshes it
+from the new verified runtime. If it was edited, Builder OS preserves it and
+reports that it could not safely update the managed copy.
+
 If an update fails before activation, the prior runtime remains current. After
 a successful update, the command names the available rollback version.
 
@@ -28,7 +32,8 @@ python -m builderos doctor
 ```
 
 Rollback activates the previous verified runtime and matching skill. Projects
-and evidence remain unchanged.
+and evidence remain unchanged. An unchanged managed Codex baseline follows the
+rollback version; edited instructions remain untouched.
 
 ## Repair
 
@@ -49,8 +54,10 @@ python -m pip uninstall builder-os
 ```
 
 The first command removes the user-local runtime and its managed skill while
-preserving every project and project history. The second removes the small
-Python launcher; keeping the steps separate avoids a process trying to uninstall
+preserving every project and project history. It also removes an unchanged
+Builder OS-managed Codex baseline. An edited baseline and all unrelated Codex
+instructions are preserved. The second command removes the small Python
+launcher; keeping the steps separate avoids a process trying to uninstall
 itself.
 
 Next: use [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if a health check fails.

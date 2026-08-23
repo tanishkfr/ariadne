@@ -7,9 +7,9 @@ python -m builderos doctor
 ```
 
 The command checks Python compatibility, the active installation, runtime file
-hashes, managed skill parity, Codex detection and optional project-state
-compatibility. A missing Codex command is reported as a warning because the
-desktop app may still be installed.
+hashes, managed skill parity, installation-history availability, Codex detection, optional Claude detection,
+optional Codex baseline state and project-state compatibility. Missing provider
+commands are warnings because desktop applications may still be installed.
 
 ## Common results
 
@@ -39,6 +39,19 @@ recorded.
 
 Run doctor, then `python -m builderos install` to repair registration. Restart
 Codex so it reloads installed skills.
+
+### The optional Codex baseline was skipped
+
+Builder OS found an existing `AGENTS.md` or `AGENTS.override.md` and preserved
+it. This does not block `$builderos`. Keep your existing instructions, or merge
+the published generic defaults yourself; Builder OS will not claim ownership of
+that manual merge.
+
+### The optional Codex baseline was edited
+
+Builder OS preserves edited instructions during update and uninstall. Run
+`python -m builderos codex-baseline status` to confirm the state. Use `remove`
+to remove only Builder OS ownership; the edited instruction file remains.
 
 ### Claude is unavailable or does not show `$builderos`
 

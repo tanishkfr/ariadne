@@ -10,6 +10,45 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.5.3 — 2026-08-23 · ENVIRONMENT AND DISTRIBUTION
+
+V1.5.2 installed a self-contained product, but a fresh user was still routed to
+the older `.codex/skills` location unless `.agents` already existed, `doctor`
+did not show optional Claude or global-instruction state, and there was no safe
+way to opt into general Codex working defaults. The aggregate Windows suite
+also exposed a real transient sharing violation while atomically replacing run
+state.
+
+Fresh installs now use Codex's documented `.agents/skills` user location while
+recognised older Builder OS-managed locations continue in place. A concise
+generic baseline can be explicitly installed into the Codex home. Its separate
+ownership marker records the canonical source, version and hash; existing
+`AGENTS.md`, `AGENTS.override.md`, edited managed instructions, project files
+and unrelated configuration are never overwritten. Update and rollback refresh
+only an unchanged managed copy, and uninstall removes only owned unchanged
+content. Deterministic positive and negative controls cover every branch.
+
+The dependency-free launcher retries bounded Windows sharing violations for
+atomic JSON replacement and still exposes persistent denial. `doctor` now
+reports Python, runtime, skill, Codex, optional Claude, optional baseline and
+project health without inspecting credentials. Release generation adds
+versioned release notes and one `SHA256SUMS.txt` inventory covering the runtime,
+wheel, descriptor and notes, while retaining source-commit provenance and the
+existing clean-tree boundary.
+
+The public licence is not silently selected. Apache-2.0 is the technical
+recommendation after inspecting the dependency-free first-party source and
+asset boundary, but repository policy keeps that legal decision human-owned.
+Until explicitly approved, `Private :: Do Not Upload` remains in package
+metadata and V1.5.3 is a packaging candidate, not a publishable release.
+
+**Scope:** no change to `ROUTER.md`, `WORKFLOW.md`, prompts, modes, canonical
+design/research/QA/evaluation policy, templates, provider neutrality, gate
+semantics, S5 isolation, human approval authority or project-state schema. No
+push, tag, release, deployment, provider sign-in or live external task occurred.
+
+---
+
 ## 1.5.2 — 2026-08-23 · SOCIAL INTELLIGENCE AND DISTRIBUTION
 
 The earlier optional social method could record a small strategy, but its

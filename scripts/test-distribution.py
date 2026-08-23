@@ -171,6 +171,7 @@ def self_test() -> int:
         release_dir = root / "release"
         bundle_140 = make_bundle(release_dir, "1.4.0")
         bundle_141 = make_bundle(release_dir, "1.4.1")
+        bundle_153 = make_bundle(release_dir, "1.5.3")
         incompatible_bundle = make_bundle(release_dir, "1.5.0", "99.0.0")
         descriptor_141 = local_descriptor(release_dir / "release-141.json", bundle_141, "1.4.1")
         legacy_manifest = cli.bundle_manifest(bundle_140)
@@ -187,6 +188,15 @@ def self_test() -> int:
             any(
                 "required runtime files" in problem
                 for problem in cli.validate_release_manifest(current_without_reasoner)
+            ),
+        )
+        current_without_baseline = cli.bundle_manifest(bundle_153)
+        current_without_baseline["files"].pop(cli.CODEX_BASELINE_RELATIVE.as_posix())
+        case(
+            "V1.5.3 manifest cannot omit its optional baseline source",
+            any(
+                "required runtime files" in problem
+                for problem in cli.validate_release_manifest(current_without_baseline)
             ),
         )
         home = root / "user-data"
@@ -210,6 +220,22 @@ def self_test() -> int:
             runtime_help.returncode == 0 and not cli.runtime_problems(runtime_140),
         )
         case("fresh install registers one managed skill", not cli.skill_problems(runtime_140, target))
+        history_rows = [
+            json.loads(line)
+            for line in (home / "install-history.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        case(
+            "installation history explains outcome and next action without secrets",
+            bool(history_rows)
+            and all(
+                all(key in row for key in ("event", "outcome", "why", "next"))
+                for row in history_rows
+            )
+            and not any(
+                token in json.dumps(history_rows).lower()
+                for token in ("password", "credential", "api_key", "access_token")
+            ),
+        )
         codex_directory = root / "codex-home"
         user_instructions = root / "existing-codex-home"
         user_instructions.mkdir()
