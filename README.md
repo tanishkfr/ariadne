@@ -1,9 +1,37 @@
 # Builder OS
 
-A project router and operating system for building websites, apps, games, experiments and content — with a design quality bar that is written down and enforced, and a clear separation between which tool thinks and which tool builds.
+Builder OS takes a creative project from an ordinary-language idea through
+research, design direction, implementation and independent review. It keeps the
+workflow moving and pauses only when your judgement or permission is needed.
 
-Not a framework or a project dependency. Canonical Markdown plus a small
-runtime controller, deterministic transport, and validation tools.
+It is for designers, developers and independent makers who want AI assistance
+without surrendering creative direction, dependency choices or shipping
+authority. Builder OS is installed once for your user account; your projects do
+not contain or depend on its source repository.
+
+**V1.4 release candidate:** install, repair, update, rollback, diagnostics,
+uninstall and the offline first run are locally verified. The first public
+release is not published yet; see [V1.4-READINESS.md](V1.4-READINESS.md).
+
+## Quick start
+
+After the `v1.4.0` GitHub release is published:
+
+```bash
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.4.0/builder_os-1.4.0-py3-none-any.whl"
+python -m builderos install
+```
+
+Then open Codex in the project you want to make, type `$builderos`, and describe
+it normally. Builder OS finds an unfinished project, safely adopts an existing
+one, or starts a new one without making you choose a mode or stage.
+
+[Short quickstart](QUICKSTART.md) · [Installation](INSTALL.md) ·
+[Updates and rollback](UPDATE.md) · [Troubleshooting](TROUBLESHOOTING.md)
+
+You still approve the design direction, dependencies, completed build, shipping
+and publishing. Builder OS never pushes, deploys or installs project packages
+without the relevant approval.
 
 ---
 
@@ -40,9 +68,9 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 ## Start here
 
-**Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — install the entry skill, then describe one real project.
+**Never used it:** [QUICKSTART.md](QUICKSTART.md) — install once, then describe one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
-**Current productization evidence:** [V1.3-READINESS.md](V1.3-READINESS.md).
+**Current productization evidence:** [V1.4-READINESS.md](V1.4-READINESS.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
 **Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
 
@@ -130,7 +158,14 @@ judgement remain separate records, and none grants a gate.
 
 ## Status
 
-**v1.3.0-rc.1.** Builder OS now carries approved design decisions into hashed
+**v1.4.0 release candidate.** The product now installs from one self-contained
+Python wheel into a versioned user-local runtime, registers its managed Codex
+skill, verifies file parity, and supports `update`, `rollback`, `doctor` and
+`uninstall` without touching projects. The wheel and runtime are generated from
+the same canonical source allowlist and carry SHA-256 manifests. Public release
+publication and fresh macOS/Linux execution remain outstanding.
+
+V1.3 carried approved design decisions into hashed
 implementation mappings, project-specific rendered QA, drift records and an
 evidence-backed creative review. It classifies human interventions, gives each
 S4B packet a unique non-overwriting project return target, and can produce an
@@ -140,7 +175,13 @@ still routes on **intent**, not keywords.
 
 Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
-**Status: V1.3 READY FOR PRIVATE USE.** A local rendered fixture exercised the
+**Status: V1.4 NEAR READY FOR PUBLIC USE.** A clean Python environment exercised
+wheel build, install, `$builderos` runtime start, doctor and uninstall with no
+source checkout dependency. Windows executed; macOS/Linux path rules are
+simulated. Publishing is blocked on a human licence decision and explicit
+release authority. See [V1.4-READINESS.md](V1.4-READINESS.md).
+
+V1.3 was ready for private use. A local rendered fixture exercised the
 new visual evidence and creative-review loop and exposed a real tablet drift;
 unsupported reduced-motion observation remained unverified. External provider
 automation, a complete V1.3 provider return and independent S5 remain

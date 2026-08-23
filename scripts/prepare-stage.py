@@ -169,6 +169,15 @@ def is_within(path: Path, parent: Path) -> bool:
 
 
 def git_head() -> str:
+    release = ROOT / "RELEASE-MANIFEST.json"
+    if release.is_file():
+        try:
+            value = json.loads(read(release))
+            source_commit = str(value.get("source_commit", "")).strip()
+            if source_commit:
+                return source_commit
+        except (OSError, json.JSONDecodeError):
+            pass
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True
     )

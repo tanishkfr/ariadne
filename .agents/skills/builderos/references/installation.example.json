@@ -1,4 +1,6 @@
 {
-  "builder_os_root": "C:\\path\\to\\builder-os",
-  "installed_from_commit": "<git commit>"
+  "schema_version": 1,
+  "builder_os_root": "C:\\user-local\\BuilderOS\\versions\\1.4.0",
+  "install_home": "C:\\user-local\\BuilderOS",
+  "version": "1.4.0"
 }

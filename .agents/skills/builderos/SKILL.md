@@ -19,27 +19,32 @@ Resolve the Builder OS root in this order:
 3. The repository root containing this skill when it is loaded from
    `.agents/skills/builderos` in Builder OS itself.
 
-The root is valid only when `scripts/builderos.py`, `ROUTER.md`, and
-`WORKFLOW.md` exist. If none resolves, stop with one action: install or locate
-Builder OS. Do not reconstruct its policies from this skill.
+For a personal installation, run `builderos doctor` before first use after an
+install, update or rollback. The root is valid only when its release manifest,
+version, file hashes and this managed skill agree, and `scripts/builderos.py`,
+`ROUTER.md`, and `WORKFLOW.md` exist. For a repository-local development skill,
+the three files are the minimum check. If validation fails, stop with one
+action: run `builderos install` to repair it. Do not reconstruct policies from
+this skill or from conversation history.
 
 ## Start or resume
 
 1. Identify the project directory from the active workspace or the user's
    explicit path. Keep runtime packets and evidence outside the project.
-2. Run `python <root>/scripts/builderos.py discover --project <project>` and
-   resume the single matching run with `status --project <project>`. Treat its
+2. Run `python <root>/scripts/builderos.py discover --project <project>` first.
+   Resume the single matching run with `status --project <project>`. Treat its
    goal, approved direction, health, attention items, and next action as the
    opening briefing. If more
    than one history matches, ask which history is authoritative; never guess or
    create a second run merely because conversation history is absent.
-3. For a new brief, run `builderos.py start` with the ordinary-language request.
-   It creates the fresh project shell when needed, allocates the run, prepares
-   S1, and starts the operations log. If the user explicitly wants to bring an
-   existing repository under Builder OS, inspect its top level first and pass
-   `--adopt-existing`. Adoption is non-destructive: preserve current behaviour
-   and every existing file. If `PROJECT.md` or `AGENTS.md` already exists, do
-   not overwrite it; discover the prior run or stop for a deliberate migration.
+3. If no run exists, inspect the project top level. Start an empty project from
+   the ordinary-language request. When the project already contains unrelated
+   work and the user asked Builder OS to work on that project, use the runtime's
+   safe adoption path (`--adopt-existing` internally) without making the user
+   know its implementation flag. Adoption
+   is non-destructive: preserve current behaviour and every existing file. If
+   `PROJECT.md` or `AGENTS.md` already exists, do not overwrite it; discover the
+   prior run or stop for a deliberate migration.
 4. Read the generated `packet.txt` yourself and perform the current reasoning
    stage in this task when independence does not require a fresh task. The user
    must not locate prompts, policies, templates, packet IDs, or transcript paths.
@@ -139,7 +144,9 @@ content, authenticate accounts, or imply that strategy changes the build gates.
 
 ## Communication
 
-Say what completed, what happens next, and whether the user needs to act. Use
+Say what completed or what you found, what happens next, and whether the user
+needs to act. Never expose recovery flags, packet construction, source paths or
+stage codes unless the user asked for diagnostics. Use
 plain stage names such as “project brief”, “design direction”, “implementation
 handoff”, and “independent review”. Put internal IDs, manifests, hashes, and
 diagnostic details in the operations log unless they affect a decision.

@@ -26,6 +26,7 @@ import sys
 import collections
 import copy
 import importlib.util
+import json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERBOSE = "--verbose" in sys.argv
@@ -34,7 +35,10 @@ SELF_TEST = "--self-test" in sys.argv
 REQUIRED = [
     "README.md", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md",
     "QA-POLICY.md", "EVALUATION-RUBRICS.md", "LIBRARY-POLICY.md",
-    "CHANGELOG.md",
+    "CHANGELOG.md", "QUICKSTART.md", "INSTALL.md", "UPDATE.md",
+    "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md",
+    "VERSION", "pyproject.toml", "build_backend/builderos_backend.py",
+    "src/builderos/__init__.py", "src/builderos/__main__.py", "src/builderos/cli.py",
     "templates/PROJECT.md", "templates/DESIGN.md",
     "templates/HANDOFF.md", "templates/QA.md", "templates/RETURN-HANDOFF.md",
     "templates/SOCIAL-STRATEGY.md",
@@ -47,6 +51,8 @@ REQUIRED = [
     "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
     "scripts/creative-operations.py",
     "scripts/install-builderos-skill.py",
+    "scripts/build-release.py", "scripts/test-distribution.py",
+    "scripts/test-wheel-install.py",
     ".agents/skills/builderos/SKILL.md",
     ".agents/skills/builderos/agents/openai.yaml",
     ".agents/skills/builderos/references/creative-intelligence.md",
@@ -83,7 +89,7 @@ DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 GENERATED = ("validation/runs/",)
 EPHEMERAL_SELF_TEST = (
     re.compile(
-        r"^validation/(?:builderos|creative-intelligence|creative-operations|packet|skill-install)-self-test-[0-9a-f]{32}/"
+        r"^validation/(?:builderos|creative-intelligence|creative-operations|distribution|packet|release|skill-install|wheel)-self-test-[0-9a-f]{32}/"
     ),
     re.compile(r"^validation/validate-self-test-[a-z0-9-]+/"),
 )
@@ -151,6 +157,78 @@ def check_duplicates(min_words=9):
 
 def check_required():
     return [f for f in REQUIRED if not os.path.exists(os.path.join(ROOT, f))]
+
+
+DISTRIBUTION_FILES = (
+    "VERSION",
+    "pyproject.toml",
+    "build_backend/builderos_backend.py",
+    "src/builderos/cli.py",
+    "scripts/build-release.py",
+    ".agents/skills/builderos/references/installation.example.json",
+)
+
+
+def check_distribution_texts(texts):
+    """Guard the release boundary without making generated artifacts canonical."""
+    problems = []
+    release_version = texts["VERSION"].strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?", release_version):
+        problems.append("VERSION is not a supported release version")
+    pyproject = texts["pyproject.toml"]
+    for token in (
+        'requires = []', 'build-backend = "builderos_backend"',
+        'dynamic = ["version"]', 'dependencies = []',
+        'builderos = "builderos.cli:main"', 'Private :: Do Not Upload',
+    ):
+        if token not in pyproject:
+            problems.append(f"pyproject.toml is missing the release contract: {token}")
+    if re.search(r"(?m)^version\s*=", pyproject):
+        problems.append("pyproject.toml duplicates the canonical VERSION value")
+    backend = texts["build_backend/builderos_backend.py"]
+    for token in ("builderos/seed-runtime.zip", "scripts\" / \"build-release.py"):
+        if token not in backend:
+            problems.append(f"wheel backend is missing: {token}")
+    cli = texts["src/builderos/cli.py"]
+    for token in (
+        "https://github.com/tanishkfr/builder-os/releases/latest/download/",
+        "def install_seed_runtime(", 'sub.add_parser("update"',
+        'sub.add_parser("rollback"', 'sub.add_parser("doctor"',
+        'sub.add_parser("uninstall"',
+    ):
+        if token not in cli:
+            problems.append(f"launcher is missing: {token}")
+    release = texts["scripts/build-release.py"]
+    for token in ("RUNTIME_TOP_LEVEL", "RUNTIME_TREES", "RUNTIME_SCRIPTS", "RELEASE-MANIFEST.json"):
+        if token not in release:
+            problems.append(f"release builder is missing: {token}")
+    if re.search(
+        r"(?s)RUNTIME_(?:TOP_LEVEL|TREES)\s*=\s*\[[^\]]*"
+        r"(?:validation|operations|tests)",
+        release,
+    ):
+        problems.append("release allowlist includes maintainer-only trees")
+    try:
+        example = json.loads(texts[".agents/skills/builderos/references/installation.example.json"])
+    except json.JSONDecodeError as exc:
+        problems.append(f"installation example is malformed: {exc}")
+    else:
+        for key in ("schema_version", "builder_os_root", "install_home", "version"):
+            if not example.get(key):
+                problems.append(f"installation example is missing {key}")
+    return problems
+
+
+def check_distribution():
+    texts = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in DISTRIBUTION_FILES
+        if os.path.isfile(os.path.join(ROOT, path))
+    }
+    missing = sorted(set(DISTRIBUTION_FILES) - set(texts))
+    return [f"distribution source is missing: {path}" for path in missing] + (
+        check_distribution_texts(texts) if not missing else []
+    )
 
 
 # Canonical routing rules. Defined once in ROUTER.md's rule index; referenced by
@@ -699,6 +777,22 @@ def load_installer_tool():
     return module
 
 
+def load_release_tool():
+    path = os.path.join(ROOT, "scripts", "build-release.py")
+    spec = importlib.util.spec_from_file_location("builder_os_release", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_distribution_tool():
+    path = os.path.join(ROOT, "scripts", "test-distribution.py")
+    spec = importlib.util.spec_from_file_location("builder_os_distribution", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def agents_transport_form(template_text):
     """Encode nested Markdown fences without closing the outer S1 prompt fence."""
     return re.sub(r"(?m)^```", "~~~", template_text.strip())
@@ -938,6 +1032,59 @@ def self_test_packet_tool():
     return 1 if failed else 0
 
 
+def self_test_distribution_contract():
+    """Positive controls and mutations for the installed-product boundary."""
+    actual = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in DISTRIBUTION_FILES
+    }
+
+    def mutate(path, old, new):
+        texts = dict(actual)
+        if old not in texts[path]:
+            raise AssertionError(f"distribution mutation source missing: {path}: {old}")
+        texts[path] = texts[path].replace(old, new, 1)
+        return texts
+
+    future = dict(actual)
+    future["VERSION"] = "9.8.7\n"
+    cases = [
+        ("repository distribution contract passes (positive control)",
+         not check_distribution_texts(actual)),
+        ("canonical VERSION can advance alone (positive control)",
+         not check_distribution_texts(future)),
+        ("invalid VERSION fails",
+         bool(check_distribution_texts({**actual, "VERSION": "version-next\n"}))),
+        ("duplicated package version fails",
+         bool(check_distribution_texts(mutate(
+             "pyproject.toml", 'dynamic = ["version"]', 'version = "1.4.0"'
+         )))),
+        ("wheel without embedded runtime fails",
+         bool(check_distribution_texts(mutate(
+             "build_backend/builderos_backend.py",
+             "builderos/seed-runtime.zip", "builderos/runtime-reference.txt"
+         )))),
+        ("insecure update endpoint fails",
+         bool(check_distribution_texts(mutate(
+             "src/builderos/cli.py", "https://github.com/tanishkfr/", "http://github.com/tanishkfr/"
+         )))),
+        ("missing rollback command fails",
+         bool(check_distribution_texts(mutate(
+             "src/builderos/cli.py", 'sub.add_parser("rollback"', 'sub.add_parser("return"'
+         )))),
+        ("installation example without version fails",
+         bool(check_distribution_texts(mutate(
+             ".agents/skills/builderos/references/installation.example.json",
+             '"version": "1.4.0"', '"release": "1.4.0"'
+         )))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def main():
     if SELF_TEST:
         print("AGENTS transport mirror self-test")
@@ -954,9 +1101,16 @@ def main():
         operations_failed = load_creative_operations_tool().self_test()
         print("\nEntry-skill installer self-test")
         installer_failed = load_installer_tool().self_test()
+        print("\nDistribution contract self-test")
+        distribution_contract_failed = self_test_distribution_contract()
+        print("\nRelease-bundle self-test")
+        release_failed = load_release_tool().self_test()
+        print("\nInstalled-product lifecycle self-test")
+        distribution_failed = load_distribution_tool().self_test()
         failed = (
             agents_failed or delivery_failed or packet_failed or runtime_failed
             or creative_failed or operations_failed or installer_failed
+            or distribution_contract_failed or release_failed or distribution_failed
         )
         print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
         return 1 if failed else 0
@@ -980,6 +1134,15 @@ def main():
             print(f"        {f}")
     else:
         print(f"ok    required files: {len(REQUIRED)} present")
+
+    distribution_problems = check_distribution()
+    if distribution_problems:
+        failed = True
+        print(f"FAIL  distribution: {len(distribution_problems)} problem(s)")
+        for problem in distribution_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    distribution: one VERSION, self-contained wheel, verified lifecycle")
 
     missing_rules, dangling = check_rule_ids()
     if missing_rules or dangling:

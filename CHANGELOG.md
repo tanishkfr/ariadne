@@ -10,6 +10,47 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.4.0 — 2026-08-23 · INSTALLABLE USER-LOCAL PRODUCT
+
+Builder OS previously had a capable runtime and managed Codex entry skill, but
+a new user still needed the source checkout and a maintainer-only skill script.
+That made the logical workflow usable while leaving distribution, repair and
+first run as manual operator work.
+
+V1.4 adds a dependency-free Python launcher and deterministic wheel. The wheel
+carries a generated runtime bundle whose files and source commit are recorded in
+one release manifest; it is an immutable transport copy of the existing
+canonical sources, not a new policy owner. Installation chooses a platform-
+appropriate user-local directory, verifies every hash, atomically activates a
+version, and installs the managed `$builderos` skill with an exact runtime
+pointer. No canonical file is copied into a project.
+
+The launcher now provides one authoritative `VERSION`, idempotent install and
+repair, HTTPS/checksum updates, retained-version rollback, plain-language
+diagnostics, compatibility checks and project-preserving uninstall. Update and
+skill swaps restore the previous valid state when activation is interrupted.
+Unsafe archive paths, corrupted files, unmanaged skill directories, unknown
+skill files and incompatible launcher/project schemas are rejected.
+
+A realistic offline stranger test builds the wheel, installs it into a clean
+Python environment, activates its embedded runtime, starts an ordinary-language
+project without the checkout, diagnoses the installation and uninstalls while
+preserving project source and history. Deterministic lifecycle tests cover
+Windows/macOS/Linux path selection plus install, repair, update, rollback,
+network, permission, checksum, traversal and compatibility failures.
+
+The README and short install/update/troubleshooting guides now lead with the
+user experience. The old checkout skill installer remains available only for
+maintainers. Public publication is deliberately withheld: the repository has no
+approved public licence and release creation needs explicit human authority.
+
+**Scope:** routing, workflow gates, policies, modes, templates, provider
+neutrality, independent-review isolation and human approval authority are
+unchanged. No remote push, deployment, project rewrite or historical-evidence
+edit occurred.
+
+---
+
 ## 1.3.0-rc.1 — 2026-08-23 · CREATIVE OPERATIONS WITH RENDERED EVIDENCE
 
 V1.2 could prove research inspection and trace it into a locked design, but it

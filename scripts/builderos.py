@@ -183,6 +183,15 @@ def resolve_run_root(args: argparse.Namespace) -> Path:
 
 
 def git_head() -> str:
+    release = ROOT / "RELEASE-MANIFEST.json"
+    if release.is_file():
+        try:
+            value = json.loads(read(release))
+            source_commit = str(value.get("source_commit", "")).strip()
+            if source_commit:
+                return source_commit
+        except (OSError, json.JSONDecodeError):
+            pass
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True
     )

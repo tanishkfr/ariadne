@@ -1,0 +1,28 @@
+[build-system]
+requires = []
+build-backend = "builderos_backend"
+backend-path = ["build_backend"]
+
+[project]
+name = "builder-os"
+dynamic = ["version"]
+description = "Creative-production workflow runtime and managed Codex skill"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Private :: Do Not Upload",
+]
+
+[project.scripts]
+builderos = "builderos.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/tanishkfr/builder-os"
+Repository = "https://github.com/tanishkfr/builder-os"
+Changelog = "https://github.com/tanishkfr/builder-os/blob/main/CHANGELOG.md"

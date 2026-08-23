@@ -20,47 +20,35 @@ That is it. Everything else is detail.
 
 ## Step 1 — Prerequisites
 
-Required for Builder OS itself: Python 3.8+ and Git. Required when a project reaches the default build stack: Node.js and pnpm. GitHub authentication, hosting accounts, and Cursor sign-in are not prerequisites for routing or design.
+Builder OS itself needs Python 3.8 or newer and Codex. Git, Node.js, pnpm,
+hosting accounts and external build tools are not first-run requirements. If a
+project later needs one, Builder OS explains why and waits for the relevant
+approval.
 
 ```bash
 python --version
-git --version
-node --version
-pnpm --version
 ```
 
-If a build prerequisite is missing, stop and install it deliberately; do not substitute a package manager or Node version silently.
-
 ---
 
-## Step 2 — Confirm your budget reality
+## Step 2 — Install Builder OS
 
-**Do this before subscribing to anything.** It takes two minutes and converts four unverified rows in [BUDGET-POLICY.md](BUDGET-POLICY.md) into verified ones.
-
-1. Open Cursor's pricing page **while in India** and record the plan and amount
-   your signed-in checkout actually shows. Confirm at checkout, not from an old
-   document or a third-party summary.
-2. Open ChatGPT's pricing page and record what you are actually charged in INR.
-3. Write both into the table in [BUDGET-POLICY.md](BUDGET-POLICY.md) section 3 with today's date.
-
-Do not carry an expected total from this guide. Add the two currently verified
-amounts in [BUDGET-POLICY.md](BUDGET-POLICY.md); its fallback order applies when
-the resulting total is outside your band.
-
----
-
-## Step 3 — Install the Builder OS entry
-
-From the Builder OS repository, run:
+After the `v1.4.0` public release is available:
 
 ```bash
-python scripts/install-builderos-skill.py install
-python scripts/install-builderos-skill.py verify
+python -m pip install --user "https://github.com/tanishkfr/builder-os/releases/download/v1.4.0/builder_os-1.4.0-py3-none-any.whl"
+python -m builderos install
+python -m builderos doctor
 ```
 
-The installed skill is a managed copy that points back to this checkout. The
-repository remains canonical. Re-run `install` after pulling a Builder OS
-update; `verify` detects drift and refuses an unmanaged skill directory.
+This installs one user-local runtime and registers `$builderos`; no source
+checkout or manual skill copy is needed. See [INSTALL.md](INSTALL.md) for
+platform locations and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if doctor finds
+a problem.
+
+---
+
+## Step 3 — Describe one project
 
 Open a clean Codex task and write:
 
@@ -73,6 +61,10 @@ Natural language such as “Use Builder OS for this project” also triggers it.
 Builder OS creates or finds the durable run, reads the current packet itself,
 and performs same-session reasoning work. It asks you only for a real decision
 or an unavoidable external action.
+
+Subscription and provider costs matter only if the chosen project reaches that
+need. Verify current prices then and record them under [BUDGET-POLICY.md](BUDGET-POLICY.md);
+do not subscribe merely to complete installation.
 
 ---
 
