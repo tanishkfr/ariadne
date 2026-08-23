@@ -109,9 +109,16 @@ Do not read the rest of the documentation first. Run something small and real.
 
 Behind the scenes, Builder OS creates the run outside the project, transports
 only the current stage's inputs, verifies their hashes, records available
-evidence, and chooses research or design from the actual project state. A
+evidence, and chooses research depth and only the methods the project actually
+needs. A URL remains merely found until a retrieval or visual artefact exists;
+a method remains merely recommended until it runs and produces an output. A
 failure resumes from the last valid boundary; it does not overwrite history or
 restart the project.
+
+When external references or technical resources would change the direction,
+Builder OS records what it inspected, what it rejected, what it used, and the
+exact downstream decision. When research would not change a decision, it skips
+the extra pass instead of manufacturing a bibliography.
 
 When you reach **G1**, the system will present a design direction and stop. **This is the moment that matters.** Read it. If it says "clean, modern, minimal", reject it — that is a mood, not a direction, and the system is meant to catch that. Ask for a thesis specific enough that a template would fail it.
 

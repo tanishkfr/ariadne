@@ -77,6 +77,18 @@ DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 # finding about THAT RUN rather than a repository-wide failure. check.py owns
 # the repository; validate.py owns a run. Do not merge the two.
 GENERATED = ("validation/runs/",)
+EPHEMERAL_SELF_TEST = (
+    re.compile(
+        r"^validation/(?:builderos|creative-intelligence|packet|skill-install)-self-test-[0-9a-f]{32}/"
+    ),
+    re.compile(r"^validation/validate-self-test-[a-z0-9-]+/"),
+)
+
+
+def generated_markdown(relative_path):
+    return relative_path.startswith(GENERATED) or any(
+        pattern.match(relative_path) for pattern in EPHEMERAL_SELF_TEST
+    )
 
 
 def md_files():
@@ -86,7 +98,7 @@ def md_files():
             if not name.endswith(".md"):
                 continue
             path = os.path.join(dirpath, name)
-            if rel(path).startswith(GENERATED):
+            if generated_markdown(rel(path)):
                 continue
             yield path
 
@@ -808,6 +820,14 @@ def self_test_delivery_contracts():
              **actual,
              "adapters/codex.md": actual["adapters/codex.md"] + "\n",
          })),
+        ("recognised ephemeral self-test markdown is excluded (positive control)",
+         generated_markdown(
+             "validation/skill-install-self-test-0123456789abcdef0123456789abcdef/managed/SKILL.md"
+         )),
+        ("similarly named durable validation markdown is not hidden",
+         not generated_markdown(
+             "validation/skill-install-self-test-user-record/managed/SKILL.md"
+         )),
         ("required-input marker outside prompt fence fails",
          bool(check_delivery_contract_texts(outside))),
         ("missing IF MISSING contract fails",

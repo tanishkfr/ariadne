@@ -598,6 +598,46 @@ def retry_count(state: dict, stage: str) -> int:
     return count
 
 
+def provider_evidence(run_root: Path, state: dict, return_record: dict) -> dict:
+    """Project selected, executed, and successful-return states without inference."""
+    preflight = state.get("provider_preflight") or {}
+    selected_provider = preflight.get("provider")
+    selected = {
+        "state": "selected" if selected_provider else "not-selected",
+        "provider": selected_provider or "not recorded",
+        "evidence": str(run_root / PREFLIGHT_NAME) if selected_provider else "none",
+    }
+    transcript = None
+    for entry in reversed(state.get("packets", [])):
+        if entry.get("stage") != "S4B":
+            continue
+        candidate = Path(entry["path"]) / "evidence" / "transcript.md"
+        if candidate.is_file():
+            transcript = candidate
+            break
+    returned = latest_evidence_path(state, "return-handoff.md")
+    if transcript:
+        executed = {"state": "observed-in-transcript", "evidence": str(transcript)}
+    elif returned:
+        executed = {"state": "reported-by-provider-return", "evidence": str(returned)}
+    else:
+        executed = {"state": "not-observed", "evidence": "none"}
+    return_status = str(return_record.get("metadata", {}).get("status", "")).strip().lower()
+    if not returned:
+        successful_return = {"state": "not-returned", "evidence": "none"}
+    elif return_status == "complete":
+        successful_return = {"state": "reported-complete", "evidence": str(returned)}
+    else:
+        successful_return = {
+            "state": f"reported-{return_status or 'unknown'}", "evidence": str(returned)
+        }
+    return {
+        "selected": selected,
+        "executed": executed,
+        "returned_successfully": successful_return,
+    }
+
+
 def project_intelligence(
     run_root: Path, state: dict, entry: dict, packet: Path, manifest: dict
 ) -> dict:
@@ -777,7 +817,8 @@ def project_intelligence(
         "mode": project_mode(project_text),
         "goal": first_meaningful_paragraph(safe_section(project_text, "Goal")),
         "current_work": FRIENDLY_STAGES.get(stage, stage),
-        "approved_direction": design_value or "not yet approved",
+        "approved_direction": design_value if g1_locked else "not yet approved",
+        "proposed_direction": design_value if design_value and not g1_locked else "none",
         "rejected_direction_attempts": retry_count(state, "S3"),
         "blocking_questions": blocking_questions,
         "open_questions": [row[1] if len(row) > 1 else row[0] for row in open_rows if row],
@@ -790,6 +831,7 @@ def project_intelligence(
             "completed_work": completed_work,
             "known_issues": known_issues,
         },
+        "provider_evidence": provider_evidence(run_root, state, return_record),
         "risks_and_evidence_gaps": risks,
         "lessons": lessons,
         "runtime_state": runtime,
@@ -830,7 +872,12 @@ def status(args: argparse.Namespace) -> int:
         print(f"{intelligence['project_name']}")
         print(f"Goal: {intelligence['goal']}")
         print(f"Where we left off: {intelligence['current_work']}.")
-        print(f"Direction: {intelligence['approved_direction']}")
+        if intelligence["approved_direction"] != "not yet approved":
+            print(f"Approved direction: {intelligence['approved_direction']}")
+        elif intelligence["proposed_direction"] != "none":
+            print(f"Proposed direction (G1 pending): {intelligence['proposed_direction']}")
+        else:
+            print("Direction: not yet proposed")
         print(f"Project health: {intelligence['overall_health'].replace('-', ' ')}")
         if attention:
             print("Attention: " + "; ".join(item["detail"] for item in attention))
@@ -2139,6 +2186,21 @@ def self_test() -> int:
         manifest_path.write_text(manifest_original, encoding="utf-8")
 
         (project / "DESIGN.md").write_text(
+            "# DESIGN\n\n**Status:** draft — awaiting G1\n\n"
+            "## Design thesis\n\n"
+            "**A speaking line makes sound visible through one typographic gesture.**\n",
+            encoding="utf-8",
+        )
+        pending_intelligence = project_intelligence(
+            run_root, state, _entry, s3_packet, json.loads(manifest_original)
+        )
+        case(
+            "a proposed thesis is never reported as human-approved",
+            pending_intelligence["approved_direction"] == "not yet approved"
+            and pending_intelligence["proposed_direction"].startswith("A speaking line"),
+        )
+
+        (project / "DESIGN.md").write_text(
             "# DESIGN\n\n**Status:** locked at G1 on 2026-08-23\n\n"
             "## Design thesis\n\n"
             "**A speaking line makes sound visible through one typographic gesture.**\n\n"
@@ -2262,6 +2324,15 @@ def self_test() -> int:
             "cleared preflight prepares a Cursor-labelled S4B packet",
             s4b_entry["stage"] == "S4B" and s4b_manifest["provider"] == "cursor",
         )
+        before_return_provider = project_intelligence(
+            run_root, state, s4b_entry, s4b_packet, s4b_manifest
+        )["provider_evidence"]
+        case(
+            "provider selection does not imply execution or successful return",
+            before_return_provider["selected"]["state"] == "selected"
+            and before_return_provider["executed"]["state"] == "not-observed"
+            and before_return_provider["returned_successfully"]["state"] == "not-returned",
+        )
 
         partial_path = s4b_packet / "evidence" / "return-handoff.md"
         partial_path.write_text(filled_return("partial"), encoding="utf-8")
@@ -2292,6 +2363,17 @@ def self_test() -> int:
             and json.loads(read(return_record_path))["metadata"]["status"] == "complete"
             and json.loads(read(return_record_path))["source_sha256"]
             == sha256(retry_packet / "evidence" / "return-handoff.md"),
+        )
+        state = load_state(run_root)
+        returned_entry, returned_packet = current_packet(state, allow_project_drift=True)
+        returned_manifest = json.loads(read(returned_packet / TRANSPORT.MANIFEST_NAME))
+        after_return_provider = project_intelligence(
+            run_root, state, returned_entry, returned_packet, returned_manifest
+        )["provider_evidence"]
+        case(
+            "provider return reports execution separately from a successful return",
+            after_return_provider["executed"]["state"] == "reported-by-provider-return"
+            and after_return_provider["returned_successfully"]["state"] == "reported-complete",
         )
         prepare_next(runtime_args(target="http://127.0.0.1:3000", lenses="creative-director (light)"))
         state = load_state(run_root)

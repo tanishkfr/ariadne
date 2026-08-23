@@ -10,6 +10,51 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.2.0-rc.1 — 2026-08-23 · CREATIVE INTELLIGENCE WITH OBSERVED EVIDENCE
+
+V1.1 could reliably route, transport, resume and preserve stage evidence, but it
+could not durably distinguish a recommended creative method from one that ran,
+or a supplied URL from a reference that was actually inspected and used. A
+well-worded `DESIGN.md` could therefore assert its own research history.
+
+New projects now receive one project-local creative evidence ledger after S1.
+A reasoned assessment chooses minimal, standard or deep research and selects
+only relevant capabilities. Each selected method records why it was chosen,
+the question it answers, its inputs, expected output, whether it is mandatory,
+and strict recommended → invoked → completed → used evidence. Skips, failures,
+and not-useful outputs remain explicit.
+
+Reference records distinguish found, inspected and inaccessible sources.
+Inspection needs a non-empty hashed retrieval/visual artefact, concrete
+observations, at most two transferable mechanisms, and explicit borrow/reject
+decisions. Downstream design decisions must cite inspected records and exact
+anchors in hashed project artifacts. Resource comparisons additionally retain
+capability, fit, compatibility, licence, cost, alternatives, necessity and the
+resulting decision without installing or approving anything.
+
+S2 and S3 packets carry this ledger when present; legacy runs remain readable,
+and isolated S5 receives none of it. Pre-G1 checks reject generic thesis words,
+missing signature/mobile behaviour, incomplete ten-question checks, cosmetic
+alternatives, uninspected reference claims, stale artifacts, hand-edited skill
+histories, and unsupported resource claims. Provider status separately reports
+selection, observed/reported execution, and successful return.
+
+A realistic Living Margins fixture loaded and visually or interactively
+inspected three live references, preserved captures, synthesised a conflict,
+compared two materially different directions, traced three decisions and
+stopped at human G1. A separate minimal fixture chose no extra research and was
+rediscovered from only its project path in a fresh process. Synthetic controls
+cover technical resource selection, inaccessible and unused sources, conflicts,
+generic direction rejection, continuation and stale evidence.
+
+**Scope:** `ROUTER.md`, `WORKFLOW.md`, modes, canonical design/QA/research/
+evaluation policies, templates, gate authority and S5 isolation are unchanged.
+No dependency was installed; no provider was executed; no gate was granted; no
+credential, remote, deployment, production state or historical evidence was
+changed.
+
+---
+
 ## 1.1.0-rc.1 — 2026-08-23 · PRODUCT INTELLIGENCE AND SAFE ADOPTION
 
 The V1 runtime made canonical delivery reliable, but a real returning operator

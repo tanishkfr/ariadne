@@ -15,6 +15,7 @@ runtime controller, deterministic transport, and validation tools.
 | One agent planning, designing, coding and reviewing | [WORKFLOW.md](WORKFLOW.md) — 5 roles, 5 gates, an independence rule |
 | Wasting usage limits on context | [MODEL-ROUTING.md](MODEL-ROUTING.md) |
 | No reliable design process | S3 cannot be skipped; **G1 blocks building without a thesis** |
+| Research claims can outrun evidence | Project-local creative evidence separates recommended, invoked, completed and used work; found, inspected and used references; and selected, executed and returned providers |
 | No document or handoff structure | [templates/](templates/) — four required documents, the rest conditional |
 | Not knowing which tool does what | [MODEL-ROUTING.md](MODEL-ROUTING.md) + [adapters/](adapters/) |
 | Reinventing prompts every project | [prompts/](prompts/) |
@@ -25,6 +26,7 @@ runtime controller, deterministic transport, and validation tools.
 Your request
   -> builderos skill        starts or resumes the right run
   -> builderos.py           discovers state and prepares the next boundary
+  -> creative evidence      selects only useful methods and verifies source/use traces
   -> ROUTER.md              detects the mode, asks up to 5 questions
   -> WORKFLOW.md            runs S0-S6, assigns a role, enforces the gates
   -> prepare-stage.py       transports only the current canonical inputs
@@ -40,7 +42,7 @@ Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build
 
 **Never used it:** [GETTING-STARTED.md](GETTING-STARTED.md) — install the entry skill, then describe one real project.
 **Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
-**Current productization evidence:** [V1.1-READINESS.md](V1.1-READINESS.md).
+**Current productization evidence:** [V1.2-READINESS.md](V1.2-READINESS.md).
 **Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
 **Starting now:** in a clean Codex task, invoke `$builderos` (or say “Use Builder OS”) and describe the project normally. Builder OS locates prompts, packets, evidence, and the next valid boundary.
 
@@ -103,6 +105,11 @@ Builder OS/
 
 **Verified, not remembered.** Anything that changes over time is looked up and dated, or marked unverified.
 
+**Observed, not asserted.** A recommended skill is not a completed skill, a URL
+is not an inspected reference, and a selected provider is not an executed one.
+New projects retain those distinctions in a hashed project-local evidence
+ledger; generated packets transport it only to the stages that need it.
+
 **Four documents, not eleven.** `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. The rest exist when they earn it — a document nobody reads is worse than none, because it manufactures the appearance of process.
 
 **The system learns under human control.** A retrospective proposes a specific change; the human approves, defers, or rejects it before any Builder OS file changes.
@@ -119,7 +126,10 @@ Builder OS/
 
 ## Status
 
-**v1.0.0.** A managed Codex entry skill now starts or resumes a project,
+**v1.2.0-rc.1.** Builder OS now chooses adaptive research and project-specific
+methods, records actual source inspection and resource comparison, traces
+reference observations into design decisions, and blocks unsupported creative
+claims before G1. A managed Codex entry skill starts or resumes a project,
 discovers its durable state, prepares verified boundaries, records evidence,
 checks provider readiness, ingests structured implementation returns, and keeps
 a plain-language operations log. The router still routes on **intent**, not
@@ -127,9 +137,11 @@ keywords.
 
 Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 roles to 5, 9 lenses to 5, scorecard moved out of the author's session.
 
-**Status: V1 READY.** Test B proved the fresh-session handoff through the
+**Status: V1.2 READY FOR PRIVATE USE.** Test B proved the fresh-session handoff through the
 start of implementation; provider quota prevented full build/return observation.
 The return path is therefore structurally verified and externally unverified,
-not presented as a live pass. See [V1-READINESS.md](V1-READINESS.md).
+not presented as a live pass. The V1.2 creative-evidence pass additionally ran
+three real visual/interaction reference inspections and stopped at G1 without
+self-approval. See [V1.2-READINESS.md](V1.2-READINESS.md).
 
 Run `python scripts/check.py` after any edit.

@@ -31,7 +31,8 @@ belong in the build tool without making the operator choose a stage manually.
 | Human-facing moment | Builder OS action |
 |---|---|---|
 | “I have an idea” | Creates/fetches the run, routes it, asks one batched question set, writes the brief |
-| Facts block direction | Prepares focused research with only the blocking questions |
+| Facts block direction | Plans the project-specific question, retrieves evidence, and prepares only the focused research needed |
+| References or resources matter | Distinguishes found/inspected/used sources and records compatibility, licence, cost, alternatives, and necessity before proposing a dependency |
 | Direction is ready | Presents G1 and waits for your creative decision |
 | Direction is approved | Produces the implementation handoff and reads its provider recommendation |
 | External build is appropriate | Checks provider availability/quota and gives you one verified packet |
@@ -42,6 +43,11 @@ belong in the build tool without making the operator choose a stage manually.
 Prompts, packet IDs, manifests, hashes, parent records, evidence paths, and stage
 names are debugging details. Builder OS manages them. The low-level commands in
 [adapters/codex.md](adapters/codex.md) remain available for recovery.
+
+The same applies to creative evidence machinery. You should see a concise
+summary of useful research and its effect on the direction, not a skill matrix
+or evidence graph. If the evidence is missing or stale, Builder OS pauses before
+G1 and names the unsupported claim.
 
 ## By situation
 
