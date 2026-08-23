@@ -54,9 +54,13 @@ this skill or from conversation history.
    Supply only semantic choices the controller cannot derive, such as whether
    motion/assets apply or the independent-review lens. Use the lower-level
    evidence and preparation commands only for diagnosis or recovery.
-6. Record a rejected direction, durable risk, lesson, or non-blocking evidence
-   gap with `builderos.py record-note`; do not rely on this conversation to
-   remember it. Project documents remain canonical for active decisions.
+6. When the human rejects a proposed direction before G1, run
+   `builderos.py restart-direction --project <project> --reason <their words>`.
+   It preserves the rejected `DESIGN.md` and reason verbatim, keeps G1
+   unresolved, and prepares the linked same-stage retry without making the
+   human reconstruct context. Use `builderos.py record-note` for other durable
+   risks, lessons, decisions, or non-blocking evidence gaps. Project documents
+   remain canonical for active decisions.
 
 ## Creative intelligence
 

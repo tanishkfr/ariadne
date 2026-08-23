@@ -390,7 +390,14 @@ def parameterise_prompt(stage: str, block: str, args: argparse.Namespace) -> tup
         )
     elif stage == "S3":
         references = "none yet"
-        if args.references_file:
+        references_text = getattr(args, "references_text", None)
+        if args.references_file and references_text:
+            raise PacketError("S3 references must come from one transport source")
+        if references_text:
+            references = str(references_text).strip()
+            if not references:
+                raise PacketError("S3 preserved references are empty")
+        elif args.references_file:
             references = read(Path(args.references_file).resolve()).strip()
             if not references:
                 raise PacketError("--references-file is empty")
@@ -486,7 +493,11 @@ def check_project_boundary(stage: str, project: Path, adopt_existing: bool = Fal
 def source_entry(label: str, path: Path, kind: str, content: str, delivered: bool = True) -> dict:
     return {
         "label": label,
-        "path": str(path.resolve()) if kind.startswith("project") else path.relative_to(ROOT).as_posix(),
+        "path": (
+            str(path.resolve())
+            if kind.startswith(("project", "continuation"))
+            else path.relative_to(ROOT).as_posix()
+        ),
         "kind": kind,
         "source_sha256": sha256_file(path),
         "content_sha256": sha256_text(content),
@@ -533,6 +544,19 @@ def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tupl
                 sources.append(source_entry(name, path, "canonical", read(path)))
             else:
                 omitted.append(f"{name} not triggered — explicitly declared no")
+        restart_context = getattr(args, "restart_context", None)
+        if restart_context:
+            if not args.retry:
+                raise PacketError("S3 restart context is valid only on a same-stage retry")
+            path = Path(restart_context).resolve()
+            if not path.is_file() or path.stat().st_size == 0:
+                raise PacketError("S3 restart context is missing or empty")
+            sources.append(source_entry(
+                "rejected S3 direction and human restart reason",
+                path,
+                "continuation-restart-context",
+                read(path),
+            ))
 
     return sources, omitted
 
@@ -792,7 +816,7 @@ No stage events have been recorded. Preparation is not execution.
 
 
 def resolve_source_path(entry: dict, manifest: dict) -> Path:
-    if entry["kind"].startswith("project"):
+    if entry["kind"].startswith(("project", "continuation")):
         return Path(entry["path"])
     return ROOT / entry["path"]
 
@@ -1004,6 +1028,8 @@ def self_test() -> int:
             request=None,
             request_file=None,
             references_file=None,
+            references_text=None,
+            restart_context=None,
             motion=None,
             assets=None,
             target=None,
@@ -1122,6 +1148,67 @@ def self_test() -> int:
             not verify_packet(s3_dir)
             and any(item["label"] == ".builderos/creative-evidence.json" for item in s3_manifest["sources"]),
         )
+
+        (s3_dir / "evidence" / "transcript.md").write_text(
+            "S3 direction proposed and rejected before G1\n", encoding="utf-8"
+        )
+        restart_context = s3_dir / "evidence" / "rejected-direction.md"
+        restart_context.write_text(
+            "# Rejected S3 direction context\n\n"
+            "**Human reason:** The organising concept is too generic.\n\n"
+            "===== BEGIN REJECTED DESIGN.md =====\n"
+            "# DESIGN\n\n**Status:** draft — awaiting G1\n"
+            "===== END REJECTED DESIGN.md =====\n",
+            encoding="utf-8",
+        )
+        s3_retry_dir = sandbox / "R1-S3-C1"
+        prepare(ns(
+            stage="S3", project=str(project), output=str(s3_retry_dir),
+            parent=str(s3_dir), retry=True,
+            references_text="one preserved reference", restart_context=str(restart_context),
+            motion="yes", assets="no",
+        ))
+        s3_retry_manifest = json.loads(read(s3_retry_dir / MANIFEST_NAME))
+        restart_sources = [
+            source for source in s3_retry_manifest["sources"]
+            if source["kind"] == "continuation-restart-context"
+        ]
+        case(
+            "S3 restart carries rejected direction and reason in a linked child",
+            not verify_packet(s3_retry_dir)
+            and s3_retry_manifest["parent_id"] == s3_manifest["packet_id"]
+            and s3_retry_manifest["retry"] is True
+            and len(restart_sources) == 1
+            and "one preserved reference" in read(s3_retry_dir / PACKET_NAME),
+        )
+        restart_original = read(restart_context)
+        restart_context.write_text(restart_original + "changed\n", encoding="utf-8")
+        case(
+            "changed restart context makes the child packet stale",
+            any("stale source" in problem for problem in verify_packet(s3_retry_dir)),
+        )
+        restart_context.write_text(restart_original, encoding="utf-8")
+        try:
+            prepare(ns(
+                stage="S3", project=str(project), output=str(sandbox / "invalid-restart"),
+                parent=str(s2_dir), retry=False, restart_context=str(restart_context),
+                motion="yes", assets="no",
+            ))
+            non_retry_restart_refused = False
+        except PacketError as exc:
+            non_retry_restart_refused = "same-stage retry" in str(exc)
+        case("restart context is rejected outside a same-stage retry", non_retry_restart_refused)
+        try:
+            prepare(ns(
+                stage="S3", project=str(project), output=str(sandbox / "missing-restart"),
+                parent=str(s3_dir), retry=True,
+                restart_context=str(sandbox / "missing-rejected-direction.md"),
+                motion="yes", assets="no",
+            ))
+            missing_restart_refused = False
+        except PacketError as exc:
+            missing_restart_refused = "missing or empty" in str(exc)
+        case("missing restart evidence blocks the child packet", missing_restart_refused)
 
         parent_transcript = s2_dir / "evidence" / "transcript.md"
         parent_transcript.write_text("changed parent evidence\n", encoding="utf-8")

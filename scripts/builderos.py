@@ -401,6 +401,8 @@ def transport_namespace(**values) -> argparse.Namespace:
         request=None,
         request_file=None,
         references_file=None,
+        references_text=None,
+        restart_context=None,
         motion=None,
         assets=None,
         target=None,
@@ -1819,6 +1821,97 @@ def record_note(args: argparse.Namespace) -> int:
     return 0
 
 
+def preserved_s3_parameters(packet: Path) -> tuple[str, str, str]:
+    manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
+    delivered_paths = {
+        str(item.get("path", ""))
+        for item in manifest.get("sources", [])
+        if item.get("delivered", True)
+    }
+    packet_text = read(packet / TRANSPORT.PACKET_NAME)
+    match = re.search(
+        r"(?ms)^===== BEGIN current S3 prompt block \|.*? =====\r?\n"
+        r"(.*?)^===== END current S3 prompt block =====\s*$",
+        packet_text,
+    )
+    if not match:
+        raise RuntimeError_("Current S3 packet has no readable prompt block")
+    references = re.search(
+        r"(?ms)^REFERENCES:\s*(.*?)(?=\r?\n\r?\nSTEP 1 - REFERENCES)",
+        match.group(1),
+    )
+    if not references or not references.group(1).strip():
+        raise RuntimeError_("Current S3 packet has no preserved reference parameter")
+    motion = "yes" if "DESIGN-MOTION.md" in delivered_paths else "no"
+    assets = "yes" if "DESIGN-ASSETS.md" in delivered_paths else "no"
+    return references.group(1).strip(), motion, assets
+
+
+def restart_direction(args: argparse.Namespace) -> int:
+    """Archive a rejected S3 direction and prepare its verified same-stage child."""
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    if entry["stage"] != "S3":
+        raise RuntimeError_("A design-direction restart belongs to the current S3 boundary")
+    project = Path(state["project"])
+    design_path = project / "DESIGN.md"
+    if not design_path.is_file() or design_path.stat().st_size == 0:
+        raise RuntimeError_("A design-direction restart needs the rejected DESIGN.md")
+    design = read(design_path)
+    if re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", design):
+        raise RuntimeError_("A G1-locked direction cannot use the pre-G1 restart path")
+    reason = args.reason.strip()
+    if not reason:
+        raise RuntimeError_("A design-direction restart needs the human's concrete reason")
+    thesis = design_thesis(design) or "thesis not extractable; rejected DESIGN.md preserved verbatim"
+    context_path = packet / "evidence" / "rejected-direction.md"
+    if context_path.exists():
+        raise RuntimeError_(f"Refusing to overwrite rejected-direction evidence: {context_path}")
+    context_path.write_text(
+        "# Rejected S3 direction context\n\n"
+        f"**Parent packet:** `{entry['id']}`  \n"
+        f"**Restart layer:** `design direction`  \n"
+        f"**Human reason:** {reason}  \n"
+        f"**Rejected thesis:** {thesis}\n\n"
+        "The following DESIGN.md is preserved verbatim as rejected evidence. "
+        "It is context for a materially different S3 proposal, not an approved direction.\n\n"
+        "===== BEGIN REJECTED DESIGN.md =====\n"
+        + design.rstrip()
+        + "\n===== END REJECTED DESIGN.md =====\n",
+        encoding="utf-8",
+    )
+    if not stage_has_evidence(packet):
+        files = ["DESIGN.md"] + (["AGENTS.md"] if (project / "AGENTS.md").is_file() else [])
+        structural_result(argparse.Namespace(
+            run_root=str(run_root), project=None, status="complete",
+            provider="orchestrator", model="not recorded",
+            summary="Design direction was presented and rejected before G1.",
+            file=files,
+        ))
+    record_note(argparse.Namespace(
+        run_root=str(run_root), project=None, kind="rejected-direction",
+        summary=f"Rejected thesis: {thesis}. Human reason: {reason}",
+        evidence="verified",
+    ))
+    references, motion, assets = preserved_s3_parameters(packet)
+    append_log(
+        run_root,
+        "Design direction restart prepared",
+        "The human rejected the pre-G1 direction; Builder OS must preserve it without making them reconstruct context.",
+        "Rejected DESIGN.md and the human reason were preserved verbatim; G1 remains unresolved.",
+        [str(context_path)],
+        f"SHA-256 {sha256(context_path)}",
+        "Prepare a materially different S3 direction from the verified restart context.",
+    )
+    return prepare_next(argparse.Namespace(
+        run_root=str(run_root), project=None, stage="S3", retry=True,
+        provider=None, references_file=None, references_text=references,
+        restart_context=str(context_path), motion=motion, assets=assets,
+        target=None, lenses=None, synthetic_validation=args.synthetic_validation,
+    ))
+
+
 def stage_has_evidence(packet: Path) -> bool:
     evidence = packet / "evidence"
     return any(
@@ -2096,6 +2189,8 @@ def prepare_next(args: argparse.Namespace) -> int:
         retry=args.retry,
         provider=args.provider or transport_provider(state.get("provider_preflight")),
         references_file=args.references_file,
+        references_text=getattr(args, "references_text", None),
+        restart_context=getattr(args, "restart_context", None),
         motion=args.motion,
         assets=args.assets,
         target=args.target,
@@ -2203,6 +2298,7 @@ def skill_contract_problems(
     for token in (
         "scripts/builderos.py", "discover --project", "provider preflight",
         "handoff-readiness", "builderos.py advance", "record-note",
+        "restart-direction",
         "ingest-return", "ingest-review", "same-stage retry", "--adopt-existing",
         "creative-plan", "record-creative", "creative-check",
         "operations-plan", "record-operations", "operations-check",
@@ -2523,7 +2619,8 @@ def self_test() -> int:
                 provider=None, model=None, effort=None, workload=None,
                 transport_provider=None,
                 availability="unknown", quota="unknown", fallback=None,
-                references_file=None, motion=None, assets=None, target=None,
+                references_file=None, references_text=None, restart_context=None,
+                motion=None, assets=None, target=None,
                 lenses=None, synthetic_validation=True,
             )
             defaults.update(values)
@@ -2666,6 +2763,53 @@ def self_test() -> int:
             "a proposed thesis is never reported as human-approved",
             pending_intelligence["approved_direction"] == "not yet approved"
             and pending_intelligence["proposed_direction"].startswith("A speaking line"),
+        )
+
+        rejected_design = read(project / "DESIGN.md")
+        rejected_reason = "The speaking line is decorative; replace the organising concept."
+        rejected_entry = _entry
+        restart_direction(runtime_args(reason=rejected_reason))
+        state = load_state(run_root)
+        retry_entry, retry_packet = current_packet(state, allow_project_drift=True)
+        retry_manifest = json.loads(read(retry_packet / TRANSPORT.MANIFEST_NAME))
+        restart_source = next(
+            (
+                source for source in retry_manifest["sources"]
+                if source["kind"] == "continuation-restart-context"
+            ),
+            None,
+        )
+        restart_path = Path(restart_source["path"]) if restart_source else None
+        restart_text = read(restart_path) if restart_path and restart_path.is_file() else ""
+        case(
+            "rejected direction restart creates a linked same-stage child",
+            retry_entry["stage"] == "S3"
+            and retry_manifest["retry"] is True
+            and retry_manifest["parent_id"] == rejected_entry["id"],
+        )
+        case(
+            "rejected direction and human reason are preserved verbatim",
+            rejected_reason in restart_text
+            and rejected_design.rstrip() in restart_text
+            and restart_text.count("===== BEGIN REJECTED DESIGN.md =====") == 1
+            and restart_text.count("===== END REJECTED DESIGN.md =====") == 1,
+        )
+        case(
+            "restart context is delivered with verified provenance",
+            restart_source is not None
+            and not TRANSPORT.verify_packet(retry_packet)
+            and "rejected S3 direction and human restart reason" in read(
+                retry_packet / TRANSPORT.PACKET_NAME
+            ),
+        )
+        case(
+            "restart keeps G1 unresolved and records the rejection",
+            not re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", read(project / "DESIGN.md"))
+            and not any(
+                row.get("category") == "creative-decision" and row.get("status") == "resolved"
+                for row in state["human_interventions"]
+            )
+            and any(note["kind"] == "rejected-direction" for note in state["notes"]),
         )
 
         (project / "DESIGN.md").write_text(
@@ -3213,6 +3357,14 @@ def parser() -> argparse.ArgumentParser:
         choices=["verified", "reasonably-assumed", "externally-unverified", "blocked"],
     )
 
+    restart_p = sub.add_parser(
+        "restart-direction",
+        help="preserve a rejected pre-G1 direction and prepare its linked S3 child",
+    )
+    run_selector(restart_p)
+    restart_p.add_argument("--reason", required=True)
+    restart_p.add_argument("--synthetic-validation", action="store_true", help=argparse.SUPPRESS)
+
     advance_p = sub.add_parser(
         "advance", help="record obvious same-session outputs and continue routine work"
     )
@@ -3264,6 +3416,7 @@ def main() -> int:
             "operations-check": operations_check,
             "record-intervention": record_intervention,
             "record-note": record_note,
+            "restart-direction": restart_direction,
             "advance": advance,
             "prepare-next": prepare_next,
         }
