@@ -7,6 +7,12 @@
 
 **The core distinction: mechanisms transfer, surfaces do not.** Copying a surface produces a knock-off. Extracting a mechanism produces a direction. Synthesising the results into a direction: [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 7.
 
+**Evidence boundary** — found, inspected, and used are different states. Mark a
+reference inspected only when a dated retrieval, visual capture, or provider
+transcript exists and is hashed in the project creative-evidence ledger. An
+inaccessible source has a blocker and no observations. Mark this skill used only
+when a traced DESIGN.md decision cites an inspected source.
+
 ---
 
 ## Method

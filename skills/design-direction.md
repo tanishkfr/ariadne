@@ -7,6 +7,11 @@
 
 **This is the stage that decides whether the output looks generic.** Every rule in [DESIGN-TASTE.md](../DESIGN-TASTE.md) applies here, not at S4. Fixing genericness at build time costs ten times more and usually fails.
 
+**Evidence boundary** — only inspected references may inform the direction.
+Trace each such reference through observation, principle, exact DESIGN.md
+decision, and implementation requirement. Found-only, inaccessible, skipped, or
+not-useful work stays visible in project history but cannot be described as used.
+
 ---
 
 ## Method

@@ -13,6 +13,8 @@ REQUIRED INPUTS
 - QUESTIONS below, copied from the blocking open questions in PROJECT.md.
 - RESEARCH-POLICY.md as the canonical verification method.
 - templates/RESEARCH.md as the canonical output structure.
+- .builderos/creative-evidence.json when supplied by a V1.2 project. It records
+  the planned question, selected skill, source state, and downstream use.
 
 IF MISSING
 Verify all three inputs before researching. If any is missing, STOP. Name it;
@@ -35,6 +37,24 @@ handling, and blocked-verification behaviour.
 Write RESEARCH.md using the supplied template. Research only the supplied
 questions. Do not design, architect, choose a direction, install anything, or
 edit PROJECT.md.
+
+EVIDENCE BOUNDARY
+- A source found is not a source inspected. A skill recommended is not a skill
+  invoked. Keep those states distinct in the supplied creative-evidence file.
+- Before searching, confirm that each lookup has a project-specific question,
+  reason, and search strategy. Do not expand into a general landscape survey.
+- Mark a source inspected only after actually retrieving it. Preserve a dated
+  retrieval artifact or tool transcript and its SHA-256. If access fails, record
+  the source as inaccessible, the blocker, and no observations.
+- A Verified finding in RESEARCH.md must point to an inspected source record.
+  A URL or expected sentence is not evidence by itself.
+- When the selected research skill finishes, record its output as RESEARCH.md.
+  Mark it used only when a later decision cites the resulting evidence.
+
+ALLOWED WRITES
+- RESEARCH.md.
+- .builderos/creative-evidence.json and its source-capture artifacts, when the
+  ledger was supplied. These are project evidence, never canonical policy.
 
 If every blocking question now has evidence sufficient for S3, end with:
 

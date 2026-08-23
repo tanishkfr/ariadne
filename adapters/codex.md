@@ -92,8 +92,8 @@ for that session only and are never copied into the project repository.
 | Stage | Attach | Do not attach |
 |---|---|---|
 | S1 | The request; `skills/intake.md` unless the mode is already known to be game-experiment | Other Builder OS files |
-| S2 | The blocking open questions from `PROJECT.md`; `RESEARCH-POLICY.md`; `templates/RESEARCH.md` | Unrelated parts of `PROJECT.md`; the whole system |
-| S3 | `PROJECT.md`; `RESEARCH.md` if it exists; `DESIGN-TASTE.md`; `templates/DESIGN.md`; `DESIGN-MOTION.md` when motion applies; `DESIGN-ASSETS.md` when unresolved imagery/assets apply; reference URLs or `none yet` | Any code or build history |
+| S2 | The blocking open questions from `PROJECT.md`; `RESEARCH-POLICY.md`; `templates/RESEARCH.md`; `.builderos/creative-evidence.json` when present | Unrelated parts of `PROJECT.md`; the whole system |
+| S3 | `PROJECT.md`; `RESEARCH.md` if it exists; `.builderos/creative-evidence.json` when present; `DESIGN-TASTE.md`; `templates/DESIGN.md`; `DESIGN-MOTION.md` when motion applies; `DESIGN-ASSETS.md` when unresolved imagery/assets apply; reference URLs or `none yet` | Any code or build history |
 | S4A handoff | `PROJECT.md`; approved `DESIGN.md`; project-root `AGENTS.md`; `templates/HANDOFF.md` | Code or earlier chat history |
 | S5 evaluation | The URL/artifact, intent, success criteria, accepted patterns or `none`, and `EVALUATION-RUBRICS.md` | `PROJECT.md`, `DESIGN.md`, `HANDOFF.md`, `AGENTS.md`, `QA.md`, the build story, the constraints |
 | S6 | `PROJECT.md`; project-root `AGENTS.md`; completed `QA.md` containing the pasted independent judgement block; `templates/RETROSPECTIVE.md` | The build or old conversations |

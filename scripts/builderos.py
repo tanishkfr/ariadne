@@ -74,6 +74,19 @@ def load_transport():
 TRANSPORT = load_transport()
 
 
+def load_creative_intelligence():
+    path = ROOT / "scripts" / "creative-intelligence.py"
+    spec = importlib.util.spec_from_file_location("builder_os_creative_intelligence", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError_("Builder OS creative-intelligence helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CREATIVE = load_creative_intelligence()
+
+
 def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -337,6 +350,7 @@ def start(args: argparse.Namespace) -> int:
         "packets": [{"id": packet_id, "stage": "S1", "path": str(output)}],
         "provider_preflight": None,
         "notes": [],
+        "creative_evidence_required": True,
         "next": "Complete the project brief from the prepared context.",
     }
     write_json(run_root / STATE_NAME, state)
@@ -531,6 +545,7 @@ def handoff_context_problems(project: Path) -> list[str]:
         problems.append(str(exc))
     if not (ROOT / "templates" / "RETURN-HANDOFF.md").is_file():
         problems.append("canonical implementation return contract is missing")
+    problems.extend(CREATIVE.project_problems(project))
     return problems
 
 
@@ -593,6 +608,9 @@ def project_intelligence(
     qa_text = read(project / "QA.md") if (project / "QA.md").is_file() else ""
     runtime = project_runtime(project)
     stage = entry["stage"]
+    creative_ledger = CREATIVE.load_ledger(project)
+    creative_summary = CREATIVE.summary(creative_ledger)
+    creative_problems = CREATIVE.project_problems(project)
 
     open_rows = markdown_table_rows(safe_section(project_text, "Open questions"))
     blocking_questions = [
@@ -629,6 +647,24 @@ def project_intelligence(
         add("research", "attention", f"{len(blocking_questions)} blocking question(s) need evidence.")
     else:
         add("research", "not-needed", "No blocking research question is recorded.")
+
+    if creative_ledger is None:
+        if state.get("creative_evidence_required"):
+            add("creative evidence", "attention", "Skill and research planning has not been recorded yet.")
+        else:
+            add("creative evidence", "not-needed", "Legacy run: creative provenance was not required when it started.")
+    elif creative_problems:
+        add("creative evidence", "attention", creative_problems[0])
+    else:
+        references = creative_summary["references"]
+        add(
+            "creative evidence",
+            "ready",
+            (
+                f"{creative_summary['completed']}/{creative_summary['selected']} selected capabilities completed or used; "
+                f"{references['inspected']} inspected reference(s), {creative_summary['decisions']} traced decision(s)."
+            ),
+        )
 
     if g1_locked and design_value:
         add("direction", "ready", "The human-approved thesis is locked at G1.")
@@ -757,6 +793,7 @@ def project_intelligence(
         "risks_and_evidence_gaps": risks,
         "lessons": lessons,
         "runtime_state": runtime,
+        "creative": creative_summary,
         "health": health,
         "overall_health": overall,
         "notes": notes,
@@ -1201,6 +1238,138 @@ def ingest_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def creative_plan(args: argparse.Namespace) -> int:
+    """Create the hidden skill/research plan after S1 has produced the brief."""
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    project = Path(state["project"])
+    if entry["stage"] != "S1":
+        raise RuntimeError_("Creative planning belongs immediately after the project brief")
+    if CREATIVE.ledger_path(project).exists():
+        raise RuntimeError_("Creative planning is already recorded; update evidence instead of replacing it")
+    for name in ("PROJECT.md", "AGENTS.md"):
+        if not (project / name).is_file():
+            raise RuntimeError_(f"Creative planning needs the completed project brief: {name}")
+    source = Path(args.input).resolve()
+    if not source.is_file() or source.stat().st_size == 0:
+        raise RuntimeError_("Creative assessment input is missing or empty")
+    try:
+        assessment = json.loads(read(source))
+        ledger = CREATIVE.create_ledger(project, assessment)
+        CREATIVE.record_skill_event(ledger, {
+            "skill": "intake",
+            "state": "invoked",
+            "evidence_path": str(packet / TRANSPORT.MANIFEST_NAME),
+        })
+        CREATIVE.record_skill_event(ledger, {
+            "skill": "intake",
+            "state": "completed",
+            "output_path": str(project / "PROJECT.md"),
+            "result": "The completed brief supplied the creative assessment.",
+            "usefulness": "useful",
+        })
+        destination = CREATIVE.save_ledger(project, ledger)
+    except (json.JSONDecodeError, CREATIVE.CreativeError) as exc:
+        raise RuntimeError_(str(exc)) from exc
+    selected = [item for item in ledger["skills"] if item.get("selected")]
+    optional = [item for item in selected if not item.get("mandatory")]
+    state["updated_at"] = now()
+    state["next"] = "Continue with the focused creative work selected for this project."
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Creative work planned",
+        "The project brief now contains enough information to select useful methods without invoking every skill.",
+        (
+            f"Research depth {ledger['research_depth']}; {len(selected)} capabilities selected, "
+            f"including {len(optional)} optional project-specific method(s)."
+        ),
+        [str(destination)],
+        "Selection reasons and intended outputs are recorded; no selected skill is claimed invoked except intake.",
+        state["next"],
+    )
+    reference = next(item for item in ledger["skills"] if item["name"] == "reference-analysis")
+    component = next(item for item in ledger["skills"] if item["name"] == "component-research")
+    choices = []
+    if reference["selected"]:
+        choices.append("a focused reference pass")
+    if component["selected"]:
+        choices.append("targeted interaction research")
+    print("Done. I chose the creative work this project actually needs.")
+    print("Plan: " + (" and ".join(choices) if choices else "no extra research beyond the brief and direction work" ) + ".")
+    print("From you: nothing right now.")
+    return 0
+
+
+def record_creative(args: argparse.Namespace) -> int:
+    """Apply structured skill, source, conflict, direction, or decision evidence."""
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    project = Path(state["project"])
+    ledger = CREATIVE.load_ledger(project)
+    if ledger is None:
+        raise RuntimeError_("Creative planning has not been recorded for this project")
+    source = Path(args.input).resolve()
+    if not source.is_file() or source.stat().st_size == 0:
+        raise RuntimeError_("Creative evidence input is missing or empty")
+    try:
+        value = json.loads(read(source))
+        CREATIVE.apply_events(ledger, value)
+        problems = CREATIVE.ledger_problems(project, ledger)
+        if problems:
+            raise CREATIVE.CreativeError("; ".join(problems))
+        destination = CREATIVE.save_ledger(project, ledger)
+    except (json.JSONDecodeError, CREATIVE.CreativeError) as exc:
+        raise RuntimeError_(str(exc)) from exc
+    creative_summary = CREATIVE.summary(ledger)
+    state["updated_at"] = now()
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Creative evidence recorded",
+        "Skill execution, source inspection, and downstream use are distinct states and must survive conversation loss.",
+        (
+            f"{creative_summary['completed']}/{creative_summary['selected']} selected capabilities completed or used; "
+            f"{creative_summary['references']['inspected']} reference(s) carry inspection artifacts; "
+            f"{creative_summary['decisions']} traced decision(s)."
+        ),
+        [str(source), str(destination)],
+        f"Input SHA-256 {sha256(source)}; ledger validation passed.",
+        state.get("next", "Continue from the current verified boundary."),
+    )
+    print("Done. I recorded what actually ran and what it influenced.")
+    print("From you: nothing right now.")
+    return 0
+
+
+def creative_check(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, _packet = current_packet(state, allow_project_drift=True)
+    project = Path(state["project"])
+    ledger = CREATIVE.load_ledger(project)
+    problems = CREATIVE.project_problems(project, entry["stage"])
+    payload = {
+        "status": "ready" if not problems else "blocked",
+        "project": str(project),
+        "stage": entry["stage"],
+        "summary": CREATIVE.summary(ledger),
+        "problems": problems,
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    elif problems:
+        print("I found creative claims that are not supported yet:")
+        for problem in problems:
+            print(f"- {problem}")
+        print("Next: record the missing execution or inspection evidence; do not rewrite the claim as a pass.")
+    else:
+        print("Ready. Skill execution, source inspection, and design use are traceable.")
+        print("From you: nothing right now.")
+    return 0 if not problems else 2
+
+
 def record_note(args: argparse.Namespace) -> int:
     run_root = resolve_run_root(args)
     state = load_state(run_root)
@@ -1254,6 +1423,29 @@ def advance(args: argparse.Namespace) -> int:
         if stage == "S3":
             design = read(project / "DESIGN.md") if (project / "DESIGN.md").is_file() else ""
             agents = read(project / "AGENTS.md") if (project / "AGENTS.md").is_file() else ""
+            if design and state.get("creative_evidence_required"):
+                creative_problems = (
+                    CREATIVE.project_problems(project, "S3")
+                    if CREATIVE.load_ledger(project) is not None
+                    else ["the project has no creative plan or skill-execution record"]
+                )
+                if creative_problems:
+                    state["next"] = "Resolve the unsupported creative evidence before asking for G1."
+                    state["updated_at"] = now()
+                    write_json(run_root / STATE_NAME, state)
+                    append_log(
+                        run_root,
+                        "Creative evidence blocked G1 presentation",
+                        "A design claim cannot prove its own research or skill execution by assertion alone.",
+                        "; ".join(creative_problems),
+                        [str(CREATIVE.ledger_path(project))] if CREATIVE.ledger_path(project).is_file() else [],
+                        "No G1 request or continuation was created.",
+                        state["next"],
+                    )
+                    print("I found creative claims that are not supported yet.")
+                    print("First issue: " + creative_problems[0])
+                    print("From you: nothing; I need to resolve or honestly downgrade that claim first.")
+                    return 2
             if not re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", design) or not re.match(
                 r"G1\b", state_field(agents, "Last gate passed")
             ):
@@ -1276,6 +1468,34 @@ def advance(args: argparse.Namespace) -> int:
                 print(f"Paused. {FRIENDLY_STAGES.get(stage, stage).capitalize()} is not complete yet.")
                 print("Missing: " + ", ".join(missing))
                 return 2
+            creative = CREATIVE.load_ledger(project)
+            if state.get("creative_evidence_required") and creative is None:
+                state["next"] = "Finish the internal creative plan from the completed brief."
+                state["updated_at"] = now()
+                write_json(run_root / STATE_NAME, state)
+                print("Paused. I need to finish the project's internal creative plan.")
+                print("From you: nothing right now.")
+                return 2
+            creative_problems = CREATIVE.project_problems(project, stage) if creative is not None else []
+            if creative_problems:
+                state["next"] = "Resolve the named creative evidence gap before continuing."
+                state["updated_at"] = now()
+                write_json(run_root / STATE_NAME, state)
+                append_log(
+                    run_root,
+                    "Creative continuation paused",
+                    "Selected skill work and source claims need evidence before the stage can complete.",
+                    "; ".join(creative_problems),
+                    [str(CREATIVE.ledger_path(project))],
+                    "No stage result or continuation was created.",
+                    state["next"],
+                )
+                print("Paused. Creative evidence is incomplete.")
+                print("First issue: " + creative_problems[0])
+                return 2
+            recorded_files = list(expected)
+            if CREATIVE.ledger_path(project).is_file():
+                recorded_files.append(CREATIVE.LEDGER_RELATIVE.as_posix())
             structural_result(
                 argparse.Namespace(
                     run_root=str(run_root),
@@ -1284,7 +1504,7 @@ def advance(args: argparse.Namespace) -> int:
                     provider=args.provider,
                     model=args.model,
                     summary=f"{FRIENDLY_STAGES.get(stage, stage).capitalize()} complete.",
-                    file=expected,
+                    file=recorded_files,
                 )
             )
         elif stage in ("S4B", "S5"):
@@ -1488,6 +1708,7 @@ def skill_contract_problems(
         "scripts/builderos.py", "discover --project", "provider preflight",
         "handoff-readiness", "builderos.py advance", "record-note",
         "ingest-return", "ingest-review", "same-stage retry", "--adopt-existing",
+        "creative-plan", "record-creative", "creative-check",
         "Never grant a gate",
     ):
         if token not in skill_text:
@@ -1506,6 +1727,8 @@ def repository_contract_problems() -> list[str]:
         ROOT / ".agents" / "skills" / "builderos" / "references" / "installation.example.json",
         ROOT / "scripts" / "install-builderos-skill.py",
         ROOT / "prompts" / "project-review.md",
+        ROOT / "scripts" / "creative-intelligence.py",
+        ROOT / ".agents" / "skills" / "builderos" / "references" / "creative-intelligence.md",
     ]
     for path in required:
         if not path.is_file():
@@ -2120,6 +2343,20 @@ def self_test() -> int:
             "| **Next prompt** | `prompts/design-direction.md` |\n",
             encoding="utf-8",
         )
+        auto_assessment = workspace / "ordinary-idea-assessment.json"
+        write_json(auto_assessment, CREATIVE.low_assessment(motion_dependence="high"))
+        creative_plan(
+            argparse.Namespace(
+                run_root=str(auto_run), project=None, input=str(auto_assessment)
+            )
+        )
+        auto_ledger = CREATIVE.load_ledger(auto_project)
+        case(
+            "creative planning records intake execution without claiming later skills ran",
+            auto_ledger is not None
+            and next(item for item in auto_ledger["skills"] if item["name"] == "intake")["state"] == "completed"
+            and next(item for item in auto_ledger["skills"] if item["name"] == "design-direction")["state"] == "recommended",
+        )
         advance(
             argparse.Namespace(
                 run_root=str(auto_run), project=None, provider="orchestrator",
@@ -2237,6 +2474,24 @@ def parser() -> argparse.ArgumentParser:
     run_selector(review_p)
     review_p.add_argument("--input", required=True)
 
+    creative_plan_p = sub.add_parser(
+        "creative-plan", help="select project-specific skills and research depth from a structured assessment"
+    )
+    run_selector(creative_plan_p)
+    creative_plan_p.add_argument("--input", required=True)
+
+    creative_record_p = sub.add_parser(
+        "record-creative", help="record skill execution, source inspection, and downstream design use"
+    )
+    run_selector(creative_record_p)
+    creative_record_p.add_argument("--input", required=True)
+
+    creative_check_p = sub.add_parser(
+        "creative-check", help="check creative claims against execution and source artifacts"
+    )
+    run_selector(creative_check_p)
+    creative_check_p.add_argument("--json", action="store_true")
+
     note_p = sub.add_parser("record-note", help="add a durable project decision, risk, or evidence note")
     run_selector(note_p)
     note_p.add_argument(
@@ -2294,6 +2549,9 @@ def main() -> int:
             "record-transcript": record_transcript,
             "ingest-return": ingest_return,
             "ingest-review": ingest_review,
+            "creative-plan": creative_plan,
+            "record-creative": record_creative,
+            "creative-check": creative_check,
             "record-note": record_note,
             "advance": advance,
             "prepare-next": prepare_next,
@@ -2302,7 +2560,7 @@ def main() -> int:
             return commands[args.command](args)
         parser().print_help()
         return 0
-    except (RuntimeError_, TRANSPORT.PacketError) as exc:
+    except (RuntimeError_, TRANSPORT.PacketError, CREATIVE.CreativeError) as exc:
         print(f"STOPPED: {exc}")
         return 1
 

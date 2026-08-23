@@ -7,6 +7,11 @@
 
 **The point of this skill is to take techniques, not dependencies.** Sources in [references/ui-libraries.md](../references/ui-libraries.md) are research-only by default ([LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 4).
 
+**Evidence boundary** — a proposed resource needs an inspected source artifact,
+the observed technique, an alternative, compatibility/licence evidence where
+relevant, and an explicit build/install/skip decision. Recommendation is not
+invocation; invocation is not completion; completion is not downstream use.
+
 ---
 
 ## Method

@@ -20,6 +20,8 @@ REQUIRED INPUTS
 - DESIGN-MOTION.md if this project has motion.
 - DESIGN-ASSETS.md if the direction needs imagery or assets that do not exist.
 - REFERENCES below, containing URLs or the explicit value "none yet".
+- .builderos/creative-evidence.json when supplied by a V1.2 project. It records
+  selected methods, inspection artifacts, conflicts, and downstream decisions.
 
 IF MISSING
 Before doing reference analysis or writing DESIGN.md, verify every applicable
@@ -51,6 +53,12 @@ fewer, ask for more or propose some and say which you chose.
 For each: load the LIVE site, do not work from screenshots - a still hides
 motion, pacing and behaviour, which is usually where the quality is.
 
+Do not write "inspected" merely because a URL was supplied. Preserve a dated
+retrieval or visual artifact and its SHA-256 in the supplied creative-evidence
+ledger. If the source cannot be opened, record it as inaccessible with the
+blocker and no observations. A found-only or inaccessible reference may remain
+in the evidence history, but it must not appear in DESIGN.md as an influence.
+
 Answer six questions per reference:
   - organising principle (grid, sequence, material, metaphor, constraint)
   - what the type does that a default would not
@@ -79,6 +87,10 @@ Write the thesis as ONE SENTENCE.
   If not, it is a mood, not a thesis. Rewrite it.
   BANNED: clean, modern, minimal, premium, sleek, elegant.
 
+If the creative plan says alternatives are useful, make the alternatives differ
+in organising mechanism and visitor experience, then record why one wins. If it
+says one direction is enough, do not generate variants for theatre.
+
 STEP 3 - DERIVE, DO NOT DECIDE
 Every choice descends from the thesis and carries its reason:
 typography (4x size ratio minimum) - palette (with a stated source, not
@@ -104,6 +116,17 @@ an unresolved asset on the critical path.
 STEP 7 - ACCEPTED PATTERNS
 Carry forward any from PROJECT.md. The direction must work BECAUSE of them,
 not despite them.
+
+STEP 8 - TRACE THE DECISIONS
+For every reference-informed choice, record:
+  reference -> observed mechanism -> design principle -> exact DESIGN.md
+  decision -> implementation requirement.
+Only mark reference-analysis or another selected skill "used" when that trace
+exists in the downstream artifact. Completion language alone is not evidence.
+
+ALLOWED WRITES
+DESIGN.md, plus .builderos/creative-evidence.json and its source-capture
+artifacts when supplied. Do not edit PROJECT.md or AGENTS.md before G1.
 
 OUTPUT - write DESIGN.md, then present:
 

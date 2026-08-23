@@ -53,6 +53,25 @@ Builder OS. Do not reconstruct its policies from this skill.
    gap with `builderos.py record-note`; do not rely on this conversation to
    remember it. Project documents remain canonical for active decisions.
 
+## Creative intelligence
+
+When S1 has produced `PROJECT.md`, read
+`references/creative-intelligence.md`. Interpret the project across its stated
+characteristics, write the temporary assessment it defines, and run
+`builderos.py creative-plan` before `advance`. This is internal machinery: tell
+the user only what focused work you chose and why, not the matrix or stage IDs.
+
+Before executing a selected method, record it as invoked with the current packet
+or tool transcript as evidence. After it produces a real artifact, record it as
+completed. Record it as used only after a downstream decision trace exists. Use
+`builderos.py record-creative` for these events and `creative-check` before G1.
+Recommended, invoked, completed, and used are never synonyms.
+
+For external research, preserve an actual retrieval, screenshot, or provider
+transcript artifact before marking a source inspected. A found URL is found;
+failed access is inaccessible; neither may be described as inspected or used.
+Do not let expected prose prove its own execution.
+
 ## Human boundaries
 
 Pause only for a decision or external action the canonical workflow reserves to

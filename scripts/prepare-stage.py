@@ -42,6 +42,7 @@ STAGES = {
         "prompt": "prompts/project-start.md",
         "block": 0,
         "project_inputs": [],
+        "optional_project_inputs": [],
         "canonical_inputs": ["skills/intake.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S1"],
@@ -52,6 +53,7 @@ STAGES = {
         "prompt": "prompts/research.md",
         "block": 0,
         "project_inputs": [],
+        "optional_project_inputs": [".builderos/creative-evidence.json"],
         "canonical_inputs": ["RESEARCH-POLICY.md", "templates/RESEARCH.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S1", "S2"],
@@ -63,6 +65,7 @@ STAGES = {
         "prompt": "prompts/design-direction.md",
         "block": 0,
         "project_inputs": ["PROJECT.md"],
+        "optional_project_inputs": [".builderos/creative-evidence.json"],
         "canonical_inputs": ["DESIGN-TASTE.md", "templates/DESIGN.md"],
         "conditional_inputs": [
             "project:RESEARCH.md",
@@ -77,6 +80,7 @@ STAGES = {
         "prompt": "prompts/build-kickoff.md",
         "block": 0,
         "project_inputs": ["PROJECT.md", "DESIGN.md", "AGENTS.md"],
+        "optional_project_inputs": [],
         "canonical_inputs": ["templates/HANDOFF.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S3", "S4A"],
@@ -87,6 +91,7 @@ STAGES = {
         "prompt": "prompts/build-kickoff.md",
         "block": 1,
         "project_inputs": ["HANDOFF.md", "DESIGN.md", "AGENTS.md"],
+        "optional_project_inputs": [],
         "canonical_inputs": [
             "QA-POLICY.md",
             "templates/QA.md",
@@ -101,6 +106,7 @@ STAGES = {
         "prompt": "prompts/project-review.md",
         "block": 0,
         "project_inputs": [],
+        "optional_project_inputs": [],
         "canonical_inputs": ["EVALUATION-RUBRICS.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S4B", "S5"],
@@ -120,6 +126,7 @@ STAGES = {
         "prompt": "prompts/retrospective.md",
         "block": 0,
         "project_inputs": ["PROJECT.md", "QA.md", "AGENTS.md"],
+        "optional_project_inputs": [],
         "canonical_inputs": ["templates/RETROSPECTIVE.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S5", "S6"],
@@ -485,6 +492,13 @@ def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tupl
         if not path.is_file():
             raise PacketError(f"{stage} required project input is missing: {name}")
         sources.append(source_entry(name, path, "project", read(path)))
+
+    for name in spec.get("optional_project_inputs", []):
+        path = project / name
+        if path.is_file():
+            sources.append(source_entry(name, path, "project-runtime", read(path)))
+        else:
+            omitted.append(f"{name} absent — legacy creative provenance remains explicitly untracked")
 
     for name in spec["canonical_inputs"]:
         path = ROOT / name
@@ -864,6 +878,8 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S5 packet isolation list is incomplete")
     if s5.get("project_inputs"):
         problems.append("S5 packet must not deliver project documents")
+    if s5.get("optional_project_inputs"):
+        problems.append("S5 packet must not deliver optional project runtime context")
     if specs.get("S4B", {}).get("allowed_parents") != ["S4A", "S4B"]:
         problems.append("S4B packet parent contract drifted from S4A -> S4B")
     if specs.get("S1", {}).get("allowed_parents") != ["S1"]:
@@ -1015,9 +1031,21 @@ def self_test() -> int:
             "## Current state\n\n| **Stage** | `S1` |\n| **Last gate passed** | `none` |\n",
             encoding="utf-8",
         )
+        creative_dir = project / ".builderos"
+        creative_dir.mkdir()
+        creative_path = creative_dir / "creative-evidence.json"
+        creative_path.write_text(
+            json.dumps({"schema_version": 1, "project": str(project), "research_depth": "standard"}, indent=2) + "\n",
+            encoding="utf-8",
+        )
         s2_dir = sandbox / "R1-S2"
         prepare(ns(stage="S2", project=str(project), output=str(s2_dir), parent=str(s1_dir)))
-        case("conditional S2 packet verifies (positive control)", not verify_packet(s2_dir))
+        s2_manifest = json.loads(read(s2_dir / MANIFEST_NAME))
+        case(
+            "conditional S2 packet carries current creative plan",
+            not verify_packet(s2_dir)
+            and any(item["label"] == ".builderos/creative-evidence.json" for item in s2_manifest["sources"]),
+        )
         (s2_dir / "evidence" / "transcript.md").write_text("S2 transcript\n", encoding="utf-8")
         (project / "RESEARCH.md").write_text(
             "# RESEARCH\n\n## Findings\n\n| Claim | Date | Confidence | Source |\n",
@@ -1026,7 +1054,12 @@ def self_test() -> int:
 
         s3_dir = sandbox / "R1-S3"
         prepare(ns(stage="S3", project=str(project), output=str(s3_dir), parent=str(s2_dir), motion="yes", assets="no"))
-        case("fresh S3 continuation verifies (positive control)", not verify_packet(s3_dir))
+        s3_manifest = json.loads(read(s3_dir / MANIFEST_NAME))
+        case(
+            "fresh S3 continuation carries creative provenance",
+            not verify_packet(s3_dir)
+            and any(item["label"] == ".builderos/creative-evidence.json" for item in s3_manifest["sources"]),
+        )
 
         parent_transcript = s2_dir / "evidence" / "transcript.md"
         parent_transcript.write_text("changed parent evidence\n", encoding="utf-8")

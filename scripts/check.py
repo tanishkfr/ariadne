@@ -43,10 +43,11 @@ REQUIRED = [
     "prompts/retrospective.md",
     "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
-    "scripts/prepare-stage.py", "scripts/builderos.py",
+    "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
     "scripts/install-builderos-skill.py",
     ".agents/skills/builderos/SKILL.md",
     ".agents/skills/builderos/agents/openai.yaml",
+    ".agents/skills/builderos/references/creative-intelligence.md",
 ]
 
 # Sentences allowed to repeat: gate names and block headers that must stay
@@ -352,10 +353,10 @@ DELIVERY_CONTRACTS = [
         "block": 0,
         "tokens": [
             "REQUIRED INPUTS", "QUESTIONS", "RESEARCH-POLICY.md",
-            "templates/RESEARCH.md", "IF MISSING",
+            "templates/RESEARCH.md", ".builderos/creative-evidence.json", "IF MISSING",
             "NEXT: S3 Design direction.",
         ],
-        "inputs": ["QUESTIONS", "RESEARCH-POLICY.md", "templates/RESEARCH.md"],
+        "inputs": ["QUESTIONS", "RESEARCH-POLICY.md", "templates/RESEARCH.md", ".builderos/creative-evidence.json"],
         "retry": "NEXT: S2 Research retry.",
         "forbidden_missing": ["NEXT: S3 Design direction."],
     },
@@ -365,11 +366,11 @@ DELIVERY_CONTRACTS = [
         "tokens": [
             "REQUIRED INPUTS", "PROJECT.md", "DESIGN-TASTE.md",
             "templates/DESIGN.md", "DESIGN-MOTION.md", "DESIGN-ASSETS.md",
-            "IF MISSING", "NEXT: S4 Build.",
+            ".builderos/creative-evidence.json", "IF MISSING", "NEXT: S4 Build.",
         ],
         "inputs": [
             "PROJECT.md", "DESIGN-TASTE.md", "templates/DESIGN.md",
-            "DESIGN-MOTION.md", "DESIGN-ASSETS.md",
+            "DESIGN-MOTION.md", "DESIGN-ASSETS.md", ".builderos/creative-evidence.json",
         ],
         "retry": "NEXT: S3 Design direction retry.",
         "forbidden_missing": ["NEXT: S4 Build."],
@@ -470,7 +471,7 @@ ADAPTER_DELIVERY = {
         "tokens": [
             "skills/intake.md", "RESEARCH-POLICY.md", "templates/RESEARCH.md",
             "DESIGN-TASTE.md", "templates/DESIGN.md", "DESIGN-MOTION.md",
-            "DESIGN-ASSETS.md", "templates/HANDOFF.md",
+            "DESIGN-ASSETS.md", ".builderos/creative-evidence.json", "templates/HANDOFF.md",
             "EVALUATION-RUBRICS.md", "completed `QA.md`",
             "templates/RETROSPECTIVE.md",
         ],
@@ -651,6 +652,14 @@ def check_runtime_tool():
         return load_runtime_tool().repository_contract_problems()
     except Exception as exc:
         return [f"{RUNTIME_TOOL} could not be checked: {exc}"]
+
+
+def load_creative_tool():
+    path = os.path.join(ROOT, "scripts", "creative-intelligence.py")
+    spec = importlib.util.spec_from_file_location("builder_os_creative_intelligence", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_installer_tool():
@@ -898,9 +907,11 @@ def main():
         packet_failed = self_test_packet_tool()
         print("\nRuntime controller self-test")
         runtime_failed = load_runtime_tool().self_test()
+        print("\nCreative intelligence self-test")
+        creative_failed = load_creative_tool().self_test()
         print("\nEntry-skill installer self-test")
         installer_failed = load_installer_tool().self_test()
-        failed = agents_failed or delivery_failed or packet_failed or runtime_failed or installer_failed
+        failed = agents_failed or delivery_failed or packet_failed or runtime_failed or creative_failed or installer_failed
         print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
         return 1 if failed else 0
 
