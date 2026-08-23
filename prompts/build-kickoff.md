@@ -100,6 +100,9 @@ REQUIRED INPUTS
 - QA-POLICY.md.
 - templates/QA.md.
 - templates/RETURN-HANDOFF.md.
+- .builderos/creative-operations.json, containing the approved requirement trace
+  and project-specific visual-QA plan.
+- skills/visual-qa.md.
 
 IF MISSING
 Verify every input before editing code. If any is missing, STOP. Name it; do not
@@ -153,8 +156,9 @@ Production build passes - zero type errors - zero console errors - every value
 from the token system - signature moment works on mobile - acceptance criteria
 met. Not "it renders on the dev server".
 
-When the build is done, create or fill QA.md from templates/QA.md and run the
-mechanical half of QA-POLICY.md yourself:
+When the build is done, create or fill QA.md from templates/QA.md, follow the
+project-specific targets in .builderos/creative-operations.json through
+skills/visual-qa.md, and run the mechanical half of QA-POLICY.md yourself:
 build, types, lint, console on every route, responsive at 375/768/900/1280/1920
 with screenshots, keyboard walk, contrast on rendered pixels, reduced-motion
 reloaded, performance on the PREVIEW not localhost.

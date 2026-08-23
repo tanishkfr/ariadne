@@ -95,6 +95,7 @@ for that session only and are never copied into the project repository.
 | S2 | The blocking open questions from `PROJECT.md`; `RESEARCH-POLICY.md`; `templates/RESEARCH.md`; `.builderos/creative-evidence.json` when present | Unrelated parts of `PROJECT.md`; the whole system |
 | S3 | `PROJECT.md`; `RESEARCH.md` if it exists; `.builderos/creative-evidence.json` when present; `DESIGN-TASTE.md`; `templates/DESIGN.md`; `DESIGN-MOTION.md` when motion applies; `DESIGN-ASSETS.md` when unresolved imagery/assets apply; reference URLs or `none yet` | Any code or build history |
 | S4A handoff | `PROJECT.md`; approved `DESIGN.md`; project-root `AGENTS.md`; `templates/HANDOFF.md` | Code or earlier chat history |
+| S4B build | The project repository; `HANDOFF.md`; approved `DESIGN.md`; project-root `AGENTS.md`; project `.builderos/creative-operations.json`; `QA-POLICY.md`; `templates/QA.md`; `templates/RETURN-HANDOFF.md`; `skills/visual-qa.md` | Earlier reasoning/build conversations; unrelated Builder OS files |
 | S5 evaluation | The URL/artifact, intent, success criteria, accepted patterns or `none`, and `EVALUATION-RUBRICS.md` | `PROJECT.md`, `DESIGN.md`, `HANDOFF.md`, `AGENTS.md`, `QA.md`, the build story, the constraints |
 | S6 | `PROJECT.md`; project-root `AGENTS.md`; completed `QA.md` containing the pasted independent judgement block; `templates/RETROSPECTIVE.md` | The build or old conversations |
 

@@ -125,6 +125,13 @@ def validate_assessment(assessment: dict) -> dict:
     normalised["alternatives_helpful"] = {
         "value": alternative["value"], "reason": alternative_reason
     }
+    social = assessment.get("social_request", {"value": False, "request": ""})
+    if not isinstance(social, dict) or not isinstance(social.get("value"), bool):
+        raise CreativeError("social_request needs a boolean value")
+    social_request = str(social.get("request", "")).strip()
+    if social["value"] and not social_request:
+        raise CreativeError("an activated social strategy needs the user's explicit request")
+    normalised["social_request"] = {"value": social["value"], "request": social_request}
     questions = assessment.get("research_questions", [])
     if not isinstance(questions, list):
         raise CreativeError("research_questions must be a list")
@@ -218,6 +225,12 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
         item["kind"] == "asset" for item in assessment["research_questions"]
     )
     motion_selected = c["motion_dependence"]["level"] != "low"
+    visual_qa_selected = any(
+        c[name]["level"] != "low"
+        for name in ("visual_dependence", "interaction_complexity", "motion_dependence", "generic_risk")
+    )
+    creative_review_selected = visual_qa_selected or c["novelty"]["level"] == "high"
+    social_selected = assessment["social_request"]["value"]
 
     skills = [
         _skill("intake", "S1", True, "Every project needs a falsifiable brief before creative work.",
@@ -254,8 +267,26 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
                "What exactly should the implementer build and preserve?", ["PROJECT.md", "DESIGN.md"], "HANDOFF.md"),
         _skill("QA", "S4B", True, "Implementation claims need mechanical evidence.",
                "Does the implementation meet the approved requirements?", ["HANDOFF.md", "built project"], "QA.md"),
+        _skill("visual-qa", "S4B", c["visual_dependence"]["level"] == "high",
+               "Rendered project-specific behaviour needs evidence." if visual_qa_selected else
+               "No visual, interaction, motion, or genericness risk currently justifies a visual pass.",
+               "Which thesis-critical behaviours and responsive transformations need rendered evidence?",
+               ["locked DESIGN.md", "rendered target", ".builderos/creative-operations.json"],
+               "visual evidence and drift findings", visual_qa_selected),
+        _skill("creative-review", "S4B", c["generic_risk"]["level"] == "high",
+               "The rendered result needs an actionable creative-quality judgement." if creative_review_selected else
+               "The current project does not justify a separate internal creative review.",
+               "Is the implemented result actually strong, and what single change matters most?",
+               ["rendered visual evidence", "approved requirement trace"],
+               "creative review event", creative_review_selected),
         _skill("independent-review", "S5", True, "Creative quality needs judgement isolated from build context.",
                "Is the finished work strong enough for the intended audience?", ["isolated live target"], "QA judgement"),
+        _skill("social-strategy", "optional", social_selected,
+               "The user explicitly requested a project-aware social strategy." if social_selected else
+               "No explicit social strategy request exists; this optional capability stays off.",
+               "Which audience, platforms, content sequence, and evidence fit this specific project?",
+               ["project context", "current inspected platform evidence", "voice examples if supplied"],
+               "SOCIAL-STRATEGY.md", social_selected),
     ]
     created = now()
     return {
@@ -846,6 +877,7 @@ def low_assessment(**overrides) -> dict:
         "characteristics": characteristics,
         "references_supplied": False,
         "alternatives_helpful": {"value": False, "reason": "One direction is sufficient for this fixture."},
+        "social_request": {"value": False, "request": ""},
         "research_questions": [],
     }
 
@@ -879,8 +911,28 @@ def self_test() -> int:
         case(
             "minimal project skips unnecessary reference and component work",
             _skill_by_name(minimal, "reference-analysis")["state"] == "skipped"
-            and _skill_by_name(minimal, "component-research")["state"] == "skipped",
+            and _skill_by_name(minimal, "component-research")["state"] == "skipped"
+            and _skill_by_name(minimal, "visual-qa")["state"] == "skipped"
+            and _skill_by_name(minimal, "social-strategy")["state"] == "skipped",
         )
+        social_assessment = low_assessment()
+        social_assessment["social_request"] = {
+            "value": True,
+            "request": "Create a social strategy for this project.",
+        }
+        social_ledger = create_ledger(project, social_assessment)
+        case(
+            "social strategy activates only from an explicit request",
+            _skill_by_name(social_ledger, "social-strategy")["state"] == "recommended",
+        )
+        try:
+            missing_social_request = low_assessment()
+            missing_social_request["social_request"] = {"value": True, "request": ""}
+            create_ledger(project, missing_social_request)
+            unsupported_social_activation = True
+        except CreativeError:
+            unsupported_social_activation = False
+        case("social strategy cannot self-activate without request evidence", not unsupported_social_activation)
 
         reference_assessment = low_assessment(visual_dependence="high", reference_sensitivity="high", generic_risk="high")
         reference_assessment["alternatives_helpful"] = {

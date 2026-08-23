@@ -26,6 +26,10 @@ assessment. Do not classify by keyword counts. Every characteristic needs one of
   },
   "references_supplied": false,
   "alternatives_helpful": {"value": true, "reason": "..."},
+  "social_request": {
+    "value": false,
+    "request": "the user's exact social-strategy request, or empty"
+  },
   "research_questions": [
     {
       "id": "rq-1",

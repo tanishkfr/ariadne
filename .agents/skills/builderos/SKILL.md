@@ -94,11 +94,14 @@ provider; never make them search for it. Keep hashes and stage mechanics in
 
 ## External return
 
-Ask the external implementer to return the generated return-handoff block. When
-the user pastes or attaches it, save it to a temporary file and run
-`builderos.py ingest-return`. Do not turn a summary into a verbatim transcript.
-The return handoff can support continuation, but it does not prove unobserved
-provider behaviour or independent QA.
+The S4B packet names a unique project-local return target. Ask the external
+implementer to write the complete marked return block there as well as emitting
+it in the response. `builderos.py advance` ingests only the target belonging to
+the current packet; a retry gets a new target and cannot overwrite prior
+evidence. If the provider cannot write that target, save the returned block to a
+temporary file and use `builderos.py ingest-return` as recovery. Do not turn a
+summary into a verbatim transcript. The return handoff can support continuation,
+but it does not prove unobserved provider behaviour or independent QA.
 
 For independent review, give the reviewer only the generated isolated packet.
 When its marked QA judgement returns, save the response temporarily and run
@@ -108,6 +111,17 @@ finding, or evidence limitation.
 
 ## QA and recovery
 
+After G1, read `references/creative-operations.md`. The controller derives the
+approved design-to-implementation trace and project-specific visual-QA plan
+automatically before S4B. After implementation, use the selected visual-QA and
+creative-review methods to record rendered evidence and material drift before
+independent review. These internal observations never enter the isolated S5
+packet and never grant G3.
+
+The recovery-level commands are `builderos.py operations-plan`,
+`builderos.py record-operations`, and `builderos.py operations-check`; normal
+progression should use `builderos.py advance` wherever it can derive the action.
+
 After implementation returns, inspect the recorded files and run the applicable
 local checks from the delivered QA policy before independent review. Fix work
 retained in the orchestrator when it is within the approved handoff. For work
@@ -115,6 +129,13 @@ owned by an external implementer, diagnose the failure and generate a
 same-stage retry from the partial/blocked return; do not ask the user to rebuild packet
 lineage. A retry never overwrites prior evidence and never reopens G1 unless the
 finding changes the approved direction.
+
+When the user explicitly requests social strategy, use
+`<root>/skills/social-strategy.md` and the conditional
+`<root>/templates/SOCIAL-STRATEGY.md`.
+Record current source evidence and the finished artifact through the
+creative-operations contract. Do not activate social planning by default, post
+content, authenticate accounts, or imply that strategy changes the build gates.
 
 ## Communication
 

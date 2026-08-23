@@ -37,6 +37,7 @@ REQUIRED = [
     "CHANGELOG.md",
     "templates/PROJECT.md", "templates/DESIGN.md",
     "templates/HANDOFF.md", "templates/QA.md", "templates/RETURN-HANDOFF.md",
+    "templates/SOCIAL-STRATEGY.md",
     # one entry point per active stage -- the v0.3 gap this closes
     "prompts/project-start.md", "prompts/research.md", "prompts/design-direction.md",
     "prompts/build-kickoff.md", "prompts/project-review.md",
@@ -44,10 +45,13 @@ REQUIRED = [
     "tests/router-cases.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
     "scripts/prepare-stage.py", "scripts/builderos.py", "scripts/creative-intelligence.py",
+    "scripts/creative-operations.py",
     "scripts/install-builderos-skill.py",
     ".agents/skills/builderos/SKILL.md",
     ".agents/skills/builderos/agents/openai.yaml",
     ".agents/skills/builderos/references/creative-intelligence.md",
+    ".agents/skills/builderos/references/creative-operations.md",
+    "skills/visual-qa.md", "skills/creative-review.md", "skills/social-strategy.md",
 ]
 
 # Sentences allowed to repeat: gate names and block headers that must stay
@@ -79,7 +83,7 @@ DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 GENERATED = ("validation/runs/",)
 EPHEMERAL_SELF_TEST = (
     re.compile(
-        r"^validation/(?:builderos|creative-intelligence|packet|skill-install)-self-test-[0-9a-f]{32}/"
+        r"^validation/(?:builderos|creative-intelligence|creative-operations|packet|skill-install)-self-test-[0-9a-f]{32}/"
     ),
     re.compile(r"^validation/validate-self-test-[a-z0-9-]+/"),
 )
@@ -407,12 +411,14 @@ DELIVERY_CONTRACTS = [
             "REQUIRED INPUTS", "HANDOFF.md", "DESIGN.md", "AGENTS.md",
             "QA-POLICY.md", "templates/QA.md", "IF MISSING",
             "templates/RETURN-HANDOFF.md", "BEGIN/END markers",
+            ".builderos/creative-operations.json", "skills/visual-qa.md",
             "feature-branch preview", "already connected",
             "NEXT: S5 Review.",
         ],
         "inputs": [
             "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
             "templates/QA.md", "templates/RETURN-HANDOFF.md",
+            ".builderos/creative-operations.json", "skills/visual-qa.md",
         ],
         "retry": "NEXT: S4 Build retry.",
         "forbidden_missing": ["NEXT: S5 Review."],
@@ -485,6 +491,7 @@ ADAPTER_DELIVERY = {
             "skills/intake.md", "RESEARCH-POLICY.md", "templates/RESEARCH.md",
             "DESIGN-TASTE.md", "templates/DESIGN.md", "DESIGN-MOTION.md",
             "DESIGN-ASSETS.md", ".builderos/creative-evidence.json", "templates/HANDOFF.md",
+            ".builderos/creative-operations.json", "skills/visual-qa.md",
             "EVALUATION-RUBRICS.md", "completed `QA.md`",
             "templates/RETROSPECTIVE.md",
         ],
@@ -495,6 +502,7 @@ ADAPTER_DELIVERY = {
         "tokens": [
             "HANDOFF.md", "DESIGN.md", "AGENTS.md", "QA-POLICY.md",
             "templates/QA.md", "templates/RETURN-HANDOFF.md",
+            ".builderos/creative-operations.json", "skills/visual-qa.md",
             "explicit human G3 approval",
         ],
     },
@@ -670,6 +678,14 @@ def check_runtime_tool():
 def load_creative_tool():
     path = os.path.join(ROOT, "scripts", "creative-intelligence.py")
     spec = importlib.util.spec_from_file_location("builder_os_creative_intelligence", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_creative_operations_tool():
+    path = os.path.join(ROOT, "scripts", "creative-operations.py")
+    spec = importlib.util.spec_from_file_location("builder_os_creative_operations", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -934,9 +950,14 @@ def main():
         runtime_failed = load_runtime_tool().self_test()
         print("\nCreative intelligence self-test")
         creative_failed = load_creative_tool().self_test()
+        print("\nCreative operations self-test")
+        operations_failed = load_creative_operations_tool().self_test()
         print("\nEntry-skill installer self-test")
         installer_failed = load_installer_tool().self_test()
-        failed = agents_failed or delivery_failed or packet_failed or runtime_failed or creative_failed or installer_failed
+        failed = (
+            agents_failed or delivery_failed or packet_failed or runtime_failed
+            or creative_failed or operations_failed or installer_failed
+        )
         print("\nSELF-TEST FAILED" if failed else "\nSELF-TEST PASS")
         return 1 if failed else 0
 
@@ -1021,6 +1042,15 @@ def main():
             print(f"        {problem}")
     else:
         print("ok    runtime controller: entry skill, preflight, return handoff, and log contracts")
+
+    operations_problems = load_creative_operations_tool().repository_contract_problems()
+    if operations_problems:
+        failed = True
+        print(f"FAIL  creative operations: {len(operations_problems)} problem(s)")
+        for problem in operations_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    creative operations: visual QA, creative review, and optional social contracts")
 
     chain_problems = check_stage_chain()
     if chain_problems:

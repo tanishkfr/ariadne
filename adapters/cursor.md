@@ -69,7 +69,7 @@ session inputs, not project files; do not copy them permanently into the project
 
 | Stage | Supply to the fresh build session | Keep out |
 |---|---|---|
-| S4B build | The project repository; `HANDOFF.md`; `DESIGN.md`; project-root `AGENTS.md`; Builder OS `QA-POLICY.md`; Builder OS `templates/QA.md`; Builder OS `templates/RETURN-HANDOFF.md` | Earlier reasoning/build conversations; unrelated Builder OS files |
+| S4B build | The project repository; `HANDOFF.md`; `DESIGN.md`; project-root `AGENTS.md`; project `.builderos/creative-operations.json`; Builder OS `QA-POLICY.md`; Builder OS `templates/QA.md`; Builder OS `templates/RETURN-HANDOFF.md`; Builder OS `skills/visual-qa.md` | Earlier reasoning/build conversations; unrelated Builder OS files |
 | S5 mechanical QA | The same project repository and canonical QA inputs used at S4B | `EVALUATION-RUBRICS.md`; independent judgement belongs to the fresh Reviewer session |
 | S6 ship action | The branch/target, completed `QA.md`, explicit human G3 approval, and the one approved G4 ship request | Design chat and reviewer conversation |
 
@@ -85,11 +85,14 @@ python scripts/prepare-stage.py prepare --stage S4B --project <project> --output
 
 The S4B default provider in the manifest is `cursor`. The packet contains the
 current canonical Part B, `HANDOFF.md`, locked `DESIGN.md`, project `AGENTS.md`,
-`QA-POLICY.md`, `templates/QA.md`, and `templates/RETURN-HANDOFF.md`; it contains
-no reasoning transcript.
+`.builderos/creative-operations.json`, `QA-POLICY.md`, `templates/QA.md`,
+`templates/RETURN-HANDOFF.md`, and `skills/visual-qa.md`; it contains no
+reasoning transcript. The packet names one project-local structured return
+target. Writing the marked return block there lets `builderos.py advance` ingest
+it without manual copying; each retry has a different non-overwriting target.
 Open Cursor at the project repository, start a fresh chat, paste `packet.txt`,
-and return the completed `templates/RETURN-HANDOFF.md` block. Builder OS ingests
-that block and manages its evidence path. A verbatim transcript is preserved
+and return the completed `templates/RETURN-HANDOFF.md` block at the packet's
+return target. Builder OS ingests that block and manages its evidence path. A verbatim transcript is preserved
 when available but is never reconstructed from the return summary.
 
 ### Cursor validation handover

@@ -90,12 +90,16 @@ STAGES = {
     "S4B": {
         "prompt": "prompts/build-kickoff.md",
         "block": 1,
-        "project_inputs": ["HANDOFF.md", "DESIGN.md", "AGENTS.md"],
+        "project_inputs": [
+            "HANDOFF.md", "DESIGN.md", "AGENTS.md",
+            ".builderos/creative-operations.json",
+        ],
         "optional_project_inputs": [],
         "canonical_inputs": [
             "QA-POLICY.md",
             "templates/QA.md",
             "templates/RETURN-HANDOFF.md",
+            "skills/visual-qa.md",
         ],
         "conditional_inputs": [],
         "allowed_parents": ["S4A", "S4B"],
@@ -594,7 +598,7 @@ def section_footer(entry: dict) -> str:
 
 
 def build_packet(stage: str, packet_id: str, provider: str, prompt: dict, sources: list[dict],
-                 parent: dict | None, omitted: list[str]) -> str:
+                 parent: dict | None, omitted: list[str], return_target: Path | None = None) -> str:
     independent = stage == "S5"
     lines = [
         f"BUILDER OS {stage} STAGE PACKET",
@@ -619,6 +623,18 @@ def build_packet(stage: str, packet_id: str, provider: str, prompt: dict, source
                 "INDEPENDENCE BOUNDARY",
                 "Give the reviewer this packet only. Do not provide project documents, source code,",
                 "QA evidence, build history, implementation details, or prior conversation.",
+            ]
+        )
+    if stage == "S4B":
+        if return_target is None:
+            raise PacketError("S4B transport requires a unique return target")
+        lines.extend(
+            [
+                "",
+                "RETURN TRANSPORT TARGET",
+                f"Write the complete marked return handoff verbatim to: {return_target}",
+                "Create its parent directory if needed. Also emit the same marked block in the response",
+                "as required by the canonical S4B prompt. This path is transport evidence, not policy.",
             ]
         )
     if omitted:
@@ -669,7 +685,14 @@ def prepare(args: argparse.Namespace) -> Path:
     sources.extend(derived)
 
     provider = args.provider or STAGES[stage]["provider"]
-    packet_text = build_packet(stage, packet_id, provider, prompt, sources, parent, omitted)
+    return_target = (
+        (project / ".builderos" / "returns" / f"{packet_id}.md").resolve()
+        if stage == "S4B"
+        else None
+    )
+    packet_text = build_packet(
+        stage, packet_id, provider, prompt, sources, parent, omitted, return_target
+    )
 
     output.mkdir(parents=True)
     evidence = output / "evidence"
@@ -698,6 +721,7 @@ def prepare(args: argparse.Namespace) -> Path:
         "packet_file": PACKET_NAME,
         "packet_sha256": sha256_file(packet_path),
         "expected_transcript": "evidence/transcript.md",
+        "return_target": str(return_target) if return_target else None,
         "sources": serial_sources,
         "omitted_conditionals": omitted,
         "forbidden_inputs": STAGES[stage]["forbidden_inputs"],
@@ -728,6 +752,7 @@ def prepare(args: argparse.Namespace) -> Path:
 - Paste packet: [`{PACKET_NAME}`]({PACKET_NAME})
 - Machine-readable provenance: [`{MANIFEST_NAME}`]({MANIFEST_NAME})
 - Expected verbatim transcript: `evidence/transcript.md`
+{f'- Structured return target: `{return_target}`' if return_target else ''}
 
 | Input | Delivered? | Source SHA-256 | Source |
 |---|---|---|---|
@@ -832,6 +857,28 @@ def verify_packet(packet_dir: Path) -> list[str]:
         ]:
             problems.append("S5 packet source set is not the canonical isolated pair")
 
+    return_target = manifest.get("return_target")
+    if stage == "S4B":
+        expected_target = (
+            Path(manifest.get("project", ""))
+            / ".builderos"
+            / "returns"
+            / f"{manifest.get('packet_id')}.md"
+        ).resolve()
+        if not return_target:
+            problems.append("S4B packet is missing its structured return target")
+        else:
+            actual_target = Path(return_target).resolve()
+            if actual_target != expected_target:
+                problems.append("S4B structured return target does not match its packet ID")
+            if not is_within(actual_target, Path(manifest.get("project", "")) / ".builderos" / "returns"):
+                problems.append("S4B structured return target escapes the project return directory")
+            target_line = f"Write the complete marked return handoff verbatim to: {actual_target}"
+            if packet.count(target_line) != 1:
+                problems.append("S4B packet return target is missing or duplicated")
+    elif return_target is not None:
+        problems.append("non-S4B packet declares an unexpected structured return target")
+
     parent_manifest = manifest.get("parent_manifest")
     if parent_manifest:
         parent_path = Path(parent_manifest)
@@ -886,6 +933,12 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S1 packet must support a linked same-stage resume")
     if "templates/RETURN-HANDOFF.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
         problems.append("S4B packet must deliver the canonical return-handoff template")
+    if ".builderos/creative-operations.json" not in specs.get("S4B", {}).get(
+        "project_inputs", []
+    ):
+        problems.append("S4B packet must carry the generated creative-operations plan")
+    if "skills/visual-qa.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
+        problems.append("S4B packet must deliver the selected visual-QA method")
     return problems
 
 
@@ -1137,10 +1190,57 @@ def self_test() -> int:
             "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n## Dependencies to install\n\nNone.\n",
             encoding="utf-8",
         )
+        operations_dir = project / ".builderos"
+        operations_dir.mkdir(exist_ok=True)
+        operations_path = operations_dir / "creative-operations.json"
+        operations_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "project": str(project),
+                    "requirements": [{"id": "DES-001", "claim": "Signature overlap"}],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         s4b_dir = sandbox / "R1-S4B"
         prepare(ns(stage="S4B", project=str(project), output=str(s4b_dir), parent=str(s4a_dir)))
         s4b_manifest = json.loads(read(s4b_dir / MANIFEST_NAME))
-        case("Cursor S4B packet verifies (positive control)", not verify_packet(s4b_dir) and s4b_manifest["provider"] == "cursor")
+        expected_return_target = (
+            project / ".builderos" / "returns" / f"{s4b_manifest['packet_id']}.md"
+        ).resolve()
+        case(
+            "Cursor S4B packet verifies with trace and unique return target (positive control)",
+            not verify_packet(s4b_dir)
+            and s4b_manifest["provider"] == "cursor"
+            and s4b_manifest["return_target"] == str(expected_return_target)
+            and any(
+                item["label"] == ".builderos/creative-operations.json"
+                for item in s4b_manifest["sources"]
+            ),
+        )
+        s4b_manifest_path = s4b_dir / MANIFEST_NAME
+        s4b_manifest_original = read(s4b_manifest_path)
+        malformed_return_target = json.loads(s4b_manifest_original)
+        malformed_return_target["return_target"] = str(project / "QA.md")
+        s4b_manifest_path.write_text(
+            json.dumps(malformed_return_target, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        case(
+            "S4B return target cannot escape its unique transport path",
+            any("return target" in problem for problem in verify_packet(s4b_dir)),
+        )
+        s4b_manifest_path.write_text(s4b_manifest_original, encoding="utf-8")
+        operations_original = read(operations_path)
+        operations_path.write_text(operations_original + "\n", encoding="utf-8")
+        case(
+            "changed creative-operations input makes the S4B packet stale",
+            any("stale source" in problem for problem in verify_packet(s4b_dir)),
+        )
+        operations_path.write_text(operations_original, encoding="utf-8")
         returned = (
             "# IMPLEMENTATION RETURN HANDOFF: fixture\n\n"
             "**Status:** complete\n**Provider:** fixture\n**Model:** fixture\n"

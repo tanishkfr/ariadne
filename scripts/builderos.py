@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -85,6 +86,19 @@ def load_creative_intelligence():
 
 
 CREATIVE = load_creative_intelligence()
+
+
+def load_creative_operations():
+    path = ROOT / "scripts" / "creative-operations.py"
+    spec = importlib.util.spec_from_file_location("builder_os_creative_operations", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError_("Builder OS creative-operations helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+OPERATIONS = load_creative_operations()
 
 
 def now() -> str:
@@ -198,6 +212,63 @@ def append_log(
         handle.write(entry)
 
 
+def intervention_summary(state: dict) -> dict:
+    rows = state.get("human_interventions", [])
+    counts = {
+        classification: sum(
+            item.get("classification") == classification and item.get("status") != "prevented"
+            for item in rows
+        )
+        for classification in OPERATIONS.INTERVENTION_CLASSES
+    }
+    return {
+        "necessary_decisions": counts["necessary"],
+        "valuable_creative_choices": counts["valuable"],
+        "avoidable_interruptions": counts["avoidable"],
+        "system_maintenance_interruptions": counts["unacceptable"],
+        "prevented_interruptions": sum(item.get("status") == "prevented" for item in rows),
+        "pending": [item for item in rows if item.get("status") == "pending"],
+    }
+
+
+def ensure_intervention(
+    state: dict,
+    classification: str,
+    need: str,
+    reason: str,
+    status: str = "pending",
+    evidence: str = "",
+) -> dict:
+    if classification not in OPERATIONS.INTERVENTION_CLASSES:
+        raise RuntimeError_(f"Unsupported human intervention classification: {classification}")
+    if status not in ("pending", "resolved", "observed", "prevented"):
+        raise RuntimeError_(f"Unsupported human intervention status: {status}")
+    need = need.strip()
+    reason = reason.strip()
+    if not need or not reason:
+        raise RuntimeError_("A human intervention needs the decision/action and why it matters")
+    matches = [
+        item for item in state.setdefault("human_interventions", [])
+        if item.get("classification") == classification and item.get("need") == need
+    ]
+    if matches:
+        row = matches[-1]
+        if row.get("status") == "pending" and status == "resolved":
+            row.update({"status": "resolved", "resolved_at": now(), "evidence": evidence})
+        return row
+    row = {
+        "id": f"human-{len(state['human_interventions']) + 1}",
+        "classification": classification,
+        "need": need,
+        "reason": reason,
+        "status": status,
+        "recorded_at": now(),
+        "evidence": evidence,
+    }
+    state["human_interventions"].append(row)
+    return row
+
+
 def initial_log(run_id: str, project: Path, request: str) -> str:
     return f"""# Builder OS operations — {run_id}
 
@@ -218,6 +289,16 @@ happens next. Canonical policies remain in Builder OS; this is project history.
 - **Reasonably assumed:** supported but not directly observed; reason recorded.
 - **Externally unverified:** requires a provider or environment that was not run.
 - **Blocked:** missing information materially prevents safe continuation.
+
+## Human intervention budget
+
+- **Necessary:** human authority or an unavoidable external action.
+- **Valuable:** a creative choice where human judgement materially improves the work.
+- **Avoidable:** routine work Builder OS should have handled.
+- **Unacceptable:** the human had to repair Builder OS machinery.
+
+Structured counts and pending decisions live in `{STATE_NAME}`. The purpose is
+to reduce interruption, not to turn it into a score.
 
 ## Timeline
 """
@@ -350,6 +431,7 @@ def start(args: argparse.Namespace) -> int:
         "packets": [{"id": packet_id, "stage": "S1", "path": str(output)}],
         "provider_preflight": None,
         "notes": [],
+        "human_interventions": [],
         "creative_evidence_required": True,
         "next": "Complete the project brief from the prepared context.",
     }
@@ -651,6 +733,9 @@ def project_intelligence(
     creative_ledger = CREATIVE.load_ledger(project)
     creative_summary = CREATIVE.summary(creative_ledger)
     creative_problems = CREATIVE.project_problems(project)
+    operations_ledger = OPERATIONS.load_ledger(project)
+    operations_summary = OPERATIONS.summary(operations_ledger)
+    operations_problems = OPERATIONS.project_problems(project)
 
     open_rows = markdown_table_rows(safe_section(project_text, "Open questions"))
     blocking_questions = [
@@ -703,6 +788,24 @@ def project_intelligence(
             (
                 f"{creative_summary['completed']}/{creative_summary['selected']} selected capabilities completed or used; "
                 f"{references['inspected']} inspected reference(s), {creative_summary['decisions']} traced decision(s)."
+            ),
+        )
+
+    if operations_ledger is None:
+        if g1_locked and stage in ("S4A", "S4B", "S5", "S6"):
+            add("design trace", "attention", "The approved direction has no generated implementation/visual-QA trace yet.")
+        else:
+            add("design trace", "not-needed", "Post-G1 trace begins only after the direction is human-approved.")
+    elif operations_problems:
+        add("design trace", "attention", operations_problems[0])
+    else:
+        add(
+            "design trace",
+            "ready",
+            (
+                f"{operations_summary['requirements']} approved requirement(s); "
+                f"{operations_summary['implemented']} implemented and "
+                f"{operations_summary['observed']} directly observed."
             ),
         )
 
@@ -836,6 +939,8 @@ def project_intelligence(
         "lessons": lessons,
         "runtime_state": runtime,
         "creative": creative_summary,
+        "creative_operations": operations_summary,
+        "human_effort": intervention_summary(state),
         "health": health,
         "overall_health": overall,
         "notes": notes,
@@ -1004,6 +1109,13 @@ def provider_preflight(args: argparse.Namespace) -> int:
         if decision in ("verified", "reasonably-assumed", "not-required")
         else recommendation
     )
+    if decision == "human-check-required":
+        ensure_intervention(
+            state,
+            "necessary",
+            "Confirm the external provider's available quota.",
+            "A large external task cannot safely proceed from an unobserved capacity assumption.",
+        )
     write_json(run_root / STATE_NAME, state)
     append_log(
         run_root,
@@ -1185,6 +1297,14 @@ def ingest_return(args: argparse.Namespace) -> int:
         if return_status == "complete"
         else "Resume from the incomplete-work section or route the blocker."
     )
+    ensure_intervention(
+        state,
+        "necessary",
+        "Start the selected external implementation provider.",
+        "The current provider boundary cannot execute without the human opening or authorising that external environment.",
+        status="resolved",
+        evidence=str(destination),
+    )
     write_json(run_root / STATE_NAME, state)
     append_log(
         run_root,
@@ -1270,6 +1390,20 @@ def ingest_review(args: argparse.Namespace) -> int:
     state["updated_at"] = now()
     state["evidence_state"] = "independent review response and judgement recorded"
     state["next"] = "Present mechanical and independent evidence for the human G3 decision."
+    ensure_intervention(
+        state,
+        "necessary",
+        "Start the isolated independent review session.",
+        "Creative judgement must remain separate from the build context.",
+        status="resolved",
+        evidence=str(raw_destination),
+    )
+    ensure_intervention(
+        state,
+        "necessary",
+        "Decide G3 from mechanical and independent review evidence.",
+        "Only the human can accept the build and any recorded evidence exception.",
+    )
     write_json(run_root / STATE_NAME, state)
     append_log(
         run_root,
@@ -1417,6 +1551,129 @@ def creative_check(args: argparse.Namespace) -> int:
     return 0 if not problems else 2
 
 
+def operations_plan(args: argparse.Namespace) -> int:
+    """Derive post-G1 implementation and visual-QA targets from locked documents."""
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    project = Path(state["project"])
+    if OPERATIONS.ledger_path(project).exists():
+        raise RuntimeError_("Creative operations planning is already recorded; do not replace its evidence")
+    try:
+        ledger = OPERATIONS.create_ledger(project)
+        destination = OPERATIONS.save_ledger(project, ledger)
+    except OPERATIONS.OperationsError as exc:
+        raise RuntimeError_(str(exc)) from exc
+    state["updated_at"] = now()
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Design-to-implementation trace generated",
+        "Approved design decisions need explicit implementation and project-specific visual-QA targets.",
+        f"Verified: {len(ledger['requirements'])} approved requirement(s) and {len(ledger['visual_qa_plan']['targets'])} QA target(s) generated.",
+        [str(destination)],
+        "Inputs are hashed; this evidence does not approve implementation or a gate.",
+        state.get("next", "Continue from the current verified boundary."),
+    )
+    print("Done. The approved direction now has a traceable implementation and visual-QA plan.")
+    print("From you: nothing right now.")
+    return 0
+
+
+def record_operations(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    project = Path(state["project"])
+    ledger = OPERATIONS.load_ledger(project)
+    if ledger is None:
+        raise RuntimeError_("Post-G1 creative operations planning has not been recorded")
+    source = Path(args.input).resolve()
+    if not source.is_file() or source.stat().st_size == 0:
+        raise RuntimeError_("Creative operations input is missing or empty")
+    try:
+        value = json.loads(read(source))
+        OPERATIONS.apply_events(project, ledger, value)
+        problems = OPERATIONS.ledger_problems(project, ledger)
+        if problems:
+            raise OPERATIONS.OperationsError("; ".join(problems))
+        destination = OPERATIONS.save_ledger(project, ledger)
+    except (json.JSONDecodeError, OPERATIONS.OperationsError) as exc:
+        raise RuntimeError_(str(exc)) from exc
+    result = OPERATIONS.summary(ledger)
+    state["updated_at"] = now()
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Creative operations evidence recorded",
+        "Implementation, rendered evidence, drift, creative judgement, and social strategy must remain separate claims.",
+        (
+            f"{result['implemented']}/{result['requirements']} requirement(s) implemented; "
+            f"{result['observed']} observed/verified visual result(s); "
+            f"{result['creative_reviews']} actionable creative review(s); "
+            f"{result['social_strategies']} optional social strategy record(s)."
+        ),
+        [str(source), str(destination)],
+        f"Input SHA-256 {sha256(source)}; ledger validation passed.",
+        state.get("next", "Continue from the current verified boundary."),
+    )
+    print("Done. I recorded the post-G1 evidence without promoting assumptions to observations.")
+    print("From you: nothing right now.")
+    return 0
+
+
+def operations_check(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    project = Path(state["project"])
+    ledger = OPERATIONS.load_ledger(project)
+    problems = OPERATIONS.project_problems(project, args.require)
+    payload = {
+        "status": "ready" if ledger is not None and not problems else "blocked",
+        "project": str(project),
+        "summary": OPERATIONS.summary(ledger),
+        "required_evidence": args.require,
+        "problems": problems if ledger is not None else ["post-G1 creative operations are not recorded"],
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    elif payload["problems"]:
+        print("I found post-G1 evidence gaps:")
+        for problem in payload["problems"]:
+            print(f"- {problem}")
+        print("Next: record the missing implementation or observation evidence; do not rewrite it as verified.")
+    else:
+        print("Ready. Approved decisions, implementation mappings, visual evidence, and creative review remain traceable.")
+        print("From you: nothing right now.")
+    return 0 if not payload["problems"] else 2
+
+
+def record_intervention(args: argparse.Namespace) -> int:
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    before = len(state.get("human_interventions", []))
+    row = ensure_intervention(
+        state,
+        args.classification,
+        args.need,
+        args.reason,
+        status=args.status,
+        evidence=args.evidence or "",
+    )
+    if len(state.get("human_interventions", [])) == before and row.get("status") != "resolved":
+        raise RuntimeError_("That human intervention is already recorded")
+    state["updated_at"] = now()
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        f"Human intervention classified {args.classification.upper()}",
+        args.reason,
+        f"{args.status}: {args.need}",
+        evidence=args.evidence or "classification recorded in runtime state",
+        next_action=state.get("next", "Continue from the current verified boundary."),
+    )
+    print(f"Done. Human intervention recorded as {args.classification.upper()} ({args.status}).")
+    return 0
+
+
 def record_note(args: argparse.Namespace) -> int:
     run_root = resolve_run_root(args)
     state = load_state(run_root)
@@ -1457,6 +1714,24 @@ def stage_has_evidence(packet: Path) -> bool:
     )
 
 
+def structured_return_target(packet: Path) -> Path | None:
+    manifest_path = packet / TRANSPORT.MANIFEST_NAME
+    if not manifest_path.is_file():
+        return None
+    manifest = json.loads(read(manifest_path))
+    value = manifest.get("return_target")
+    if not value:
+        return None
+    target = Path(value).resolve()
+    project = Path(manifest.get("project", "")).resolve()
+    expected = (
+        project / ".builderos" / "returns" / f"{manifest.get('packet_id')}.md"
+    ).resolve()
+    if target != expected:
+        raise RuntimeError_("The S4B structured return target does not match this packet")
+    return target
+
+
 def advance(args: argparse.Namespace) -> int:
     """Record obvious same-session outputs and continue through routine boundaries."""
     run_root = resolve_run_root(args)
@@ -1464,6 +1739,19 @@ def advance(args: argparse.Namespace) -> int:
     entry, packet = current_packet(state, allow_project_drift=True)
     stage = entry["stage"]
     project = Path(state["project"])
+
+    if stage == "S4B" and not stage_has_evidence(packet):
+        target = structured_return_target(packet)
+        if target is not None and target.is_file():
+            ingest_return(
+                argparse.Namespace(
+                    run_root=str(run_root),
+                    project=None,
+                    input=str(target),
+                )
+            )
+            state = load_state(run_root)
+            entry, packet = current_packet(state, allow_project_drift=True)
 
     if not stage_has_evidence(packet):
         expected = EXPECTED_STAGE_OUTPUTS.get(stage)
@@ -1496,6 +1784,12 @@ def advance(args: argparse.Namespace) -> int:
             if not re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", design) or not re.match(
                 r"G1\b", state_field(agents, "Last gate passed")
             ):
+                ensure_intervention(
+                    state,
+                    "necessary",
+                    "Decide the G1 creative direction.",
+                    "Only the human can approve, reject, or redirect the proposed thesis.",
+                )
                 state["next"] = "Review the proposed design direction at G1."
                 state["updated_at"] = now()
                 write_json(run_root / STATE_NAME, state)
@@ -1653,6 +1947,30 @@ def prepare_next(args: argparse.Namespace) -> int:
         append_log(run_root, "Continuation paused", reason, "No packet created.", next_action=reason)
         print(f"Paused: {reason}")
         return 2
+    if entry["stage"] == "S3" and stage == "S4A":
+        ensure_intervention(
+            state,
+            "necessary",
+            "Decide the G1 creative direction.",
+            "Only the human can approve, reject, or redirect the proposed thesis.",
+            status="resolved",
+            evidence="DESIGN.md locked at G1 and AGENTS.md records G1.",
+        )
+    if stage == "S4B" and OPERATIONS.load_ledger(Path(state["project"])) is None:
+        try:
+            operations_ledger = OPERATIONS.create_ledger(Path(state["project"]))
+            operations_destination = OPERATIONS.save_ledger(Path(state["project"]), operations_ledger)
+        except OPERATIONS.OperationsError as exc:
+            raise RuntimeError_(str(exc)) from exc
+        append_log(
+            run_root,
+            "Design-to-implementation trace generated",
+            "The approved direction needs project-specific implementation and visual-QA targets before the build starts.",
+            f"Verified: {len(operations_ledger['requirements'])} approved requirement(s) and a prioritised visual-QA plan generated.",
+            [str(operations_destination)],
+            "Derived from locked DESIGN.md, HANDOFF.md, PROJECT.md, and AGENTS.md; no gate was granted.",
+            "Prepare the verified implementation packet.",
+        )
     packet_id, output = allocate_packet(run_root, state["run_id"], stage)
     kwargs = dict(
         stage=stage,
@@ -1675,6 +1993,20 @@ def prepare_next(args: argparse.Namespace) -> int:
     state["updated_at"] = now()
     state["evidence_state"] = "verified-transport; stage not yet observed"
     state["next"] = f"Continue with {FRIENDLY_STAGES.get(stage, stage)}."
+    if stage == "S4B":
+        ensure_intervention(
+            state,
+            "necessary",
+            "Start the selected external implementation provider.",
+            "The current provider boundary cannot execute without the human opening or authorising that external environment.",
+        )
+    elif stage == "S5":
+        ensure_intervention(
+            state,
+            "necessary",
+            "Start the isolated independent review session.",
+            "Creative judgement must remain separate from the build context.",
+        )
     write_json(run_root / STATE_NAME, state)
     append_log(
         run_root,
@@ -1756,6 +2088,8 @@ def skill_contract_problems(
         "handoff-readiness", "builderos.py advance", "record-note",
         "ingest-return", "ingest-review", "same-stage retry", "--adopt-existing",
         "creative-plan", "record-creative", "creative-check",
+        "operations-plan", "record-operations", "operations-check",
+        "references/creative-operations.md",
         "Never grant a gate",
     ):
         if token not in skill_text:
@@ -1776,6 +2110,12 @@ def repository_contract_problems() -> list[str]:
         ROOT / "prompts" / "project-review.md",
         ROOT / "scripts" / "creative-intelligence.py",
         ROOT / ".agents" / "skills" / "builderos" / "references" / "creative-intelligence.md",
+        ROOT / "scripts" / "creative-operations.py",
+        ROOT / ".agents" / "skills" / "builderos" / "references" / "creative-operations.md",
+        ROOT / "skills" / "visual-qa.md",
+        ROOT / "skills" / "creative-review.md",
+        ROOT / "skills" / "social-strategy.md",
+        ROOT / "templates" / "SOCIAL-STRATEGY.md",
     ]
     for path in required:
         if not path.is_file():
@@ -1815,6 +2155,7 @@ def repository_contract_problems() -> list[str]:
     for token in ("BEGIN QA JUDGEMENT", "END QA JUDGEMENT", "## Judgement"):
         if token not in review:
             problems.append(f"S5 prompt missing review-ingestion contract: {token}")
+    problems.extend(OPERATIONS.repository_contract_problems())
     return problems
 
 
@@ -1826,7 +2167,17 @@ def self_test_workspace():
         yield path
     finally:
         if path.exists():
-            shutil.rmtree(path)
+            last_error = None
+            for attempt in range(10):
+                try:
+                    shutil.rmtree(path)
+                    last_error = None
+                    break
+                except PermissionError as exc:
+                    last_error = exc
+                    time.sleep(0.1 * (attempt + 1))
+            if last_error is not None:
+                raise last_error
 
 
 def filled_return(status_value: str = "complete") -> str:
@@ -2204,6 +2555,14 @@ def self_test() -> int:
             "# DESIGN\n\n**Status:** locked at G1 on 2026-08-23\n\n"
             "## Design thesis\n\n"
             "**A speaking line makes sound visible through one typographic gesture.**\n\n"
+            "## Signature moment\n\n"
+            "- **What / where:** A speaking line crosses the listening boundary.\n"
+            "- **Why memorable:** Sound becomes a typographic gesture.\n"
+            "- **Mobile equivalent:** The line becomes a vertical sound trace.\n\n"
+            "## Responsive behaviour\n\n"
+            "| Width | Composition |\n|---|---|\n"
+            "| 375 | The line becomes a vertical sound trace. |\n"
+            "| 1280 | The line crosses the listening boundary. |\n\n"
             "## Asset direction\n\n"
             "| Asset | Exists? | Plan | Blocking? |\n|---|---|---|---|\n"
             "| none | yes | no asset required | no |\n",
@@ -2324,6 +2683,26 @@ def self_test() -> int:
             "cleared preflight prepares a Cursor-labelled S4B packet",
             s4b_entry["stage"] == "S4B" and s4b_manifest["provider"] == "cursor",
         )
+        operations_ledger = OPERATIONS.load_ledger(project)
+        case(
+            "S4B preparation derives project-specific visual QA without another human task",
+            operations_ledger is not None
+            and not OPERATIONS.ledger_problems(project, operations_ledger)
+            and any(item["id"] == "signature-moment" for item in operations_ledger["requirements"]),
+        )
+        effort = intervention_summary(state)
+        case(
+            "human effort separates authority from routine machinery",
+            effort["necessary_decisions"] >= 1
+            and effort["avoidable_interruptions"] == 0
+            and effort["system_maintenance_interruptions"] == 0,
+        )
+        try:
+            ensure_intervention(state, "routine", "Locate a packet.", "Fixture invalid class.")
+            bad_intervention_allowed = True
+        except RuntimeError_:
+            bad_intervention_allowed = False
+        case("unknown human intervention class is rejected", not bad_intervention_allowed)
         before_return_provider = project_intelligence(
             run_root, state, s4b_entry, s4b_packet, s4b_manifest
         )["provider_evidence"]
@@ -2353,9 +2732,29 @@ def self_test() -> int:
             and retry_manifest["parent_id"] == s4b_entry["id"]
             and retry_manifest["parent_evidence_kind"] == "structured-return-handoff",
         )
-        returned_source = workspace / "return.md"
-        returned_source.write_text(filled_return(), encoding="utf-8")
-        ingest_return(runtime_args(input=str(returned_source)))
+        unexpected_return = project / ".builderos" / "returns" / "wrong-packet.md"
+        unexpected_return.parent.mkdir(parents=True, exist_ok=True)
+        unexpected_return.write_text(filled_return(), encoding="utf-8")
+        advance_result = advance(runtime_args())
+        case(
+            "an unrelated project return cannot be ingested as the current packet",
+            advance_result == 2
+            and not (retry_packet / "evidence" / "return-handoff.md").exists(),
+        )
+        expected_return = Path(retry_manifest["return_target"])
+        expected_return.write_text(filled_return(), encoding="utf-8")
+        advance(
+            runtime_args(
+                target="http://127.0.0.1:3000",
+                lenses="creative-director (light)",
+            )
+        )
+        state = load_state(run_root)
+        external = next(
+            item for item in state["human_interventions"]
+            if item["need"] == "Start the selected external implementation provider."
+        )
+        case("provider return resolves the external human action", external["status"] == "resolved")
         return_record_path = retry_packet / "evidence" / "return-handoff.json"
         case(
             "implementation return produces deterministic machine state",
@@ -2365,8 +2764,8 @@ def self_test() -> int:
             == sha256(retry_packet / "evidence" / "return-handoff.md"),
         )
         state = load_state(run_root)
-        returned_entry, returned_packet = current_packet(state, allow_project_drift=True)
-        returned_manifest = json.loads(read(returned_packet / TRANSPORT.MANIFEST_NAME))
+        returned_entry, returned_packet = retry_entry, retry_packet
+        returned_manifest = retry_manifest
         after_return_provider = project_intelligence(
             run_root, state, returned_entry, returned_packet, returned_manifest
         )["provider_evidence"]
@@ -2375,8 +2774,6 @@ def self_test() -> int:
             after_return_provider["executed"]["state"] == "reported-by-provider-return"
             and after_return_provider["returned_successfully"]["state"] == "reported-complete",
         )
-        prepare_next(runtime_args(target="http://127.0.0.1:3000", lenses="creative-director (light)"))
-        state = load_state(run_root)
         _s5_entry, s5_packet = current_packet(state)
         s5_manifest = json.loads(read(s5_packet / TRANSPORT.MANIFEST_NAME))
         delivered = [source["label"] for source in s5_manifest["sources"] if source.get("delivered", True)]
@@ -2574,6 +2971,38 @@ def parser() -> argparse.ArgumentParser:
     run_selector(creative_check_p)
     creative_check_p.add_argument("--json", action="store_true")
 
+    operations_plan_p = sub.add_parser(
+        "operations-plan", help="derive post-G1 implementation and project-specific visual-QA targets"
+    )
+    run_selector(operations_plan_p)
+
+    operations_record_p = sub.add_parser(
+        "record-operations", help="record implementation, rendered evidence, drift, review, or social provenance"
+    )
+    run_selector(operations_record_p)
+    operations_record_p.add_argument("--input", required=True)
+
+    operations_check_p = sub.add_parser(
+        "operations-check", help="check post-G1 claims against implementation and rendered evidence"
+    )
+    run_selector(operations_check_p)
+    operations_check_p.add_argument(
+        "--require",
+        choices=["plan", "implementation", "visual", "review", "social"],
+        default="plan",
+    )
+    operations_check_p.add_argument("--json", action="store_true")
+
+    intervention_p = sub.add_parser(
+        "record-intervention", help="classify a human interruption in the run operations record"
+    )
+    run_selector(intervention_p)
+    intervention_p.add_argument("--classification", required=True, choices=list(OPERATIONS.INTERVENTION_CLASSES))
+    intervention_p.add_argument("--status", required=True, choices=["pending", "resolved", "observed", "prevented"])
+    intervention_p.add_argument("--need", required=True)
+    intervention_p.add_argument("--reason", required=True)
+    intervention_p.add_argument("--evidence")
+
     note_p = sub.add_parser("record-note", help="add a durable project decision, risk, or evidence note")
     run_selector(note_p)
     note_p.add_argument(
@@ -2634,6 +3063,10 @@ def main() -> int:
             "creative-plan": creative_plan,
             "record-creative": record_creative,
             "creative-check": creative_check,
+            "operations-plan": operations_plan,
+            "record-operations": record_operations,
+            "operations-check": operations_check,
+            "record-intervention": record_intervention,
             "record-note": record_note,
             "advance": advance,
             "prepare-next": prepare_next,
@@ -2642,7 +3075,7 @@ def main() -> int:
             return commands[args.command](args)
         parser().print_help()
         return 0
-    except (RuntimeError_, TRANSPORT.PacketError, CREATIVE.CreativeError) as exc:
+    except (RuntimeError_, TRANSPORT.PacketError, CREATIVE.CreativeError, OPERATIONS.OperationsError) as exc:
         print(f"STOPPED: {exc}")
         return 1
 
