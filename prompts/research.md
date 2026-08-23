@@ -51,6 +51,16 @@ EVIDENCE BOUNDARY
 - When the selected research skill finishes, record its output as RESEARCH.md.
   Mark it used only when a later decision cites the resulting evidence.
 
+RESOURCE EVIDENCE
+When the question evaluates a library, framework, browser API, font, icon set,
+asset source, image source, technique, design tool, or component primitive,
+record the proposed resource separately in the supplied creative-evidence
+ledger. Include what it provides, why it is appropriate, compatibility,
+licence where relevant, implementation cost, named alternatives, whether it is
+actually necessary, the inspected source record, and the exact downstream
+decision anchor. A familiar package name is not evidence and availability does
+not make a dependency necessary.
+
 ALLOWED WRITES
 - RESEARCH.md.
 - .builderos/creative-evidence.json and its source-capture artifacts, when the

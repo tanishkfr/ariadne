@@ -354,6 +354,7 @@ DELIVERY_CONTRACTS = [
         "tokens": [
             "REQUIRED INPUTS", "QUESTIONS", "RESEARCH-POLICY.md",
             "templates/RESEARCH.md", ".builderos/creative-evidence.json", "IF MISSING",
+            "RESOURCE EVIDENCE", "compatibility", "licence", "alternatives",
             "NEXT: S3 Design direction.",
         ],
         "inputs": ["QUESTIONS", "RESEARCH-POLICY.md", "templates/RESEARCH.md", ".builderos/creative-evidence.json"],
@@ -827,6 +828,10 @@ def self_test_delivery_contracts():
          bool(check_delivery_contract_texts(mutate(
              "prompts/research.md",
              "NEXT: S2 Research resolution.", "NEXT: S3 Design direction."
+         )))),
+        ("missing S2 resource evidence contract fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/research.md", "RESOURCE EVIDENCE", "RESOURCE NOTES"
          )))),
         ("missing S4B canonical QA policy fails",
          bool(check_delivery_contract_texts(mutate(

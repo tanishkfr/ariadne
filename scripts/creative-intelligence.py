@@ -38,8 +38,21 @@ DIMENSIONS = (
     "motion_dependence",
 )
 SKILL_STATES = ("recommended", "invoked", "completed", "used", "skipped", "failed")
+SKILL_TRANSITIONS = {
+    "recommended": {"invoked", "skipped"},
+    "invoked": {"completed", "failed"},
+    "completed": {"used"},
+    "used": {"used"},
+    "skipped": set(),
+    "failed": set(),
+}
 REFERENCE_STATES = ("found", "inspected", "inaccessible")
 INSPECTION_KINDS = ("content", "visual", "interaction")
+RESOURCE_CATEGORIES = (
+    "library", "framework", "browser-api", "font", "icon-set", "asset-source",
+    "image-source", "technique", "design-tool", "component-primitive",
+)
+RESOURCE_DECISIONS = ("use", "do-not-use", "defer")
 STAGE_ORDER = {"S1": 1, "S2": 2, "S3": 3, "S4A": 4, "S4B": 5, "S5": 6}
 
 
@@ -254,6 +267,7 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
         "assessment": assessment,
         "skills": skills,
         "references": [],
+        "resources": [],
         "decisions": [],
         "conflicts": [],
         "directions": [],
@@ -286,15 +300,7 @@ def record_skill_event(ledger: dict, event: dict) -> None:
     if state not in SKILL_STATES[1:]:
         raise CreativeError(f"unsupported skill evidence state: {state}")
     current = skill.get("state")
-    allowed = {
-        "recommended": {"invoked", "skipped"},
-        "invoked": {"completed", "failed"},
-        "completed": {"used"},
-        "used": {"used"},
-        "skipped": set(),
-        "failed": set(),
-    }
-    if state not in allowed.get(current, set()):
+    if state not in SKILL_TRANSITIONS.get(current, set()):
         raise CreativeError(f"invalid skill transition for {name}: {current} -> {state}")
     if state == "skipped" and skill.get("mandatory"):
         raise CreativeError(f"mandatory skill cannot be skipped: {name}")
@@ -372,6 +378,75 @@ def record_reference(ledger: dict, event: dict) -> None:
             row["attempt_evidence"] = evidence_record(Path(str(event["evidence_path"])))
     if not existing:
         ledger.setdefault("references", []).append(row)
+
+
+def record_resource(ledger: dict, event: dict) -> None:
+    resource_id = str(event.get("id", "")).strip()
+    name = str(event.get("name", "")).strip()
+    category = str(event.get("category", "")).strip()
+    decision = str(event.get("decision", "")).strip()
+    if not resource_id or not name or category not in RESOURCE_CATEGORIES:
+        raise CreativeError("resource evidence needs id, name, and a valid category")
+    if decision not in RESOURCE_DECISIONS:
+        raise CreativeError("resource evidence needs use, do-not-use, or defer decision")
+    if any(item.get("id") == resource_id for item in ledger.get("resources", [])):
+        raise CreativeError(f"resource ID is already recorded: {resource_id}")
+    alternatives = event.get("alternatives", [])
+    if (
+        not isinstance(alternatives, list)
+        or not alternatives
+        or not all(
+            isinstance(item, dict)
+            and str(item.get("name", "")).strip()
+            and str(item.get("reason", "")).strip()
+            for item in alternatives
+        )
+    ):
+        raise CreativeError("resource evidence needs at least one named alternative and reason")
+    reference_ids = event.get("source_reference_ids", [])
+    references = {item.get("id"): item for item in ledger.get("references", [])}
+    if not isinstance(reference_ids, list) or not reference_ids:
+        raise CreativeError("resource evidence needs at least one inspected source reference")
+    for reference_id in reference_ids:
+        reference = references.get(reference_id)
+        if not reference or reference.get("state") != "inspected":
+            raise CreativeError(f"resource cites an uninspected source: {reference_id}")
+    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+    anchor = str(event.get("artifact_anchor", "")).strip()
+    if not anchor or anchor not in Path(artifact["path"]).read_text(encoding="utf-8"):
+        raise CreativeError("resource decision anchor is not present in the downstream artifact")
+    row = {
+        "id": resource_id,
+        "name": name,
+        "category": category,
+        "provides": str(event.get("provides", "")).strip(),
+        "appropriate_because": str(event.get("appropriate_because", "")).strip(),
+        "compatibility": str(event.get("compatibility", "")).strip(),
+        "license": str(event.get("license", "")).strip(),
+        "implementation_cost": str(event.get("implementation_cost", "")).strip(),
+        "alternatives": [
+            {"name": str(item["name"]).strip(), "reason": str(item["reason"]).strip()}
+            for item in alternatives
+        ],
+        "necessary": bool(event.get("necessary", False)),
+        "decision": decision,
+        "source_reference_ids": reference_ids,
+        "artifact": artifact,
+        "artifact_anchor": anchor,
+        "recorded_at": now(),
+    }
+    if not all(
+        row[key]
+        for key in ("provides", "appropriate_because", "compatibility", "license", "implementation_cost")
+    ):
+        raise CreativeError(
+            "resource evidence needs provides, why, compatibility, licence, and implementation cost"
+        )
+    if decision == "use" and not row["necessary"]:
+        raise CreativeError("a resource selected for use must be marked necessary")
+    if decision == "do-not-use" and row["necessary"]:
+        raise CreativeError("a rejected resource cannot be marked necessary")
+    ledger.setdefault("resources", []).append(row)
 
 
 def record_decision(ledger: dict, event: dict) -> None:
@@ -457,6 +532,8 @@ def apply_event(ledger: dict, event: dict) -> None:
         record_skill_event(ledger, event)
     elif kind == "reference":
         record_reference(ledger, event)
+    elif kind == "resource":
+        record_resource(ledger, event)
     elif kind == "decision":
         record_decision(ledger, event)
     elif kind == "conflict":
@@ -533,6 +610,19 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
         history = skill.get("history", [])
         if not history or history[-1].get("state") != skill.get("state"):
             problems.append(f"skill history does not match current state: {skill.get('name')}")
+        expected_initial = "recommended" if skill.get("selected") else "skipped"
+        if history and history[0].get("state") != expected_initial:
+            problems.append(f"skill history has invalid initial state: {skill.get('name')}")
+        previous = None
+        for index, event in enumerate(history):
+            state = event.get("state")
+            if state not in SKILL_STATES:
+                problems.append(f"skill history has invalid state: {skill.get('name')} event {index + 1}")
+            elif previous is not None and state not in SKILL_TRANSITIONS.get(previous, set()):
+                problems.append(
+                    f"skill history has invalid transition: {skill.get('name')} {previous} -> {state}"
+                )
+            previous = state
         for event in history:
             if event.get("evidence"):
                 problems.extend(_artifact_problems(event["evidence"], f"{skill.get('name')} invocation"))
@@ -556,6 +646,33 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
                 problems.append(f"reference contributes more than two mechanisms: {reference.get('id')}")
         if state == "inaccessible" and (reference.get("observations") or reference.get("mechanisms")):
             problems.append(f"inaccessible reference carries invented observations: {reference.get('id')}")
+    resources = ledger.get("resources", [])
+    resource_ids = [item.get("id") for item in resources]
+    if len(resource_ids) != len(set(resource_ids)):
+        problems.append("creative evidence duplicates a resource ID")
+    references_by_id = {item.get("id"): item for item in references}
+    for resource in resources:
+        if resource.get("category") not in RESOURCE_CATEGORIES:
+            problems.append(f"resource has invalid category: {resource.get('id')}")
+        if resource.get("decision") not in RESOURCE_DECISIONS:
+            problems.append(f"resource has invalid decision: {resource.get('id')}")
+        if not resource.get("alternatives"):
+            problems.append(f"resource has no considered alternative: {resource.get('id')}")
+        if resource.get("decision") == "use" and not resource.get("necessary"):
+            problems.append(f"selected resource is not marked necessary: {resource.get('id')}")
+        if resource.get("decision") == "do-not-use" and resource.get("necessary"):
+            problems.append(f"rejected resource is marked necessary: {resource.get('id')}")
+        source_ids = resource.get("source_reference_ids", [])
+        if not source_ids:
+            problems.append(f"resource has no inspected source: {resource.get('id')}")
+        for reference_id in source_ids:
+            reference = references_by_id.get(reference_id)
+            if not reference or reference.get("state") != "inspected":
+                problems.append(f"resource cites uninspected source: {resource.get('id')} -> {reference_id}")
+        problems.extend(_artifact_problems(resource.get("artifact", {}), f"resource {resource.get('id')}"))
+        artifact_path = Path(str(resource.get("artifact", {}).get("path", "")))
+        if artifact_path.is_file() and resource.get("artifact_anchor") not in artifact_path.read_text(encoding="utf-8"):
+            problems.append(f"resource decision anchor disappeared: {resource.get('id')}")
     decisions = ledger.get("decisions", [])
     decision_ids = {item.get("id") for item in decisions}
     for decision in decisions:
@@ -602,7 +719,9 @@ def claim_problems(project: Path, ledger: dict) -> list[str]:
     research_path = project / "RESEARCH.md"
     if research_path.is_file():
         research = research_path.read_text(encoding="utf-8")
-        for heading, column in (("Findings", 4), ("Reference analysis", 0)):
+        for heading, column in (
+            ("Findings", 4), ("Reference analysis", 0), ("Component and technique research", 2)
+        ):
             for row in _table_rows(_section(research, heading)):
                 if len(row) <= column:
                     continue
@@ -612,6 +731,12 @@ def claim_problems(project: Path, ledger: dict) -> list[str]:
                 reference = _recorded_reference_by_source(ledger, source)
                 if not reference or reference.get("state") != "inspected":
                     problems.append(f"RESEARCH.md claims an uninspected source: {source}")
+        resource_names = {
+            str(item.get("name", "")).strip().lower() for item in ledger.get("resources", [])
+        }
+        for row in _table_rows(_section(research, "Library checks")):
+            if row and row[0].strip() and not row[0].startswith("<") and row[0].strip().lower() not in resource_names:
+                problems.append(f"RESEARCH.md claims an unevaluated resource: {row[0].strip()}")
     design_path = project / "DESIGN.md"
     if design_path.is_file():
         design = design_path.read_text(encoding="utf-8")
@@ -690,6 +815,7 @@ def summary(ledger: dict | None) -> dict:
             "status": "legacy-untracked", "research_depth": "not recorded",
             "selected": 0, "completed": 0, "references": {"found": 0, "inspected": 0, "inaccessible": 0},
             "decisions": 0,
+            "resources": {"evaluated": 0, "selected": 0},
         }
     selected = [item for item in ledger.get("skills", []) if item.get("selected")]
     return {
@@ -702,6 +828,10 @@ def summary(ledger: dict | None) -> dict:
             for state in REFERENCE_STATES
         },
         "decisions": len(ledger.get("decisions", [])),
+        "resources": {
+            "evaluated": len(ledger.get("resources", [])),
+            "selected": sum(item.get("decision") == "use" for item in ledger.get("resources", [])),
+        },
     }
 
 
@@ -887,11 +1017,90 @@ def self_test() -> int:
             _skill_by_name(technical_ledger, "technical-research")["selected"]
             and _skill_by_name(technical_ledger, "component-research")["selected"],
         )
+        platform_doc = workspace / "platform-doc.html"
+        platform_doc.write_text(
+            "<html><title>Platform observer fixture</title><main>Observer support and behaviour.</main></html>",
+            encoding="utf-8",
+        )
+        package_doc = workspace / "package-doc.html"
+        package_doc.write_text(
+            "<html><title>Package fixture</title><main>Package compatibility and licence.</main></html>",
+            encoding="utf-8",
+        )
+        for reference_id, source, capture in (
+            ("ref-platform", "https://platform.example.test/observer", platform_doc),
+            ("ref-package", "https://registry.example.test/motion", package_doc),
+        ):
+            record_reference(technical_ledger, {
+                "id": reference_id, "source": source, "state": "inspected",
+                "inspection": "content", "evidence_path": str(capture),
+                "observations": ["The fixture exposes the capability fields needed for comparison."],
+                "mechanisms": [], "why_it_matters": "The dependency decision needs inspected evidence.",
+                "borrow": "Use the verified capability boundary.", "reject": "Do not infer unrecorded features.",
+            })
+        technical_output = workspace / "technical-decision.md"
+        technical_output.write_text(
+            "# Technical decision\n\nUse the platform observer; no motion package is necessary.\n",
+            encoding="utf-8",
+        )
+        record_resource(technical_ledger, {
+            "id": "resource-platform-observer", "name": "Platform observer", "category": "browser-api",
+            "provides": "Active-section observation without a package.",
+            "appropriate_because": "The project only needs threshold-based section activation.",
+            "compatibility": "Compatible with the fixture target described by the inspected platform record.",
+            "license": "N/A — browser platform capability.",
+            "implementation_cost": "One observer and deterministic fallback logic.",
+            "alternatives": [{"name": "scroll listener", "reason": "More manual work and event-frequency risk."}],
+            "necessary": True, "decision": "use", "source_reference_ids": ["ref-platform"],
+            "artifact_path": str(technical_output), "artifact_anchor": "Use the platform observer",
+        })
+        record_resource(technical_ledger, {
+            "id": "resource-motion-package", "name": "Motion package", "category": "library",
+            "provides": "A general component animation runtime.",
+            "appropriate_because": "It was compared because the interaction includes motion.",
+            "compatibility": "No compatibility advantage over the platform observer was established.",
+            "license": "Fixture source records a permissive package licence.",
+            "implementation_cost": "Adds installation, bundle, and maintenance cost.",
+            "alternatives": [{"name": "Platform observer", "reason": "Supplies the bounded behaviour without a dependency."}],
+            "necessary": False, "decision": "do-not-use", "source_reference_ids": ["ref-package"],
+            "artifact_path": str(technical_output), "artifact_anchor": "no motion package is necessary",
+        })
+        case(
+            "technical resource decision records compatibility cost and alternatives",
+            not ledger_problems(project, technical_ledger)
+            and all(item.get("alternatives") for item in technical_ledger["resources"]),
+        )
+        case(
+            "dependency decision distinguishes selected platform capability from rejected package",
+            summary(technical_ledger)["resources"] == {"evaluated": 2, "selected": 1}
+            and {item["decision"] for item in technical_ledger["resources"]} == {"use", "do-not-use"},
+        )
+        try:
+            record_resource(technical_ledger, {
+                "id": "resource-unproved", "name": "Unproved package", "category": "library",
+                "provides": "Unknown capability.", "appropriate_because": "It was familiar.",
+                "compatibility": "Claimed only.", "license": "Claimed only.",
+                "implementation_cost": "Unknown.",
+                "alternatives": [{"name": "none", "reason": "No comparison ran."}],
+                "necessary": False, "decision": "defer", "source_reference_ids": ["missing-reference"],
+                "artifact_path": str(technical_output), "artifact_anchor": "Technical decision",
+            })
+            unproved_resource_blocked = False
+        except CreativeError:
+            unproved_resource_blocked = True
+        case("resource claim cannot cite an uninspected source", unproved_resource_blocked)
 
         save_ledger(project, ledger)
         reloaded = load_ledger(project)
         case("fresh task can reload creative state", reloaded is not None and reloaded["decisions"][0]["id"] == "decision-1")
         case("project resumption preserves research and design provenance", not ledger_problems(project, reloaded))
+        tampered = json.loads(json.dumps(reloaded))
+        tampered_skill = _skill_by_name(tampered, "reference-analysis")
+        tampered_skill["history"] = [tampered_skill["history"][0], *tampered_skill["history"][2:]]
+        case(
+            "hand-edited skill history cannot bypass the invocation boundary",
+            any("recommended -> completed" in item for item in ledger_problems(project, tampered)),
+        )
         saved_design = design.read_text(encoding="utf-8")
         design.write_text(saved_design + "\nchanged after evidence\n", encoding="utf-8")
         case("changed downstream artifact makes evidence stale", any("changed" in item for item in ledger_problems(project, reloaded)))

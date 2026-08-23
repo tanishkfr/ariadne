@@ -72,6 +72,11 @@ transcript artifact before marking a source inspected. A found URL is found;
 failed access is inaccessible; neither may be described as inspected or used.
 Do not let expected prose prove its own execution.
 
+When research compares a resource or dependency, record the resource decision
+defined in the same reference file: capability, fit, compatibility, licence,
+cost, alternatives, necessity, inspected source, and downstream anchor. Do not
+convert a comparison into an install request; G2 remains human-owned.
+
 ## Human boundaries
 
 Pause only for a decision or external action the canonical workflow reserves to

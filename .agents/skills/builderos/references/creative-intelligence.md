@@ -107,3 +107,32 @@ Decision trace:
 reference conflict with two or more IDs and a design implication. Record
 multiple direction candidates only when the assessment says they are helpful;
 each candidate needs a different mechanism and experience, not a palette swap.
+
+Resource decision:
+
+```json
+{
+  "type": "resource",
+  "id": "resource-observer",
+  "name": "Platform observer",
+  "category": "browser-api",
+  "provides": "Active-section observation without a package",
+  "appropriate_because": "The interaction only needs bounded threshold changes",
+  "compatibility": "Supported by the inspected target-platform record",
+  "license": "N/A - browser platform capability",
+  "implementation_cost": "One observer and a deterministic fallback",
+  "alternatives": [{"name": "scroll listener", "reason": "More manual event handling"}],
+  "necessary": true,
+  "decision": "use",
+  "source_reference_ids": ["ref-platform-doc"],
+  "artifact_path": "<RESEARCH.md or HANDOFF.md>",
+  "artifact_anchor": "<exact text in that artifact>"
+}
+```
+
+Allowed categories are `library`, `framework`, `browser-api`, `font`,
+`icon-set`, `asset-source`, `image-source`, `technique`, `design-tool`, and
+`component-primitive`. Decisions are `use`, `do-not-use`, or `defer`. Every
+resource comparison needs at least one inspected source and one named
+alternative. This record proposes or rejects a resource; it never installs one
+or grants G2.
