@@ -182,9 +182,9 @@ Earlier: v0.2.0 restructured after an independent audit — 71 files to 49, 12 r
 wheel build, install, `$builderos` runtime start, doctor and uninstall with no
 source checkout dependency. Windows executed; macOS/Linux path rules are
 simulated. Publishing is blocked on a human licence decision and explicit
-release authority. One workflow-adjacent decision also remains: whether an
-unresolved internal creative review should hard-block preparation of isolated
-S5. See [V1.5-READINESS.md](V1.5-READINESS.md).
+release authority. V1.5 deliberately keeps internal creative-review readiness
+advisory rather than making it a new hard prerequisite for isolated S5. See
+[V1.5-READINESS.md](V1.5-READINESS.md).
 
 V1.3 was ready for private use. A local rendered fixture exercised the
 new visual evidence and creative-review loop and exposed a real tablet drift;

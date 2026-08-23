@@ -48,9 +48,11 @@ mutation controls.
 **Scope:** `ROUTER.md`, `WORKFLOW.md`, modes, prompts, canonical design/research/
 QA/evaluation policies, templates, provider neutrality, gate semantics and S5
 isolation are unchanged. Tightening internal creative-review readiness into a
-hard S5 prerequisite remains a human decision; it was not implemented. Cursor
-was unavailable. No dependency install, remote push, deployment, credential
-access or historical validation rewrite occurred.
+hard S5 prerequisite was explicitly rejected for V1.5: readiness remains a
+strong warning/recommendation unless the existing workflow already requires
+more. A stricter boundary is only a later candidate after real-project evidence,
+not an approved change. Cursor was unavailable. No dependency install, remote
+push, deployment, credential access or historical validation rewrite occurred.
 
 ---
 
