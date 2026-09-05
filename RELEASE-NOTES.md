@@ -39,7 +39,7 @@ gates and human authority.
 
 Deterministic fixtures and isolated lifecycle tests do not prove native
 macOS/Linux behaviour, live Claude or Cursor execution, or first-time-user
-comprehension. This version has not been published yet.
+comprehension. Publication does not convert any of those gaps into evidence.
 
 ## Known compatibility limitation
 

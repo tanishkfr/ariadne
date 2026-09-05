@@ -10,6 +10,26 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## Unreleased — ADVERSARIAL ACCEPTANCE CORRECTIONS
+
+The 1.6.0 adversarial acceptance review reproduced a continuation defect at
+the implementation boundary: a transcript and `QA.md` could allow S4B to infer
+independent review even when the required structured implementation return was
+absent. The runtime now blocks until that packet-specific return exists and is
+complete. A negative test proves that transcript-plus-QA cannot substitute for
+the return, and the positive complete-return path remains covered.
+
+The same review found that public installation guidance used a moving source
+branch despite an immutable release wheel being available, and that release
+notes still described the published version as unpublished. Public entry docs
+now install the exact release wheel, the README states the installed
+update/rollback/uninstall and preservation contract, and the existing
+distribution checker rejects moving-source installs, lifecycle omissions and
+lost evidence limits. Two stale product-document labels were corrected without
+changing policy, workflow or mode behaviour.
+
+---
+
 ## 1.6.0 — 2026-09-05 · EVIDENCE, CAPABILITY AND SESSION HARDENING
 
 Fresh standalone sessions exposed a repeated delivery defect: a stage could

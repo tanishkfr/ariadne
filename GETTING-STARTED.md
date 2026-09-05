@@ -36,7 +36,7 @@ python --version
 Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.0/ariadne-1.6.0-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 ```
@@ -149,16 +149,12 @@ rendered evidence, observed interaction, drift and environmental gaps as
 different claims. An internal creative review gives one prioritised correction
 before the isolated independent review. Neither review approves G3 for you.
 
-The recovery commands are:
-
-```bash
-python scripts/ariadne.py operations-plan --project <project>
-python scripts/ariadne.py record-operations --project <project> --input <events.json>
-python scripts/ariadne.py operations-check --project <project> --require review
-```
-
-Normal `$ariadne` progression runs the planning step automatically. Use these
-commands only when diagnosing or recovering a run.
+Normal `$ariadne` progression runs the planning and evidence checks
+automatically. If an installed run is interrupted, invoke `$ariadne` again in
+the project and ask it to resume or recover; the managed skill locates the
+active runtime and its low-level controller. Checkout-relative
+`python scripts/ariadne.py ...` commands are maintainer diagnostics, not public
+commands an installed user is expected to reconstruct.
 
 If you explicitly ask for a social strategy, Ariadne may add the conditional
 `SOCIAL-STRATEGY.md`. It reads the current project and real assets first, then
