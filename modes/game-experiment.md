@@ -103,6 +103,6 @@ Ten minutes of this is the difference between a distinctive experiment and the d
 | Building menus and settings before the mechanic | Start in the game |
 | "Retro" producing generic retro | The light S3 questions above |
 | Scope growing into a real game | One mechanic; re-route if it grows |
-| Heavy process killing the experiment | Four documents, three questions |
+| Heavy process killing the experiment | Two core documents, three questions |
 | Ignoring a marking rubric | Ask for it; it outranks this file |
 | Motion that ignores reduced-motion | Still a blocking check, even here |

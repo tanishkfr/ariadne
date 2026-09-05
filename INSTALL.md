@@ -36,7 +36,7 @@ name, `$ariadne` skill or user-local runtime after installation.
 Run these as your normal user:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.1/ariadne-1.6.1-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 ```

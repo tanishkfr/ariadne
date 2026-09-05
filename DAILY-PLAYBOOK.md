@@ -68,8 +68,8 @@ Check: is `HANDOFF.md` written and was **G1** approved?
 
 ### "I already have a project"
 
-Invoke `$ariadne` from that repository and say you want to adopt it. Builder
-OS uses the existing source as read-only intake context, preserves every file,
+Invoke `$ariadne` from that repository and say you want to adopt it. Ariadne
+uses the existing source as read-only intake context, preserves every file,
 and writes no implementation during S1. Existing Ariadne entry documents are
 never overwritten: if `PROJECT.md` or `AGENTS.md` is present, the runtime asks
 you to resume or migrate deliberately.

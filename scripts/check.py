@@ -323,6 +323,11 @@ def check_required():
 DISTRIBUTION_FILES = (
     "VERSION",
     "LICENSE",
+    "README.md",
+    "QUICKSTART.md",
+    "INSTALL.md",
+    "GETTING-STARTED.md",
+    "UPDATE.md",
     "pyproject.toml",
     "build_backend/ariadne_backend.py",
     "src/ariadne/cli.py",
@@ -403,10 +408,30 @@ def check_distribution_texts(texts):
             problems.append(f"Codex baseline is missing a general working default: {token}")
     if re.search(r"(?i)\b(?:G[1-5]|S[0-6]|Ariadne|provider routing|social strategy)\b", baseline):
         problems.append("Codex baseline contains Ariadne workflow or project policy")
+    install_url = (
+        "https://github.com/tanishkfr/ariadne/releases/download/"
+        f"v{release_version}/ariadne-{release_version}-py3-none-any.whl"
+    )
+    for path in ("README.md", "QUICKSTART.md", "INSTALL.md", "GETTING-STARTED.md"):
+        if install_url not in texts[path]:
+            problems.append(f"{path} does not install the immutable current release wheel")
+        if "archive/refs/heads/master.zip" in texts[path]:
+            problems.append(f"{path} installs from a moving source branch")
+    for token in (
+        "python -m ariadne --version",
+        "python -m ariadne update",
+        "python -m ariadne rollback",
+        "python -m ariadne uninstall",
+        "python -m pip uninstall ariadne",
+        "python -m pip show ariadne",
+        "Projects, project documents, evidence, source files",
+    ):
+        if token not in texts["README.md"]:
+            problems.append(f"README.md omits installed lifecycle guidance: {token}")
     release_notes = texts["RELEASE-NOTES.md"]
     if not re.search(rf"(?m)^# Ariadne {re.escape(release_version)}\s*$", release_notes):
         problems.append("release notes do not name the authoritative VERSION")
-    for token in ("not been published", "macOS", "Linux", "Codex"):
+    for token in ("first-time-user", "comprehension", "macOS", "Linux", "Codex"):
         if token not in release_notes:
             problems.append(f"release notes omit an evidence boundary: {token}")
     try:
@@ -1562,6 +1587,12 @@ def self_test_distribution_contract():
     future["RELEASE-NOTES.md"] = future["RELEASE-NOTES.md"].replace(
         f"# Ariadne {release_version}", "# Ariadne 9.8.7", 1
     )
+    for path in ("README.md", "QUICKSTART.md", "INSTALL.md", "GETTING-STARTED.md"):
+        future[path] = future[path].replace(
+            f"/v{release_version}/ariadne-{release_version}-py3-none-any.whl",
+            "/v9.8.7/ariadne-9.8.7-py3-none-any.whl",
+            1,
+        )
     cases = [
         ("repository distribution contract passes (positive control)",
          not check_distribution_texts(actual)),
@@ -1569,6 +1600,16 @@ def self_test_distribution_contract():
          not check_distribution_texts(future)),
         ("invalid VERSION fails",
          bool(check_distribution_texts({**actual, "VERSION": "version-next\n"}))),
+        ("public install cannot drift to a moving branch",
+         bool(check_distribution_texts(mutate(
+             "README.md",
+             f"releases/download/v{release_version}/ariadne-{release_version}-py3-none-any.whl",
+             "archive/refs/heads/master.zip"
+         )))),
+        ("public README cannot omit rollback guidance",
+         bool(check_distribution_texts(mutate(
+             "README.md", "python -m ariadne rollback", "python -m ariadne recover"
+         )))),
         ("duplicated package version fails",
          bool(check_distribution_texts(mutate(
              "pyproject.toml", 'dynamic = ["version"]', 'version = "1.5.0"'
