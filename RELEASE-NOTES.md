@@ -1,49 +1,32 @@
-# Ariadne 1.6.0
+# Ariadne 1.6.1
 
-Ariadne 1.6.0 hardens creative evidence, capability selection, provider
-transport and independent review while preserving the established workflow,
-gates and human authority.
+Ariadne 1.6.1 is a narrow correctness and documentation patch for the 1.6.0
+release. It does not change routing, stages, policies, gates, provider
+boundaries or project-state compatibility.
 
-## Highlights
+## Fixed
 
-- Research findings now distinguish observed, supported, inferred,
-  hypothetical and assumed claims from source confidence.
-- A small dated capability registry supports project-specific comparison after
-  existing, native, project-local and already-approved solutions are exhausted.
-  It cannot install anything or grant G2.
-- S1-S6 packet contracts carry current canonical inputs with source and parent
-  provenance; blocked stages cannot emit misleading forward transitions.
-- Claude Code is an explicit implementation transport, while unrecognised
-  provider names are no longer silently relabelled as Cursor.
-- S4B completion records implementation and mechanical evidence only; the
-  fresh S5 review judges only evidence observable inside its isolated boundary.
-- External pages, repositories and tool output are research data, never human
-  authorisation to execute, disclose, install or cross a gate.
-- Project-local creative ledgers retry bounded Windows sharing violations while
-  still exposing persistent write denial.
-- Package and wheel changelog links now match the public repository's `master`
-  branch.
+- S4B can continue to S5 only after the current packet's structured
+  `return-handoff.md` exists and records a complete implementation return.
+- An S4B transcript plus `QA.md` can no longer substitute for that return.
+- Deterministic negative and positive controls preserve both the blocked and
+  successful continuation paths.
 
-## Compatibility
+## Documentation
 
-- Python 3.10 or newer.
-- Windows is directly exercised.
-- macOS and Linux paths are simulated; native installation remains unverified.
-- Codex is the default. Claude remains optional and is not required to install.
-- Existing project-state schema 1 remains supported; no project migration is
-  introduced.
-- Routing, stage order, design policy, gate semantics and the independent-review
-  isolation boundary are unchanged.
+- Public installation guidance uses the immutable 1.6.1 wheel rather than a
+  moving source-branch archive.
+- The README documents version discovery, user-local data locations, update,
+  rollback, uninstall and preservation of project and user-created files.
+- Installed-user recovery guidance no longer depends on commands available
+  only in a maintainer checkout.
 
-## Evidence limits
+## Compatibility and evidence limits
 
-Deterministic fixtures and isolated lifecycle tests do not prove native
-macOS/Linux behaviour, live Claude or Cursor execution, or first-time-user
-comprehension. Publication does not convert any of those gaps into evidence.
-
-## Known compatibility limitation
-
-The Python distribution/import name `ariadne` is also used by Ariadne GraphQL.
-The packages cannot coexist in one Python environment. This release preserves
-the approved product identity; users with that package must use a separate
-interpreter or virtual environment.
+- Python 3.10 or newer; Windows is directly exercised.
+- Existing project-state schema 1 remains supported; no migration is required.
+- Codex remains the default. Claude remains optional.
+- Native macOS/Linux behaviour, live Claude or Cursor execution and
+  first-time-user comprehension remain unverified.
+- The Python distribution/import name `ariadne` is also used by Ariadne
+  GraphQL; use a separate interpreter or virtual environment when needed.

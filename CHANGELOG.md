@@ -10,7 +10,7 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
-## Unreleased — ADVERSARIAL ACCEPTANCE CORRECTIONS
+## 1.6.1 — 2026-09-05 · CONTINUATION BOUNDARY PATCH
 
 The 1.6.0 adversarial acceptance review reproduced a continuation defect at
 the implementation boundary: a transcript and `QA.md` could allow S4B to infer
