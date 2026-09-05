@@ -17,10 +17,14 @@ do not contain or depend on its source repository.
 Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.1/ariadne-1.6.1-py3-none-any.whl"
-python -m ariadne install
-python -m ariadne doctor
+py -3 -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.2/ariadne-1.6.2-py3-none-any.whl"
+py -3 -m ariadne install
+py -3 -m ariadne doctor
+
 ```
+If `doctor` reports that Ariadne is healthy, open your project in Codex and invoke:
+
+$ariadne
 
 The Python distribution/import name is also used by Ariadne GraphQL. The two
 packages cannot share one Python environment; see the compatibility warning in

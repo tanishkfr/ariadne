@@ -108,7 +108,7 @@
 | Capability needed | `R2` / `R3` / `R4` / split with `R1` |
 | Provider | <recommended provider or `retain in orchestrator`> |
 | Model | <exact model if known, otherwise `provider default — unverified`> |
-| Effort | low / medium / high |
+| Effort | low / medium / high / xhigh / max |
 | Workload | small / medium / large |
 | Split | <what stays with the orchestrator, or `none`> |
 | Reason | <why this route fits the work> |
