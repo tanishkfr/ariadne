@@ -17,7 +17,7 @@ do not contain or depend on its source repository.
 Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.1/ariadne-1.6.1-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 ```
@@ -32,6 +32,54 @@ one, or starts a new one without making you choose a mode or stage.
 
 [Short quickstart](QUICKSTART.md) · [Installation](INSTALL.md) ·
 [Updates and rollback](UPDATE.md) · [Troubleshooting](TROUBLESHOOTING.md)
+
+### Installed lifecycle
+
+`python -m ariadne --version` reports the active Ariadne version. `doctor`
+also checks the runtime, managed skill, provider detection and compatible
+project state.
+
+The launcher is installed in the selected Python user's package location. The
+second command above creates an immutable runtime and an installation history
+under the platform data directory, then registers the managed skill at
+`~/.agents/skills/ariadne` unless an earlier Ariadne-owned skill location is
+already active:
+
+| Platform | Ariadne data directory |
+|---|---|
+| Windows | `%LOCALAPPDATA%\Ariadne` |
+| macOS | `~/Library/Application Support/Ariadne` |
+| Linux | `$XDG_DATA_HOME/ariadne`, otherwise `~/.local/share/ariadne` |
+
+Update and verify without touching project files:
+
+```bash
+python -m ariadne update
+python -m ariadne doctor
+```
+
+Update installs a verified immutable version and switches the active pointer
+only after validation. A failure before activation leaves the prior runtime
+current. When a previous verified version exists, recovery is:
+
+```bash
+python -m ariadne rollback
+python -m ariadne doctor
+```
+
+Remove Ariadne in two explicit steps:
+
+```bash
+python -m ariadne uninstall
+python -m pip uninstall ariadne
+```
+
+The first command asks for confirmation, removes the user-local runtime and
+managed skill, and removes only an unchanged Ariadne-managed optional baseline.
+Projects, project documents, evidence, source files, edited instructions and
+unrelated user files are preserved. The second command removes the Python
+launcher. Confirm removal with `python -m pip show ariadne`; see the package-name
+warning above if that command then identifies the unrelated GraphQL package.
 
 Normal installation does not change global Codex instructions. The optional
 recommended baseline is documented in [CODEX-ENVIRONMENT.md](CODEX-ENVIRONMENT.md).

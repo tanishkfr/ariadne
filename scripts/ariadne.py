@@ -2438,7 +2438,9 @@ def infer_next_stage(state: dict) -> tuple[str | None, str]:
         return "S4B", "The handoff is complete and provider preflight cleared."
     if stage == "S4B":
         returned = _packet / "evidence" / "return-handoff.md"
-        if returned.is_file() and TRANSPORT.return_handoff_status(read(returned)) != "complete":
+        if not returned.is_file():
+            return None, "The structured implementation return is missing; complete or recover it before independent review."
+        if TRANSPORT.return_handoff_status(read(returned)) != "complete":
             return None, "Implementation returned partial or blocked; resume it before independent review."
         if not (project / "QA.md").is_file():
             return None, "Implementation or mechanical QA is incomplete."
@@ -3574,6 +3576,20 @@ def self_test() -> int:
             and before_return_provider["executed"]["state"] == "not-observed"
             and before_return_provider["returned_successfully"]["state"] == "not-returned",
         )
+
+        transcript_only = s4b_packet / "evidence" / "transcript.md"
+        transcript_only.write_text("S4B fixture transcript without a structured return.\n", encoding="utf-8")
+        (project / "QA.md").write_text(
+            "# QA\n\n## Mechanical\n\n| # | Check | Result | Evidence |\n|---|---|---|---|\n"
+            "| 1 | Build | pass | fixture |\n\n## Judgement\n\nPending.\n\n"
+            "## Screenshots\n\n| View | Path |\n|---|---|\n| Fixture | none |\n",
+            encoding="utf-8",
+        )
+        case(
+            "S4B transcript and QA cannot replace the structured implementation return",
+            infer_next_stage(load_state(run_root))[0] is None,
+        )
+        transcript_only.unlink()
 
         partial_path = s4b_packet / "evidence" / "return-handoff.md"
         partial_path.write_text(filled_return("partial"), encoding="utf-8")

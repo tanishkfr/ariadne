@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.6.1 — 2026-09-05
+
+- Required the current packet's structured implementation return before S4B
+  can continue to independent review.
+- Prevented an implementation transcript plus `QA.md` from substituting for
+  that return boundary.
+- Corrected public installation, version discovery, data-location, update,
+  rollback and uninstall guidance.
+- Switched public installation examples from a moving branch archive to the
+  immutable 1.6.1 wheel.
+
+Routing, stage order, design policy, gate semantics, provider isolation and
+human approval authority are unchanged.
+
 ## 1.6.0 — 2026-09-05
 
 - Made fresh-stage packets carry their required canonical inputs, source hashes,
