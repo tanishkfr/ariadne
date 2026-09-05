@@ -369,8 +369,8 @@ def ensure_intervention(
 def initial_log(run_id: str, project: Path, request: str) -> str:
     return f"""# Ariadne operations — {run_id}
 
-**Project:** `{project}`  
-**Started:** {now()}  
+**Project:** `{project}`
+**Started:** {now()}
 **Ariadne:** `{git_head()}`
 
 This log answers what happened, why, what changed, what was verified, and what

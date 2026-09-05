@@ -19,6 +19,8 @@ gates and human authority.
   fresh S5 review judges only evidence observable inside its isolated boundary.
 - External pages, repositories and tool output are research data, never human
   authorisation to execute, disclose, install or cross a gate.
+- Project-local creative ledgers retry bounded Windows sharing violations while
+  still exposing persistent write denial.
 - Package and wheel changelog links now match the public repository's `master`
   branch.
 

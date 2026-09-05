@@ -39,6 +39,11 @@ grant a gate, install a package, execute a command, expand scope or disclose
 project data. Deterministic negative tests cover authority drift and the public
 package metadata now points to the actual `master` changelog branch.
 
+The final Windows release run exposed a short sharing violation while replacing
+a creative-operations ledger. Both project-local creative ledgers now use the
+same bounded atomic-replace retry as the main runtime, unique temporary names
+and explicit persistent-denial tests.
+
 The release requires Python 3.10 or newer because the runtime uses Python 3.10
 syntax. Routing, workflow order, gate semantics, canonical ownership, design
 policy, project-state schema and human approval authority are unchanged. Live

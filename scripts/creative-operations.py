@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 import sys
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -76,11 +77,38 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def replace_with_retry(
+    source: Path,
+    target: Path,
+    *,
+    attempts: int = 10,
+    replace=None,
+    sleep=None,
+) -> None:
+    """Complete one atomic replace despite short Windows sharing violations."""
+    replace = replace or (lambda old, new: old.replace(new))
+    sleep = sleep or time.sleep
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            replace(source, target)
+            return
+        except (PermissionError, OSError) as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                sleep(0.05 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+
+
 def write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        replace_with_retry(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_json(path: Path) -> dict:
@@ -1207,6 +1235,31 @@ def self_test() -> int:
 
     def case(name: str, passed: bool) -> None:
         cases.append((name, bool(passed)))
+
+    replace_attempts = []
+
+    def transient_replace(_source: Path, _target: Path) -> None:
+        replace_attempts.append(True)
+        if len(replace_attempts) < 3:
+            raise PermissionError("fixture sharing violation")
+
+    replace_with_retry(
+        Path("fixture-source"), Path("fixture-target"), attempts=3,
+        replace=transient_replace, sleep=lambda _seconds: None,
+    )
+    case("atomic operations write retries transient sharing violations", len(replace_attempts) == 3)
+    try:
+        replace_with_retry(
+            Path("fixture-source"), Path("fixture-target"), attempts=2,
+            replace=lambda _source, _target: (_ for _ in ()).throw(
+                PermissionError("fixture persistent denial")
+            ),
+            sleep=lambda _seconds: None,
+        )
+        persistent_replace_failed = False
+    except PermissionError:
+        persistent_replace_failed = True
+    case("atomic operations write exposes persistent denial", persistent_replace_failed)
 
     with self_test_workspace() as workspace:
         case("creative operations method contracts pass (positive control)", not repository_contract_problems())

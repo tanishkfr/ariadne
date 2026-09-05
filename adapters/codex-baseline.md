@@ -8,4 +8,3 @@
 - Distinguish verified facts from assumptions and unobserved results.
 - Report what changed, what remains, and any decision that genuinely needs the user.
 - Keep user-facing explanations clear and concise.
-
