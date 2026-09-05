@@ -1,7 +1,7 @@
 # RETROSPECTIVE: <name>
 
 > Template. Owner: Strategist · Stage: S6 · 15 minutes.
-> **This is the stage that makes the Ariadne improve instead of ossify.**
+> **This is the stage that makes Ariadne improve instead of ossify.**
 > A retrospective that changes no Ariadne file was not a retrospective.
 
 **Project:** <> · **Mode:** <> · **Shipped:** <date> · **Elapsed:** <>
@@ -44,7 +44,7 @@
 |---|---|---|
 | | | `modes/<mode>.md` |
 
-### 4. What changes in the Ariadne as a result?
+### 4. What changes in Ariadne as a result?
 
 > **A retrospective does not edit Ariadne.** It produces *proposals*; Tanishk approves them.
 > Direct mutation is how a system grows back to seventy files.

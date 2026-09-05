@@ -47,6 +47,7 @@ without the relevant approval.
 | Wasting usage limits on context | [MODEL-ROUTING.md](MODEL-ROUTING.md) |
 | No reliable design process | S3 cannot be skipped; **G1 blocks building without a thesis** |
 | Research claims can outrun evidence | Project-local creative evidence separates recommended, invoked, completed and used work; found, inspected and used references; and selected, executed and returned providers |
+| External source text can masquerade as authority | [PRIVACY-POLICY.md](PRIVACY-POLICY.md) — data, instructions and human authorisation remain separate |
 | No document or handoff structure | [templates/](templates/) — four required documents, the rest conditional |
 | Not knowing which tool does what | [MODEL-ROUTING.md](MODEL-ROUTING.md) + [adapters/](adapters/) |
 | Reinventing prompts every project | [prompts/](prompts/) |
@@ -116,11 +117,10 @@ Ariadne/
 ├─ templates/   13   4 required, the rest conditional or transport
 ├─ modes/        5
 ├─ adapters/         Codex/Cursor paths plus optional Claude reasoner transport
-├─ references/   2   visual references, UI libraries
+├─ references/   3   visual references, UI libraries, capability candidates
 ├─ prompts/      8   start, conditional research, direction, build, review,
 │                    portfolio, content, retrospective
-├─ tests/            deterministic contract and regression checks
-└─ scripts/          ariadne.py · prepare-stage.py · check.py · validate.py
+└─ scripts/          runtime controller, stage transport and selected methods
 ```
 
 ## Principles
@@ -157,19 +157,16 @@ judgement remain separate records, and none grants a gate.
 
 ---
 
-## Development
-
-The maintained repository checks are:
+## Verify your installation
 
 ```bash
-python scripts/check.py
-python scripts/check.py --self-test
-python scripts/validate.py --self-test
+python -m ariadne doctor
 ```
 
-Generated runtime bundles exclude validation runs, fixtures, maintainer notes,
-operations logs and machine-specific paths. See [RELEASING.md](RELEASING.md)
-for the deterministic packaging boundary.
+The public repository and runtime deliberately exclude validation runs, test
+fixtures, maintainer operations records and machine-specific paths. They are
+generated from the validated private maintainer source, not used as evidence
+merely because they appear in a public checkout.
 
 ## Licence
 

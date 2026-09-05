@@ -1427,7 +1427,7 @@ def discover(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         if len(matches) == 1:
-            print(f"Found the Ariadne run for {project.name}: {matches[0]}")
+            print(f"Found Ariadne run for {project.name}: {matches[0]}")
         else:
             print(f"Found {len(matches)} Ariadne runs for {project.name}:")
             for path in matches:

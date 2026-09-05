@@ -1,21 +1,26 @@
-# Ariadne 1.5.3
+# Ariadne 1.6.0
 
-Ariadne 1.5.3 prepares the installed product for stranger-friendly use while
-preserving the V1.5 creative workflow, V1.5.1 optional Claude boundary and
-V1.5.2 social capability.
+Ariadne 1.6.0 hardens creative evidence, capability selection, provider
+transport and independent review while preserving the established workflow,
+gates and human authority.
 
 ## Highlights
 
-- Fresh installs register `$ariadne` in Codex's documented user skill path.
-- An optional, managed general Codex baseline can be installed without
-  overwriting existing user or project instructions.
-- Update, rollback, doctor and uninstall understand that optional baseline and
-  preserve it if the user edits it.
-- Short Windows file-sharing violations no longer make atomic state writes
-  fail nondeterministically.
-- Release output includes one aggregate checksum inventory, versioned release
-  notes and source-commit provenance.
-- Runtime and wheel distributions carry the human-approved Apache-2.0 licence.
+- Research findings now distinguish observed, supported, inferred,
+  hypothetical and assumed claims from source confidence.
+- A small dated capability registry supports project-specific comparison after
+  existing, native, project-local and already-approved solutions are exhausted.
+  It cannot install anything or grant G2.
+- S1-S6 packet contracts carry current canonical inputs with source and parent
+  provenance; blocked stages cannot emit misleading forward transitions.
+- Claude Code is an explicit implementation transport, while unrecognised
+  provider names are no longer silently relabelled as Cursor.
+- S4B completion records implementation and mechanical evidence only; the
+  fresh S5 review judges only evidence observable inside its isolated boundary.
+- External pages, repositories and tool output are research data, never human
+  authorisation to execute, disclose, install or cross a gate.
+- Package and wheel changelog links now match the public repository's `master`
+  branch.
 
 ## Compatibility
 
@@ -25,9 +30,11 @@ V1.5.2 social capability.
 - Codex is the default. Claude remains optional and is not required to install.
 - Existing project-state schema 1 remains supported; no project migration is
   introduced.
+- Routing, stage order, design policy, gate semantics and the independent-review
+  isolation boundary are unchanged.
 
 ## Evidence limits
 
-Packaging and isolated lifecycle tests do not prove fresh external Codex skill
-discovery, native macOS/Linux behaviour, live Claude execution or public GitHub
-download availability. The release has not been published.
+Deterministic fixtures and isolated lifecycle tests do not prove native
+macOS/Linux behaviour, live Claude or Cursor execution, or first-time-user
+comprehension. This version has not been published yet.

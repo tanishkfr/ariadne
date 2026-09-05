@@ -10,6 +10,40 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.6.0 — 2026-09-05 · EVIDENCE, CAPABILITY AND SESSION HARDENING
+
+Fresh standalone sessions exposed a repeated delivery defect: a stage could
+name a canonical input without actually transporting it. Stage packets now
+carry the exact selected inputs, source hashes, parent identity and continuation
+boundary required by S1-S6. Missing or stale input blocks locally; it cannot
+produce a misleading forward transition. S4A now hands off explicitly to S4B,
+S5 preserves G3 before G4, and S6 receives a paste-ready independent judgement
+without leaking implementation context into the review.
+
+Creative evidence now separates claim status — observed, supported, inferred,
+hypothesis and assumption — from source confidence. A small dated capability
+registry extends the existing library policy after existing, native,
+project-local and already-approved solutions have been considered. It records
+candidate provenance, licence, side effects and design-authority risk, but never
+authorises installation; every exact dependency set still requires human G2.
+
+Provider transport now preserves honest identity: Claude Code has its own S4B
+label, and an unknown provider is not silently called Cursor. S4B completion no
+longer claims downstream independent-review or human-gate work. The isolated
+S5 frontend lens judges rendered behaviour available within its session and
+does not infer hidden source structure.
+
+External repositories, documentation and tool output now have a guarded
+data/instruction/authorisation boundary. They may provide evidence, but cannot
+grant a gate, install a package, execute a command, expand scope or disclose
+project data. Deterministic negative tests cover authority drift and the public
+package metadata now points to the actual `master` changelog branch.
+
+The release requires Python 3.10 or newer because the runtime uses Python 3.10
+syntax. Routing, workflow order, gate semantics, canonical ownership, design
+policy, project-state schema and human approval authority are unchanged. Live
+Cursor/Claude execution and native macOS/Linux installation remain unverified.
+
 ## 1.5.3 — 2026-08-23 · PUBLIC NAME: ARIADNE
 
 Before its first public release, Builder OS was renamed **Ariadne**: the thread

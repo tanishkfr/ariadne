@@ -2,7 +2,7 @@
 
 Which tool does which job, and how to not burn your subscription limits doing it.
 
-**Provider-neutrality rule:** this file routes by *capability class*, never by brand. The capability classes are stable; the products filling them are not. When a product changes, you edit the one mapping table in section 3 and nothing else in the Ariadne changes.
+**Provider-neutrality rule:** this file routes by *capability class*, never by brand. The capability classes are stable; the products filling them are not. When a product changes, you edit the one mapping table in section 3 and nothing else in Ariadne changes.
 
 Related: [adapters/](adapters/) for tool-specific mechanics · [BUDGET-POLICY.md](BUDGET-POLICY.md) for cost.
 
