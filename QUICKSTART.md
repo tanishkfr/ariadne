@@ -1,13 +1,17 @@
 # QUICKSTART
 
-Requires Python 3.8 or newer and Codex.
+Requires Python 3.10 or newer and Codex.
+
+If `python -m pip show ariadne` already describes Ariadne GraphQL, use a
+separate Python environment; the two packages cannot coexist. Details:
+[INSTALL.md](INSTALL.md).
 
 ## Install
 
 Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.5.3/ariadne-1.5.3-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
 python -m ariadne install
 python -m ariadne doctor
 ```

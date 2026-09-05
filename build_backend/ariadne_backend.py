@@ -32,17 +32,18 @@ def _metadata() -> bytes:
 Name: {NAME}
 Version: {_version()}
 Summary: Creative-production workflow runtime and managed Codex skill
-Requires-Python: >=3.8
+Requires-Python: >=3.10
 License-Expression: Apache-2.0
 Classifier: Development Status :: 4 - Beta
 Classifier: Environment :: Console
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
 Classifier: License :: OSI Approved :: Apache Software License
 Project-URL: Homepage, https://github.com/tanishkfr/ariadne
 Project-URL: Repository, https://github.com/tanishkfr/ariadne
-Project-URL: Changelog, https://github.com/tanishkfr/ariadne/blob/main/CHANGELOG.md
+Project-URL: Changelog, https://github.com/tanishkfr/ariadne/blob/master/CHANGELOG.md
 
 Ariadne installs and maintains a user-local creative-production runtime and managed Codex skill.
 """

@@ -1,7 +1,7 @@
 # RETROSPECTIVE: <name>
 
 > Template. Owner: Strategist · Stage: S6 · 15 minutes.
-> **This is the stage that makes the Ariadne improve instead of ossify.**
+> **This is the stage that makes Ariadne improve instead of ossify.**
 > A retrospective that changes no Ariadne file was not a retrospective.
 
 **Project:** <> · **Mode:** <> · **Shipped:** <date> · **Elapsed:** <>
@@ -46,7 +46,7 @@
 
 ### 4. What changes in Ariadne as a result?
 
-> **A retrospective does not edit Ariadne.** It produces *proposals*; the human owner approves them.
+> **A retrospective does not edit Ariadne.** It produces *proposals*; Tanishk approves them.
 > Direct mutation is how a system grows back to seventy files.
 
 #### 4a. Qualification — all four must hold
@@ -89,7 +89,7 @@ Complexity:   <+N words, +N files>
 > A deferred proposal stays here. **The same lesson deferred three times is itself the evidence** —
 > promote it on the third.
 
-**Candidates found:** <n> · **Promoted to proposals:** <n> · **Approved by the human owner:** <n>
+**Candidates found:** <n> · **Promoted to proposals:** <n> · **Approved by Tanishk:** <n>
 
 ---
 

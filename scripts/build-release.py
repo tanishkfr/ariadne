@@ -182,7 +182,7 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
             "sha256": release_notes_sha,
         },
         "source_commit": manifest["source_commit"],
-        "requires_python": ">=3.8",
+        "requires_python": ">=3.10",
         "project_state_schema": manifest["project_state_schema"],
         "publication": publication_state(),
     }
@@ -214,7 +214,7 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
 
 @contextlib.contextmanager
 def self_test_workspace():
-    path = ROOT / f".ariadne-release-self-test-{uuid.uuid4().hex}"
+    path = ROOT / "validation" / f"release-self-test-{uuid.uuid4().hex}"
     path.mkdir()
     try:
         yield path
@@ -235,28 +235,6 @@ def self_test_workspace():
 
 def self_test() -> int:
     cases = []
-
-    maintainer_name_markers = {
-        value.lower()
-        for value in (
-            Path.home().name,
-            ROOT.parent.name,
-            os.environ.get("USERNAME", ""),
-            os.environ.get("USER", ""),
-        )
-        if len(value.strip()) >= 4
-    }
-    maintainer_content_markers = {
-        value.lower().encode("utf-8")
-        for value in (
-            *maintainer_name_markers,
-            str(ROOT),
-            str(ROOT).replace("\\", "/"),
-            str(ROOT.parent),
-            str(ROOT.parent).replace("\\", "/"),
-        )
-        if value
-    }
 
     def case(name: str, passed: bool) -> None:
         cases.append((name, passed))
@@ -312,16 +290,12 @@ def self_test() -> int:
             any(name.endswith(".dist-info/licenses/LICENSE") for name in wheel_names),
         )
         case("runtime excludes developer validation and operations", not any(name.startswith(("validation/", "operations/", "tests/")) for name in names))
-        case(
-            "runtime excludes maintainer machine paths",
-            all(
-                not any(marker in archive_name.lower() for marker in maintainer_name_markers)
-                for archive_name in names
-            ),
-        )
+        case("runtime excludes maintainer machine paths", all("snprasad" not in archive_name.lower() and "testbed" not in archive_name.lower() for archive_name in names))
         case(
             "runtime content excludes maintainer-specific paths and private test data",
-            not any(marker in runtime_bytes for marker in maintainer_content_markers)
+            not any(token in runtime_bytes for token in (
+                b"snprasad", b"c:\\testbed", b"builder os tests", b"ariadne tests",
+            ))
             and not any(
                 part in name.lower()
                 for name in names

@@ -1,10 +1,12 @@
 # ADAPTER: Claude Code
 
-**Role in the system: implementation agent, interchangeable with Cursor.** Primary during the transition; a permanent fallback afterwards.
+**Role in the system: optional implementation adapter using the same S4B
+contract as Cursor.** Transport-ready; live implementation equivalence remains
+unverified.
 
 Capability classes: **`R2`**, **`R3`**, **`R4`**, **`R6`**. See [MODEL-ROUTING.md](../MODEL-ROUTING.md).
 
-**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in the Ariadne changes. That is the portability test ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
+**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in Ariadne changes. That is the portability test ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
 
 ---
 
@@ -34,12 +36,38 @@ particular machine's global `~/.claude/CLAUDE.md`.
 
 ---
 
-## Optional local skills
+## Candidate skills requiring local verification
 
-Provider-local skills are discovered at runtime and are never assumed to be
-installed. Select at most one skill for a given job, record why it is useful,
-and keep `DESIGN.md` and the canonical Ariadne policies authoritative. A local
-skill that introduces paid or metered services still requires G2 approval.
+These names came from one historical machine inventory. They are not runtime
+requirements and must not be assumed present on another machine. **Their
+current availability, quality, and behaviour are unverified.** Treat this table
+as a bounded comparison checklist, not a recommendation.
+
+| Ariadne skill | Candidate local skill | Notes |
+|---|---|---|
+| [intake](../skills/intake.md) | `grill-me` | Closest direct match in the set |
+| [design-direction](../skills/design-direction.md) | `design-taste-frontend`, `high-end-visual-design`, `impeccable` | Three overlapping options — pick one and stay with it, or they will fight each other |
+| [DESIGN-MOTION.md](../DESIGN-MOTION.md) | `design-motion-principles` | Has an audit mode for catching generic motion |
+| [QA-POLICY.md](../QA-POLICY.md) | `webapp-testing` | Playwright-based |
+| [DESIGN-ASSETS.md](../DESIGN-ASSETS.md) | `banana`, `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile` | **Check whether any bills per token** before use ([BUDGET-POLICY.md](../BUDGET-POLICY.md)) |
+| [component-research](../skills/component-research.md) | `ui-ux-pro-max` | Local database of patterns |
+| [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) | `humanizer` | Useful for the anti-AI-tell sweep specifically |
+| [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) | `claude-mem:design-is`, `design-motion-principles` (audit mode) | Neither replaces the rubrics in [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) |
+| [reference-analysis](../skills/reference-analysis.md) | **none** | Use the skill file's method |
+| [QA-POLICY.md](../QA-POLICY.md) | **none directly** | Use the skill file's method |
+| [QA-POLICY.md](../QA-POLICY.md) | **none directly** | Use the skill file's method |
+| [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) | built-in web search | |
+| [QA-POLICY.md](../QA-POLICY.md) | built-in bash | |
+
+Built-in commands worth knowing: `/code-review` (diff review, user-triggered), `/security-review`, `/init`, `/run`.
+
+**Three cautions.**
+
+First, several of these skills carry **their own strong aesthetic opinions** — `minimalist-ui`, `industrial-brutalist-ui`, `gpt-taste`, `high-end-visual-design`. Those opinions can override your `DESIGN.md` thesis and produce that skill's house style instead of your direction. **`DESIGN.md` outranks any skill.** If a skill's output fights the thesis, the skill is wrong.
+
+Second, having three overlapping design skills is itself a risk. Pick one, learn its behaviour, and record which one you chose and why in the retrospective.
+
+Third, image-generation skills may use paid APIs. Verify before running one — pay-per-token is Amber ([BUDGET-POLICY.md](../BUDGET-POLICY.md)).
 
 ---
 

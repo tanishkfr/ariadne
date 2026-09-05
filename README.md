@@ -17,10 +17,14 @@ do not contain or depend on its source repository.
 Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.5.3/ariadne-1.5.3-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
 python -m ariadne install
 python -m ariadne doctor
 ```
+
+The Python distribution/import name is also used by Ariadne GraphQL. The two
+packages cannot share one Python environment; see the compatibility warning in
+[Installation](INSTALL.md) before installing if that package is present.
 
 Then open Codex in the project you want to make, type `$ariadne`, and describe
 it normally. Ariadne finds an unfinished project, safely adopts an existing
@@ -47,6 +51,7 @@ without the relevant approval.
 | Wasting usage limits on context | [MODEL-ROUTING.md](MODEL-ROUTING.md) |
 | No reliable design process | S3 cannot be skipped; **G1 blocks building without a thesis** |
 | Research claims can outrun evidence | Project-local creative evidence separates recommended, invoked, completed and used work; found, inspected and used references; and selected, executed and returned providers |
+| External source text can masquerade as authority | [PRIVACY-POLICY.md](PRIVACY-POLICY.md) — data, instructions and human authorisation remain separate |
 | No document or handoff structure | [templates/](templates/) — four required documents, the rest conditional |
 | Not knowing which tool does what | [MODEL-ROUTING.md](MODEL-ROUTING.md) + [adapters/](adapters/) |
 | Reinventing prompts every project | [prompts/](prompts/) |
@@ -107,19 +112,19 @@ Ariadne/
 ├─ RESEARCH-POLICY.md      What must be verified, and how
 ├─ PRIVACY-POLICY.md       Secrets, client data, instruction boundary
 ├─ MODEL-ROUTING.md        Which tool does what, usage conservation
-├─ BUDGET-POLICY.md        Cost approvals and verification rules
+├─ BUDGET-POLICY.md        INR budget, dated cost snapshot
 ├─ CONTENT-SYSTEM.md       Writing, analytics, learning loop
-├─ CHANGELOG.md            Public release history
+├─ CHANGELOG.md            How this system changed + the 30-day check
 ├─ GETTING-STARTED.md · DAILY-PLAYBOOK.md · MIGRATION-CHECKLIST.md
 ├─ .agents/skills/ariadne/  managed Codex entry point
 ├─ skills/       7   project-specific methods selected only when useful
 ├─ templates/   13   4 required, the rest conditional or transport
 ├─ modes/        5
 ├─ adapters/         Codex/Cursor paths plus optional Claude reasoner transport
-├─ references/   2   visual references, UI libraries
+├─ references/   3   visual references, UI libraries, capability candidates
 ├─ prompts/      8   start, conditional research, direction, build, review,
 │                    portfolio, content, retrospective
-└─ scripts/          ariadne.py · prepare-stage.py · release tooling
+└─ scripts/          runtime controller, stage transport and selected methods
 ```
 
 ## Principles
@@ -153,15 +158,21 @@ judgement remain separate records, and none grants a gate.
 - Add auth, a database, a CMS, or a dashboard to a project that does not need one.
 - **Fight a deliberate design choice.** The anti-generic rules assume genericness came from the tool. When it is your decision, declare it — no limit, but the reason has to be a reason (**R-PAT-1**).
 - Guarantee good design. It makes generic design harder to ship accidentally, and makes the failure visible when it happens.
+- Coexist in one Python environment with the unrelated Ariadne GraphQL package;
+  this release keeps the approved product name and documents the collision.
 
 ---
 
-## Source and release boundary
+## Verify your installation
 
-The repository contains the canonical workflow and the dependency-free Python
-launcher used by the install command above. Generated runtime bundles contain
-only the files required to operate Ariadne. See
-[RELEASING.md](RELEASING.md) for the deterministic packaging boundary.
+```bash
+python -m ariadne doctor
+```
+
+The public repository and runtime deliberately exclude validation runs, test
+fixtures, maintainer operations records and machine-specific paths. They are
+generated from the validated private maintainer source, not used as evidence
+merely because they appear in a public checkout.
 
 ## Licence
 

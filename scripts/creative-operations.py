@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 import sys
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -76,11 +77,38 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def replace_with_retry(
+    source: Path,
+    target: Path,
+    *,
+    attempts: int = 10,
+    replace=None,
+    sleep=None,
+) -> None:
+    """Complete one atomic replace despite short Windows sharing violations."""
+    replace = replace or (lambda old, new: old.replace(new))
+    sleep = sleep or time.sleep
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            replace(source, target)
+            return
+        except (PermissionError, OSError) as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                sleep(0.05 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+
+
 def write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        replace_with_retry(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_json(path: Path) -> dict:
@@ -97,11 +125,27 @@ def ledger_path(project: Path) -> Path:
     return project.resolve() / LEDGER_RELATIVE
 
 
-def evidence_record(path: Path, anchor: str | None = None) -> dict:
+def evidence_record(
+    path: Path, anchor: str | None = None, project: Path | None = None
+) -> dict:
     path = path.resolve()
+    if project is not None:
+        try:
+            path.relative_to(project.resolve())
+        except ValueError as exc:
+            raise OperationsError(
+                "creative operations evidence must stay inside the project repository"
+            ) from exc
     if not path.is_file() or path.stat().st_size == 0:
         raise OperationsError(f"evidence artifact is missing or empty: {path}")
-    if path.name.lower() == ".env" or path.name.lower().startswith(".env."):
+    lowered = path.name.lower()
+    if (
+        lowered == ".env"
+        or lowered.startswith(".env.")
+        or lowered in {"id_rsa", "id_ed25519"}
+        or lowered.endswith((".key", ".pem", ".p12", ".pfx"))
+        or any(token in lowered for token in ("credential", "secret", "token"))
+    ):
         raise OperationsError("credential files cannot be creative evidence")
     if anchor and anchor not in path.read_text(encoding="utf-8", errors="ignore"):
         raise OperationsError(f"evidence anchor is absent from {path}: {anchor}")
@@ -109,6 +153,13 @@ def evidence_record(path: Path, anchor: str | None = None) -> dict:
     if anchor:
         record["anchor"] = anchor
     return record
+
+
+def ledger_project(ledger: dict) -> Path:
+    value = str(ledger.get("project", "")).strip()
+    if not value:
+        raise OperationsError("creative operations evidence has no project root")
+    return Path(value).resolve()
 
 
 def section(text: str, heading: str) -> str:
@@ -174,7 +225,7 @@ def _requirement(
         "kind": kind,
         "decision": decision,
         "implementation_requirement": implementation_requirement,
-        "design_source": evidence_record(source, anchor),
+        "design_source": evidence_record(source, anchor, source.parent),
         "priority": priority,
         "viewports": viewports or [],
         "expected_evidence_kind": evidence_kind,
@@ -342,7 +393,9 @@ def record_implementation(ledger: dict, event: dict) -> None:
     }
     if status in ("implemented", "partial"):
         row["source"] = evidence_record(
-            Path(str(event.get("source_path", ""))), str(event.get("source_anchor", "")).strip()
+            Path(str(event.get("source_path", ""))),
+            str(event.get("source_anchor", "")).strip(),
+            ledger_project(ledger),
         )
     else:
         blocker = str(event.get("blocker", "")).strip()
@@ -380,7 +433,9 @@ def record_visual_evidence(ledger: dict, event: dict) -> None:
             raise OperationsError("unverified visual evidence needs a blocker")
         row["blocker"] = blocker
     else:
-        row["evidence"] = evidence_record(Path(str(event.get("evidence_path", ""))))
+        row["evidence"] = evidence_record(
+            Path(str(event.get("evidence_path", ""))), project=ledger_project(ledger)
+        )
     if level == "verified":
         prior_ids = event.get("prior_evidence_ids", [])
         prior = {item.get("id"): item for item in ledger.get("visual_evidence", [])}
@@ -512,7 +567,9 @@ def _checked_date(value: object, *, current: bool) -> str:
     return checked
 
 
-def _event_evidence(rows: object, label: str, minimum: int = 1) -> list[dict]:
+def _event_evidence(
+    rows: object, label: str, minimum: int = 1, project: Path | None = None
+) -> list[dict]:
     if not isinstance(rows, list) or len(rows) < minimum:
         raise OperationsError(f"{label} needs at least {minimum} evidence artifact(s)")
     records = []
@@ -520,7 +577,9 @@ def _event_evidence(rows: object, label: str, minimum: int = 1) -> list[dict]:
         if not isinstance(item, dict) or not str(item.get("path", "")).strip():
             raise OperationsError(f"{label} evidence needs a path")
         records.append(evidence_record(
-            Path(str(item["path"])), str(item.get("anchor", "")).strip() or None
+            Path(str(item["path"])),
+            str(item.get("anchor", "")).strip() or None,
+            project,
         ))
     return records
 
@@ -569,7 +628,9 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
             not str(project_story.get(field, "")).strip() for field in required_story
         ):
             raise OperationsError("social intelligence needs a concrete project story before platform advice")
-        project_evidence = _event_evidence(event.get("project_evidence"), "project story")
+        project_evidence = _event_evidence(
+            event.get("project_evidence"), "project story", project=project
+        )
         excluded_platforms = event.get("not_recommended", [])
         if not isinstance(excluded_platforms, list) or any(
             not isinstance(item, dict)
@@ -607,7 +668,7 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
             if status == "existing":
                 if not path_value:
                     raise OperationsError("an existing social visual needs a real artifact path")
-                row["evidence"] = evidence_record(Path(path_value))
+                row["evidence"] = evidence_record(Path(path_value), project=project)
             elif path_value:
                 raise OperationsError("a missing or to-create visual cannot claim an existing path")
             visual_assets.append(row)
@@ -714,8 +775,12 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
     if voice_basis != "provided-examples" and draft_status != "rough-draft":
         raise OperationsError("copy without provided voice examples must be marked rough-draft")
     if contract_version == 2 and voice_basis == "provided-examples":
-        voice_evidence = _event_evidence(event.get("voice_evidence"), "voice matching", 2)
-    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+        voice_evidence = _event_evidence(
+            event.get("voice_evidence"), "voice matching", 2, project
+        )
+    artifact = evidence_record(
+        Path(str(event.get("artifact_path", ""))), project=project
+    )
     revises = str(event.get("revises", "")).strip()
     if revises and not any(item.get("id") == revises for item in ledger.get("social_strategies", [])):
         raise OperationsError("social strategy revision names an unknown parent strategy")
@@ -787,7 +852,9 @@ def record_social_result(ledger: dict, event: dict) -> None:
         raise OperationsError("social qualitative_signals must be concrete text entries")
     if not metrics and not qualitative:
         raise OperationsError("social result needs actual performance data or a qualitative signal")
-    evidence = evidence_record(Path(str(event.get("evidence_path", ""))))
+    evidence = evidence_record(
+        Path(str(event.get("evidence_path", ""))), project=ledger_project(ledger)
+    )
     revises = str(event.get("revises", "")).strip()
     same_observation = [
         item for item in ledger.get("social_results", [])
@@ -852,7 +919,9 @@ def record_social_learning(ledger: dict, event: dict) -> None:
     promoted_rule = str(event.get("promoted_rule", "")).strip()
     if promoted_rule and len({item.get("concept_id") for item in results}) < 3:
         raise OperationsError("a social rule needs at least three distinct recorded posts")
-    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+    artifact = evidence_record(
+        Path(str(event.get("artifact_path", ""))), project=ledger_project(ledger)
+    )
     revises = str(event.get("revises", "")).strip()
     if revises and not any(item.get("id") == revises for item in ledger.get("social_learnings", [])):
         raise OperationsError("social learning revision names an unknown parent")
@@ -1167,6 +1236,31 @@ def self_test() -> int:
     def case(name: str, passed: bool) -> None:
         cases.append((name, bool(passed)))
 
+    replace_attempts = []
+
+    def transient_replace(_source: Path, _target: Path) -> None:
+        replace_attempts.append(True)
+        if len(replace_attempts) < 3:
+            raise PermissionError("fixture sharing violation")
+
+    replace_with_retry(
+        Path("fixture-source"), Path("fixture-target"), attempts=3,
+        replace=transient_replace, sleep=lambda _seconds: None,
+    )
+    case("atomic operations write retries transient sharing violations", len(replace_attempts) == 3)
+    try:
+        replace_with_retry(
+            Path("fixture-source"), Path("fixture-target"), attempts=2,
+            replace=lambda _source, _target: (_ for _ in ()).throw(
+                PermissionError("fixture persistent denial")
+            ),
+            sleep=lambda _seconds: None,
+        )
+        persistent_replace_failed = False
+    except PermissionError:
+        persistent_replace_failed = True
+    case("atomic operations write exposes persistent denial", persistent_replace_failed)
+
     with self_test_workspace() as workspace:
         case("creative operations method contracts pass (positive control)", not repository_contract_problems())
         social_contract = (ROOT / "skills" / "social-strategy.md").read_text(encoding="utf-8")
@@ -1180,6 +1274,28 @@ def self_test() -> int:
             bool(repository_contract_problems({"visual": visual_contract.replace("code-suggests", "source-reviewed", 1)})),
         )
         project = fixture_project(workspace)
+        local_capture = project / "local-evidence.txt"
+        local_capture.write_text("project-local observation\n", encoding="utf-8")
+        case(
+            "project-local operations evidence is accepted (positive control)",
+            evidence_record(local_capture, project=project)["sha256"] == digest(local_capture),
+        )
+        outside_capture = workspace / "outside-operations.txt"
+        outside_capture.write_text("outside observation\n", encoding="utf-8")
+        try:
+            evidence_record(outside_capture, project=project)
+            outside_evidence_blocked = False
+        except OperationsError:
+            outside_evidence_blocked = True
+        case("outside-project operations evidence is rejected", outside_evidence_blocked)
+        secret_capture = project / "deployment-secret.pem"
+        secret_capture.write_text("not-a-real-secret\n", encoding="utf-8")
+        try:
+            evidence_record(secret_capture, project=project)
+            secret_evidence_blocked = False
+        except OperationsError:
+            secret_evidence_blocked = True
+        case("sensitive project files cannot become operations evidence", secret_evidence_blocked)
         ledger = create_ledger(project)
         ids = {item["id"] for item in ledger["requirements"]}
         case("approved documents derive thesis and signature requirements", {"design-thesis", "signature-moment"} <= ids)
@@ -1361,7 +1477,7 @@ def self_test() -> int:
         source_capture = project / "platform-source.html"
         source_capture.write_text("Official platform format guidance.\n", encoding="utf-8")
         write_json(creative_dir / "creative-evidence.json", {
-            "references": [{"id": "social-source", "state": "inspected", "source": "https://platform.example.test", "evidence": evidence_record(source_capture)}]
+            "references": [{"id": "social-source", "state": "inspected", "source": "https://platform.example.test", "evidence": evidence_record(source_capture, project=project)}]
         })
         social_event = {
             "id": "social-1", "activated_by": "Create a social strategy for this project.",

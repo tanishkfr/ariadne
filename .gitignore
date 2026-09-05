@@ -1,8 +1,17 @@
-__pycache__/
-*.pyc
-dist/
-build/
+node_modules/
 .env*
 .DS_Store
 .vscode/
 .idea/
+dist/
+build/
+.next/
+private/
+client-assets/
+__pycache__/
+*.pyc
+
+# Local validation evidence is private operator material. Canonical fixtures and
+# the validation protocol remain tracked; individual run records do not.
+validation/runs/*
+!validation/runs/_README.md

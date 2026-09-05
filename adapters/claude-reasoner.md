@@ -22,13 +22,14 @@ says it reads `CLAUDE.md`; Ariadne deliberately avoids adding that
 provider-specific file to projects. Required `AGENTS.md` content reaches Claude
 through the verified stage packet instead.
 
-## Documented interface
+## Current verified interface
 
 Official documentation dated 2026-08-23 verifies interactive and `-p`
 non-interactive operation, JSON/stream-JSON/JSON-Schema output, explicit model
 selection, bounded turns, permission modes, user skills and session resume.
-Ariadne still detects the installed CLI and records actual execution evidence;
-documentation alone never counts as a completed stage.
+The local validation machine has no `claude` executable, so authentication,
+models, tool behaviour, output shape and stage execution remain externally
+unverified.
 
 Sources: [CLI](https://code.claude.com/docs/en/cli-usage),
 [non-interactive operation](https://code.claude.com/docs/en/headless),
@@ -57,3 +58,9 @@ discard or continue that work.
 Session resume is an optional provider convenience. Ariadne packet evidence
 and canonical project files remain authoritative; a missing Claude session must
 not lose the project.
+
+## Unsupported claims
+
+Until live validation, do not claim creative parity, successful Ariadne
+skill discovery, authenticated non-interactive use, canonical handoff output,
+provider switching execution or end-to-end completion.

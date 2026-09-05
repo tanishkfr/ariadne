@@ -74,7 +74,7 @@ STAGES = {
         "block": 0,
         "project_inputs": [],
         "optional_project_inputs": [".ariadne/creative-evidence.json"],
-        "canonical_inputs": ["RESEARCH-POLICY.md", "templates/RESEARCH.md"],
+        "canonical_inputs": ["RESEARCH-POLICY.md", "PRIVACY-POLICY.md", "templates/RESEARCH.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S1", "S2"],
         "forbidden_inputs": ["unrelated PROJECT.md content", "design context", "source code"],
@@ -86,11 +86,17 @@ STAGES = {
         "block": 0,
         "project_inputs": ["PROJECT.md"],
         "optional_project_inputs": [".ariadne/creative-evidence.json"],
-        "canonical_inputs": ["DESIGN-TASTE.md", "templates/DESIGN.md"],
+        "canonical_inputs": [
+            "DESIGN-TASTE.md", "PRIVACY-POLICY.md", "templates/DESIGN.md",
+            "skills/design-direction.md",
+        ],
         "conditional_inputs": [
             "project:RESEARCH.md",
             "canonical:DESIGN-MOTION.md",
             "canonical:DESIGN-ASSETS.md",
+            "selected-skill:skills/reference-analysis.md",
+            "selected-skill:skills/component-research.md",
+            "selected-capability-registry:references/capabilities.json",
         ],
         "allowed_parents": ["S1", "S2", "S3"],
         "forbidden_inputs": ["source code", "build history"],
@@ -556,6 +562,40 @@ def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tupl
         if not path.is_file():
             raise PacketError(f"{stage} canonical input is missing: {name}")
         sources.append(source_entry(name, path, "canonical", read(path)))
+
+    selected_skills = set()
+    creative_path = project / ".ariadne" / "creative-evidence.json"
+    if creative_path.is_file():
+        try:
+            creative = json.loads(read(creative_path))
+            if Path(str(creative.get("project", ""))).resolve() != project.resolve():
+                raise PacketError("creative evidence belongs to a different project")
+            selected_skills = {
+                str(item.get("name"))
+                for item in creative.get("skills", [])
+                if isinstance(item, dict) and item.get("selected")
+            }
+        except json.JSONDecodeError as exc:
+            raise PacketError("creative evidence is malformed") from exc
+
+    if stage == "S3":
+        selected_sources = {
+            "reference-analysis": "skills/reference-analysis.md",
+            "component-research": "skills/component-research.md",
+        }
+        for skill_name, name in selected_sources.items():
+            if skill_name in selected_skills:
+                path = ROOT / name
+                sources.append(source_entry(name, path, "canonical-selected-skill", read(path)))
+            else:
+                omitted.append(f"{name} not selected by the project creative plan")
+        if "component-research" in selected_skills:
+            path = ROOT / "references" / "capabilities.json"
+            sources.append(source_entry(
+                "references/capabilities.json", path, "canonical-selected-capability", read(path)
+            ))
+        else:
+            omitted.append("references/capabilities.json not needed — component research was not selected")
 
     if stage == "S3":
         if args.motion not in ("yes", "no") or args.assets not in ("yes", "no"):
@@ -1024,6 +1064,24 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S4B packet must carry the generated creative-operations plan")
     if "skills/visual-qa.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
         problems.append("S4B packet must deliver the selected visual-QA method")
+    if specs.get("S2", {}).get("canonical_inputs") != [
+        "RESEARCH-POLICY.md", "PRIVACY-POLICY.md", "templates/RESEARCH.md"
+    ]:
+        problems.append("S2 packet must deliver research, privacy, and output contracts")
+    s3 = specs.get("S3", {})
+    for source in (
+        "DESIGN-TASTE.md", "PRIVACY-POLICY.md", "templates/DESIGN.md",
+        "skills/design-direction.md",
+    ):
+        if source not in s3.get("canonical_inputs", []):
+            problems.append(f"S3 packet must deliver canonical source: {source}")
+    for source in (
+        "selected-skill:skills/reference-analysis.md",
+        "selected-skill:skills/component-research.md",
+        "selected-capability-registry:references/capabilities.json",
+    ):
+        if source not in s3.get("conditional_inputs", []):
+            problems.append(f"S3 packet conditional transport is missing: {source}")
     return problems
 
 
@@ -1064,6 +1122,14 @@ def self_test() -> int:
     changed = copy.deepcopy(STAGES)
     changed["S1"]["allowed_parents"] = []
     case("missing S1 resume parent contract fails", bool(repository_contract_problems(changed)))
+    changed = copy.deepcopy(STAGES)
+    changed["S2"]["canonical_inputs"].remove("PRIVACY-POLICY.md")
+    case("missing S2 privacy boundary fails", bool(repository_contract_problems(changed)))
+    changed = copy.deepcopy(STAGES)
+    changed["S3"]["conditional_inputs"].remove(
+        "selected-skill:skills/component-research.md"
+    )
+    case("missing selected S3 skill transport fails", bool(repository_contract_problems(changed)))
 
     with self_test_workspace() as sandbox:
         project = sandbox / "project"
@@ -1210,7 +1276,15 @@ def self_test() -> int:
         creative_dir.mkdir()
         creative_path = creative_dir / "creative-evidence.json"
         creative_path.write_text(
-            json.dumps({"schema_version": 1, "project": str(project), "research_depth": "standard"}, indent=2) + "\n",
+            json.dumps({
+                "schema_version": 2,
+                "project": str(project),
+                "research_depth": "standard",
+                "skills": [
+                    {"name": "reference-analysis", "selected": True},
+                    {"name": "component-research", "selected": True},
+                ],
+            }, indent=2) + "\n",
             encoding="utf-8",
         )
         s2_dir = sandbox / "R1-S2"
@@ -1234,6 +1308,14 @@ def self_test() -> int:
             "fresh S3 continuation carries creative provenance",
             not verify_packet(s3_dir)
             and any(item["label"] == ".ariadne/creative-evidence.json" for item in s3_manifest["sources"]),
+        )
+        delivered_s3 = {item["label"] for item in s3_manifest["sources"]}
+        case(
+            "selected S3 methods and registry are delivered (positive control)",
+            {
+                "skills/reference-analysis.md", "skills/component-research.md",
+                "references/capabilities.json",
+            }.issubset(delivered_s3),
         )
 
         (s3_dir / "evidence" / "transcript.md").write_text(
@@ -1318,6 +1400,28 @@ def self_test() -> int:
         manifest_original = read(manifest_path)
         packet_path = s3_dir / PACKET_NAME
         packet_original = read(packet_path)
+        registry_entry = next(
+            source for source in json.loads(manifest_original)["sources"]
+            if source["path"] == "references/capabilities.json"
+        )
+        registry_header = section_header(registry_entry)
+        registry_tampered = packet_original.replace(
+            '"name": "Base UI"', '"name": "Tampered UI"', 1
+        )
+        packet_path.write_text(registry_tampered, encoding="utf-8")
+        registry_manifest = json.loads(manifest_original)
+        registry_manifest["packet_sha256"] = sha256_file(packet_path)
+        manifest_path.write_text(
+            json.dumps(registry_manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        case(
+            "changed delivered capability registry cannot pass as current",
+            registry_header in packet_original
+            and any("section content hash mismatch" in problem for problem in verify_packet(s3_dir)),
+        )
+        packet_path.write_text(packet_original, encoding="utf-8")
+        manifest_path.write_text(manifest_original, encoding="utf-8")
         broken_packet = re.sub(r"(?ms)^===== BEGIN DESIGN-TASTE.md.*?^===== END DESIGN-TASTE.md =====\n?", "", packet_original)
         packet_path.write_text(broken_packet, encoding="utf-8")
         manifest = json.loads(manifest_original)
@@ -1446,6 +1550,30 @@ def self_test() -> int:
                 for item in s4b_manifest["sources"]
             ),
         )
+        claude_code_dir = sandbox / "R1-S4B-CLAUDE-CODE"
+        prepare(ns(
+            stage="S4B", project=str(project), output=str(claude_code_dir),
+            parent=str(s4a_dir), provider="claude-code",
+        ))
+        case(
+            "Claude Code S4B transport retains its provider identity",
+            not verify_packet(claude_code_dir)
+            and json.loads(read(claude_code_dir / MANIFEST_NAME))["provider"]
+            == "claude-code",
+        )
+        try:
+            prepare(ns(
+                stage="S4B", project=str(project),
+                output=str(sandbox / "R1-S4B-REASONER-MISROUTE"),
+                parent=str(s4a_dir), provider="claude",
+            ))
+            claude_reasoner_misroute_blocked = False
+        except PacketError as exc:
+            claude_reasoner_misroute_blocked = "reasoner" in str(exc)
+        case(
+            "Claude reasoner ID cannot masquerade as an implementation provider",
+            claude_reasoner_misroute_blocked,
+        )
         s4b_manifest_path = s4b_dir / MANIFEST_NAME
         s4b_manifest_original = read(s4b_manifest_path)
         malformed_return_target = json.loads(s4b_manifest_original)
@@ -1520,7 +1648,9 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--packet-id")
     prepare_parser.add_argument("--parent")
     prepare_parser.add_argument("--retry", action="store_true")
-    prepare_parser.add_argument("--provider", choices=["codex", "claude", "cursor", "other"])
+    prepare_parser.add_argument(
+        "--provider", choices=["codex", "claude", "cursor", "claude-code", "other"]
+    )
     prepare_parser.add_argument("--request")
     prepare_parser.add_argument("--request-file")
     prepare_parser.add_argument("--references-file")

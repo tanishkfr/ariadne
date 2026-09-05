@@ -148,17 +148,24 @@ Availability and quota are runtime facts; do not invent them in this document.
 
 ## Definition of done
 
+> This is the S4B implementation-return boundary. Independent judgement and
+> human gate decisions happen afterwards and cannot be claimed here.
+
 - [ ] Every task in `TASKS.md` meets its acceptance criterion
 - [ ] Production build passes
 - [ ] Zero type errors, zero console errors, zero React warnings
 - [ ] Every value from the token system
 - [ ] Signature moment built and working on mobile
 - [ ] All mechanical QA checks run and recorded (including *not run*, with reasons)
-- [ ] Scorecard >= 35, no criterion at 1
-- [ ] Zero anti-generic patterns present
 - [ ] Screenshots captured **and inspected**
-- [ ] `QA.md` complete with a non-empty Known gaps list
-- [ ] G3 presented
+- [ ] `QA.md` mechanical evidence is complete with a non-empty Known gaps list
+- [ ] The complete marked implementation return is ready
+
+### Downstream evidence — explicitly not part of S4B completion
+
+The fresh independent reviewer supplies the scorecard and judgement. The human
+then decides G3. Neither may be fabricated, predicted, or checked off by the
+builder.
 
 ## Return handoff
 

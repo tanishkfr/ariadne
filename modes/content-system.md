@@ -26,7 +26,7 @@ Full method: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). This file is the routing
 
 ## Setup, once
 
-Three artifacts, built at S1-S2, living **in the content project, never in the Ariadne** ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)):
+Three artifacts, built at S1-S2, living **in the content project, never in Ariadne** ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)):
 
 **1. `voice-profile.md`** — from 10-20 things you have actually written. Includes the **anti-voice list**: constructions you find embarrassing. Minimum ten entries. Easier to enforce than a voice list and does more work.
 

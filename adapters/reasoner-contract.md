@@ -26,12 +26,32 @@ evidence distinctions and handoff structure.
 - No reasoner may self-approve a gate or silently choose a fallback during a
   material partial output.
 
+## Capability matrix — 2026-08-23
+
+| Capability | Codex | Claude reasoner |
+|---|---|---|
+| Intake | verified | externally unverified |
+| Research | verified | externally unverified |
+| Design direction | verified | externally unverified |
+| Canonical handoff | verified | externally unverified |
+| Fresh-task continuity | verified | externally unverified |
+| Visual-QA planning | verified | externally unverified |
+| Creative review | verified | externally unverified |
+| Social strategy | verified | externally unverified |
+| Social result learning | verified | externally unverified |
+| CLI non-interactive JSON/schema output | not applicable | verified in official documentation; not locally executed |
+| Session resume | task continuity uses Ariadne state | verified in official documentation; integration unverified |
+| Native skill entry | managed Ariadne skill verified | documented; optional Ariadne skill not live-tested |
+
+Claude workflow rows remain externally unverified because `claude` is not
+installed in the validation environment. Structural packet compatibility is not
+creative or execution parity.
+
 ## Evidence and failure
 
 Provider self-report remains self-report. Stage output is recorded structurally
 or with a transcript; mechanical, observed and independent evidence remain
 separate. A provider switch or failure gets its own immutable parent evidence.
-A documented capability is not execution evidence.
 A failed external reasoner may fall back to Codex automatically only when no
 material stage output exists. Otherwise Ariadne pauses for human judgement.
 
@@ -44,6 +64,7 @@ the optional Claude entry skill is a separate explicit action.
 
 ## Canonical handoff parity
 
-Both reasoners produce the existing `templates/HANDOFF.md` contract. Cursor or
-Grok consumes the current S4B packet and returns the existing structured return.
+Both reasoners produce the existing `templates/HANDOFF.md` contract. The
+selected implementation provider consumes the current S4B packet and returns
+the existing structured return.
 No Claude-specific project document or handoff schema exists.

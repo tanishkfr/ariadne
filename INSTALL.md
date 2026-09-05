@@ -6,7 +6,7 @@ templates, tests or source code into a project.
 
 ## Requirements
 
-- Python 3.8 or newer.
+- Python 3.10 or newer.
 - Codex for the `$ariadne` interface.
 - Internet access to download the initial wheel. The runtime installation from
   that wheel is offline; later updates need internet access.
@@ -15,12 +15,28 @@ Node.js, pnpm, hosting accounts and implementation providers are project
 requirements, not installation requirements. Ariadne asks before any project
 dependency is installed.
 
+### Python package-name compatibility
+
+This product currently shares the Python distribution and import name
+`ariadne` with the unrelated [Ariadne GraphQL package](https://pypi.org/project/ariadne/)
+(verified 2026-09-05). They cannot coexist in one Python environment. Before a
+first install, run:
+
+```bash
+python -m pip show ariadne
+```
+
+If the result describes a GraphQL library, stop and use a separate Python
+interpreter or virtual environment for this product. Do not let pip replace an
+existing application dependency. This limitation does not affect the product
+name, `$ariadne` skill or user-local runtime after installation.
+
 ## Install from GitHub
 
 Run these as your normal user:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.5.3/ariadne-1.5.3-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/archive/refs/heads/master.zip"
 python -m ariadne install
 python -m ariadne doctor
 ```

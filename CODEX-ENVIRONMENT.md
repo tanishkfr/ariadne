@@ -76,3 +76,17 @@ python -m ariadne codex-baseline remove
 ```
 
 Restart Codex after installing or removing the baseline.
+
+## Evidence classification
+
+- **VERIFIED:** documented instruction traversal, user and project instruction
+  scope, current skill directories, progressive skill loading, explicit and
+  implicit skill invocation, and deterministic isolated install/update/
+  rollback/remove controls.
+- **REASONABLY ASSUMED:** a fresh supported Codex version will apply the same
+  published discovery rules to the generated files.
+- **EXTERNALLY UNVERIFIED:** a genuinely new person's first external Codex task
+  discovering `$ariadne` and applying both user and project instructions.
+- **BLOCKED:** no current blocker to packaging; live fresh-task evidence needs a
+  human-opened external Codex task after publication or isolated candidate
+  installation.
