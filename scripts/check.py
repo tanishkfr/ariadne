@@ -873,11 +873,56 @@ def check_delivery_contract_texts(texts):
             if token not in matrix:
                 problems.append(f"{path} does not deliver required input: {token}")
 
+    rubric = texts.get("EVALUATION-RUBRICS.md", "")
+    frontend_match = re.search(
+        r"(?ms)^## 5\. Frontend engineer\s*$\r?\n(.*?)(?=^---\s*$)", rubric
+    )
+    if not frontend_match:
+        problems.append("independent frontend lens is missing")
+    else:
+        frontend = frontend_match.group(1)
+        for token in (
+            "Do not infer source structure", "Responsive integrity", "Keyboard and focus"
+        ):
+            if token not in frontend:
+                problems.append(f"independent frontend lens lost observable boundary: {token}")
+        for forbidden in (
+            "Component boundaries", "600-line components", "Repeated patterns extracted",
+            "six months without rereading",
+        ):
+            if forbidden in frontend:
+                problems.append(
+                    f"independent frontend lens requires unavailable source context: {forbidden}"
+                )
+
+    handoff = texts.get("templates/HANDOFF.md", "")
+    done_match = re.search(
+        r"(?ms)^## Definition of done\s*$\r?\n(.*?)(?=^##\s+)", handoff
+    )
+    if not done_match:
+        problems.append("HANDOFF template has no S4B completion boundary")
+    else:
+        done = done_match.group(1)
+        for token in (
+            "S4B implementation-return boundary",
+            "The complete marked implementation return is ready",
+            "Downstream evidence — explicitly not part of S4B completion",
+        ):
+            if token not in done:
+                problems.append(f"HANDOFF S4B boundary is incomplete: {token}")
+        for forbidden in ("[ ] Scorecard", "[ ] G3"):
+            if forbidden in done:
+                problems.append(f"HANDOFF makes downstream evidence S4B work: {forbidden}")
+
     return problems
 
 
 def check_delivery_contracts():
-    paths = {spec["path"] for spec in DELIVERY_CONTRACTS} | set(ADAPTER_DELIVERY)
+    paths = (
+        {spec["path"] for spec in DELIVERY_CONTRACTS}
+        | set(ADAPTER_DELIVERY)
+        | {"EVALUATION-RUBRICS.md", "templates/HANDOFF.md"}
+    )
     texts = {
         path: open(os.path.join(ROOT, path), encoding="utf-8").read()
         for path in paths
@@ -1116,7 +1161,11 @@ pnpm install
 
 def self_test_delivery_contracts():
     """Positive controls and mutations that must break standalone delivery."""
-    paths = {spec["path"] for spec in DELIVERY_CONTRACTS} | set(ADAPTER_DELIVERY)
+    paths = (
+        {spec["path"] for spec in DELIVERY_CONTRACTS}
+        | set(ADAPTER_DELIVERY)
+        | {"EVALUATION-RUBRICS.md", "templates/HANDOFF.md"}
+    )
     actual = {
         path: open(os.path.join(ROOT, path), encoding="utf-8").read()
         for path in paths
@@ -1218,6 +1267,17 @@ def self_test_delivery_contracts():
          bool(check_delivery_contract_texts(mutate(
              "adapters/codex.md", "`references/capabilities.json`",
              "the capability registry"
+         )))),
+        ("independent frontend lens cannot require hidden source context",
+         bool(check_delivery_contract_texts(mutate(
+             "EVALUATION-RUBRICS.md", "Do not infer source structure",
+             "Inspect source structure"
+         )))),
+        ("S4B completion cannot claim human G3 work",
+         bool(check_delivery_contract_texts(mutate(
+             "templates/HANDOFF.md",
+             "- [ ] The complete marked implementation return is ready",
+             "- [ ] G3 presented"
          )))),
         ("content drafting without voice continuity fails",
          bool(check_delivery_contract_texts(mutate(

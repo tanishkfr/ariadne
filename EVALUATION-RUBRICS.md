@@ -144,20 +144,24 @@ Test: *Could someone complete the core task without being told how?*
 
 ## 5. Frontend engineer
 
-*Would I want to maintain this?* The judgement part — the checkable parts are in [QA-POLICY.md](QA-POLICY.md).
+*Does this behave like a robust frontend in use?* This is an external,
+rendered-product lens. Do not infer source structure, component boundaries, or
+maintainability from the interface; those checks belong to the mechanical half
+in [QA-POLICY.md](QA-POLICY.md).
 
 | # | Criterion | Looking for |
 |---|---|---|
-| 1 | Component boundaries | Sensible; no 600-line components |
-| 2 | Token discipline | Values from the system, not hardcoded one-offs |
-| 3 | Dependency justification | Minimal, documented ([LIBRARY-POLICY.md](LIBRARY-POLICY.md)) |
-| 4 | Reusability | Repeated patterns extracted; single-use abstractions not invented |
-| 5 | Readability | A stranger follows it in ten minutes |
-| 6 | Correctness under change | Adding a feature would not require rewriting |
+| 1 | State stability | Repeated interactions do not leave stale, contradictory, or broken states |
+| 2 | Visual-system consistency | Repeated controls and patterns render and behave consistently |
+| 3 | Responsive integrity | Core paths remain coherent across supplied desktop and narrow viewports |
+| 4 | Feedback and recovery | Actions, errors, retries, and disabled states are legible and recoverable |
+| 5 | Perceived performance | Loading, transition, and input response do not visibly fight the task |
+| 6 | Keyboard and focus | Core paths remain understandable and operable without pointer-only assumptions |
 
 **Max 30.** Below 18: refactor before extending. 18-23: acceptable. 24+: good.
 
-Test: *Could I add a feature to this in six months without rereading everything?*
+Test: *Can I repeat the core path across the supplied viewports without visible
+state, interaction, or system-consistency failures?*
 
 ---
 
