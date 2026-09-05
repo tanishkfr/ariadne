@@ -38,3 +38,10 @@ gates and human authority.
 Deterministic fixtures and isolated lifecycle tests do not prove native
 macOS/Linux behaviour, live Claude or Cursor execution, or first-time-user
 comprehension. This version has not been published yet.
+
+## Known compatibility limitation
+
+The Python distribution/import name `ariadne` is also used by Ariadne GraphQL.
+The packages cannot coexist in one Python environment. This release preserves
+the approved product identity; users with that package must use a separate
+interpreter or virtual environment.

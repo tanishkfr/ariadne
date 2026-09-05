@@ -15,6 +15,22 @@ Node.js, pnpm, hosting accounts and implementation providers are project
 requirements, not installation requirements. Ariadne asks before any project
 dependency is installed.
 
+### Python package-name compatibility
+
+This product currently shares the Python distribution and import name
+`ariadne` with the unrelated [Ariadne GraphQL package](https://pypi.org/project/ariadne/)
+(verified 2026-09-05). They cannot coexist in one Python environment. Before a
+first install, run:
+
+```bash
+python -m pip show ariadne
+```
+
+If the result describes a GraphQL library, stop and use a separate Python
+interpreter or virtual environment for this product. Do not let pip replace an
+existing application dependency. This limitation does not affect the product
+name, `$ariadne` skill or user-local runtime after installation.
+
 ## Install from GitHub
 
 Run these as your normal user:
