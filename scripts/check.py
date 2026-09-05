@@ -40,6 +40,7 @@ REQUIRED = [
     "CHANGELOG.md", "QUICKSTART.md", "INSTALL.md", "UPDATE.md",
     "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md", "V1.5-READINESS.md",
     "V1.5.1-READINESS.md", "V1.5.2-READINESS.md", "V1.5.3-READINESS.md",
+    "V1.6-READINESS.md",
     "CODEX-ENVIRONMENT.md", "RELEASE-NOTES.md",
     "VERSION", "LICENSE", "pyproject.toml", "build_backend/ariadne_backend.py",
     "src/ariadne/__init__.py", "src/ariadne/__main__.py", "src/ariadne/cli.py",
