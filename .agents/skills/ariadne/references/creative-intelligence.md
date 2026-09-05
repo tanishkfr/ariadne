@@ -110,6 +110,7 @@ Decision trace:
   "decision":"The concrete project choice",
   "principle":"What the observation became",
   "basis":"reference",
+  "claim_status":"SUPPORTED",
   "reference_ids":["ref-1"],
   "artifact_path":"<DESIGN.md or another real output>",
   "artifact_anchor":"Exact text present in that artifact",
@@ -139,6 +140,7 @@ Resource decision:
   "alternatives": [{"name": "scroll listener", "reason": "More manual event handling"}],
   "necessary": true,
   "decision": "use",
+  "claim_status": "SUPPORTED",
   "source_reference_ids": ["ref-platform-doc"],
   "artifact_path": "<RESEARCH.md or HANDOFF.md>",
   "artifact_anchor": "<exact text in that artifact>"

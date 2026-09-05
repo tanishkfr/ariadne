@@ -31,8 +31,8 @@ QUESTIONS:
 <blocking questions copied from PROJECT.md>
 
 Apply the complete supplied RESEARCH-POLICY.md exactly; it owns the lookup
-budget, source ranking, confidence definitions, recording fields, disagreement
-handling, and blocked-verification behaviour.
+budget, evidence ladder, source-confidence definitions, recording fields,
+disagreement handling, and blocked-verification behaviour.
 
 Write RESEARCH.md using the supplied template. Research only the supplied
 questions. Do not design, architect, choose a direction, install anything, or
@@ -48,6 +48,9 @@ EVIDENCE BOUNDARY
   the source as inaccessible, the blocker, and no observations.
 - A Verified finding in RESEARCH.md must point to an inspected source record.
   A URL or expected sentence is not evidence by itself.
+- Classify every finding separately as OBSERVED, SUPPORTED, INFERRED,
+  HYPOTHESIS, or ASSUMPTION. Do not promote a hypothesis or assumption merely
+  because it sounds plausible.
 - When the selected research skill finishes, record its output as RESEARCH.md.
   Mark it used only when a later decision cites the resulting evidence.
 

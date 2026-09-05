@@ -63,7 +63,31 @@ Tier 6 deserves naming: frequently generated, frequently wrong, and carrying a c
 
 ---
 
-## 4. Recording
+## 4. Evidence ladder and recording
+
+Every consequential statement carries two different labels:
+
+1. **Claim status** says how far the reasoning has travelled from direct
+   evidence.
+2. **Source confidence** says how well the external source was verified.
+
+Do not collapse them. An observed sentence on an unverified page is
+`OBSERVED / Unverified`; a conclusion supported by two primary sources is
+`SUPPORTED / Verified`.
+
+| Claim status | Means |
+|---|---|
+| **OBSERVED** | Directly seen in a retrieved source, command result, supplied artifact, or rendered interaction; the evidence location is named |
+| **SUPPORTED** | The claim is a bounded conclusion backed by one or more inspected evidence records |
+| **INFERRED** | The claim follows from evidence plus an explicit reasoning step that could be wrong |
+| **HYPOTHESIS** | A falsifiable proposition proposed for a future test; it is not yet evidence |
+| **ASSUMPTION** | A temporary premise being acted on without sufficient evidence; owner and cost-if-wrong are recorded |
+
+Promote a claim only when new evidence justifies the higher status. Never use a
+HYPOTHESIS or ASSUMPTION to close a blocking S2 question, approve a dependency,
+or claim that a behaviour works. Model memory is an ASSUMPTION until verified.
+
+### Source confidence
 
 Four fields, always: **claim · date · source URL · confidence.** Missing one means it is not research.
 

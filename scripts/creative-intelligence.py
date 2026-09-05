@@ -22,7 +22,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = (1, 2)
 LEDGER_RELATIVE = Path(".ariadne") / "creative-evidence.json"
 LEVELS = ("low", "medium", "high")
 DIMENSIONS = (
@@ -53,6 +54,7 @@ RESOURCE_CATEGORIES = (
     "image-source", "technique", "design-tool", "component-primitive",
 )
 RESOURCE_DECISIONS = ("use", "do-not-use", "defer")
+CLAIM_STATUSES = ("OBSERVED", "SUPPORTED", "INFERRED", "HYPOTHESIS", "ASSUMPTION")
 STAGE_ORDER = {"S1": 1, "S2": 2, "S3": 3, "S4A": 4, "S4B": 5, "S5": 6}
 
 
@@ -480,10 +482,13 @@ def record_resource(ledger: dict, event: dict) -> None:
     name = str(event.get("name", "")).strip()
     category = str(event.get("category", "")).strip()
     decision = str(event.get("decision", "")).strip()
+    claim_status = str(event.get("claim_status", "")).strip().upper()
     if not resource_id or not name or category not in RESOURCE_CATEGORIES:
         raise CreativeError("resource evidence needs id, name, and a valid category")
     if decision not in RESOURCE_DECISIONS:
         raise CreativeError("resource evidence needs use, do-not-use, or defer decision")
+    if claim_status not in CLAIM_STATUSES:
+        raise CreativeError("resource evidence needs a supported claim_status")
     if any(item.get("id") == resource_id for item in ledger.get("resources", [])):
         raise CreativeError(f"resource ID is already recorded: {resource_id}")
     alternatives = event.get("alternatives", [])
@@ -527,6 +532,7 @@ def record_resource(ledger: dict, event: dict) -> None:
         ],
         "necessary": bool(event.get("necessary", False)),
         "decision": decision,
+        "claim_status": claim_status,
         "source_reference_ids": reference_ids,
         "artifact": artifact,
         "artifact_anchor": anchor,
@@ -541,6 +547,8 @@ def record_resource(ledger: dict, event: dict) -> None:
         )
     if decision == "use" and not row["necessary"]:
         raise CreativeError("a resource selected for use must be marked necessary")
+    if decision == "use" and claim_status in ("HYPOTHESIS", "ASSUMPTION"):
+        raise CreativeError("a hypothesis or assumption cannot justify selecting a resource")
     if decision == "do-not-use" and row["necessary"]:
         raise CreativeError("a rejected resource cannot be marked necessary")
     ledger.setdefault("resources", []).append(row)
@@ -551,8 +559,11 @@ def record_decision(ledger: dict, event: dict) -> None:
     decision = str(event.get("decision", "")).strip()
     principle = str(event.get("principle", "")).strip()
     basis = str(event.get("basis", "")).strip()
+    claim_status = str(event.get("claim_status", "")).strip().upper()
     if not decision_id or not decision or not principle or basis not in ("reference", "research", "thesis", "constraint"):
         raise CreativeError("decision evidence needs id, decision, principle, and a valid basis")
+    if claim_status not in CLAIM_STATUSES:
+        raise CreativeError("decision evidence needs a supported claim_status")
     if any(item.get("id") == decision_id for item in ledger.get("decisions", [])):
         raise CreativeError(f"decision ID is already recorded: {decision_id}")
     artifact = evidence_record(
@@ -576,6 +587,7 @@ def record_decision(ledger: dict, event: dict) -> None:
         "decision": decision,
         "principle": principle,
         "basis": basis,
+        "claim_status": claim_status,
         "reference_ids": reference_ids,
         "artifact": artifact,
         "artifact_anchor": anchor,
@@ -692,7 +704,8 @@ def _artifact_problems(record: dict, label: str) -> list[str]:
 def ledger_problems(project: Path, ledger: dict) -> list[str]:
     project = project.resolve()
     problems = []
-    if ledger.get("schema_version") != SCHEMA_VERSION:
+    schema_version = ledger.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         problems.append("creative evidence has unsupported schema version")
     try:
         if Path(str(ledger.get("project", ""))).resolve() != project:
@@ -757,6 +770,10 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
             problems.append(f"resource has invalid category: {resource.get('id')}")
         if resource.get("decision") not in RESOURCE_DECISIONS:
             problems.append(f"resource has invalid decision: {resource.get('id')}")
+        if schema_version == SCHEMA_VERSION and resource.get("claim_status") not in CLAIM_STATUSES:
+            problems.append(f"resource has invalid claim status: {resource.get('id')}")
+        if resource.get("decision") == "use" and resource.get("claim_status") in ("HYPOTHESIS", "ASSUMPTION"):
+            problems.append(f"selected resource lacks sufficient evidence: {resource.get('id')}")
         if not resource.get("alternatives"):
             problems.append(f"resource has no considered alternative: {resource.get('id')}")
         if resource.get("decision") == "use" and not resource.get("necessary"):
@@ -777,6 +794,8 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
     decisions = ledger.get("decisions", [])
     decision_ids = {item.get("id") for item in decisions}
     for decision in decisions:
+        if schema_version == SCHEMA_VERSION and decision.get("claim_status") not in CLAIM_STATUSES:
+            problems.append(f"decision has invalid claim status: {decision.get('id')}")
         problems.extend(_artifact_problems(decision.get("artifact", {}), f"decision {decision.get('id')}"))
         artifact_path = Path(str(decision.get("artifact", {}).get("path", "")))
         if artifact_path.is_file() and decision.get("artifact_anchor") not in artifact_path.read_text(encoding="utf-8"):
@@ -1143,6 +1162,7 @@ def self_test() -> int:
             record_decision(ledger, {
                 "id": f"decision-{index}", "decision": f"Use mechanism {index}",
                 "principle": "Translate the reference into the archive subject.", "basis": "reference",
+                "claim_status": "SUPPORTED",
                 "reference_ids": [f"ref-{index}"], "artifact_path": str(design),
                 "artifact_anchor": f"https://example.test/reference-{index}", "status": "proposed", "gate": "pending",
             })
@@ -1222,6 +1242,7 @@ def self_test() -> int:
             "implementation_cost": "One observer and deterministic fallback logic.",
             "alternatives": [{"name": "scroll listener", "reason": "More manual work and event-frequency risk."}],
             "necessary": True, "decision": "use", "source_reference_ids": ["ref-platform"],
+            "claim_status": "SUPPORTED",
             "artifact_path": str(technical_output), "artifact_anchor": "Use the platform observer",
         })
         record_resource(technical_ledger, {
@@ -1233,6 +1254,7 @@ def self_test() -> int:
             "implementation_cost": "Adds installation, bundle, and maintenance cost.",
             "alternatives": [{"name": "Platform observer", "reason": "Supplies the bounded behaviour without a dependency."}],
             "necessary": False, "decision": "do-not-use", "source_reference_ids": ["ref-package"],
+            "claim_status": "SUPPORTED",
             "artifact_path": str(technical_output), "artifact_anchor": "no motion package is necessary",
         })
         case(
@@ -1245,6 +1267,26 @@ def self_test() -> int:
             summary(technical_ledger)["resources"] == {"evaluated": 2, "selected": 1}
             and {item["decision"] for item in technical_ledger["resources"]} == {"use", "do-not-use"},
         )
+        weak_resource_ledger = json.loads(json.dumps(technical_ledger))
+        weak_resource_ledger["resources"][0]["claim_status"] = "ASSUMPTION"
+        case(
+            "assumption cannot justify a selected resource",
+            any("lacks sufficient evidence" in item for item in ledger_problems(project, weak_resource_ledger)),
+        )
+        missing_status_ledger = json.loads(json.dumps(ledger))
+        missing_status_ledger["decisions"][0].pop("claim_status")
+        case(
+            "current evidence schema rejects a missing decision claim status",
+            any("invalid claim status" in item for item in ledger_problems(project, missing_status_ledger)),
+        )
+        legacy_ledger = json.loads(json.dumps(ledger))
+        legacy_ledger["schema_version"] = 1
+        for item in legacy_ledger["decisions"]:
+            item.pop("claim_status", None)
+        case(
+            "legacy evidence remains readable without fabricated classifications",
+            not ledger_problems(project, legacy_ledger),
+        )
         try:
             record_resource(technical_ledger, {
                 "id": "resource-unproved", "name": "Unproved package", "category": "library",
@@ -1253,6 +1295,7 @@ def self_test() -> int:
                 "implementation_cost": "Unknown.",
                 "alternatives": [{"name": "none", "reason": "No comparison ran."}],
                 "necessary": False, "decision": "defer", "source_reference_ids": ["missing-reference"],
+                "claim_status": "ASSUMPTION",
                 "artifact_path": str(technical_output), "artifact_anchor": "Technical decision",
             })
             unproved_resource_blocked = False

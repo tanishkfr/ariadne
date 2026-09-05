@@ -121,6 +121,11 @@ SKILL_FILES = [
 DEPENDENCY_AUTHORITY_FILES = (
     "WORKFLOW.md", "LIBRARY-POLICY.md", "prompts/build-kickoff.md",
 )
+EVIDENCE_LADDER_FILES = (
+    "RESEARCH-POLICY.md", "templates/RESEARCH.md", "prompts/research.md",
+    "scripts/creative-intelligence.py",
+    ".agents/skills/ariadne/references/creative-intelligence.md",
+)
 
 
 def generated_markdown(relative_path):
@@ -176,6 +181,30 @@ def check_dependency_authority_texts(texts=None):
         problems.append("workflow no longer sends every new package to G2")
     if "NO NEW DEPENDENCY without asking me (G2)" not in values["prompts/build-kickoff.md"]:
         problems.append("build prompt no longer stops before an unapproved dependency")
+    return problems
+
+
+def check_evidence_ladder_texts(texts=None):
+    """One claim ladder travels from policy to prompt, template, and ledger."""
+    values = dict(texts or {})
+    for relative in EVIDENCE_LADDER_FILES:
+        if relative not in values:
+            values[relative] = open(
+                os.path.join(ROOT, relative), encoding="utf-8"
+            ).read()
+    statuses = ("OBSERVED", "SUPPORTED", "INFERRED", "HYPOTHESIS", "ASSUMPTION")
+    problems = []
+    for relative in ("RESEARCH-POLICY.md", "templates/RESEARCH.md", "prompts/research.md"):
+        if any(status not in values[relative] for status in statuses):
+            problems.append(f"evidence ladder is incomplete: {relative}")
+    runtime = values["scripts/creative-intelligence.py"]
+    if "CLAIM_STATUSES =" not in runtime or runtime.count('"claim_status"') < 6:
+        problems.append("creative evidence ledger does not enforce claim status")
+    reference = values[".agents/skills/ariadne/references/creative-intelligence.md"]
+    if reference.count('"claim_status"') < 2:
+        problems.append("managed skill examples omit claim status")
+    if "Do not collapse them" not in values["RESEARCH-POLICY.md"]:
+        problems.append("claim status and source confidence are not kept distinct")
     return problems
 
 
@@ -1257,6 +1286,48 @@ def self_test_dependency_authority():
     return 1 if failed else 0
 
 
+def self_test_evidence_ladder():
+    """Positive controls and mutations for claim-status transport."""
+    actual = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in EVIDENCE_LADDER_FILES
+    }
+
+    def mutate(path, old, new):
+        texts = dict(actual)
+        if old not in texts[path]:
+            raise AssertionError(f"evidence mutation source missing: {path}: {old}")
+        texts[path] = texts[path].replace(old, new, 1)
+        return texts
+
+    cases = [
+        ("repository evidence ladder passes (positive control)",
+         not check_evidence_ladder_texts(actual)),
+        ("unrelated research prose passes (positive control)",
+         not check_evidence_ladder_texts({
+             **actual, "RESEARCH-POLICY.md": actual["RESEARCH-POLICY.md"] + "\n",
+         })),
+        ("missing template claim status fails", bool(check_evidence_ladder_texts(mutate(
+            "templates/RESEARCH.md", "**HYPOTHESIS**", "**PROPOSAL**"
+        )))),
+        ("missing prompt classification fails", bool(check_evidence_ladder_texts(mutate(
+            "prompts/research.md", "HYPOTHESIS, or ASSUMPTION", "PROPOSAL, or GUESS"
+        )))),
+        ("ledger claim-status guard drift fails", bool(check_evidence_ladder_texts(mutate(
+            "scripts/creative-intelligence.py", "CLAIM_STATUSES =", "EVIDENCE_LABELS ="
+        )))),
+        ("missing managed-skill claim status fails", bool(check_evidence_ladder_texts(mutate(
+            ".agents/skills/ariadne/references/creative-intelligence.md",
+            '"claim_status":"SUPPORTED"', '"confidence":"high"'
+        )))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def self_test_distribution_contract():
     """Positive controls and mutations for the installed-product boundary."""
     actual = {
@@ -1360,6 +1431,8 @@ def main():
         skill_contract_failed = self_test_skill_contracts()
         print("\nHuman dependency-authority self-test")
         dependency_authority_failed = self_test_dependency_authority()
+        print("\nEvidence-ladder self-test")
+        evidence_ladder_failed = self_test_evidence_ladder()
         print("\nRuntime controller self-test")
         runtime_failed = load_runtime_tool().self_test()
         print("\nReasoner adapter self-test")
@@ -1384,7 +1457,7 @@ def main():
         distribution_failed = load_distribution_tool().self_test()
         failed = (
             agents_failed or delivery_failed or packet_failed or skill_contract_failed
-            or dependency_authority_failed or runtime_failed
+            or dependency_authority_failed or evidence_ladder_failed or runtime_failed
             or reasoner_failed
             or creative_failed or operations_failed or real_projects_failed or social_failed or installer_failed
             or claude_installer_failed
@@ -1492,6 +1565,15 @@ def main():
             print(f"        {problem}")
     else:
         print("ok    dependency authority: discovery never grants human G2")
+
+    evidence_ladder_problems = check_evidence_ladder_texts()
+    if evidence_ladder_problems:
+        failed = True
+        print(f"FAIL  evidence ladder: {len(evidence_ladder_problems)} problem(s)")
+        for problem in evidence_ladder_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    evidence ladder: claim status stays distinct from source confidence")
 
     runtime_problems = check_runtime_tool()
     if runtime_problems:
