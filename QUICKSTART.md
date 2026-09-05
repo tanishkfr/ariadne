@@ -1,6 +1,6 @@
 # QUICKSTART
 
-Requires Python 3.8 or newer and Codex.
+Requires Python 3.10 or newer and Codex.
 
 ## Install
 

@@ -19,7 +19,7 @@ V1.5.2 social capability.
 
 ## Compatibility
 
-- Python 3.8 or newer.
+- Python 3.10 or newer.
 - Windows is directly exercised.
 - macOS and Linux paths are simulated; native installation remains unverified.
 - Codex is the default. Claude remains optional and is not required to install.

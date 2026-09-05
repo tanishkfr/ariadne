@@ -20,8 +20,8 @@ Run `python -m ariadne install`.
 ### Runtime or skill is damaged
 
 Run `python -m ariadne install` again. It repairs only managed files. If an
-unknown file is present in the skill directory, move it elsewhere first; Builder
-OS will not delete it.
+unknown file is present in the skill directory, move it elsewhere first;
+Ariadne will not delete it.
 
 ### An update cannot connect
 

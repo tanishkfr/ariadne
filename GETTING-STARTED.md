@@ -20,7 +20,7 @@ That is it. Everything else is detail.
 
 ## Step 1 — Prerequisites
 
-Ariadne itself needs Python 3.8 or newer and Codex. Git, Node.js, pnpm,
+Ariadne itself needs Python 3.10 or newer and Codex. Git, Node.js, pnpm,
 hosting accounts and external build tools are not first-run requirements. If a
 project later needs one, Ariadne explains why and waits for the relevant
 approval.

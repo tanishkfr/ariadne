@@ -308,7 +308,7 @@ def check_distribution_texts(texts):
     pyproject = texts["pyproject.toml"]
     for token in (
         'requires = []', 'build-backend = "ariadne_backend"',
-        'dynamic = ["version"]', 'dependencies = []',
+        'dynamic = ["version"]', 'dependencies = []', 'requires-python = ">=3.10"',
         'ariadne = "ariadne.cli:main"', 'license = "Apache-2.0"',
         'License :: OSI Approved :: Apache Software License',
     ):
@@ -323,6 +323,7 @@ def check_distribution_texts(texts):
     for token in (
         "ariadne/seed-runtime.zip", "scripts\" / \"build-release.py",
         "License-Expression: Apache-2.0", "licenses/LICENSE",
+        "Requires-Python: >=3.10",
     ):
         if token not in backend:
             problems.append(f"wheel backend is missing: {token}")
@@ -335,6 +336,7 @@ def check_distribution_texts(texts):
         'sub.add_parser("disable-claude"', 'sub.add_parser("codex-baseline"',
         'preferred = home / ".agents" / "skills"', "def install_codex_baseline(",
         "def remove_codex_baseline(", "def refresh_codex_baseline_if_managed(",
+        "MIN_PYTHON = (3, 10)", '"User-Agent": "Ariadne-installer"',
     ):
         if token not in cli:
             problems.append(f"launcher is missing: {token}")
@@ -344,6 +346,7 @@ def check_distribution_texts(texts):
         '"VERSION", "LICENSE"',
         "RELEASE-MANIFEST.json", "SHA256SUMS.txt", "release_notes",
         "publication_state", "PACKAGING CANDIDATE",
+        '"requires_python": ">=3.10"',
     ):
         if token not in release:
             problems.append(f"release builder is missing: {token}")
@@ -1419,6 +1422,16 @@ def self_test_distribution_contract():
         ("duplicated package version fails",
          bool(check_distribution_texts(mutate(
              "pyproject.toml", 'dynamic = ["version"]', 'version = "1.5.0"'
+         )))),
+        ("advertised Python minimum cannot drift below runtime syntax",
+         bool(check_distribution_texts(mutate(
+             "pyproject.toml", 'requires-python = ">=3.10"',
+             'requires-python = ">=3.8"'
+         )))),
+        ("installer user agent cannot retain the pre-rename product",
+         bool(check_distribution_texts(mutate(
+             "src/ariadne/cli.py", '"User-Agent": "Ariadne-installer"',
+             '"User-Agent": "Builder-OS-installer"'
          )))),
         ("changed Apache licence text fails",
          bool(check_distribution_texts(mutate(

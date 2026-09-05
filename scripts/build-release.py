@@ -182,7 +182,7 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
             "sha256": release_notes_sha,
         },
         "source_commit": manifest["source_commit"],
-        "requires_python": ">=3.8",
+        "requires_python": ">=3.10",
         "project_state_schema": manifest["project_state_schema"],
         "publication": publication_state(),
     }

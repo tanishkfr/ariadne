@@ -6,7 +6,7 @@ templates, tests or source code into a project.
 
 ## Requirements
 
-- Python 3.8 or newer.
+- Python 3.10 or newer.
 - Codex for the `$ariadne` interface.
 - Internet access to download the initial wheel. The runtime installation from
   that wheel is offline; later updates need internet access.

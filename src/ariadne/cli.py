@@ -34,7 +34,7 @@ from . import package_version
 PRODUCT = "Ariadne"
 INSTALL_SCHEMA = 1
 RELEASE_SCHEMA = 1
-MIN_PYTHON = (3, 8)
+MIN_PYTHON = (3, 10)
 DEFAULT_RELEASE_MANIFEST = (
     "https://github.com/tanishkfr/ariadne/releases/latest/download/"
     "ariadne-release.json"
@@ -792,7 +792,7 @@ def _open_bytes(source: str) -> bytes:
     if parsed.scheme in ("http", "https"):
         if parsed.scheme != "https":
             raise ProductError("Ariadne downloads require HTTPS")
-        request = urllib.request.Request(source, headers={"User-Agent": "Builder-OS-installer"})
+        request = urllib.request.Request(source, headers={"User-Agent": "Ariadne-installer"})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 return response.read()
