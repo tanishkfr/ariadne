@@ -10,6 +10,33 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.6.2 — 2026-09-06 · MODEL ROUTING COST PATCH
+
+An adversarial review of the 1.6.1 routing aid found that `R1` model selection
+escalated on any single elevated signal, because the three selection predicates
+were overlapping disjunctions with nothing able to de-escalate. A task labelled
+`novel` reached the highest-cost model and maximum effort even when it was
+low-consequence, fully reversible and unambiguous -- directly contradicting the
+stated rule that the cheapest model which can reliably solve the task should
+win.
+
+The cause was treating one operator label as sufficient evidence of required
+capability. Model and effort are now decided by two orthogonal gates, difficulty
+and stakes, and escalation requires both. A hard problem that is cheap to check
+and cheap to undo is better retried on a smaller model than escalated; an easy
+problem with serious downside needs verification rather than a larger model.
+Escalation for genuinely difficult and genuinely consequential work is
+unchanged.
+
+The same review found the recommendation reported a constant as its evidence
+class, under a key that already carries two different validated vocabularies
+elsewhere in Ariadne. That field is renamed and now classifies where the model
+name actually came from, and can never report verification that did not happen.
+
+These tier boundaries are argued, not measured. They are recorded here as a
+defensible default that an operator is expected to override, not as a
+calibrated result.
+
 ## 1.6.1 — 2026-09-05 · CONTINUATION BOUNDARY PATCH
 
 The 1.6.0 adversarial acceptance review reproduced a continuation defect at

@@ -133,6 +133,17 @@ Branch: s4/<slug>
 
 ---
 
+## Implementation model selection in Cursor
+
+Cursor operates as the `R2` adapter. Concrete model selection takes place inside the Cursor runtime environment rather than in workflow policy:
+
+- **Runtime-aware selection:** When Cursor exposes multiple model options, choose the model that fits the task's execution character.
+- **Fast iteration / frontend exploration:** When prototyping rapid UI interactions or exploring layout alternatives, an agile model such as Grok (where available in your runtime) can be selected for rapid response loops.
+- **Spec-driven implementation:** When implementing locked specifications from `HANDOFF.md`, prefer Cursor's standard implementation model to ensure strict adherence to tokens and architecture.
+- **Non-mandatory:** Grok and other specific models are runtime options, not system requirements. No single model is permanently canonical. Keep selection capability-based.
+
+---
+
 ## Browser QA in Cursor
 
 Use the browser tooling for `R4` work: loading routes, reading the console, checking responsive widths, capturing screenshots.

@@ -1464,6 +1464,307 @@ def preflight_recommendation(
     return "Choose an available provider with the same capability class, then rerun preflight."
 
 
+# The mapping from an R1 capability class to a concrete vendor model is dated
+# runtime knowledge held in this file. It is a source-edit contract, not a live
+# lookup: when the model landscape changes, edit these two lines and the matrix in
+# recommend_task_routing. Nothing here is ever reported as verified.
+MODEL_LANDSCAPE_DATED = "2026-09-05"
+MODEL_LANDSCAPE_MODELS = (
+    "GPT-5.6 Luna", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-6 Astra",
+)
+
+
+def recommend_task_routing(task: dict) -> dict:
+    """Recommend capability class, concrete model, effort, session strategy, and rationale.
+
+    TASK -> CAPABILITY CLASS -> MODEL/PROVIDER -> EFFORT -> SESSION STRATEGY
+
+    Dimensions read from the task:
+    1. Task complexity                  -> difficulty gate
+    2. Ambiguity                        -> difficulty gate
+    3. Consequence of error             -> stakes gate
+    4. Reversibility                    -> stakes gate
+    5. Visual / creative importance     -> stakes gate
+    6. Context requirements             -> difficulty gate
+    7. Expected iterations (operator judgement; accepted but not automated)
+    8. Primary nature (reasoning vs execution vs mechanical) -> capability class
+    9. Reliable cost vs expected quality threshold -> the two gates together
+
+    Within R1 the dimensions are not summed or weighted. They collapse into two
+    ordinal gates, difficulty and stakes, and escalation requires both. This is a
+    judgement aid, not a calibrated model: the tier boundaries are argued, not
+    measured, and an operator who disagrees should override the recommendation.
+    """
+    task_type = task.get("task_type")
+    stage = task.get("stage")
+    complexity = task.get("complexity", "medium")
+    ambiguity = task.get("ambiguity", "medium")
+    consequence = task.get("consequence", "medium")
+    reversibility = task.get("reversibility", "medium")
+    visual_importance = task.get("visual_creative_importance", task.get("visual_importance", "low"))
+    context_requirements = task.get("context_requirements", "medium")
+
+    context_state = task.get("context_state", "useful")
+    same_objective = task.get("same_objective", True)
+    independence_required = (
+        task.get("independence_required", False)
+        or context_state == "independent_required"
+        or stage == "S5"
+        or task.get("independent_review", False)
+    )
+
+    provider = task.get("provider") or "Cursor"
+    provider_available = task.get("provider_available", True)
+    if isinstance(provider_available, str):
+        provider_available = provider_available.lower() in ("yes", "true", "available")
+    quota_sufficient = task.get("quota_sufficient", True)
+    if isinstance(quota_sufficient, str):
+        quota_sufficient = quota_sufficient.lower() in ("yes", "true", "sufficient")
+    runtime_model = task.get("runtime_model")
+    escalated = task.get("escalated", False)
+
+    # 1. Capability class selection (R1-R6)
+    if not task_type:
+        if stage in ("S5_mechanical", "S6_ship"):
+            task_type = "mechanical"
+        elif stage in ("S4", "S4B"):
+            task_type = "implementation"
+        elif stage == "S5":
+            task_type = "reasoning"
+        elif stage in ("S0", "S1", "S2", "S3", "S4A", "S6_retro"):
+            task_type = "reasoning"
+        else:
+            task_type = "reasoning"
+
+    # Escalation: bugs surviving multiple attempts, conflicting requirements, or core design changes
+    if task_type == "implementation" and escalated:
+        task_type = "reasoning"
+        reversibility = "low"
+        consequence = "high"
+        ambiguity = "high"
+
+    if task_type == "mechanical":
+        cap_class = "R6"
+        cap_desc = "R6 Local / free"
+        model = "Terminal / Local tools"
+        effort = "none"
+        cap_why = (
+            "Deterministic checks and commands (build, lint, test, git) are free and fast in R6; "
+            "reasoning models must never run mechanical builds or checks."
+        )
+    elif task_type == "browser":
+        cap_class = "R4"
+        cap_desc = "R4 Browser / visual"
+        model = f"{provider} browser tools or Playwright" if provider == "Cursor" else "Playwright script (R6)"
+        effort = "low"
+        cap_why = "DOM verification and visual interaction QA belong in R4 browser tooling."
+    elif task_type == "generative":
+        cap_class = "R5"
+        cap_desc = "R5 Generative visual"
+        model = "Subscription image tooling"
+        effort = "medium"
+        cap_why = "Generative visual assets and concepts belong in R5."
+    elif task_type == "reading":
+        cap_class = "R3"
+        cap_desc = "R3 Long-context reading"
+        model = f"{provider} (codebase indexing)"
+        effort = "medium"
+        cap_why = "Codebase indexing and cross-file search belong in R3; never paste full codebases into R1."
+    elif task_type == "implementation":
+        cap_class = "R2"
+        cap_desc = "R2 Fast implementation"
+        if not provider_available or not quota_sufficient:
+            model = task.get("fallback_provider") or "Claude Code"
+            effort = "medium"
+            cap_why = f"Implementation spec is locked; primary provider {provider} constrained, falling back to {model} without weakening capability."
+        else:
+            if runtime_model:
+                model = f"{provider} ({runtime_model})"
+            elif task.get("interactive_iteration") and provider == "Cursor":
+                model = "Cursor (Grok implementation model)"
+            else:
+                model = f"{provider} (default implementation model)"
+            effort = "medium"
+            cap_why = "The design and handoff are already locked; this is execution rather than new reasoning."
+    else:  # reasoning (R1)
+        cap_class = "R1"
+        cap_desc = "R1 Deep reasoning"
+
+        # Two orthogonal gates decide how much reasoning capability is worth buying.
+        #
+        #   difficulty -- how hard is this to get right (complexity, ambiguity, context)
+        #   stakes     -- how expensive is it to be wrong (consequence, reversibility, value)
+        #
+        # Escalation requires both axes, never one alone. A hard task whose answer is
+        # cheap to check and cheap to undo is better retried on a cheaper model than
+        # escalated; an easy task with high stakes needs care and verification rather
+        # than a larger model. Neither axis is a score: each is a small ordinal gate.
+        if complexity in ("novel", "extreme"):
+            difficulty = "exceptional"
+        elif complexity == "high" or ambiguity == "high":
+            difficulty = "high"
+        elif complexity == "low" and ambiguity == "low" and context_requirements != "high":
+            difficulty = "low"
+        else:
+            difficulty = "medium"
+
+        if consequence == "high" or reversibility == "low" or visual_importance == "high":
+            stakes = "high"
+        elif consequence == "low" and reversibility == "high":
+            stakes = "low"
+        else:
+            stakes = "medium"
+
+        # difficulty x stakes -> concrete R1 model. Read this table as the routing policy.
+        r1_matrix = {
+            ("low", "low"): "GPT-5.6 Luna",
+            ("low", "medium"): "GPT-5.6 Luna",
+            ("low", "high"): "GPT-5.6 Terra",
+            ("medium", "low"): "GPT-5.6 Luna",
+            ("medium", "medium"): "GPT-5.6 Terra",
+            ("medium", "high"): "GPT-5.6 Sol",
+            ("high", "low"): "GPT-5.6 Terra",
+            ("high", "medium"): "GPT-5.6 Sol",
+            ("high", "high"): "GPT-5.6 Sol",
+            ("exceptional", "low"): "GPT-5.6 Terra",
+            ("exceptional", "medium"): "GPT-5.6 Sol",
+            ("exceptional", "high"): "GPT-6 Astra",
+        }
+        r1_reasons = {
+            "GPT-5.6 Luna": "Bounded reasoning with limited downside; a stronger model is unlikely to change the answer.",
+            "GPT-5.6 Terra": "Balanced analysis where moderate capability is justified without Sol expenditure.",
+            "GPT-5.6 Sol": "Difficult and consequential reasoning where a wrong answer is expensive to detect or undo.",
+            "GPT-6 Astra": "Exceptional difficulty combined with high stakes; the extra capability is justified here.",
+        }
+
+        if not provider_available or not quota_sufficient:
+            model = "Claude Code"
+            cap_why = "Primary reasoning provider is constrained; falling back to Claude Code without weakening R1 deep reasoning requirement."
+        else:
+            model = r1_matrix[(difficulty, stakes)]
+            cap_why = f"{r1_reasons[model]} (difficulty {difficulty} / stakes {stakes})"
+            if model == "GPT-5.6 Terra" and not task.get("terra_available", True):
+                model = "GPT-5.6 Sol"
+                cap_why = (
+                    "Terra is unavailable in this runtime; escalating rather than under-routing "
+                    f"preserves the reasoning capability this task needs (difficulty {difficulty} / stakes {stakes})."
+                )
+
+        # Effort follows the same two gates, not the chosen model.
+        if difficulty == "exceptional" and stakes == "high":
+            effort = "xhigh"
+        elif difficulty in ("exceptional", "high") or stakes == "high":
+            effort = "high"
+        elif difficulty == "low" and stakes == "low":
+            effort = "low"
+        else:
+            effort = "medium"
+
+        # Same damping rule as model selection: when a wrong answer is cheap to detect
+        # and cheap to undo, deep deliberation is not worth buying either.
+        if stakes == "low" and effort in ("high", "xhigh", "max"):
+            effort = "medium"
+
+        # Model compatibility guard. The gates above should not produce these, but the
+        # recommendation must never name an effort the target model does not support.
+        if model == "GPT-5.6 Luna" and effort in ("high", "xhigh", "max"):
+            effort = "medium"
+        elif model in ("GPT-5.6 Terra", "GPT-5.6 Sol") and effort in ("xhigh", "max"):
+            effort = "high"
+
+    # Session Strategy: Context Value vs Independence
+    if independence_required:
+        session = "New"
+        session_why = "Independent judgement is required; the session must not inherit the author's prior reasoning or justifications."
+    elif context_state in ("noisy", "stale") or task.get("drifted", False):
+        session = "New"
+        session_why = "Accumulated conversation context has drifted or become noisy; fresh context clears stale assumptions."
+    elif not same_objective or task.get("project_changed", False) or task.get("major_phase_change", False):
+        session = "New"
+        session_why = "Changing major objectives or phases; the value of clean context exceeds continuity."
+    elif same_objective and context_state == "useful":
+        session = "Continue"
+        session_why = "The same objective remains active and existing context materially aids continuity."
+    else:
+        session = "New"
+        session_why = "Fresh context is recommended to avoid carrying unnecessary conversation overhead."
+
+    # Staleness: model capabilities, quotas, and pricing drift over time, so every
+    # recommendation says where its model name came from. "evidence_class" is not
+    # used here: that key already carries two different validated vocabularies
+    # elsewhere in Ariadne (reasoners.py, creative-operations.py).
+    if runtime_model:
+        # The operator read this model out of their own runtime; Ariadne did not check it.
+        model_landscape_evidence = "operator-reported"
+        model_landscape_dated = None
+    elif model in MODEL_LANDSCAPE_MODELS:
+        model_landscape_evidence = "unverified"
+        model_landscape_dated = MODEL_LANDSCAPE_DATED
+    else:
+        # Local tooling, provider defaults, and fallbacks name no dated vendor model.
+        model_landscape_evidence = "not-applicable"
+        model_landscape_dated = None
+
+    return {
+        "capability_class": cap_class,
+        "capability": cap_desc,
+        "model": model,
+        "effort": effort,
+        "session": session,
+        "why": f"{cap_why} {session_why}".strip(),
+        "task_why": cap_why,
+        "session_why": session_why,
+        "model_landscape_dated": model_landscape_dated,
+        "model_landscape_evidence": model_landscape_evidence,
+    }
+
+
+def format_routing_recommendation(rec: dict) -> str:
+    effort_str = rec["effort"].capitalize() if rec["effort"] != "none" else "None"
+    lines = [
+        "RECOMMENDED",
+        f"- Capability: {rec['capability']}",
+        f"- Model: {rec['model']}",
+        f"- Effort: {effort_str}",
+        f"- Session: {rec['session']}",
+        f"- Why: {rec['why']}",
+    ]
+    evidence = rec.get("model_landscape_evidence")
+    if rec.get("model_landscape_dated"):
+        lines.append(
+            f"- Model landscape: dated {rec['model_landscape_dated']}, {evidence} "
+            "(check the model still exists and still fits before relying on it)"
+        )
+    elif evidence == "operator-reported":
+        lines.append("- Model landscape: operator-reported runtime model; Ariadne did not check it")
+    return "\n".join(lines)
+
+
+def route_command(args: argparse.Namespace) -> int:
+    task = {
+        "task_type": args.task_type,
+        "stage": args.stage,
+        "complexity": args.complexity,
+        "ambiguity": args.ambiguity,
+        "consequence": args.consequence,
+        "reversibility": args.reversibility,
+        "visual_creative_importance": args.visual_importance,
+        "context_requirements": args.context_requirements,
+        "context_state": args.context_state,
+        "same_objective": args.same_objective,
+        "provider_available": args.provider_available,
+        "quota_sufficient": args.quota_sufficient,
+        "runtime_model": args.runtime_model,
+        "escalated": getattr(args, "escalated", False),
+    }
+    rec = recommend_task_routing(task)
+    if getattr(args, "json", False):
+        print(json.dumps(rec, indent=2, sort_keys=True))
+    else:
+        print(format_routing_recommendation(rec))
+    return 0
+
+
 def handoff_routing(project: Path) -> dict[str, str]:
     handoff = project / "HANDOFF.md"
     if not handoff.is_file():
@@ -1497,7 +1798,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
     model = args.model or routing["model"]
     effort = args.effort or routing["effort"].lower()
     workload = args.workload or routing["workload"].lower()
-    if effort not in ("low", "medium", "high"):
+    if effort not in ("low", "medium", "high", "xhigh", "max"):
         raise RuntimeError_(f"HANDOFF.md has unsupported effort: {effort}")
     if workload not in ("small", "medium", "large"):
         raise RuntimeError_(f"HANDOFF.md has unsupported workload: {workload}")
@@ -3801,6 +4102,399 @@ def self_test() -> int:
             and discover_run_roots(auto_project) == [auto_run.resolve()],
         )
 
+        # Model routing intelligence scenarios
+        rec_s1 = recommend_task_routing({
+            "task_type": "reasoning",
+            "complexity": "low",
+            "ambiguity": "low",
+            "consequence": "low",
+            "reversibility": "high",
+        })
+        case(
+            "routing scenario 1: simple reasoning selects cheap R1 with bounded effort",
+            rec_s1["capability_class"] == "R1"
+            and rec_s1["model"] == "GPT-5.6 Luna"
+            and rec_s1["effort"] in ("low", "medium"),
+        )
+
+        rec_s2 = recommend_task_routing({
+            "task_type": "reasoning",
+            "stage": "S3",
+            "complexity": "high",
+            "ambiguity": "high",
+            "consequence": "high",
+            "reversibility": "low",
+        })
+        case(
+            "routing scenario 2: complex architecture selects stronger R1 with high effort",
+            rec_s2["capability_class"] == "R1"
+            and rec_s2["model"] == "GPT-5.6 Sol"
+            and rec_s2["effort"] == "high",
+        )
+
+        rec_s3 = recommend_task_routing({
+            "task_type": "reasoning",
+            "complexity": "novel",
+            "ambiguity": "high",
+            "consequence": "high",
+        })
+        case(
+            "routing scenario 3: novel high-consequence reasoning selects strongest model",
+            rec_s3["capability_class"] == "R1"
+            and rec_s3["model"] == "GPT-6 Astra"
+            and rec_s3["effort"] in ("high", "xhigh", "max"),
+        )
+
+        rec_s4 = recommend_task_routing({
+            "task_type": "implementation",
+            "stage": "S4B",
+        })
+        case(
+            "routing scenario 4: clear implementation selects R2 not R1",
+            rec_s4["capability_class"] == "R2"
+            and "Cursor" in rec_s4["model"],
+        )
+
+        rec_s5 = recommend_task_routing({
+            "task_type": "mechanical",
+        })
+        case(
+            "routing scenario 5: mechanical check selects R6 not R1",
+            rec_s5["capability_class"] == "R6",
+        )
+
+        rec_s6 = recommend_task_routing({
+            "task_type": "reasoning",
+            "same_objective": True,
+            "context_state": "useful",
+        })
+        case(
+            "routing scenario 6: same objective with useful context recommends continue",
+            rec_s6["session"] == "Continue",
+        )
+
+        rec_s7 = recommend_task_routing({
+            "task_type": "reasoning",
+            "stage": "S5",
+            "context_state": "independent_required",
+        })
+        case(
+            "routing scenario 7: independent review recommends new session",
+            rec_s7["session"] == "New",
+        )
+
+        rec_s8 = recommend_task_routing({
+            "task_type": "reasoning",
+            "context_state": "noisy",
+        })
+        case(
+            "routing scenario 8: context drift and noise recommends new session",
+            rec_s8["session"] == "New",
+        )
+
+        rec_s9 = recommend_task_routing({
+            "task_type": "reasoning",
+            "complexity": "high",
+            "provider_available": False,
+        })
+        case(
+            "routing scenario 9: provider unavailable falls back without weakening capability",
+            rec_s9["capability_class"] == "R1"
+            and rec_s9["model"] == "Claude Code",
+        )
+
+        rec_s10 = recommend_task_routing({
+            "task_type": "implementation",
+            "runtime_model": "Grok",
+        })
+        case(
+            "routing scenario 10: cursor implementation supports runtime model selection",
+            rec_s10["capability_class"] == "R2"
+            and "Grok" in rec_s10["model"],
+        )
+
+        rec_s11 = recommend_task_routing({
+            "task_type": "reasoning",
+            "complexity": "medium",
+            "ambiguity": "medium",
+            "consequence": "medium",
+        })
+        case(
+            "routing scenario 11: standard task avoids over-routing to maximum effort",
+            rec_s11["effort"] == "medium",
+        )
+
+        rec_s12 = recommend_task_routing({
+            "task_type": "implementation",
+            "escalated": True,
+        })
+        case(
+            "routing scenario 12: unsafe or failing implementation escalates to R1 deep reasoning",
+            rec_s12["capability_class"] == "R1"
+            and rec_s12["model"] == "GPT-5.6 Sol"
+            and rec_s12["effort"] == "high",
+        )
+
+        # Decision boundary tests: each pair differs in exactly one dimension,
+        # and that single change must flip the routing output.
+
+        # Boundary A: consequence medium -> high flips model from Terra to Sol
+        boundary_base_a = {
+            "task_type": "reasoning", "complexity": "medium",
+            "ambiguity": "low", "consequence": "medium", "reversibility": "medium",
+        }
+        boundary_flip_a = dict(boundary_base_a, consequence="high")
+        rec_ba_base = recommend_task_routing(boundary_base_a)
+        rec_ba_flip = recommend_task_routing(boundary_flip_a)
+        case(
+            "boundary: consequence medium->high flips from cheaper to Sol",
+            rec_ba_base["model"] == "GPT-5.6 Terra"
+            and rec_ba_flip["model"] == "GPT-5.6 Sol",
+        )
+
+        # Boundary B: context_state useful -> noisy flips session Continue -> New
+        boundary_base_b = {
+            "task_type": "reasoning", "same_objective": True,
+            "context_state": "useful",
+        }
+        boundary_flip_b = dict(boundary_base_b, context_state="noisy")
+        rec_bb_base = recommend_task_routing(boundary_base_b)
+        rec_bb_flip = recommend_task_routing(boundary_flip_b)
+        case(
+            "boundary: context_state useful->noisy flips session Continue->New",
+            rec_bb_base["session"] == "Continue"
+            and rec_bb_flip["session"] == "New",
+        )
+
+        # Boundary C: complexity high -> novel flips model from Sol to Astra
+        boundary_base_c = {
+            "task_type": "reasoning", "complexity": "high",
+            "ambiguity": "high", "consequence": "high", "reversibility": "low",
+        }
+        boundary_flip_c = dict(boundary_base_c, complexity="novel")
+        rec_bc_base = recommend_task_routing(boundary_base_c)
+        rec_bc_flip = recommend_task_routing(boundary_flip_c)
+        case(
+            "boundary: complexity high->novel flips model from Sol to Astra",
+            rec_bc_base["model"] == "GPT-5.6 Sol"
+            and rec_bc_flip["model"] == "GPT-6 Astra",
+        )
+
+        # Boundary D: escalated False -> True flips capability R2 -> R1
+        boundary_base_d = {"task_type": "implementation", "escalated": False}
+        boundary_flip_d = dict(boundary_base_d, escalated=True)
+        rec_bd_base = recommend_task_routing(boundary_base_d)
+        rec_bd_flip = recommend_task_routing(boundary_flip_d)
+        case(
+            "boundary: escalated false->true flips capability R2->R1",
+            rec_bd_base["capability_class"] == "R2"
+            and rec_bd_flip["capability_class"] == "R1",
+        )
+
+        # Boundary E: same_objective True -> False flips session Continue -> New
+        boundary_base_e = {
+            "task_type": "reasoning", "same_objective": True,
+            "context_state": "useful",
+        }
+        boundary_flip_e = dict(boundary_base_e, same_objective=False)
+        rec_be_base = recommend_task_routing(boundary_base_e)
+        rec_be_flip = recommend_task_routing(boundary_flip_e)
+        case(
+            "boundary: same_objective true->false flips session Continue->New",
+            rec_be_base["session"] == "Continue"
+            and rec_be_flip["session"] == "New",
+        )
+
+        # Boundary F: reversibility medium -> low flips model from cheaper to Sol
+        boundary_base_f = {
+            "task_type": "reasoning", "complexity": "medium",
+            "ambiguity": "low", "consequence": "medium", "reversibility": "medium",
+        }
+        boundary_flip_f = dict(boundary_base_f, reversibility="low")
+        rec_bf_base = recommend_task_routing(boundary_base_f)
+        rec_bf_flip = recommend_task_routing(boundary_flip_f)
+        case(
+            "boundary: reversibility medium->low flips from cheaper to Sol",
+            rec_bf_base["model"] == "GPT-5.6 Terra"
+            and rec_bf_flip["model"] == "GPT-5.6 Sol",
+        )
+
+        # Cost boundaries: the two gates must not escalate on one elevated signal alone.
+
+        # A. Normal bounded reasoning stays on the cheapest R1 model at low effort.
+        rec_cheap = recommend_task_routing({
+            "task_type": "reasoning", "complexity": "low",
+            "ambiguity": "low", "consequence": "low", "reversibility": "high",
+        })
+        case(
+            "cost: bounded low-stakes reasoning stays on Luna at low effort",
+            rec_cheap["model"] == "GPT-5.6 Luna" and rec_cheap["effort"] == "low",
+        )
+
+        # B. Moderate complexity reaches Terra, not Sol.
+        rec_moderate = recommend_task_routing({
+            "task_type": "reasoning", "complexity": "medium",
+            "ambiguity": "medium", "consequence": "medium", "reversibility": "medium",
+        })
+        case(
+            "cost: moderate reasoning reaches Terra and not Sol",
+            rec_moderate["model"] == "GPT-5.6 Terra"
+            and rec_moderate["effort"] == "medium",
+        )
+
+        # C. Genuinely exceptional AND high-stakes work is the only route to Astra.
+        rec_exceptional = recommend_task_routing({
+            "task_type": "reasoning", "complexity": "novel",
+            "ambiguity": "high", "consequence": "high", "reversibility": "low",
+        })
+        case(
+            "cost: exceptional high-stakes work reaches Astra at xhigh effort",
+            rec_exceptional["model"] == "GPT-6 Astra"
+            and rec_exceptional["effort"] == "xhigh",
+        )
+
+        # E. Novel but cheap and reversible must NOT buy Astra or maximum effort.
+        rec_novel_cheap = recommend_task_routing({
+            "task_type": "reasoning", "complexity": "novel",
+            "ambiguity": "low", "consequence": "low", "reversibility": "high",
+        })
+        case(
+            "cost: novel but cheap and reversible work does not reach Astra or xhigh",
+            rec_novel_cheap["model"] not in ("GPT-6 Astra", "GPT-5.6 Sol")
+            and rec_novel_cheap["effort"] in ("low", "medium"),
+        )
+
+        # Boundary G: with difficulty held at exceptional, stakes alone decides Astra.
+        boundary_base_g = {
+            "task_type": "reasoning", "complexity": "novel",
+            "ambiguity": "high", "consequence": "medium", "reversibility": "medium",
+        }
+        boundary_flip_g = dict(boundary_base_g, consequence="high")
+        rec_bg_base = recommend_task_routing(boundary_base_g)
+        rec_bg_flip = recommend_task_routing(boundary_flip_g)
+        case(
+            "boundary: exceptional difficulty needs high stakes before Astra is chosen",
+            rec_bg_base["model"] == "GPT-5.6 Sol"
+            and rec_bg_flip["model"] == "GPT-6 Astra",
+        )
+
+        # Boundary H: with stakes held high, difficulty alone decides Terra vs Sol.
+        boundary_base_h = {
+            "task_type": "reasoning", "complexity": "low",
+            "ambiguity": "low", "consequence": "high", "reversibility": "medium",
+        }
+        boundary_flip_h = dict(boundary_base_h, ambiguity="high")
+        rec_bh_base = recommend_task_routing(boundary_base_h)
+        rec_bh_flip = recommend_task_routing(boundary_flip_h)
+        case(
+            "boundary: an isolated high consequence on a trivial task stops at Terra",
+            rec_bh_base["model"] == "GPT-5.6 Terra"
+            and rec_bh_flip["model"] == "GPT-5.6 Sol",
+        )
+
+        # Boundary I: cheap retry damps effort; one step of stakes restores it.
+        boundary_base_i = {
+            "task_type": "reasoning", "complexity": "high",
+            "ambiguity": "low", "consequence": "low", "reversibility": "high",
+        }
+        boundary_flip_i = dict(boundary_base_i, reversibility="medium")
+        rec_bi_base = recommend_task_routing(boundary_base_i)
+        rec_bi_flip = recommend_task_routing(boundary_flip_i)
+        case(
+            "boundary: cheap-retry damping holds effort at medium until stakes rise",
+            rec_bi_base["model"] == "GPT-5.6 Terra"
+            and rec_bi_base["effort"] == "medium"
+            and rec_bi_flip["model"] == "GPT-5.6 Sol"
+            and rec_bi_flip["effort"] == "high",
+        )
+
+        # A missing middle tier escalates rather than silently under-routing.
+        rec_no_terra = recommend_task_routing({
+            "task_type": "reasoning", "complexity": "medium",
+            "ambiguity": "medium", "consequence": "medium", "reversibility": "medium",
+            "terra_available": False,
+        })
+        case(
+            "cost: an unavailable middle tier escalates instead of under-routing",
+            rec_no_terra["model"] == "GPT-5.6 Sol",
+        )
+
+        # No input combination may produce an effort the target model cannot run.
+        effort_supported = {
+            "GPT-5.6 Luna": ("low", "medium"),
+            "GPT-5.6 Terra": ("low", "medium", "high"),
+            "GPT-5.6 Sol": ("low", "medium", "high"),
+            "GPT-6 Astra": ("low", "medium", "high", "xhigh", "max"),
+        }
+        surface = [
+            recommend_task_routing({
+                "task_type": "reasoning", "complexity": cx, "ambiguity": am,
+                "consequence": cq, "reversibility": rv,
+                "visual_creative_importance": vi, "context_requirements": cr,
+            })
+            for cx in ("low", "medium", "high", "novel", "extreme")
+            for am in ("low", "medium", "high")
+            for cq in ("low", "medium", "high")
+            for rv in ("low", "medium", "high")
+            for vi in ("low", "high")
+            for cr in ("low", "medium", "high")
+        ]
+        case(
+            "cost: no routing combination recommends an unsupported effort level",
+            all(
+                item["effort"] in effort_supported[item["model"]]
+                for item in surface
+                if item["model"] in effort_supported
+            ),
+        )
+        # The anti-regression invariant for the two gates: starting from a minimal task,
+        # raising exactly one dimension to its most elevated value must never reach the
+        # top tier or maximum effort. Restoring any single-signal OR escalation (such as
+        # "novel implies Astra") makes this fail.
+        single_signal_base = {
+            "task_type": "reasoning", "complexity": "low", "ambiguity": "low",
+            "consequence": "low", "reversibility": "high",
+            "visual_creative_importance": "low", "context_requirements": "low",
+        }
+        single_signal = [
+            recommend_task_routing(dict(single_signal_base, **{key: value}))
+            for key, value in (
+                ("complexity", "extreme"), ("ambiguity", "high"),
+                ("consequence", "high"), ("reversibility", "low"),
+                ("visual_creative_importance", "high"), ("context_requirements", "high"),
+            )
+        ]
+        case(
+            "cost: no single elevated dimension alone reaches the top model or effort",
+            all(
+                item["model"] in ("GPT-5.6 Luna", "GPT-5.6 Terra")
+                and item["effort"] not in ("xhigh", "max")
+                for item in single_signal
+            ),
+        )
+        case(
+            "cost: two elevated dimensions are required before Astra is reachable",
+            any(item["model"] == "GPT-6 Astra" for item in surface)
+            and recommend_task_routing(dict(
+                single_signal_base, complexity="extreme", consequence="high",
+            ))["model"] == "GPT-6 Astra",
+        )
+
+        # Staleness: the model landscape marker classifies where the name came from
+        # and never claims verification.
+        case(
+            "staleness: model landscape evidence distinguishes dated, reported, and n/a",
+            rec_s1.get("model_landscape_dated") == MODEL_LANDSCAPE_DATED
+            and rec_s1.get("model_landscape_evidence") == "unverified"
+            and rec_s5.get("model_landscape_evidence") == "not-applicable"
+            and rec_s5.get("model_landscape_dated") is None
+            and rec_s10.get("model_landscape_evidence") == "operator-reported"
+            and rec_s10.get("model_landscape_dated") is None
+            and all(
+                item.get("model_landscape_evidence") != "verified" for item in surface
+            ),
+        )
+
     print("ARIADNE RUNTIME SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
@@ -3875,11 +4569,41 @@ def parser() -> argparse.ArgumentParser:
     run_selector(preflight_p)
     preflight_p.add_argument("--provider")
     preflight_p.add_argument("--model")
-    preflight_p.add_argument("--effort", choices=["low", "medium", "high"])
+    preflight_p.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"])
     preflight_p.add_argument("--workload", choices=["small", "medium", "large"])
     preflight_p.add_argument("--availability", default="unknown", choices=["available", "limited", "unavailable", "unknown"])
     preflight_p.add_argument("--quota", default="unknown", choices=["sufficient", "insufficient", "unknown"])
     preflight_p.add_argument("--fallback")
+
+    route_p = sub.add_parser(
+        "route",
+        help="recommend capability class, concrete model, effort, session strategy, and rationale",
+    )
+    route_p.add_argument(
+        "--task-type",
+        choices=["reasoning", "implementation", "mechanical", "reading", "browser", "generative"],
+    )
+    route_p.add_argument("--stage", choices=list(TRANSPORT.STAGES) + ["S0", "S4_browser"])
+    route_p.add_argument("--complexity", choices=["low", "medium", "high", "novel"], default="medium")
+    route_p.add_argument("--ambiguity", choices=["low", "medium", "high"], default="medium")
+    route_p.add_argument("--consequence", choices=["low", "medium", "high"], default="medium")
+    route_p.add_argument("--reversibility", choices=["high", "medium", "low"], default="medium")
+    route_p.add_argument("--visual-importance", choices=["low", "high"], default="low")
+    route_p.add_argument(
+        "--context-requirements", choices=["low", "medium", "high"], default="medium"
+    )
+    route_p.add_argument(
+        "--context-state",
+        choices=["useful", "stale", "noisy", "independent_required"],
+        default="useful",
+    )
+    route_p.add_argument("--same-objective", action="store_true", default=True)
+    route_p.add_argument("--new-objective", dest="same_objective", action="store_false")
+    route_p.add_argument("--provider-available", choices=["yes", "no"], default="yes")
+    route_p.add_argument("--quota-sufficient", choices=["yes", "no"], default="yes")
+    route_p.add_argument("--runtime-model")
+    route_p.add_argument("--escalated", action="store_true")
+    route_p.add_argument("--json", action="store_true")
 
     result_p = sub.add_parser("record-result", help="record structurally verified same-session outputs")
     run_selector(result_p)
@@ -4024,6 +4748,7 @@ def main() -> int:
             "record-reasoner-failure": record_reasoner_failure,
             "handoff-readiness": handoff_readiness_command,
             "preflight": provider_preflight,
+            "route": route_command,
             "record-result": structural_result,
             "record-transcript": record_transcript,
             "ingest-return": ingest_return,
