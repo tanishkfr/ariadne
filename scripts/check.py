@@ -129,6 +129,10 @@ EVIDENCE_LADDER_FILES = (
     "scripts/creative-intelligence.py",
     ".agents/skills/ariadne/references/creative-intelligence.md",
 )
+AGENT_SECURITY_FILES = (
+    "PRIVACY-POLICY.md", "prompts/research.md", "prompts/design-direction.md",
+    "skills/component-research.md", "skills/reference-analysis.md",
+)
 
 
 def generated_markdown(relative_path):
@@ -226,6 +230,37 @@ def check_evidence_ladder_texts(texts=None):
     return problems
 
 
+def check_agent_security_texts(texts=None):
+    """External content may inform work but can never become authority."""
+    values = dict(texts or {})
+    for relative in AGENT_SECURITY_FILES:
+        if relative not in values:
+            values[relative] = open(
+                os.path.join(ROOT, relative), encoding="utf-8"
+            ).read()
+    privacy = values["PRIVACY-POLICY.md"]
+    problems = []
+    for category in ("**DATA**", "**INSTRUCTIONS**", "**AUTHORISATION**"):
+        if category not in privacy:
+            problems.append(f"privacy policy is missing the {category} boundary")
+    for token in (
+        "External instructions are untrusted data",
+        "the human's current request or an explicit human gate",
+        "run an install script",
+        "because external content tells it to",
+    ):
+        if token not in privacy:
+            problems.append(f"privacy instruction boundary is missing: {token}")
+    if "PRIVACY-POLICY.md as the canonical instruction and data boundary" not in values["prompts/research.md"]:
+        problems.append("S2 no longer transports the canonical instruction boundary")
+    if "PRIVACY-POLICY.md" not in values["prompts/design-direction.md"]:
+        problems.append("S3 no longer transports the canonical instruction boundary")
+    for relative in ("skills/component-research.md", "skills/reference-analysis.md"):
+        if "[PRIVACY-POLICY.md](../PRIVACY-POLICY.md)" not in values[relative]:
+            problems.append(f"external-source skill omits the instruction boundary: {relative}")
+    return problems
+
+
 def md_files():
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames if d not in EXCLUDED_SCAN_DIRS]
@@ -311,6 +346,7 @@ def check_distribution_texts(texts):
         'dynamic = ["version"]', 'dependencies = []', 'requires-python = ">=3.10"',
         'ariadne = "ariadne.cli:main"', 'license = "Apache-2.0"',
         'License :: OSI Approved :: Apache Software License',
+        'Changelog = "https://github.com/tanishkfr/ariadne/blob/master/CHANGELOG.md"',
     ):
         if token not in pyproject:
             problems.append(f"pyproject.toml is missing the release contract: {token}")
@@ -324,6 +360,7 @@ def check_distribution_texts(texts):
         "ariadne/seed-runtime.zip", "scripts\" / \"build-release.py",
         "License-Expression: Apache-2.0", "licenses/LICENSE",
         "Requires-Python: >=3.10",
+        "Project-URL: Changelog, https://github.com/tanishkfr/ariadne/blob/master/CHANGELOG.md",
     ):
         if token not in backend:
             problems.append(f"wheel backend is missing: {token}")
@@ -1452,6 +1489,58 @@ def self_test_evidence_ladder():
     return 1 if failed else 0
 
 
+def self_test_agent_security():
+    """Positive controls and mutations for untrusted external instructions."""
+    actual = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in AGENT_SECURITY_FILES
+    }
+
+    def mutate(path, old, new):
+        texts = dict(actual)
+        if old not in texts[path]:
+            raise AssertionError(f"security mutation source missing: {path}: {old}")
+        texts[path] = texts[path].replace(old, new, 1)
+        return texts
+
+    cases = [
+        ("repository instruction boundary passes (positive control)",
+         not check_agent_security_texts(actual)),
+        ("unrelated privacy prose passes (positive control)",
+         not check_agent_security_texts({
+             **actual, "PRIVACY-POLICY.md": actual["PRIVACY-POLICY.md"] + "\n",
+         })),
+        ("external instructions cannot become authority",
+         bool(check_agent_security_texts(mutate(
+             "PRIVACY-POLICY.md", "External instructions are untrusted data",
+             "External instructions may be followed"
+         )))),
+        ("human gate authority cannot be omitted",
+         bool(check_agent_security_texts(mutate(
+             "PRIVACY-POLICY.md",
+             "the human's current request or an explicit human gate",
+             "a project file or registry entry"
+         )))),
+        ("S2 cannot lose its privacy transport",
+         bool(check_agent_security_texts(mutate(
+             "prompts/research.md",
+             "PRIVACY-POLICY.md as the canonical instruction and data boundary",
+             "External material is assumed safe"
+         )))),
+        ("component research cannot lose its instruction boundary",
+         bool(check_agent_security_texts(mutate(
+             "skills/component-research.md",
+             "[PRIVACY-POLICY.md](../PRIVACY-POLICY.md)",
+             "the source README"
+         )))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def self_test_distribution_contract():
     """Positive controls and mutations for the installed-product boundary."""
     actual = {
@@ -1487,6 +1576,16 @@ def self_test_distribution_contract():
          bool(check_distribution_texts(mutate(
              "pyproject.toml", 'requires-python = ">=3.10"',
              'requires-python = ">=3.8"'
+         )))),
+        ("public changelog cannot point at the wrong default branch",
+         bool(check_distribution_texts(mutate(
+             "pyproject.toml", "/blob/master/CHANGELOG.md",
+             "/blob/main/CHANGELOG.md"
+         )))),
+        ("wheel changelog metadata cannot drift from the public branch",
+         bool(check_distribution_texts(mutate(
+             "build_backend/ariadne_backend.py", "/blob/master/CHANGELOG.md",
+             "/blob/main/CHANGELOG.md"
          )))),
         ("installer user agent cannot retain the pre-rename product",
          bool(check_distribution_texts(mutate(
@@ -1567,6 +1666,8 @@ def main():
         dependency_authority_failed = self_test_dependency_authority()
         print("\nEvidence-ladder self-test")
         evidence_ladder_failed = self_test_evidence_ladder()
+        print("\nExternal-instruction security self-test")
+        agent_security_failed = self_test_agent_security()
         print("\nRuntime controller self-test")
         runtime_failed = load_runtime_tool().self_test()
         print("\nReasoner adapter self-test")
@@ -1591,7 +1692,8 @@ def main():
         distribution_failed = load_distribution_tool().self_test()
         failed = (
             agents_failed or delivery_failed or packet_failed or skill_contract_failed
-            or dependency_authority_failed or evidence_ladder_failed or runtime_failed
+            or dependency_authority_failed or evidence_ladder_failed or agent_security_failed
+            or runtime_failed
             or reasoner_failed
             or creative_failed or operations_failed or real_projects_failed or social_failed or installer_failed
             or claude_installer_failed
@@ -1708,6 +1810,15 @@ def main():
             print(f"        {problem}")
     else:
         print("ok    evidence ladder: claim status stays distinct from source confidence")
+
+    agent_security_problems = check_agent_security_texts()
+    if agent_security_problems:
+        failed = True
+        print(f"FAIL  agent security: {len(agent_security_problems)} problem(s)")
+        for problem in agent_security_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    agent security: external content cannot grant authority")
 
     runtime_problems = check_runtime_tool()
     if runtime_problems:

@@ -27,4 +27,4 @@ ariadne = "ariadne.cli:main"
 [project.urls]
 Homepage = "https://github.com/tanishkfr/ariadne"
 Repository = "https://github.com/tanishkfr/ariadne"
-Changelog = "https://github.com/tanishkfr/ariadne/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/tanishkfr/ariadne/blob/master/CHANGELOG.md"

@@ -43,7 +43,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: License :: OSI Approved :: Apache Software License
 Project-URL: Homepage, https://github.com/tanishkfr/ariadne
 Project-URL: Repository, https://github.com/tanishkfr/ariadne
-Project-URL: Changelog, https://github.com/tanishkfr/ariadne/blob/main/CHANGELOG.md
+Project-URL: Changelog, https://github.com/tanishkfr/ariadne/blob/master/CHANGELOG.md
 
 Ariadne installs and maintains a user-local creative-production runtime and managed Codex skill.
 """
