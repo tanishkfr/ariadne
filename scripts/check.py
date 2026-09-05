@@ -98,6 +98,9 @@ DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 # finding about THAT RUN rather than a repository-wide failure. check.py owns
 # the repository; validate.py owns a run. Do not merge the two.
 GENERATED = ("validation/runs/",)
+EXCLUDED_SCAN_DIRS = {
+    ".git", ".next", "__pycache__", "build", "dist", "node_modules",
+}
 EPHEMERAL_SELF_TEST = (
     re.compile(
         r"^validation/(?:ariadne|creative-intelligence|creative-operations|distribution|packet|real-projects|release|skill-install|social|wheel)-self-test-[0-9a-f]{32}/"
@@ -122,6 +125,11 @@ def generated_markdown(relative_path):
     )
 
 
+def excluded_scan_path(relative_path):
+    """Return true for reproducible or tool-owned trees, never source trees."""
+    return any(part in EXCLUDED_SCAN_DIRS for part in relative_path.split("/"))
+
+
 def check_skill_contract_texts(texts=None):
     """Every executable skill declares its boundary and completion condition."""
     values = dict(texts or {})
@@ -143,7 +151,7 @@ def check_skill_contract_texts(texts=None):
 
 def md_files():
     for dirpath, dirnames, filenames in os.walk(ROOT):
-        dirnames[:] = [d for d in dirnames if d not in (".git", "node_modules")]
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_SCAN_DIRS]
         for name in sorted(filenames):
             if not name.endswith(".md"):
                 continue
@@ -1051,6 +1059,10 @@ def self_test_delivery_contracts():
          not generated_markdown(
              "validation/skill-install-self-test-user-record/managed/SKILL.md"
          )),
+        ("reproducible dist markdown is excluded from source checks",
+         excluded_scan_path("dist/ariadne-runtime/README.md")),
+        ("similarly named source directory remains visible",
+         not excluded_scan_path("distribution/README.md")),
         ("required-input marker outside prompt fence fails",
          bool(check_delivery_contract_texts(outside))),
         ("missing IF MISSING contract fails",
