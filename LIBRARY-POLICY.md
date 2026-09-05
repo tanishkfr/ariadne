@@ -12,7 +12,7 @@ Rule of thumb: **every dependency is a decision you have outsourced.** Outsource
 
 | Tier | Meaning | Approval |
 |---|---|---|
-| **Approved** | Pre-cleared for the default stack | None needed |
+| **Default candidate** | Familiar part of the default stack, but still needs an exact-version G2 approval before installation | G2, brief |
 | **Conditional** | Fine for a stated purpose, needs a one-line reason | G2, brief |
 | **Research-only** | Read the source, take the technique, do not install | Installing needs full G2 with justification |
 | **Specialty** | Heavy or niche; only when the project is *about* that thing | Full G2 |
@@ -20,9 +20,11 @@ Rule of thumb: **every dependency is a decision you have outsourced.** Outsource
 
 ---
 
-## 2. Approved
+## 2. Default candidates
 
-Installable without asking, because they are the default stack or have no realistic alternative.
+These are normal candidates for the default stack. They reduce research work;
+they do **not** grant installation authority. Every exact dependency set still
+requires human G2 approval before the first install command.
 
 | Package | For |
 |---|---|
@@ -36,7 +38,22 @@ Installable without asking, because they are the default stack or have no realis
 | `sharp` | Image processing in a build step |
 | `zod` | Runtime validation, when there is real external input |
 
-Everything else, including things that feel obvious, goes through G2.
+Everything else, including things that feel obvious, also goes through G2.
+
+### Minimum-solution ladder
+
+Before proposing a package, walk this order and stop at the first rung that
+meets the project need without weakening accessibility or the approved design:
+
+1. Use an existing project capability.
+2. Use a browser or language primitive.
+3. Write the smallest project-local implementation.
+4. Reuse an already approved dependency.
+5. Compare a registered external capability against the project constraints.
+6. Research a new external capability only when the earlier rungs fail.
+
+Record the rejected rung and reason in the G2 proposal. Discovery never grants
+permission to install, and a familiar package name is not evidence of need.
 
 ---
 

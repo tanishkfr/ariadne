@@ -118,6 +118,10 @@ SKILL_FILES = [
     "skills/social-strategy.md",
 ]
 
+DEPENDENCY_AUTHORITY_FILES = (
+    "WORKFLOW.md", "LIBRARY-POLICY.md", "prompts/build-kickoff.md",
+)
+
 
 def generated_markdown(relative_path):
     return relative_path.startswith(GENERATED) or any(
@@ -146,6 +150,32 @@ def check_skill_contract_texts(texts=None):
                 problems.append(f"skill contract missing or duplicates {field}: {relative}")
         if not re.search(r"(?m)^## (?:Done when|Stop conditions)\s*$", text):
             problems.append(f"skill contract has no completion or stop section: {relative}")
+    return problems
+
+
+def check_dependency_authority_texts(texts=None):
+    """Discovery and defaults must never silently grant the human G2 gate."""
+    values = dict(texts or {})
+    for relative in DEPENDENCY_AUTHORITY_FILES:
+        if relative not in values:
+            values[relative] = open(
+                os.path.join(ROOT, relative), encoding="utf-8"
+            ).read()
+    library = values["LIBRARY-POLICY.md"]
+    problems = []
+    required = (
+        "Every exact dependency set still",
+        "requires human G2 approval before the first install command",
+        "Discovery never grants",
+    )
+    if any(token not in library for token in required):
+        problems.append("library policy does not preserve exact human G2 authority")
+    if re.search(r"(?im)^Installable without asking|\|\s*\*\*Approved\*\*.*\|\s*None needed\s*\|", library):
+        problems.append("library policy still contains a dependency self-approval path")
+    if "Any new package" not in values["WORKFLOW.md"]:
+        problems.append("workflow no longer sends every new package to G2")
+    if "NO NEW DEPENDENCY without asking me (G2)" not in values["prompts/build-kickoff.md"]:
+        problems.append("build prompt no longer stops before an unapproved dependency")
     return problems
 
 
@@ -1194,6 +1224,39 @@ def self_test_skill_contracts():
     return 1 if failed else 0
 
 
+def self_test_dependency_authority():
+    """Positive controls and mutations for the human-owned G2 boundary."""
+    actual = {
+        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
+        for path in DEPENDENCY_AUTHORITY_FILES
+    }
+    missing_gate = dict(actual)
+    missing_gate["LIBRARY-POLICY.md"] = missing_gate["LIBRARY-POLICY.md"].replace(
+        "requires human G2 approval before the first install command",
+        "may be installed by the agent",
+        1,
+    )
+    self_approval = dict(actual)
+    self_approval["LIBRARY-POLICY.md"] += "\nInstallable without asking.\n"
+    cases = [
+        ("repository dependency authority passes (positive control)",
+         not check_dependency_authority_texts(actual)),
+        ("unrelated policy prose passes (positive control)",
+         not check_dependency_authority_texts({
+             **actual, "LIBRARY-POLICY.md": actual["LIBRARY-POLICY.md"] + "\n",
+         })),
+        ("missing exact G2 requirement fails",
+         bool(check_dependency_authority_texts(missing_gate))),
+        ("dependency self-approval language fails",
+         bool(check_dependency_authority_texts(self_approval))),
+    ]
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print("\nFAILED" if failed else "\nPASS")
+    return 1 if failed else 0
+
+
 def self_test_distribution_contract():
     """Positive controls and mutations for the installed-product boundary."""
     actual = {
@@ -1295,6 +1358,8 @@ def main():
         packet_failed = self_test_packet_tool()
         print("\nExecutable skill-contract self-test")
         skill_contract_failed = self_test_skill_contracts()
+        print("\nHuman dependency-authority self-test")
+        dependency_authority_failed = self_test_dependency_authority()
         print("\nRuntime controller self-test")
         runtime_failed = load_runtime_tool().self_test()
         print("\nReasoner adapter self-test")
@@ -1318,7 +1383,8 @@ def main():
         print("\nInstalled-product lifecycle self-test")
         distribution_failed = load_distribution_tool().self_test()
         failed = (
-            agents_failed or delivery_failed or packet_failed or skill_contract_failed or runtime_failed
+            agents_failed or delivery_failed or packet_failed or skill_contract_failed
+            or dependency_authority_failed or runtime_failed
             or reasoner_failed
             or creative_failed or operations_failed or real_projects_failed or social_failed or installer_failed
             or claude_installer_failed
@@ -1417,6 +1483,15 @@ def main():
             print(f"        {problem}")
     else:
         print(f"ok    skill contracts: {len(SKILL_FILES)} executable boundaries declared")
+
+    dependency_problems = check_dependency_authority_texts()
+    if dependency_problems:
+        failed = True
+        print(f"FAIL  dependency authority: {len(dependency_problems)} problem(s)")
+        for problem in dependency_problems:
+            print(f"        {problem}")
+    else:
+        print("ok    dependency authority: discovery never grants human G2")
 
     runtime_problems = check_runtime_tool()
     if runtime_problems:

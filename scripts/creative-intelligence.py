@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Project-local creative planning, provenance, and anti-assertion checks.
 
-This module owns a small evidence schema, not creative policy. Canonical Builder
-OS skills and policies still decide what good research and design mean. The
+This module owns a small evidence schema, not creative policy. Canonical Ariadne
+skills and policies still decide what good research and design mean. The
 ledger records what was selected, what actually ran, which source artifact
 supports an inspection claim, and where a result was used downstream.
 """
@@ -89,13 +89,47 @@ def ledger_path(project: Path) -> Path:
     return project.resolve() / LEDGER_RELATIVE
 
 
-def evidence_record(path: Path) -> dict:
+def evidence_record(path: Path, project: Path) -> dict:
     path = path.resolve()
+    project = project.resolve()
+    try:
+        path.relative_to(project)
+        project_local = True
+    except ValueError:
+        project_local = False
+    if not project_local:
+        try:
+            transport = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            transport = {}
+        if not (
+            path.name == "manifest.json"
+            and Path(str(transport.get("project", ""))).resolve() == project
+            and str(transport.get("packet_id", "")).strip()
+            and str(transport.get("packet_sha256", "")).strip()
+        ):
+            raise CreativeError(
+                "creative evidence must stay inside the project repository or be its verified packet manifest"
+            )
     if not path.is_file() or path.stat().st_size == 0:
         raise CreativeError(f"evidence artifact is missing or empty: {path}")
-    if path.name.lower() == ".env" or path.name.lower().startswith(".env."):
+    lowered = path.name.lower()
+    if (
+        lowered == ".env"
+        or lowered.startswith(".env.")
+        or lowered in {"id_rsa", "id_ed25519"}
+        or lowered.endswith((".key", ".pem", ".p12", ".pfx"))
+        or any(token in lowered for token in ("credential", "secret", "token"))
+    ):
         raise CreativeError("credential files cannot be creative evidence")
     return {"path": str(path), "sha256": digest(path)}
+
+
+def ledger_project(ledger: dict) -> Path:
+    value = str(ledger.get("project", "")).strip()
+    if not value:
+        raise CreativeError("creative evidence has no project root")
+    return Path(value).resolve()
 
 
 def _assessment_item(assessment: dict, name: str) -> dict:
@@ -362,9 +396,13 @@ def record_skill_event(ledger: dict, event: dict) -> None:
             raise CreativeError(f"{state} skill evidence needs a reason")
         row["reason"] = reason
     if state == "invoked":
-        row["evidence"] = evidence_record(Path(str(event.get("evidence_path", ""))))
+        row["evidence"] = evidence_record(
+            Path(str(event.get("evidence_path", ""))), ledger_project(ledger)
+        )
     if state == "completed":
-        row["output"] = evidence_record(Path(str(event.get("output_path", ""))))
+        row["output"] = evidence_record(
+            Path(str(event.get("output_path", ""))), ledger_project(ledger)
+        )
         usefulness = str(event.get("usefulness", "useful"))
         if usefulness not in ("useful", "not-useful"):
             raise CreativeError("completed skill usefulness must be useful or not-useful")
@@ -373,7 +411,9 @@ def record_skill_event(ledger: dict, event: dict) -> None:
     if state == "used":
         if skill.get("history", [])[-1].get("usefulness") == "not-useful":
             raise CreativeError(f"skill output recorded as not useful cannot be marked used: {name}")
-        row["downstream"] = evidence_record(Path(str(event.get("downstream_path", ""))))
+        row["downstream"] = evidence_record(
+            Path(str(event.get("downstream_path", ""))), ledger_project(ledger)
+        )
         decisions = event.get("decision_ids", [])
         known = {item.get("id") for item in ledger.get("decisions", [])}
         if not isinstance(decisions, list) or not decisions or any(item not in known for item in decisions):
@@ -409,7 +449,9 @@ def record_reference(ledger: dict, event: dict) -> None:
         row.update({
             "inspected_at": str(event.get("inspected_at") or now()),
             "inspection": kind,
-            "evidence": evidence_record(Path(str(event.get("evidence_path", "")))),
+            "evidence": evidence_record(
+                Path(str(event.get("evidence_path", ""))), ledger_project(ledger)
+            ),
             "observations": [str(item).strip() for item in observations],
             "mechanisms": [str(item).strip() for item in mechanisms if str(item).strip()],
             "why_it_matters": str(event.get("why_it_matters", "")).strip(),
@@ -426,7 +468,9 @@ def record_reference(ledger: dict, event: dict) -> None:
             raise CreativeError("an inaccessible reference cannot carry observations or mechanisms")
         row.update({"attempted_at": str(event.get("attempted_at") or now()), "blocker": blocker})
         if event.get("evidence_path"):
-            row["attempt_evidence"] = evidence_record(Path(str(event["evidence_path"])))
+            row["attempt_evidence"] = evidence_record(
+                Path(str(event["evidence_path"])), ledger_project(ledger)
+            )
     if not existing:
         ledger.setdefault("references", []).append(row)
 
@@ -462,7 +506,9 @@ def record_resource(ledger: dict, event: dict) -> None:
         reference = references.get(reference_id)
         if not reference or reference.get("state") != "inspected":
             raise CreativeError(f"resource cites an uninspected source: {reference_id}")
-    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+    artifact = evidence_record(
+        Path(str(event.get("artifact_path", ""))), ledger_project(ledger)
+    )
     anchor = str(event.get("artifact_anchor", "")).strip()
     if not anchor or anchor not in Path(artifact["path"]).read_text(encoding="utf-8"):
         raise CreativeError("resource decision anchor is not present in the downstream artifact")
@@ -509,7 +555,9 @@ def record_decision(ledger: dict, event: dict) -> None:
         raise CreativeError("decision evidence needs id, decision, principle, and a valid basis")
     if any(item.get("id") == decision_id for item in ledger.get("decisions", [])):
         raise CreativeError(f"decision ID is already recorded: {decision_id}")
-    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+    artifact = evidence_record(
+        Path(str(event.get("artifact_path", ""))), ledger_project(ledger)
+    )
     anchor = str(event.get("artifact_anchor", "")).strip()
     if not anchor or anchor not in Path(artifact["path"]).read_text(encoding="utf-8"):
         raise CreativeError("decision anchor is not present in the downstream artifact")
@@ -925,8 +973,37 @@ def self_test() -> int:
         project = workspace / "project"
         project.mkdir()
         (project / "PROJECT.md").write_text("# PROJECT\n\n## Goal\n\nA fixture goal.\n", encoding="utf-8")
-        packet = workspace / "packet.txt"
-        packet.write_text("verified fixture packet\n", encoding="utf-8")
+        packet_dir = workspace / "packet"
+        packet_dir.mkdir()
+        packet = packet_dir / "manifest.json"
+        packet.write_text(json.dumps({
+            "project": str(project.resolve()),
+            "packet_id": "fixture-S1",
+            "packet_sha256": "fixture-sha256",
+        }) + "\n", encoding="utf-8")
+
+        local_capture = project / "capture.txt"
+        local_capture.write_text("project-local evidence\n", encoding="utf-8")
+        case(
+            "project-local evidence is accepted (positive control)",
+            evidence_record(local_capture, project)["sha256"] == digest(local_capture),
+        )
+        outside_capture = workspace / "outside.txt"
+        outside_capture.write_text("outside evidence\n", encoding="utf-8")
+        try:
+            evidence_record(outside_capture, project)
+            outside_blocked = False
+        except CreativeError:
+            outside_blocked = True
+        case("outside-project evidence is rejected", outside_blocked)
+        secret_capture = project / "service-token.txt"
+        secret_capture.write_text("not-a-real-secret\n", encoding="utf-8")
+        try:
+            evidence_record(secret_capture, project)
+            secret_blocked = False
+        except CreativeError:
+            secret_blocked = True
+        case("sensitive project files are rejected as evidence", secret_blocked)
 
         minimal = create_ledger(project, low_assessment())
         case("minimal project chooses minimal research", minimal["research_depth"] == "minimal")
@@ -1002,7 +1079,7 @@ def self_test() -> int:
         case("skill cannot be completed without invocation", impossible_completion)
 
         for index in range(1, 4):
-            capture = workspace / f"reference-{index}.html"
+            capture = project / f"reference-{index}.html"
             capture.write_text(f"<html><title>Reference {index}</title><main>Observed mechanism {index}</main></html>", encoding="utf-8")
             record_reference(ledger, {
                 "id": f"ref-{index}", "source": f"https://example.test/reference-{index}",
@@ -1110,12 +1187,12 @@ def self_test() -> int:
             _skill_by_name(technical_ledger, "technical-research")["selected"]
             and _skill_by_name(technical_ledger, "component-research")["selected"],
         )
-        platform_doc = workspace / "platform-doc.html"
+        platform_doc = project / "platform-doc.html"
         platform_doc.write_text(
             "<html><title>Platform observer fixture</title><main>Observer support and behaviour.</main></html>",
             encoding="utf-8",
         )
-        package_doc = workspace / "package-doc.html"
+        package_doc = project / "package-doc.html"
         package_doc.write_text(
             "<html><title>Package fixture</title><main>Package compatibility and licence.</main></html>",
             encoding="utf-8",
@@ -1131,7 +1208,7 @@ def self_test() -> int:
                 "mechanisms": [], "why_it_matters": "The dependency decision needs inspected evidence.",
                 "borrow": "Use the verified capability boundary.", "reject": "Do not infer unrecorded features.",
             })
-        technical_output = workspace / "technical-decision.md"
+        technical_output = project / "technical-decision.md"
         technical_output.write_text(
             "# Technical decision\n\nUse the platform observer; no motion package is necessary.\n",
             encoding="utf-8",
