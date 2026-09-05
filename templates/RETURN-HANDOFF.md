@@ -5,11 +5,11 @@
 > independent review. Fill every section; use `none` or `not run` rather than
 > leaving a blank.
 
-**Status:** complete / partial / blocked  
-**Provider:** <>  
-**Model:** <>  
-**Effort:** low / medium / high / unrecorded  
-**Started:** <>  
+**Status:** complete / partial / blocked
+**Provider:** <>
+**Model:** <>
+**Effort:** low / medium / high / unrecorded
+**Started:** <>
 **Ended:** <>
 
 ## What was built

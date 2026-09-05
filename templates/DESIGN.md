@@ -28,14 +28,16 @@
 > Surface: "black background with big white serif type."
 > Mechanism: "a single achromatic field, so type scale alone carries hierarchy."
 > Method: [reference-analysis](../skills/reference-analysis.md).
+> If reference analysis was not selected, write `none — direction derived from
+> project subject and constraints` and do not invent references.
 
 | Reference | Mechanism taken (max 2 each) |
 |---|---|
 | <url> | <> |
 
-## What to borrow
+## Mechanisms to combine
 
-1. <mechanism> — from <reference> — applied here as <how it lands on this subject>
+1. <mechanism> — from <project subject, verified research, or inspected reference> — applied here as <how it lands on this subject>
 2. <>
 3. <>
 

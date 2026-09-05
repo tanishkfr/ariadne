@@ -1,8 +1,8 @@
 # SKILL: design-direction
 
-**Trigger** — discovery is complete, references are analysed, nothing has been designed yet. S3.
+**Trigger** — discovery and any selected research/reference work are complete; nothing has been designed yet. S3.
 **Owner** — Design director
-**Inputs** — `PROJECT.md`, `RESEARCH.md`, pooled mechanisms from [reference-analysis](reference-analysis.md)
+**Inputs** — `PROJECT.md`; `RESEARCH.md` when produced; pooled mechanisms from [reference-analysis](reference-analysis.md) only when that skill was selected
 **Output** — [`DESIGN.md`](../templates/DESIGN.md) and the G1 presentation
 
 **This is the stage that decides whether the output looks generic.** Every rule in [DESIGN-TASTE.md](../DESIGN-TASTE.md) applies here, not at S4. Fixing genericness at build time costs ten times more and usually fails.
@@ -23,7 +23,13 @@ not-useful work stays visible in project history but cannot be described as used
 
 Test it: does it tell you what to do when someone asks for a hero image? If not, it is a mood, not a thesis.
 
-**2. Build the thesis from conflict.** Take the pooled mechanisms and pick two or three that **conflict**. Conflict is what makes a direction original. Three harmonious mechanisms from three similar sites is a copy of the genre. A rigorous archival grid plus playful physical motion is a direction.
+**2. Build the thesis from conflict.** Take the project's subject mechanisms,
+constraints, verified research, and pooled reference mechanisms when reference
+analysis was selected. Pick two or three that **conflict**. Conflict is what
+makes a direction original. Three harmonious mechanisms from three similar
+sites is a copy of the genre. A rigorous archival grid plus playful physical
+motion is a direction. Never invent references when the creative plan skipped
+them.
 
 **3. Ground it in the subject.** Apply the mechanisms to *this* project's actual content. This is where originality actually comes from — the same mechanism applied to a boxing game and a law firm produces entirely different work.
 

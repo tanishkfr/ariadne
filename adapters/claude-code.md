@@ -1,10 +1,12 @@
 # ADAPTER: Claude Code
 
-**Role in the system: implementation agent, interchangeable with Cursor.** Primary during the transition; a permanent fallback afterwards.
+**Role in the system: optional implementation adapter using the same S4B
+contract as Cursor.** Transport-ready; live implementation equivalence remains
+unverified.
 
 Capability classes: **`R2`**, **`R3`**, **`R4`**, **`R6`**. See [MODEL-ROUTING.md](../MODEL-ROUTING.md).
 
-**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in the Ariadne changes. That is the portability test ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
+**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in Ariadne changes. That is the portability test ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
 
 ---
 
@@ -34,9 +36,12 @@ particular machine's global `~/.claude/CLAUDE.md`.
 
 ---
 
-## Installed skills on this machine
+## Candidate skills requiring local verification
 
-Verified present at `C:\Users\User\.claude\skills` on 2026-08-21. **Their existence is verified; their quality and behaviour are not — I have not run them.** Treat this table as a starting point to test, not a recommendation.
+These names came from one historical machine inventory. They are not runtime
+requirements and must not be assumed present on another machine. **Their
+current availability, quality, and behaviour are unverified.** Treat this table
+as a bounded comparison checklist, not a recommendation.
 
 | Ariadne skill | Candidate local skill | Notes |
 |---|---|---|

@@ -368,7 +368,7 @@ def self_test() -> int:
         })
         CREATIVE.record_skill_event(creative, {"skill": "social-strategy", "state": "invoked", "evidence_path": str(source_a)})
         CREATIVE.record_skill_event(creative, {"skill": "social-strategy", "state": "completed", "output_path": str(strategy_path), "result": "Project-aware strategy recorded.", "usefulness": "useful"})
-        CREATIVE.record_decision(creative, {"id": "social-decision", "decision": "Use the editorial programme frame.", "principle": "The actual project mechanism should lead distribution.", "basis": "thesis", "reference_ids": [], "artifact_path": str(strategy_path), "artifact_anchor": "What I recommend", "status": "proposed", "gate": "G5 pending"})
+        CREATIVE.record_decision(creative, {"id": "social-decision", "decision": "Use the editorial programme frame.", "principle": "The actual project mechanism should lead distribution.", "basis": "thesis", "claim_status": "SUPPORTED", "reference_ids": [], "artifact_path": str(strategy_path), "artifact_anchor": "What I recommend", "status": "proposed", "gate": "G5 pending"})
         CREATIVE.record_skill_event(creative, {"skill": "social-strategy", "state": "used", "downstream_path": str(strategy_path), "decision_ids": ["social-decision"]})
         social_history = next(item for item in creative["skills"] if item["name"] == "social-strategy")
         case(

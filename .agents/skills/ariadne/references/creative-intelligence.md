@@ -30,6 +30,19 @@ assessment. Do not classify by keyword counts. Every characteristic needs one of
     "value": false,
     "request": "the user's exact social-strategy request, or empty"
   },
+  "capability_needs": [
+    {
+      "id": "capability-1",
+      "capability": "a behavioural capability, not a package name",
+      "reason": "why the project may need it",
+      "necessary": true,
+      "existing_solution": null,
+      "native_solution": null,
+      "project_local_solution": null,
+      "approved_dependency": null,
+      "excluded_candidates": []
+    }
+  ],
   "research_questions": [
     {
       "id": "rq-1",
@@ -45,6 +58,11 @@ assessment. Do not classify by keyword counts. Every characteristic needs one of
 
 Allowed question kinds: `reference`, `technical`, `domain`, `resource`, `asset`.
 An empty question list is correct when research would not change a decision.
+An empty capability-needs list is correct when the project needs no component
+or external-resource comparison. Ariadne evaluates declared needs in this
+order: existing project, native platform, project-local build, already-approved
+dependency, current registry, then bounded external discovery. The plan never
+installs or grants G2.
 
 Run:
 
@@ -110,6 +128,7 @@ Decision trace:
   "decision":"The concrete project choice",
   "principle":"What the observation became",
   "basis":"reference",
+  "claim_status":"SUPPORTED",
   "reference_ids":["ref-1"],
   "artifact_path":"<DESIGN.md or another real output>",
   "artifact_anchor":"Exact text present in that artifact",
@@ -139,6 +158,7 @@ Resource decision:
   "alternatives": [{"name": "scroll listener", "reason": "More manual event handling"}],
   "necessary": true,
   "decision": "use",
+  "claim_status": "SUPPORTED",
   "source_reference_ids": ["ref-platform-doc"],
   "artifact_path": "<RESEARCH.md or HANDOFF.md>",
   "artifact_anchor": "<exact text in that artifact>"

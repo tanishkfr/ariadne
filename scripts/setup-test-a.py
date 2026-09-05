@@ -105,7 +105,7 @@ def prereqs():
     out = {}
     out["Python"] = f"{sys.version_info.major}.{sys.version_info.minor}"
     if sys.version_info < (3, 8):
-        die("Python 3.8+ required.")
+        die("Python 3.10+ required.")
     try:
         g = subprocess.run(["git", "--version"], capture_output=True, text=True)
         out["Git"] = g.stdout.strip().replace("git version ", "") if g.returncode == 0 else None

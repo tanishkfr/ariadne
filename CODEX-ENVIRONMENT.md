@@ -90,4 +90,3 @@ Restart Codex after installing or removing the baseline.
 - **BLOCKED:** no current blocker to packaging; live fresh-task evidence needs a
   human-opened external Codex task after publication or isolated candidate
   installation.
-

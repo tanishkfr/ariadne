@@ -2,13 +2,14 @@
 
 This is a maintainer procedure, not part of normal use.
 
-1. Confirm the human-approved public product name and its repository, package,
-   command and skill identifiers before publishing the first release.
+1. Confirm the public destination is `tanishkfr/ariadne`, the private canonical
+   source is `tanishkfr/ariadne-maintainer`, and GitHub is authenticated only as
+   `tanishkfr`.
 2. Confirm [LICENSE](LICENSE) and package metadata still declare the
    human-approved Apache-2.0 licence.
 3. Update the single authoritative [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
-4. Start from a clean tracked worktree and run the complete validation listed in
-   [V1.5.3-READINESS.md](V1.5.3-READINESS.md).
+4. Start from a clean tracked worktree and run the complete validation recorded
+   in the current private readiness report.
 5. Build the release set:
 
    ```bash
@@ -20,11 +21,14 @@ This is a maintainer procedure, not part of normal use.
    environment and run the stranger test.
 7. Tag that exact commit as `vX.Y.Z`. Create one draft GitHub release, attach all
    generated files, then publish it. Prefer an immutable release when available.
-8. Verify the public asset against its local file and run the README install in
+8. Export only product/runtime source and user documentation to the public
+   repository. Exclude validation runs, fixtures, tests, readiness reports,
+   operations logs, maintainer notes and machine-specific paths.
+9. Verify the public asset against its local file and run the README install in
    a machine or VM without the source checkout.
 
 The release builder refuses tracked uncommitted changes. Generated bundles are
 transport artifacts; canonical ownership remains in the tagged repository
 source. Public naming, tagging, pushing and publishing remain human actions.
 
-Next: select the public product name before preparing the final release commit.
+Next: validate the clean candidate commit before building its release set.

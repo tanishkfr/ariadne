@@ -369,8 +369,8 @@ def ensure_intervention(
 def initial_log(run_id: str, project: Path, request: str) -> str:
     return f"""# Ariadne operations — {run_id}
 
-**Project:** `{project}`  
-**Started:** {now()}  
+**Project:** `{project}`
+**Started:** {now()}
 **Ariadne:** `{git_head()}`
 
 This log answers what happened, why, what changed, what was verified, and what
@@ -1427,7 +1427,7 @@ def discover(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         if len(matches) == 1:
-            print(f"Found the Ariadne run for {project.name}: {matches[0]}")
+            print(f"Found Ariadne run for {project.name}: {matches[0]}")
         else:
             print(f"Found {len(matches)} Ariadne runs for {project.name}:")
             for path in matches:
@@ -2583,8 +2583,10 @@ def transport_provider(preflight: dict | None) -> str | None:
     if not preflight:
         return None
     value = str(preflight.get("provider", "")).lower()
-    if "cursor" in value or "grok" in value:
+    if "cursor" in value:
         return "cursor"
+    if "claude code" in value or "claude-code" in value:
+        return "claude-code"
     if "codex" in value or "orchestrator" in value:
         return "codex"
     return "other" if value else None
@@ -2864,7 +2866,7 @@ A small typographic interaction for testing the Ariadne runtime.
 | Field | Recommendation |
 |---|---|
 | Capability needed | `R2` |
-| Provider | Cursor / Grok |
+| Provider | Cursor |
 | Model | provider default — unverified |
 | Effort | medium |
 | Workload | medium |
@@ -2958,6 +2960,14 @@ def self_test() -> int:
     case(
         "blocked provider recommends the supplied fallback",
         "Claude Code" in preflight_recommendation("blocked", "Cursor", "large", "Claude Code"),
+    )
+    case(
+        "Claude Code retains an explicit implementation transport identity",
+        transport_provider({"provider": "Claude Code"}) == "claude-code",
+    )
+    case(
+        "a model name is not relabelled as the Cursor provider",
+        transport_provider({"provider": "Grok"}) == "other",
     )
     case("complete return handoff passes (positive control)", not TRANSPORT.return_handoff_problems(filled_return()))
     case("missing return section fails", bool(TRANSPORT.return_handoff_problems(filled_return().replace("## Known issues", "## Notes"))))
@@ -3450,7 +3460,7 @@ def self_test() -> int:
         state = load_state(run_root)
         case(
             "provider routing is read from HANDOFF.md",
-            state["provider_preflight"]["provider"] == "Cursor / Grok"
+            state["provider_preflight"]["provider"] == "Cursor"
             and state["provider_preflight"]["decision"] == "verified",
         )
         prepare_next(runtime_args())
@@ -3958,7 +3968,9 @@ def parser() -> argparse.ArgumentParser:
     run_selector(advance_p)
     advance_p.add_argument("--provider", default="orchestrator")
     advance_p.add_argument("--model", default="not recorded")
-    advance_p.add_argument("--transport-provider", choices=["codex", "cursor", "other"])
+    advance_p.add_argument(
+        "--transport-provider", choices=["codex", "cursor", "claude-code", "other"]
+    )
     advance_p.add_argument("--references-file")
     advance_p.add_argument("--motion", choices=["yes", "no"])
     advance_p.add_argument("--assets", choices=["yes", "no"])
@@ -3970,7 +3982,9 @@ def parser() -> argparse.ArgumentParser:
     run_selector(next_p)
     next_p.add_argument("--stage", choices=list(TRANSPORT.STAGES))
     next_p.add_argument("--retry", action="store_true")
-    next_p.add_argument("--provider", choices=["codex", "claude", "cursor", "other"])
+    next_p.add_argument(
+        "--provider", choices=["codex", "claude", "cursor", "claude-code", "other"]
+    )
     next_p.add_argument("--references-file")
     next_p.add_argument("--motion", choices=["yes", "no"])
     next_p.add_argument("--assets", choices=["yes", "no"])

@@ -13,6 +13,13 @@ commands are warnings because desktop applications may still be installed.
 
 ## Common results
 
+### `pip show ariadne` describes a GraphQL library
+
+That is the unrelated Ariadne GraphQL package. Do not install this product into
+the same Python environment because the distribution and import names collide.
+Use a separate interpreter or virtual environment; neither package should
+replace the other.
+
 ### Ariadne is not installed
 
 Run `python -m ariadne install`.
@@ -20,8 +27,8 @@ Run `python -m ariadne install`.
 ### Runtime or skill is damaged
 
 Run `python -m ariadne install` again. It repairs only managed files. If an
-unknown file is present in the skill directory, move it elsewhere first; Builder
-OS will not delete it.
+unknown file is present in the skill directory, move it elsewhere first;
+Ariadne will not delete it.
 
 ### An update cannot connect
 

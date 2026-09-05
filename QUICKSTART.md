@@ -1,6 +1,10 @@
 # QUICKSTART
 
-Requires Python 3.8 or newer and Codex.
+Requires Python 3.10 or newer and Codex.
+
+If `python -m pip show ariadne` already describes Ariadne GraphQL, use a
+separate Python environment; the two packages cannot coexist. Details:
+[INSTALL.md](INSTALL.md).
 
 ## Install
 

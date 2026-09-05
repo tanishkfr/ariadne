@@ -89,7 +89,10 @@
 
 ## References
 
-> Minimum three. Analysed via [reference-analysis](../skills/reference-analysis.md) before any design work.
+> When reference analysis is selected: minimum three, analysed via
+> [reference-analysis](../skills/reference-analysis.md) before design work.
+> Otherwise write `none — reference analysis not selected`; do not invent a
+> reference to fill the table.
 
 | Reference | Why it is here | Mechanism to take |
 |---|---|---|

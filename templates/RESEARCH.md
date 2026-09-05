@@ -2,22 +2,24 @@
 
 > Template. Owner: Researcher · Stage: S2 · Skill: [RESEARCH-POLICY.md](../RESEARCH-POLICY.md)
 > Policy: [RESEARCH-POLICY.md](../RESEARCH-POLICY.md)
-> **Every claim carries a date, a URL, and a confidence level.** Definitions, freshness windows, source
+> **Every claim carries a claim status, date, URL, and source-confidence level.** Definitions, freshness windows, source
 > ranking, and how to handle disagreement all live in [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) — this is just the register.
 
 **Last updated:** <date>
 
 ---
 
-Confidence: **Verified** · **Reported** · **Unverified** · **Contradicted** — see [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 4.
+Claim status: **OBSERVED** · **SUPPORTED** · **INFERRED** · **HYPOTHESIS** · **ASSUMPTION**.
+
+Source confidence: **Verified** · **Reported** · **Unverified** · **Contradicted** — see [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 4.
 
 ---
 
 ## Findings
 
-| # | Claim | Date | Confidence | Source |
-|---|---|---|---|---|
-| 1 | <a falsifiable statement, not a question> | <YYYY-MM-DD> | Verified | <url> |
+| # | Claim | Claim status | Date | Source confidence | Source |
+|---|---|---|---|---|---|
+| 1 | <a falsifiable statement, not a question> | OBSERVED | <YYYY-MM-DD> | Verified | <url> |
 
 > Write claims, not topics.
 > Topic: "Cursor pricing." Claim: "Cursor's India individual plan is ₹650/month."

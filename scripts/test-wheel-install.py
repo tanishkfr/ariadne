@@ -90,7 +90,7 @@ def self_test() -> int:
             wheel_metadata = wheel.read(metadata_name).decode("utf-8")
         case(
             "package manager receives the minimum Python contract",
-            "Requires-Python: >=3.8" in wheel_metadata,
+            "Requires-Python: >=3.10" in wheel_metadata,
         )
         case(
             "wheel declares and carries Apache-2.0",

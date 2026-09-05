@@ -64,6 +64,7 @@ the optional Claude entry skill is a separate explicit action.
 
 ## Canonical handoff parity
 
-Both reasoners produce the existing `templates/HANDOFF.md` contract. Cursor or
-Grok consumes the current S4B packet and returns the existing structured return.
+Both reasoners produce the existing `templates/HANDOFF.md` contract. The
+selected implementation provider consumes the current S4B packet and returns
+the existing structured return.
 No Claude-specific project document or handoff schema exists.

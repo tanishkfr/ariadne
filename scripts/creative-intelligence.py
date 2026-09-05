@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Project-local creative planning, provenance, and anti-assertion checks.
 
-This module owns a small evidence schema, not creative policy. Canonical Builder
-OS skills and policies still decide what good research and design mean. The
+This module owns a small evidence schema, not creative policy. Canonical Ariadne
+skills and policies still decide what good research and design mean. The
 ledger records what was selected, what actually ran, which source artifact
 supports an inspection claim, and where a result was used downstream.
 """
@@ -16,14 +16,17 @@ import json
 import re
 import shutil
 import sys
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = (1, 2)
 LEDGER_RELATIVE = Path(".ariadne") / "creative-evidence.json"
+CAPABILITY_REGISTRY = ROOT / "references" / "capabilities.json"
 LEVELS = ("low", "medium", "high")
 DIMENSIONS = (
     "novelty",
@@ -53,6 +56,7 @@ RESOURCE_CATEGORIES = (
     "image-source", "technique", "design-tool", "component-primitive",
 )
 RESOURCE_DECISIONS = ("use", "do-not-use", "defer")
+CLAIM_STATUSES = ("OBSERVED", "SUPPORTED", "INFERRED", "HYPOTHESIS", "ASSUMPTION")
 STAGE_ORDER = {"S1": 1, "S2": 2, "S3": 3, "S4A": 4, "S4B": 5, "S5": 6}
 
 
@@ -68,11 +72,38 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def replace_with_retry(
+    source: Path,
+    target: Path,
+    *,
+    attempts: int = 10,
+    replace=None,
+    sleep=None,
+) -> None:
+    """Complete one atomic replace despite short Windows sharing violations."""
+    replace = replace or (lambda old, new: old.replace(new))
+    sleep = sleep or time.sleep
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            replace(source, target)
+            return
+        except (PermissionError, OSError) as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                sleep(0.05 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+
+
 def write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        replace_with_retry(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_json(path: Path) -> dict:
@@ -89,13 +120,47 @@ def ledger_path(project: Path) -> Path:
     return project.resolve() / LEDGER_RELATIVE
 
 
-def evidence_record(path: Path) -> dict:
+def evidence_record(path: Path, project: Path) -> dict:
     path = path.resolve()
+    project = project.resolve()
+    try:
+        path.relative_to(project)
+        project_local = True
+    except ValueError:
+        project_local = False
+    if not project_local:
+        try:
+            transport = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            transport = {}
+        if not (
+            path.name == "manifest.json"
+            and Path(str(transport.get("project", ""))).resolve() == project
+            and str(transport.get("packet_id", "")).strip()
+            and str(transport.get("packet_sha256", "")).strip()
+        ):
+            raise CreativeError(
+                "creative evidence must stay inside the project repository or be its verified packet manifest"
+            )
     if not path.is_file() or path.stat().st_size == 0:
         raise CreativeError(f"evidence artifact is missing or empty: {path}")
-    if path.name.lower() == ".env" or path.name.lower().startswith(".env."):
+    lowered = path.name.lower()
+    if (
+        lowered == ".env"
+        or lowered.startswith(".env.")
+        or lowered in {"id_rsa", "id_ed25519"}
+        or lowered.endswith((".key", ".pem", ".p12", ".pfx"))
+        or any(token in lowered for token in ("credential", "secret", "token"))
+    ):
         raise CreativeError("credential files cannot be creative evidence")
     return {"path": str(path), "sha256": digest(path)}
+
+
+def ledger_project(ledger: dict) -> Path:
+    value = str(ledger.get("project", "")).strip()
+    if not value:
+        raise CreativeError("creative evidence has no project root")
+    return Path(value).resolve()
 
 
 def _assessment_item(assessment: dict, name: str) -> dict:
@@ -132,6 +197,49 @@ def validate_assessment(assessment: dict) -> dict:
     if social["value"] and not social_request:
         raise CreativeError("an activated social strategy needs the user's explicit request")
     normalised["social_request"] = {"value": social["value"], "request": social_request}
+    capability_needs = assessment.get("capability_needs", [])
+    if not isinstance(capability_needs, list):
+        raise CreativeError("capability_needs must be a list")
+    normalised["capability_needs"] = []
+    for index, need in enumerate(capability_needs, 1):
+        if not isinstance(need, dict):
+            raise CreativeError(f"capability need {index} must be an object")
+        row = {
+            "id": str(need.get("id") or f"capability-{index}").strip(),
+            "capability": str(need.get("capability", "")).strip(),
+            "reason": str(need.get("reason", "")).strip(),
+            "necessary": bool(need.get("necessary", True)),
+            "existing_solution": need.get("existing_solution"),
+            "native_solution": need.get("native_solution"),
+            "project_local_solution": need.get("project_local_solution"),
+            "approved_dependency": need.get("approved_dependency"),
+            "excluded_candidates": need.get("excluded_candidates", []),
+        }
+        if not row["id"] or not row["capability"] or not row["reason"]:
+            raise CreativeError(f"capability need {index} needs id, capability, and reason")
+        for label in (
+            "existing_solution", "native_solution", "project_local_solution",
+            "approved_dependency",
+        ):
+            candidate = row[label]
+            if candidate is not None and (
+                not isinstance(candidate, dict)
+                or not isinstance(candidate.get("suitable"), bool)
+                or not str(candidate.get("name", "")).strip()
+                or not str(candidate.get("reason", "")).strip()
+            ):
+                raise CreativeError(f"capability need {row['id']} has malformed {label}")
+        if not isinstance(row["excluded_candidates"], list) or any(
+            not isinstance(item, dict)
+            or not str(item.get("id", "")).strip()
+            or not str(item.get("reason", "")).strip()
+            for item in row["excluded_candidates"]
+        ):
+            raise CreativeError(f"capability need {row['id']} has malformed exclusions")
+        normalised["capability_needs"].append(row)
+    capability_ids = [item["id"] for item in normalised["capability_needs"]]
+    if len(capability_ids) != len(set(capability_ids)):
+        raise CreativeError("capability need IDs must be unique")
     questions = assessment.get("research_questions", [])
     if not isinstance(questions, list):
         raise CreativeError("research_questions must be a list")
@@ -157,6 +265,90 @@ def validate_assessment(assessment: dict) -> dict:
     if len(ids) != len(set(ids)):
         raise CreativeError("research question IDs must be unique")
     return normalised
+
+
+def load_capability_registry(path: Path = CAPABILITY_REGISTRY) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CreativeError(f"capability registry is unavailable or malformed: {exc}") from exc
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise CreativeError("capability registry has an unsupported schema")
+    checked_on = str(value.get("checked_on", ""))
+    try:
+        checked_date = datetime.strptime(checked_on, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise CreativeError("capability registry checked_on must be a real YYYY-MM-DD date") from exc
+    reverify = value.get("reverify_after_days")
+    if not isinstance(reverify, int) or reverify <= 0:
+        raise CreativeError("capability registry needs a positive freshness window")
+    entries = value.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise CreativeError("capability registry needs entries")
+    ids = []
+    required = (
+        "id", "name", "capabilities", "status", "resolved_revision",
+        "official_url", "licence", "licence_url", "acquisition",
+        "design_authority", "notes",
+    )
+    for entry in entries:
+        if not isinstance(entry, dict) or any(not entry.get(field) for field in required):
+            raise CreativeError("capability registry entry is incomplete")
+        if not isinstance(entry.get("capabilities"), list) or not entry["capabilities"]:
+            raise CreativeError(f"capability registry entry has no capabilities: {entry.get('id')}")
+        for flag in ("writes_project", "runtime_code", "agent_instructions", "hooks_or_mcp"):
+            if not isinstance(entry.get(flag), bool):
+                raise CreativeError(f"capability registry entry lacks boolean {flag}: {entry.get('id')}")
+        ids.append(entry["id"])
+    if len(ids) != len(set(ids)):
+        raise CreativeError("capability registry IDs must be unique")
+    result = dict(value)
+    result["stale"] = (
+        datetime.now().astimezone().date() - checked_date
+    ).days > reverify
+    return result
+
+
+def capability_plan(assessment: dict, registry: dict) -> list[dict]:
+    """Choose the first sufficient rung; this never selects or installs a package."""
+    entries = registry.get("entries", [])
+    stale = bool(registry.get("stale"))
+    plan = []
+    for need in assessment.get("capability_needs", []):
+        rejected = [dict(item) for item in need.get("excluded_candidates", [])]
+        excluded = {item["id"] for item in rejected}
+        if not need.get("necessary", True):
+            action, candidates = "skip-unnecessary", []
+        elif (need.get("existing_solution") or {}).get("suitable"):
+            action, candidates = "existing-project", [need["existing_solution"]["name"]]
+        elif (need.get("native_solution") or {}).get("suitable"):
+            action, candidates = "native-platform", [need["native_solution"]["name"]]
+        elif (need.get("project_local_solution") or {}).get("suitable"):
+            action, candidates = "project-local", [need["project_local_solution"]["name"]]
+        elif (need.get("approved_dependency") or {}).get("suitable"):
+            action, candidates = "approved-dependency", [need["approved_dependency"]["name"]]
+        else:
+            matching = [
+                entry for entry in entries
+                if need["capability"] in entry.get("capabilities", [])
+                and entry.get("id") not in excluded
+                and entry.get("status") not in ("research-only-unpinned",)
+            ]
+            if stale or not matching:
+                action, candidates = "bounded-external-discovery", []
+            elif len(matching) == 1:
+                action, candidates = "registered-candidate", [matching[0]["id"]]
+            else:
+                action, candidates = "compare-registered", [item["id"] for item in matching]
+        plan.append({
+            "id": need["id"],
+            "capability": need["capability"],
+            "action": action,
+            "candidates": candidates,
+            "rejected": rejected,
+            "install_authority": "none — human G2 required",
+        })
+    return plan
 
 
 def research_depth(assessment: dict) -> str:
@@ -215,7 +407,15 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
         (c["technical_uncertainty"]["level"], c["interaction_complexity"]["level"]),
         key=LEVELS.index,
     )
-    component_selected = component_level != "low"
+    registry = load_capability_registry() if assessment["capability_needs"] else None
+    capability_choices = capability_plan(assessment, registry) if registry else []
+    capability_research = any(
+        item["action"] in (
+            "registered-candidate", "compare-registered", "bounded-external-discovery"
+        )
+        for item in capability_choices
+    )
+    component_selected = component_level != "low" or capability_research
     technical_questions = [
         item for item in assessment["research_questions"]
         if item["kind"] in ("technical", "resource", "domain")
@@ -296,6 +496,16 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
         "updated_at": created,
         "research_depth": research_depth(assessment),
         "assessment": assessment,
+        "capability_registry": (
+            {
+                "path": str(CAPABILITY_REGISTRY),
+                "sha256": digest(CAPABILITY_REGISTRY),
+                "checked_on": registry["checked_on"],
+                "stale": registry["stale"],
+            }
+            if registry else None
+        ),
+        "capability_plan": capability_choices,
         "skills": skills,
         "references": [],
         "resources": [],
@@ -362,9 +572,13 @@ def record_skill_event(ledger: dict, event: dict) -> None:
             raise CreativeError(f"{state} skill evidence needs a reason")
         row["reason"] = reason
     if state == "invoked":
-        row["evidence"] = evidence_record(Path(str(event.get("evidence_path", ""))))
+        row["evidence"] = evidence_record(
+            Path(str(event.get("evidence_path", ""))), ledger_project(ledger)
+        )
     if state == "completed":
-        row["output"] = evidence_record(Path(str(event.get("output_path", ""))))
+        row["output"] = evidence_record(
+            Path(str(event.get("output_path", ""))), ledger_project(ledger)
+        )
         usefulness = str(event.get("usefulness", "useful"))
         if usefulness not in ("useful", "not-useful"):
             raise CreativeError("completed skill usefulness must be useful or not-useful")
@@ -373,7 +587,9 @@ def record_skill_event(ledger: dict, event: dict) -> None:
     if state == "used":
         if skill.get("history", [])[-1].get("usefulness") == "not-useful":
             raise CreativeError(f"skill output recorded as not useful cannot be marked used: {name}")
-        row["downstream"] = evidence_record(Path(str(event.get("downstream_path", ""))))
+        row["downstream"] = evidence_record(
+            Path(str(event.get("downstream_path", ""))), ledger_project(ledger)
+        )
         decisions = event.get("decision_ids", [])
         known = {item.get("id") for item in ledger.get("decisions", [])}
         if not isinstance(decisions, list) or not decisions or any(item not in known for item in decisions):
@@ -409,7 +625,9 @@ def record_reference(ledger: dict, event: dict) -> None:
         row.update({
             "inspected_at": str(event.get("inspected_at") or now()),
             "inspection": kind,
-            "evidence": evidence_record(Path(str(event.get("evidence_path", "")))),
+            "evidence": evidence_record(
+                Path(str(event.get("evidence_path", ""))), ledger_project(ledger)
+            ),
             "observations": [str(item).strip() for item in observations],
             "mechanisms": [str(item).strip() for item in mechanisms if str(item).strip()],
             "why_it_matters": str(event.get("why_it_matters", "")).strip(),
@@ -426,7 +644,9 @@ def record_reference(ledger: dict, event: dict) -> None:
             raise CreativeError("an inaccessible reference cannot carry observations or mechanisms")
         row.update({"attempted_at": str(event.get("attempted_at") or now()), "blocker": blocker})
         if event.get("evidence_path"):
-            row["attempt_evidence"] = evidence_record(Path(str(event["evidence_path"])))
+            row["attempt_evidence"] = evidence_record(
+                Path(str(event["evidence_path"])), ledger_project(ledger)
+            )
     if not existing:
         ledger.setdefault("references", []).append(row)
 
@@ -436,10 +656,13 @@ def record_resource(ledger: dict, event: dict) -> None:
     name = str(event.get("name", "")).strip()
     category = str(event.get("category", "")).strip()
     decision = str(event.get("decision", "")).strip()
+    claim_status = str(event.get("claim_status", "")).strip().upper()
     if not resource_id or not name or category not in RESOURCE_CATEGORIES:
         raise CreativeError("resource evidence needs id, name, and a valid category")
     if decision not in RESOURCE_DECISIONS:
         raise CreativeError("resource evidence needs use, do-not-use, or defer decision")
+    if claim_status not in CLAIM_STATUSES:
+        raise CreativeError("resource evidence needs a supported claim_status")
     if any(item.get("id") == resource_id for item in ledger.get("resources", [])):
         raise CreativeError(f"resource ID is already recorded: {resource_id}")
     alternatives = event.get("alternatives", [])
@@ -462,7 +685,9 @@ def record_resource(ledger: dict, event: dict) -> None:
         reference = references.get(reference_id)
         if not reference or reference.get("state") != "inspected":
             raise CreativeError(f"resource cites an uninspected source: {reference_id}")
-    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+    artifact = evidence_record(
+        Path(str(event.get("artifact_path", ""))), ledger_project(ledger)
+    )
     anchor = str(event.get("artifact_anchor", "")).strip()
     if not anchor or anchor not in Path(artifact["path"]).read_text(encoding="utf-8"):
         raise CreativeError("resource decision anchor is not present in the downstream artifact")
@@ -481,6 +706,7 @@ def record_resource(ledger: dict, event: dict) -> None:
         ],
         "necessary": bool(event.get("necessary", False)),
         "decision": decision,
+        "claim_status": claim_status,
         "source_reference_ids": reference_ids,
         "artifact": artifact,
         "artifact_anchor": anchor,
@@ -495,6 +721,8 @@ def record_resource(ledger: dict, event: dict) -> None:
         )
     if decision == "use" and not row["necessary"]:
         raise CreativeError("a resource selected for use must be marked necessary")
+    if decision == "use" and claim_status in ("HYPOTHESIS", "ASSUMPTION"):
+        raise CreativeError("a hypothesis or assumption cannot justify selecting a resource")
     if decision == "do-not-use" and row["necessary"]:
         raise CreativeError("a rejected resource cannot be marked necessary")
     ledger.setdefault("resources", []).append(row)
@@ -505,11 +733,16 @@ def record_decision(ledger: dict, event: dict) -> None:
     decision = str(event.get("decision", "")).strip()
     principle = str(event.get("principle", "")).strip()
     basis = str(event.get("basis", "")).strip()
+    claim_status = str(event.get("claim_status", "")).strip().upper()
     if not decision_id or not decision or not principle or basis not in ("reference", "research", "thesis", "constraint"):
         raise CreativeError("decision evidence needs id, decision, principle, and a valid basis")
+    if claim_status not in CLAIM_STATUSES:
+        raise CreativeError("decision evidence needs a supported claim_status")
     if any(item.get("id") == decision_id for item in ledger.get("decisions", [])):
         raise CreativeError(f"decision ID is already recorded: {decision_id}")
-    artifact = evidence_record(Path(str(event.get("artifact_path", ""))))
+    artifact = evidence_record(
+        Path(str(event.get("artifact_path", ""))), ledger_project(ledger)
+    )
     anchor = str(event.get("artifact_anchor", "")).strip()
     if not anchor or anchor not in Path(artifact["path"]).read_text(encoding="utf-8"):
         raise CreativeError("decision anchor is not present in the downstream artifact")
@@ -528,6 +761,7 @@ def record_decision(ledger: dict, event: dict) -> None:
         "decision": decision,
         "principle": principle,
         "basis": basis,
+        "claim_status": claim_status,
         "reference_ids": reference_ids,
         "artifact": artifact,
         "artifact_anchor": anchor,
@@ -644,7 +878,8 @@ def _artifact_problems(record: dict, label: str) -> list[str]:
 def ledger_problems(project: Path, ledger: dict) -> list[str]:
     project = project.resolve()
     problems = []
-    if ledger.get("schema_version") != SCHEMA_VERSION:
+    schema_version = ledger.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         problems.append("creative evidence has unsupported schema version")
     try:
         if Path(str(ledger.get("project", ""))).resolve() != project:
@@ -653,6 +888,28 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
         problems.append("creative evidence project path is invalid")
     if ledger.get("research_depth") not in ("minimal", "standard", "deep"):
         problems.append("creative evidence has invalid research depth")
+    capability_needs = ledger.get("assessment", {}).get("capability_needs", [])
+    capability_rows = ledger.get("capability_plan", [])
+    if schema_version == SCHEMA_VERSION and capability_needs:
+        registry = ledger.get("capability_registry") or {}
+        if (
+            Path(str(registry.get("path", ""))).resolve() != CAPABILITY_REGISTRY.resolve()
+            or not CAPABILITY_REGISTRY.is_file()
+            or registry.get("sha256") != digest(CAPABILITY_REGISTRY)
+        ):
+            problems.append("capability registry changed after planning")
+        if len(capability_rows) != len(capability_needs):
+            problems.append("capability plan does not cover every declared need")
+    allowed_actions = {
+        "skip-unnecessary", "existing-project", "native-platform", "project-local",
+        "approved-dependency",
+        "registered-candidate", "compare-registered", "bounded-external-discovery",
+    }
+    for item in capability_rows:
+        if item.get("action") not in allowed_actions:
+            problems.append(f"capability plan has invalid action: {item.get('id')}")
+        if item.get("install_authority") != "none — human G2 required":
+            problems.append(f"capability plan claims installation authority: {item.get('id')}")
     skills = ledger.get("skills", [])
     names = [item.get("name") for item in skills if isinstance(item, dict)]
     if len(names) != len(set(names)):
@@ -709,6 +966,10 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
             problems.append(f"resource has invalid category: {resource.get('id')}")
         if resource.get("decision") not in RESOURCE_DECISIONS:
             problems.append(f"resource has invalid decision: {resource.get('id')}")
+        if schema_version == SCHEMA_VERSION and resource.get("claim_status") not in CLAIM_STATUSES:
+            problems.append(f"resource has invalid claim status: {resource.get('id')}")
+        if resource.get("decision") == "use" and resource.get("claim_status") in ("HYPOTHESIS", "ASSUMPTION"):
+            problems.append(f"selected resource lacks sufficient evidence: {resource.get('id')}")
         if not resource.get("alternatives"):
             problems.append(f"resource has no considered alternative: {resource.get('id')}")
         if resource.get("decision") == "use" and not resource.get("necessary"):
@@ -729,6 +990,8 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
     decisions = ledger.get("decisions", [])
     decision_ids = {item.get("id") for item in decisions}
     for decision in decisions:
+        if schema_version == SCHEMA_VERSION and decision.get("claim_status") not in CLAIM_STATUSES:
+            problems.append(f"decision has invalid claim status: {decision.get('id')}")
         problems.extend(_artifact_problems(decision.get("artifact", {}), f"decision {decision.get('id')}"))
         artifact_path = Path(str(decision.get("artifact", {}).get("path", "")))
         if artifact_path.is_file() and decision.get("artifact_anchor") not in artifact_path.read_text(encoding="utf-8"):
@@ -900,6 +1163,7 @@ def low_assessment(**overrides) -> dict:
         "references_supplied": False,
         "alternatives_helpful": {"value": False, "reason": "One direction is sufficient for this fixture."},
         "social_request": {"value": False, "request": ""},
+        "capability_needs": [],
         "research_questions": [],
     }
 
@@ -921,12 +1185,66 @@ def self_test() -> int:
     def case(name: str, passed: bool) -> None:
         cases.append((name, bool(passed)))
 
+    replace_attempts = []
+
+    def transient_replace(_source: Path, _target: Path) -> None:
+        replace_attempts.append(True)
+        if len(replace_attempts) < 3:
+            raise PermissionError("fixture sharing violation")
+
+    replace_with_retry(
+        Path("fixture-source"), Path("fixture-target"), attempts=3,
+        replace=transient_replace, sleep=lambda _seconds: None,
+    )
+    case("atomic evidence write retries transient sharing violations", len(replace_attempts) == 3)
+    try:
+        replace_with_retry(
+            Path("fixture-source"), Path("fixture-target"), attempts=2,
+            replace=lambda _source, _target: (_ for _ in ()).throw(
+                PermissionError("fixture persistent denial")
+            ),
+            sleep=lambda _seconds: None,
+        )
+        persistent_replace_failed = False
+    except PermissionError:
+        persistent_replace_failed = True
+    case("atomic evidence write exposes persistent denial", persistent_replace_failed)
+
     with self_test_workspace() as workspace:
         project = workspace / "project"
         project.mkdir()
         (project / "PROJECT.md").write_text("# PROJECT\n\n## Goal\n\nA fixture goal.\n", encoding="utf-8")
-        packet = workspace / "packet.txt"
-        packet.write_text("verified fixture packet\n", encoding="utf-8")
+        packet_dir = workspace / "packet"
+        packet_dir.mkdir()
+        packet = packet_dir / "manifest.json"
+        packet.write_text(json.dumps({
+            "project": str(project.resolve()),
+            "packet_id": "fixture-S1",
+            "packet_sha256": "fixture-sha256",
+        }) + "\n", encoding="utf-8")
+
+        local_capture = project / "capture.txt"
+        local_capture.write_text("project-local evidence\n", encoding="utf-8")
+        case(
+            "project-local evidence is accepted (positive control)",
+            evidence_record(local_capture, project)["sha256"] == digest(local_capture),
+        )
+        outside_capture = workspace / "outside.txt"
+        outside_capture.write_text("outside evidence\n", encoding="utf-8")
+        try:
+            evidence_record(outside_capture, project)
+            outside_blocked = False
+        except CreativeError:
+            outside_blocked = True
+        case("outside-project evidence is rejected", outside_blocked)
+        secret_capture = project / "service-token.txt"
+        secret_capture.write_text("not-a-real-secret\n", encoding="utf-8")
+        try:
+            evidence_record(secret_capture, project)
+            secret_blocked = False
+        except CreativeError:
+            secret_blocked = True
+        case("sensitive project files are rejected as evidence", secret_blocked)
 
         minimal = create_ledger(project, low_assessment())
         case("minimal project chooses minimal research", minimal["research_depth"] == "minimal")
@@ -936,6 +1254,107 @@ def self_test() -> int:
             and _skill_by_name(minimal, "component-research")["state"] == "skipped"
             and _skill_by_name(minimal, "visual-qa")["state"] == "skipped"
             and _skill_by_name(minimal, "social-strategy")["state"] == "skipped",
+        )
+        registry = load_capability_registry()
+        case(
+            "canonical capability registry validates (positive control)",
+            not registry["stale"] and len(registry["entries"]) >= 5,
+        )
+
+        def planned_action(**need_overrides):
+            need = {
+                "id": "cap-1",
+                "capability": "source-owned-component-starting-points",
+                "reason": "The fixture needs a bounded source-owned component comparison.",
+                "necessary": True,
+                "existing_solution": None,
+                "native_solution": None,
+                "project_local_solution": None,
+                "approved_dependency": None,
+                "excluded_candidates": [],
+            }
+            need.update(need_overrides)
+            value = low_assessment()
+            value["capability_needs"] = [need]
+            normalised = validate_assessment(value)
+            return capability_plan(normalised, registry)[0]
+
+        case(
+            "existing project capability wins before external research",
+            planned_action(existing_solution={
+                "name": "Existing project primitive", "suitable": True,
+                "reason": "It already meets the fixture behaviour.",
+            })["action"] == "existing-project",
+        )
+        case(
+            "native platform capability wins before a registry candidate",
+            planned_action(native_solution={
+                "name": "Native dialog", "suitable": True,
+                "reason": "The platform supplies the required semantics.",
+            })["action"] == "native-platform",
+        )
+        case(
+            "small project-local solution wins before dependency research",
+            planned_action(project_local_solution={
+                "name": "Project-local primitive", "suitable": True,
+                "reason": "The behaviour is small and project-specific.",
+            })["action"] == "project-local",
+        )
+        case(
+            "already-approved dependency wins before new registry research",
+            planned_action(approved_dependency={
+                "name": "Existing approved dependency", "suitable": True,
+                "reason": "Human G2 already approved it for this project.",
+            })["action"] == "approved-dependency",
+        )
+        case(
+            "one current registry match becomes a candidate, not an install",
+            planned_action()["action"] == "registered-candidate"
+            and planned_action()["install_authority"] == "none — human G2 required",
+        )
+        competing = planned_action(capability="accessible-unstyled-primitives")
+        case(
+            "competing registered capabilities require comparison",
+            competing["action"] == "compare-registered" and len(competing["candidates"]) >= 3,
+        )
+        case(
+            "missing capability triggers bounded discovery",
+            planned_action(capability="nonexistent-fixture-capability")["action"]
+            == "bounded-external-discovery",
+        )
+        case(
+            "project-specific design conflict excludes a registry candidate",
+            planned_action(excluded_candidates=[{
+                "id": "shadcn-ui", "reason": "Generated conventions conflict with the locked visual language."
+            }])["action"] == "bounded-external-discovery",
+        )
+        case(
+            "unnecessary capability skips dependency work",
+            planned_action(necessary=False)["action"] == "skip-unnecessary",
+        )
+        stale_registry = dict(registry)
+        stale_registry["stale"] = True
+        stale_assessment = low_assessment()
+        stale_assessment["capability_needs"] = [{
+            "id": "cap-stale", "capability": "source-owned-component-starting-points",
+            "reason": "The fixture needs a current comparison.", "necessary": True,
+        }]
+        case(
+            "stale registry cannot select a candidate",
+            capability_plan(validate_assessment(stale_assessment), stale_registry)[0]["action"]
+            == "bounded-external-discovery",
+        )
+        integrated_assessment = low_assessment()
+        integrated_assessment["capability_needs"] = [{
+            "id": "cap-integrated", "capability": "source-owned-component-starting-points",
+            "reason": "The project requires a source-owned component comparison.",
+            "necessary": True,
+        }]
+        integrated = create_ledger(project, integrated_assessment)
+        case(
+            "declared unresolved capability activates component research",
+            _skill_by_name(integrated, "component-research")["selected"]
+            and integrated["capability_plan"][0]["action"] == "registered-candidate",
         )
         social_assessment = low_assessment()
         social_assessment["social_request"] = {
@@ -1002,7 +1421,7 @@ def self_test() -> int:
         case("skill cannot be completed without invocation", impossible_completion)
 
         for index in range(1, 4):
-            capture = workspace / f"reference-{index}.html"
+            capture = project / f"reference-{index}.html"
             capture.write_text(f"<html><title>Reference {index}</title><main>Observed mechanism {index}</main></html>", encoding="utf-8")
             record_reference(ledger, {
                 "id": f"ref-{index}", "source": f"https://example.test/reference-{index}",
@@ -1066,6 +1485,7 @@ def self_test() -> int:
             record_decision(ledger, {
                 "id": f"decision-{index}", "decision": f"Use mechanism {index}",
                 "principle": "Translate the reference into the archive subject.", "basis": "reference",
+                "claim_status": "SUPPORTED",
                 "reference_ids": [f"ref-{index}"], "artifact_path": str(design),
                 "artifact_anchor": f"https://example.test/reference-{index}", "status": "proposed", "gate": "pending",
             })
@@ -1110,12 +1530,12 @@ def self_test() -> int:
             _skill_by_name(technical_ledger, "technical-research")["selected"]
             and _skill_by_name(technical_ledger, "component-research")["selected"],
         )
-        platform_doc = workspace / "platform-doc.html"
+        platform_doc = project / "platform-doc.html"
         platform_doc.write_text(
             "<html><title>Platform observer fixture</title><main>Observer support and behaviour.</main></html>",
             encoding="utf-8",
         )
-        package_doc = workspace / "package-doc.html"
+        package_doc = project / "package-doc.html"
         package_doc.write_text(
             "<html><title>Package fixture</title><main>Package compatibility and licence.</main></html>",
             encoding="utf-8",
@@ -1131,7 +1551,7 @@ def self_test() -> int:
                 "mechanisms": [], "why_it_matters": "The dependency decision needs inspected evidence.",
                 "borrow": "Use the verified capability boundary.", "reject": "Do not infer unrecorded features.",
             })
-        technical_output = workspace / "technical-decision.md"
+        technical_output = project / "technical-decision.md"
         technical_output.write_text(
             "# Technical decision\n\nUse the platform observer; no motion package is necessary.\n",
             encoding="utf-8",
@@ -1145,6 +1565,7 @@ def self_test() -> int:
             "implementation_cost": "One observer and deterministic fallback logic.",
             "alternatives": [{"name": "scroll listener", "reason": "More manual work and event-frequency risk."}],
             "necessary": True, "decision": "use", "source_reference_ids": ["ref-platform"],
+            "claim_status": "SUPPORTED",
             "artifact_path": str(technical_output), "artifact_anchor": "Use the platform observer",
         })
         record_resource(technical_ledger, {
@@ -1156,6 +1577,7 @@ def self_test() -> int:
             "implementation_cost": "Adds installation, bundle, and maintenance cost.",
             "alternatives": [{"name": "Platform observer", "reason": "Supplies the bounded behaviour without a dependency."}],
             "necessary": False, "decision": "do-not-use", "source_reference_ids": ["ref-package"],
+            "claim_status": "SUPPORTED",
             "artifact_path": str(technical_output), "artifact_anchor": "no motion package is necessary",
         })
         case(
@@ -1168,6 +1590,26 @@ def self_test() -> int:
             summary(technical_ledger)["resources"] == {"evaluated": 2, "selected": 1}
             and {item["decision"] for item in technical_ledger["resources"]} == {"use", "do-not-use"},
         )
+        weak_resource_ledger = json.loads(json.dumps(technical_ledger))
+        weak_resource_ledger["resources"][0]["claim_status"] = "ASSUMPTION"
+        case(
+            "assumption cannot justify a selected resource",
+            any("lacks sufficient evidence" in item for item in ledger_problems(project, weak_resource_ledger)),
+        )
+        missing_status_ledger = json.loads(json.dumps(ledger))
+        missing_status_ledger["decisions"][0].pop("claim_status")
+        case(
+            "current evidence schema rejects a missing decision claim status",
+            any("invalid claim status" in item for item in ledger_problems(project, missing_status_ledger)),
+        )
+        legacy_ledger = json.loads(json.dumps(ledger))
+        legacy_ledger["schema_version"] = 1
+        for item in legacy_ledger["decisions"]:
+            item.pop("claim_status", None)
+        case(
+            "legacy evidence remains readable without fabricated classifications",
+            not ledger_problems(project, legacy_ledger),
+        )
         try:
             record_resource(technical_ledger, {
                 "id": "resource-unproved", "name": "Unproved package", "category": "library",
@@ -1176,6 +1618,7 @@ def self_test() -> int:
                 "implementation_cost": "Unknown.",
                 "alternatives": [{"name": "none", "reason": "No comparison ran."}],
                 "necessary": False, "decision": "defer", "source_reference_ids": ["missing-reference"],
+                "claim_status": "ASSUMPTION",
                 "artifact_path": str(technical_output), "artifact_anchor": "Technical decision",
             })
             unproved_resource_blocked = False

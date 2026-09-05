@@ -92,8 +92,8 @@ for that session only and are never copied into the project repository.
 | Stage | Attach | Do not attach |
 |---|---|---|
 | S1 | The request; `skills/intake.md` unless the mode is already known to be game-experiment | Other Ariadne files |
-| S2 | The blocking open questions from `PROJECT.md`; `RESEARCH-POLICY.md`; `templates/RESEARCH.md`; `.ariadne/creative-evidence.json` when present | Unrelated parts of `PROJECT.md`; the whole system |
-| S3 | `PROJECT.md`; `RESEARCH.md` if it exists; `.ariadne/creative-evidence.json` when present; `DESIGN-TASTE.md`; `templates/DESIGN.md`; `DESIGN-MOTION.md` when motion applies; `DESIGN-ASSETS.md` when unresolved imagery/assets apply; reference URLs or `none yet` | Any code or build history |
+| S2 | The blocking open questions from `PROJECT.md`; `RESEARCH-POLICY.md`; `PRIVACY-POLICY.md`; `templates/RESEARCH.md`; `.ariadne/creative-evidence.json` when present | Unrelated parts of `PROJECT.md`; the whole system |
+| S3 | `PROJECT.md`; `RESEARCH.md` if it exists; `.ariadne/creative-evidence.json` when present; `DESIGN-TASTE.md`; `PRIVACY-POLICY.md`; `templates/DESIGN.md`; `skills/design-direction.md`; `skills/reference-analysis.md` only when selected; `skills/component-research.md` and `references/capabilities.json` only when selected; `DESIGN-MOTION.md` when motion applies; `DESIGN-ASSETS.md` when unresolved imagery/assets apply; reference URLs or `none yet` | Any code or build history; unselected skills |
 | S4A handoff | `PROJECT.md`; approved `DESIGN.md`; project-root `AGENTS.md`; `templates/HANDOFF.md` | Code or earlier chat history |
 | S4B build | The project repository; `HANDOFF.md`; approved `DESIGN.md`; project-root `AGENTS.md`; project `.ariadne/creative-operations.json`; `QA-POLICY.md`; `templates/QA.md`; `templates/RETURN-HANDOFF.md`; `skills/visual-qa.md` | Earlier reasoning/build conversations; unrelated Ariadne files |
 | S5 evaluation | The URL/artifact, intent, success criteria, accepted patterns or `none`, and `EVALUATION-RUBRICS.md` | `PROJECT.md`, `DESIGN.md`, `HANDOFF.md`, `AGENTS.md`, `QA.md`, the build story, the constraints |
