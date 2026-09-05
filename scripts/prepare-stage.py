@@ -1550,6 +1550,30 @@ def self_test() -> int:
                 for item in s4b_manifest["sources"]
             ),
         )
+        claude_code_dir = sandbox / "R1-S4B-CLAUDE-CODE"
+        prepare(ns(
+            stage="S4B", project=str(project), output=str(claude_code_dir),
+            parent=str(s4a_dir), provider="claude-code",
+        ))
+        case(
+            "Claude Code S4B transport retains its provider identity",
+            not verify_packet(claude_code_dir)
+            and json.loads(read(claude_code_dir / MANIFEST_NAME))["provider"]
+            == "claude-code",
+        )
+        try:
+            prepare(ns(
+                stage="S4B", project=str(project),
+                output=str(sandbox / "R1-S4B-REASONER-MISROUTE"),
+                parent=str(s4a_dir), provider="claude",
+            ))
+            claude_reasoner_misroute_blocked = False
+        except PacketError as exc:
+            claude_reasoner_misroute_blocked = "reasoner" in str(exc)
+        case(
+            "Claude reasoner ID cannot masquerade as an implementation provider",
+            claude_reasoner_misroute_blocked,
+        )
         s4b_manifest_path = s4b_dir / MANIFEST_NAME
         s4b_manifest_original = read(s4b_manifest_path)
         malformed_return_target = json.loads(s4b_manifest_original)
@@ -1624,7 +1648,9 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--packet-id")
     prepare_parser.add_argument("--parent")
     prepare_parser.add_argument("--retry", action="store_true")
-    prepare_parser.add_argument("--provider", choices=["codex", "claude", "cursor", "other"])
+    prepare_parser.add_argument(
+        "--provider", choices=["codex", "claude", "cursor", "claude-code", "other"]
+    )
     prepare_parser.add_argument("--request")
     prepare_parser.add_argument("--request-file")
     prepare_parser.add_argument("--references-file")

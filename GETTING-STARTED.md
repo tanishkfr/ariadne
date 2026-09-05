@@ -53,7 +53,7 @@ are never overwritten. Restart Codex afterwards.
 Codex remains the default and Claude is not installed or enabled by this
 process. If Claude Code is already installed and you explicitly want it as the
 reasoner, run `python -m ariadne enable-claude`. Use `disable-claude` to
-remove only that optional entry. Cursor/Grok still owns external S4B work.
+remove only that optional entry. Cursor remains the default external S4B tool.
 
 ---
 
@@ -89,7 +89,11 @@ You do not need to copy project rules or canonical QA files manually; they are
 inside the verified handoff packet. Let the project-brief pass create root
 `AGENTS.md`; do not pre-create it.
 
-Claude Code works identically as a fallback — see [adapters/claude-code.md](adapters/claude-code.md). **Read the cautions in that file**, particularly about design skills whose house style can override your `DESIGN.md`.
+Claude Code uses the same S4B packet contract as an optional fallback — see
+[adapters/claude-code.md](adapters/claude-code.md). Its transport is prepared,
+but live equivalence remains unverified. **Read the cautions in that file**,
+particularly about design skills whose house style can override your
+`DESIGN.md`.
 
 ---
 

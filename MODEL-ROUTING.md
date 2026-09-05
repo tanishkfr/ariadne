@@ -60,7 +60,10 @@ Route work to a *class* first. This is the layer that does not change.
 
 - **Codex (`R1`)** — decides. Strategy, grilling, design direction, architecture, evaluation, retrospectives. It may retain a bounded high-reasoning implementation/debugging split named in `HANDOFF.md`; it does not absorb routine build volume.
 - **Cursor (`R2`/`R3`/`R4`)** — builds. Implements the handoff, refactors, runs the browser, fixes QA findings. Reads documents. Writes most code.
-- **Claude Code (`R2` fallback, `R4`)** — implements during the transition, and handles agentic multi-file work in a terminal. Interchangeable with Cursor by design. See [adapters/claude-code.md](adapters/claude-code.md).
+- **Claude Code (`R2` fallback, `R4`)** — accepts the same S4B transport
+  contract and can handle agentic multi-file work in a terminal. Transport
+  compatibility is implemented; live implementation equivalence remains
+  unverified. See [adapters/claude-code.md](adapters/claude-code.md).
 
 If any one of these disappears tomorrow, the other two absorb its classes and the system still runs. That is the test of provider-neutrality, and it is the reason no Ariadne document outside [adapters/](adapters/) names a product.
 
