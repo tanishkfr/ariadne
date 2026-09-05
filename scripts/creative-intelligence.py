@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_VERSION = 2
 SUPPORTED_SCHEMA_VERSIONS = (1, 2)
 LEDGER_RELATIVE = Path(".ariadne") / "creative-evidence.json"
+CAPABILITY_REGISTRY = ROOT / "references" / "capabilities.json"
 LEVELS = ("low", "medium", "high")
 DIMENSIONS = (
     "novelty",
@@ -168,6 +169,49 @@ def validate_assessment(assessment: dict) -> dict:
     if social["value"] and not social_request:
         raise CreativeError("an activated social strategy needs the user's explicit request")
     normalised["social_request"] = {"value": social["value"], "request": social_request}
+    capability_needs = assessment.get("capability_needs", [])
+    if not isinstance(capability_needs, list):
+        raise CreativeError("capability_needs must be a list")
+    normalised["capability_needs"] = []
+    for index, need in enumerate(capability_needs, 1):
+        if not isinstance(need, dict):
+            raise CreativeError(f"capability need {index} must be an object")
+        row = {
+            "id": str(need.get("id") or f"capability-{index}").strip(),
+            "capability": str(need.get("capability", "")).strip(),
+            "reason": str(need.get("reason", "")).strip(),
+            "necessary": bool(need.get("necessary", True)),
+            "existing_solution": need.get("existing_solution"),
+            "native_solution": need.get("native_solution"),
+            "project_local_solution": need.get("project_local_solution"),
+            "approved_dependency": need.get("approved_dependency"),
+            "excluded_candidates": need.get("excluded_candidates", []),
+        }
+        if not row["id"] or not row["capability"] or not row["reason"]:
+            raise CreativeError(f"capability need {index} needs id, capability, and reason")
+        for label in (
+            "existing_solution", "native_solution", "project_local_solution",
+            "approved_dependency",
+        ):
+            candidate = row[label]
+            if candidate is not None and (
+                not isinstance(candidate, dict)
+                or not isinstance(candidate.get("suitable"), bool)
+                or not str(candidate.get("name", "")).strip()
+                or not str(candidate.get("reason", "")).strip()
+            ):
+                raise CreativeError(f"capability need {row['id']} has malformed {label}")
+        if not isinstance(row["excluded_candidates"], list) or any(
+            not isinstance(item, dict)
+            or not str(item.get("id", "")).strip()
+            or not str(item.get("reason", "")).strip()
+            for item in row["excluded_candidates"]
+        ):
+            raise CreativeError(f"capability need {row['id']} has malformed exclusions")
+        normalised["capability_needs"].append(row)
+    capability_ids = [item["id"] for item in normalised["capability_needs"]]
+    if len(capability_ids) != len(set(capability_ids)):
+        raise CreativeError("capability need IDs must be unique")
     questions = assessment.get("research_questions", [])
     if not isinstance(questions, list):
         raise CreativeError("research_questions must be a list")
@@ -193,6 +237,90 @@ def validate_assessment(assessment: dict) -> dict:
     if len(ids) != len(set(ids)):
         raise CreativeError("research question IDs must be unique")
     return normalised
+
+
+def load_capability_registry(path: Path = CAPABILITY_REGISTRY) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CreativeError(f"capability registry is unavailable or malformed: {exc}") from exc
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise CreativeError("capability registry has an unsupported schema")
+    checked_on = str(value.get("checked_on", ""))
+    try:
+        checked_date = datetime.strptime(checked_on, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise CreativeError("capability registry checked_on must be a real YYYY-MM-DD date") from exc
+    reverify = value.get("reverify_after_days")
+    if not isinstance(reverify, int) or reverify <= 0:
+        raise CreativeError("capability registry needs a positive freshness window")
+    entries = value.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise CreativeError("capability registry needs entries")
+    ids = []
+    required = (
+        "id", "name", "capabilities", "status", "resolved_revision",
+        "official_url", "licence", "licence_url", "acquisition",
+        "design_authority", "notes",
+    )
+    for entry in entries:
+        if not isinstance(entry, dict) or any(not entry.get(field) for field in required):
+            raise CreativeError("capability registry entry is incomplete")
+        if not isinstance(entry.get("capabilities"), list) or not entry["capabilities"]:
+            raise CreativeError(f"capability registry entry has no capabilities: {entry.get('id')}")
+        for flag in ("writes_project", "runtime_code", "agent_instructions", "hooks_or_mcp"):
+            if not isinstance(entry.get(flag), bool):
+                raise CreativeError(f"capability registry entry lacks boolean {flag}: {entry.get('id')}")
+        ids.append(entry["id"])
+    if len(ids) != len(set(ids)):
+        raise CreativeError("capability registry IDs must be unique")
+    result = dict(value)
+    result["stale"] = (
+        datetime.now().astimezone().date() - checked_date
+    ).days > reverify
+    return result
+
+
+def capability_plan(assessment: dict, registry: dict) -> list[dict]:
+    """Choose the first sufficient rung; this never selects or installs a package."""
+    entries = registry.get("entries", [])
+    stale = bool(registry.get("stale"))
+    plan = []
+    for need in assessment.get("capability_needs", []):
+        rejected = [dict(item) for item in need.get("excluded_candidates", [])]
+        excluded = {item["id"] for item in rejected}
+        if not need.get("necessary", True):
+            action, candidates = "skip-unnecessary", []
+        elif (need.get("existing_solution") or {}).get("suitable"):
+            action, candidates = "existing-project", [need["existing_solution"]["name"]]
+        elif (need.get("native_solution") or {}).get("suitable"):
+            action, candidates = "native-platform", [need["native_solution"]["name"]]
+        elif (need.get("project_local_solution") or {}).get("suitable"):
+            action, candidates = "project-local", [need["project_local_solution"]["name"]]
+        elif (need.get("approved_dependency") or {}).get("suitable"):
+            action, candidates = "approved-dependency", [need["approved_dependency"]["name"]]
+        else:
+            matching = [
+                entry for entry in entries
+                if need["capability"] in entry.get("capabilities", [])
+                and entry.get("id") not in excluded
+                and entry.get("status") not in ("research-only-unpinned",)
+            ]
+            if stale or not matching:
+                action, candidates = "bounded-external-discovery", []
+            elif len(matching) == 1:
+                action, candidates = "registered-candidate", [matching[0]["id"]]
+            else:
+                action, candidates = "compare-registered", [item["id"] for item in matching]
+        plan.append({
+            "id": need["id"],
+            "capability": need["capability"],
+            "action": action,
+            "candidates": candidates,
+            "rejected": rejected,
+            "install_authority": "none — human G2 required",
+        })
+    return plan
 
 
 def research_depth(assessment: dict) -> str:
@@ -251,7 +379,15 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
         (c["technical_uncertainty"]["level"], c["interaction_complexity"]["level"]),
         key=LEVELS.index,
     )
-    component_selected = component_level != "low"
+    registry = load_capability_registry() if assessment["capability_needs"] else None
+    capability_choices = capability_plan(assessment, registry) if registry else []
+    capability_research = any(
+        item["action"] in (
+            "registered-candidate", "compare-registered", "bounded-external-discovery"
+        )
+        for item in capability_choices
+    )
+    component_selected = component_level != "low" or capability_research
     technical_questions = [
         item for item in assessment["research_questions"]
         if item["kind"] in ("technical", "resource", "domain")
@@ -332,6 +468,16 @@ def create_ledger(project: Path, assessment_value: dict) -> dict:
         "updated_at": created,
         "research_depth": research_depth(assessment),
         "assessment": assessment,
+        "capability_registry": (
+            {
+                "path": str(CAPABILITY_REGISTRY),
+                "sha256": digest(CAPABILITY_REGISTRY),
+                "checked_on": registry["checked_on"],
+                "stale": registry["stale"],
+            }
+            if registry else None
+        ),
+        "capability_plan": capability_choices,
         "skills": skills,
         "references": [],
         "resources": [],
@@ -714,6 +860,28 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
         problems.append("creative evidence project path is invalid")
     if ledger.get("research_depth") not in ("minimal", "standard", "deep"):
         problems.append("creative evidence has invalid research depth")
+    capability_needs = ledger.get("assessment", {}).get("capability_needs", [])
+    capability_rows = ledger.get("capability_plan", [])
+    if schema_version == SCHEMA_VERSION and capability_needs:
+        registry = ledger.get("capability_registry") or {}
+        if (
+            Path(str(registry.get("path", ""))).resolve() != CAPABILITY_REGISTRY.resolve()
+            or not CAPABILITY_REGISTRY.is_file()
+            or registry.get("sha256") != digest(CAPABILITY_REGISTRY)
+        ):
+            problems.append("capability registry changed after planning")
+        if len(capability_rows) != len(capability_needs):
+            problems.append("capability plan does not cover every declared need")
+    allowed_actions = {
+        "skip-unnecessary", "existing-project", "native-platform", "project-local",
+        "approved-dependency",
+        "registered-candidate", "compare-registered", "bounded-external-discovery",
+    }
+    for item in capability_rows:
+        if item.get("action") not in allowed_actions:
+            problems.append(f"capability plan has invalid action: {item.get('id')}")
+        if item.get("install_authority") != "none — human G2 required":
+            problems.append(f"capability plan claims installation authority: {item.get('id')}")
     skills = ledger.get("skills", [])
     names = [item.get("name") for item in skills if isinstance(item, dict)]
     if len(names) != len(set(names)):
@@ -967,6 +1135,7 @@ def low_assessment(**overrides) -> dict:
         "references_supplied": False,
         "alternatives_helpful": {"value": False, "reason": "One direction is sufficient for this fixture."},
         "social_request": {"value": False, "request": ""},
+        "capability_needs": [],
         "research_questions": [],
     }
 
@@ -1032,6 +1201,107 @@ def self_test() -> int:
             and _skill_by_name(minimal, "component-research")["state"] == "skipped"
             and _skill_by_name(minimal, "visual-qa")["state"] == "skipped"
             and _skill_by_name(minimal, "social-strategy")["state"] == "skipped",
+        )
+        registry = load_capability_registry()
+        case(
+            "canonical capability registry validates (positive control)",
+            not registry["stale"] and len(registry["entries"]) >= 5,
+        )
+
+        def planned_action(**need_overrides):
+            need = {
+                "id": "cap-1",
+                "capability": "source-owned-component-starting-points",
+                "reason": "The fixture needs a bounded source-owned component comparison.",
+                "necessary": True,
+                "existing_solution": None,
+                "native_solution": None,
+                "project_local_solution": None,
+                "approved_dependency": None,
+                "excluded_candidates": [],
+            }
+            need.update(need_overrides)
+            value = low_assessment()
+            value["capability_needs"] = [need]
+            normalised = validate_assessment(value)
+            return capability_plan(normalised, registry)[0]
+
+        case(
+            "existing project capability wins before external research",
+            planned_action(existing_solution={
+                "name": "Existing project primitive", "suitable": True,
+                "reason": "It already meets the fixture behaviour.",
+            })["action"] == "existing-project",
+        )
+        case(
+            "native platform capability wins before a registry candidate",
+            planned_action(native_solution={
+                "name": "Native dialog", "suitable": True,
+                "reason": "The platform supplies the required semantics.",
+            })["action"] == "native-platform",
+        )
+        case(
+            "small project-local solution wins before dependency research",
+            planned_action(project_local_solution={
+                "name": "Project-local primitive", "suitable": True,
+                "reason": "The behaviour is small and project-specific.",
+            })["action"] == "project-local",
+        )
+        case(
+            "already-approved dependency wins before new registry research",
+            planned_action(approved_dependency={
+                "name": "Existing approved dependency", "suitable": True,
+                "reason": "Human G2 already approved it for this project.",
+            })["action"] == "approved-dependency",
+        )
+        case(
+            "one current registry match becomes a candidate, not an install",
+            planned_action()["action"] == "registered-candidate"
+            and planned_action()["install_authority"] == "none — human G2 required",
+        )
+        competing = planned_action(capability="accessible-unstyled-primitives")
+        case(
+            "competing registered capabilities require comparison",
+            competing["action"] == "compare-registered" and len(competing["candidates"]) >= 3,
+        )
+        case(
+            "missing capability triggers bounded discovery",
+            planned_action(capability="nonexistent-fixture-capability")["action"]
+            == "bounded-external-discovery",
+        )
+        case(
+            "project-specific design conflict excludes a registry candidate",
+            planned_action(excluded_candidates=[{
+                "id": "shadcn-ui", "reason": "Generated conventions conflict with the locked visual language."
+            }])["action"] == "bounded-external-discovery",
+        )
+        case(
+            "unnecessary capability skips dependency work",
+            planned_action(necessary=False)["action"] == "skip-unnecessary",
+        )
+        stale_registry = dict(registry)
+        stale_registry["stale"] = True
+        stale_assessment = low_assessment()
+        stale_assessment["capability_needs"] = [{
+            "id": "cap-stale", "capability": "source-owned-component-starting-points",
+            "reason": "The fixture needs a current comparison.", "necessary": True,
+        }]
+        case(
+            "stale registry cannot select a candidate",
+            capability_plan(validate_assessment(stale_assessment), stale_registry)[0]["action"]
+            == "bounded-external-discovery",
+        )
+        integrated_assessment = low_assessment()
+        integrated_assessment["capability_needs"] = [{
+            "id": "cap-integrated", "capability": "source-owned-component-starting-points",
+            "reason": "The project requires a source-owned component comparison.",
+            "necessary": True,
+        }]
+        integrated = create_ledger(project, integrated_assessment)
+        case(
+            "declared unresolved capability activates component research",
+            _skill_by_name(integrated, "component-research")["selected"]
+            and integrated["capability_plan"][0]["action"] == "registered-candidate",
         )
         social_assessment = low_assessment()
         social_assessment["social_request"] = {

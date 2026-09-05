@@ -55,6 +55,13 @@ meets the project need without weakening accessibility or the approved design:
 Record the rejected rung and reason in the G2 proposal. Discovery never grants
 permission to install, and a familiar package name is not evidence of need.
 
+The dated [capability registry](references/capabilities.json) is an advisory
+comparison index for rung 5. It records what a source may provide, provenance,
+licence, side effects, and design-authority risk. It is not a preferred-library
+list, does not replace current source inspection, and cannot approve G2. When a
+registry row is stale, unpinned, or incompatible with the project, return to
+research or choose an earlier rung.
+
 ---
 
 ## 3. Conditional

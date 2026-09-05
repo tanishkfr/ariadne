@@ -36,6 +36,7 @@ SELF_TEST = "--self-test" in sys.argv
 REQUIRED = [
     "README.md", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md",
     "QA-POLICY.md", "EVALUATION-RUBRICS.md", "LIBRARY-POLICY.md",
+    "PRIVACY-POLICY.md", "references/capabilities.json",
     "CHANGELOG.md", "QUICKSTART.md", "INSTALL.md", "UPDATE.md",
     "TROUBLESHOOTING.md", "RELEASING.md", "V1.4-READINESS.md", "V1.5-READINESS.md",
     "V1.5.1-READINESS.md", "V1.5.2-READINESS.md", "V1.5.3-READINESS.md",
@@ -120,6 +121,8 @@ SKILL_FILES = [
 
 DEPENDENCY_AUTHORITY_FILES = (
     "WORKFLOW.md", "LIBRARY-POLICY.md", "prompts/build-kickoff.md",
+    "references/capabilities.json", "scripts/creative-intelligence.py",
+    "skills/component-research.md",
 )
 EVIDENCE_LADDER_FILES = (
     "RESEARCH-POLICY.md", "templates/RESEARCH.md", "prompts/research.md",
@@ -181,6 +184,21 @@ def check_dependency_authority_texts(texts=None):
         problems.append("workflow no longer sends every new package to G2")
     if "NO NEW DEPENDENCY without asking me (G2)" not in values["prompts/build-kickoff.md"]:
         problems.append("build prompt no longer stops before an unapproved dependency")
+    try:
+        registry = json.loads(values["references/capabilities.json"])
+    except json.JSONDecodeError:
+        registry = {}
+        problems.append("capability registry is malformed JSON")
+    if registry.get("canonical_owner") != "LIBRARY-POLICY.md":
+        problems.append("capability registry no longer points to the canonical library policy")
+    if "never installation authority" not in registry.get("purpose", ""):
+        problems.append("capability registry can be mistaken for installation authority")
+    runtime = values["scripts/creative-intelligence.py"]
+    if '"install_authority": "none — human G2 required"' not in runtime:
+        problems.append("capability planning no longer preserves human G2")
+    method = values["skills/component-research.md"]
+    if "minimum-solution ladder" not in method or "current registered capability" not in method:
+        problems.append("component research no longer walks the minimum-solution ladder")
     return problems
 
 
@@ -589,11 +607,15 @@ DELIVERY_CONTRACTS = [
         "block": 0,
         "tokens": [
             "REQUIRED INPUTS", "QUESTIONS", "RESEARCH-POLICY.md",
-            "templates/RESEARCH.md", ".ariadne/creative-evidence.json", "IF MISSING",
+            "PRIVACY-POLICY.md", "templates/RESEARCH.md",
+            ".ariadne/creative-evidence.json", "IF MISSING",
             "RESOURCE EVIDENCE", "compatibility", "licence", "alternatives",
             "NEXT: S3 Design direction.",
         ],
-        "inputs": ["QUESTIONS", "RESEARCH-POLICY.md", "templates/RESEARCH.md", ".ariadne/creative-evidence.json"],
+        "inputs": [
+            "QUESTIONS", "RESEARCH-POLICY.md", "PRIVACY-POLICY.md",
+            "templates/RESEARCH.md", ".ariadne/creative-evidence.json",
+        ],
         "retry": "NEXT: S2 Research retry.",
         "forbidden_missing": ["NEXT: S3 Design direction."],
     },
@@ -602,11 +624,16 @@ DELIVERY_CONTRACTS = [
         "block": 0,
         "tokens": [
             "REQUIRED INPUTS", "PROJECT.md", "DESIGN-TASTE.md",
-            "templates/DESIGN.md", "DESIGN-MOTION.md", "DESIGN-ASSETS.md",
+            "PRIVACY-POLICY.md", "templates/DESIGN.md", "skills/design-direction.md",
+            "skills/reference-analysis.md", "skills/component-research.md",
+            "references/capabilities.json", "DESIGN-MOTION.md", "DESIGN-ASSETS.md",
             ".ariadne/creative-evidence.json", "IF MISSING", "NEXT: S4 Build.",
         ],
         "inputs": [
-            "PROJECT.md", "DESIGN-TASTE.md", "templates/DESIGN.md",
+            "PROJECT.md", "DESIGN-TASTE.md", "PRIVACY-POLICY.md",
+            "templates/DESIGN.md", "skills/design-direction.md",
+            "skills/reference-analysis.md", "skills/component-research.md",
+            "references/capabilities.json",
             "DESIGN-MOTION.md", "DESIGN-ASSETS.md", ".ariadne/creative-evidence.json",
         ],
         "retry": "NEXT: S3 Design direction retry.",
@@ -708,8 +735,10 @@ ADAPTER_DELIVERY = {
         "begin": "**What to attach per stage:**",
         "end": "If a required input is unavailable",
         "tokens": [
-            "skills/intake.md", "RESEARCH-POLICY.md", "templates/RESEARCH.md",
-            "DESIGN-TASTE.md", "templates/DESIGN.md", "DESIGN-MOTION.md",
+            "skills/intake.md", "RESEARCH-POLICY.md", "PRIVACY-POLICY.md",
+            "templates/RESEARCH.md", "DESIGN-TASTE.md", "templates/DESIGN.md",
+            "skills/design-direction.md", "skills/reference-analysis.md",
+            "skills/component-research.md", "references/capabilities.json", "DESIGN-MOTION.md",
             "DESIGN-ASSETS.md", ".ariadne/creative-evidence.json", "templates/HANDOFF.md",
             ".ariadne/creative-operations.json", "skills/visual-qa.md",
             "EVALUATION-RUBRICS.md", "completed `QA.md`",
@@ -1138,6 +1167,10 @@ def self_test_delivery_contracts():
              "prompts/research.md",
              "NEXT: S2 Research retry.", "NEXT: S3 Design direction."
          )))),
+        ("S2 without the privacy boundary fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/research.md", "- PRIVACY-POLICY.md", "- Privacy guidance"
+         )))),
         ("unresolved S2 evidence advancing to S3 fails",
          bool(check_delivery_contract_texts(mutate(
              "prompts/research.md",
@@ -1150,6 +1183,11 @@ def self_test_delivery_contracts():
         ("missing S4B canonical QA policy fails",
          bool(check_delivery_contract_texts(mutate(
              "prompts/build-kickoff.md", "- QA-POLICY.md.", "- QA rules."
+         )))),
+        ("S3 without its selected component method contract fails",
+         bool(check_delivery_contract_texts(mutate(
+             "prompts/design-direction.md", "- skills/component-research.md",
+             "- the component-research method"
          )))),
         ("S4A transition without Ariadne handoff fails",
          bool(check_delivery_contract_texts(mutate(
@@ -1172,6 +1210,11 @@ def self_test_delivery_contracts():
         ("Cursor adapter missing QA template fails",
          bool(check_delivery_contract_texts(mutate(
              "adapters/cursor.md", "`templates/QA.md`", "the QA template"
+         )))),
+        ("Codex adapter missing S3 capability registry fails",
+         bool(check_delivery_contract_texts(mutate(
+             "adapters/codex.md", "`references/capabilities.json`",
+             "the capability registry"
          )))),
         ("content drafting without voice continuity fails",
          bool(check_delivery_contract_texts(mutate(
@@ -1267,6 +1310,20 @@ def self_test_dependency_authority():
     )
     self_approval = dict(actual)
     self_approval["LIBRARY-POLICY.md"] += "\nInstallable without asking.\n"
+    registry_self_approval = dict(actual)
+    registry_self_approval["references/capabilities.json"] = (
+        registry_self_approval["references/capabilities.json"].replace(
+            "never installation authority", "installation authority", 1
+        )
+    )
+    runtime_self_approval = dict(actual)
+    runtime_self_approval["scripts/creative-intelligence.py"] = (
+        runtime_self_approval["scripts/creative-intelligence.py"].replace(
+            '"install_authority": "none — human G2 required"',
+            '"install_authority": "approved by registry"',
+            1,
+        )
+    )
     cases = [
         ("repository dependency authority passes (positive control)",
          not check_dependency_authority_texts(actual)),
@@ -1278,6 +1335,10 @@ def self_test_dependency_authority():
          bool(check_dependency_authority_texts(missing_gate))),
         ("dependency self-approval language fails",
          bool(check_dependency_authority_texts(self_approval))),
+        ("registry cannot become installation authority",
+         bool(check_dependency_authority_texts(registry_self_approval))),
+        ("capability plan cannot self-approve G2",
+         bool(check_dependency_authority_texts(runtime_self_approval))),
     ]
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
