@@ -10,6 +10,13 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.6.3.2 — 2026-09-06 · RUNTIME PACKAGING CORRECTION
+
+The 1.6.3.1 private release omitted `WRITING-POLICY.md` from the runtime
+allowlist even though the bundled writing skill references it. This patch adds
+that top-level policy to fresh runtime artifacts. The existing 1.6.3.1 release
+and its history remain unchanged.
+
 ## 1.6.3.1 — 2026-09-06 · WRITING ARCHITECTURE AND EXECUTION
 
 The existing writing path now records a writing intent before selecting a

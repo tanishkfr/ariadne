@@ -34,7 +34,7 @@ RUNTIME_TOP_LEVEL = [
     "VERSION", "LICENSE", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md", "DESIGN-MOTION.md",
     "DESIGN-ASSETS.md", "QA-POLICY.md", "EVALUATION-RUBRICS.md",
     "LIBRARY-POLICY.md", "RESEARCH-POLICY.md", "PRIVACY-POLICY.md",
-    "MODEL-ROUTING.md", "BUDGET-POLICY.md", "CONTENT-SYSTEM.md",
+    "MODEL-ROUTING.md", "BUDGET-POLICY.md", "CONTENT-SYSTEM.md", "WRITING-POLICY.md",
 ]
 RUNTIME_TREES = ["prompts", "templates", "modes", "skills", "adapters", "references"]
 RUNTIME_SCRIPTS = [

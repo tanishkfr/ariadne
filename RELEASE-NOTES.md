@@ -1,4 +1,26 @@
-# Ariadne 1.6.3.1
+# Ariadne 1.6.3.2
+
+Ariadne 1.6.3.2 is a packaging correction for the 1.6.3.1 writing release.
+It adds the omitted `WRITING-POLICY.md` file to the runtime allowlist so the
+installed writing skill and its referenced policy travel together.
+
+The existing immutable 1.6.3.1 release is preserved unchanged.
+
+## Fixed
+
+- Fresh wheel and runtime artifacts now include `WRITING-POLICY.md` alongside
+  the writing skills and `scripts/prepare-stage.py`.
+- Development-only tests, validation fixtures and maintainer-only files remain
+  excluded from the runtime release surface.
+
+## Evidence limits
+
+- The correction changes packaging only; it does not change the writing
+  architecture or claim live provider equivalence.
+
+---
+
+## Ariadne 1.6.3.1
 
 Ariadne 1.6.3.1 adds a writing architecture and executable writing packet
 workflow. It is a focused release and does not change the existing workflow
