@@ -17,7 +17,7 @@ do not contain or depend on its source repository.
 Install the current public version directly from GitHub:
 
 ```bash
-py -3 -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.4/ariadne-1.6.4-py3-none-any.whl"
+py -3 -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.5/ariadne-1.6.5-py3-none-any.whl"
 py -3 -m ariadne install
 py -3 -m ariadne doctor
 
