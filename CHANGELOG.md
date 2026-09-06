@@ -10,6 +10,18 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.6.3 — 2026-09-06 · SOCIAL CREATIVE CONTRACT PATCH
+
+The social strategy contract now requires a deliberate creative choice before
+drafting. Contract v3 records two to four distinct angles with project
+evidence, audience value, driver, platform fit and risk, then requires a
+selected angle, selection rationale and a reason to exist. Each post concept
+also records a 1–5 hook score, and scores below 4 fail the drafting gate.
+
+Contract v2 remains readable and valid without the v3 angle and hook fields.
+The implementation adds no semantic-similarity subsystem, detector-evasion
+logic or changes to unrelated writing behavior.
+
 ## 1.6.2 — 2026-09-06 · MODEL ROUTING COST PATCH
 
 An adversarial review of the 1.6.1 routing aid found that `R1` model selection

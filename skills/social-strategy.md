@@ -20,43 +20,55 @@ unverified until live execution exists.
    thesis, implementation, screenshots, recordings, references, assets and
    retrospective evidence when they exist. Do not reduce a finished project to
    its original brief.
-2. Establish the project signal before platform research:
+2. Establish the project signal and objective before platform research:
    - what it is and why it exists;
+   - what the content is trying to accomplish (objective: hiring proof, peer critique, adoption, technical insight, cultural signal);
    - the concrete maker decision or failure behind it;
    - what is unusual or useful to learn;
    - the strongest real moment and available visual evidence;
    - the audience most aligned with the project's actual purpose.
    Ask one small question only when the missing answer would change the story,
    audience, sensitive claim, voice treatment or final approval.
-3. Choose research depth: `minimal` for a bounded low-stakes question,
+3. Explore two to four genuinely distinct creative angles before drafting:
+   - each angle represents a different underlying story or mechanism (e.g. unexpected failure vs. technical constraint vs. counter-intuitive thesis vs. user surprise);
+   - record core idea, project evidence, why the audience cares, emotional/curiosity driver, and risk for each;
+   - select the strongest angle with an explicit qualitative rationale grounded in project evidence, not fake engagement scores.
+4. Apply the "Reason to Exist" test to the selected direction:
+   - answer why this deserves to become social content rather than remaining inside the project;
+   - identify the specific value (surprising finding, demonstrated result, useful disagreement, important failure, or distinctive perspective);
+   - reject generic announcements, superficial inspiration, or interchangeable AI takes.
+5. Choose research depth: `minimal` for a bounded low-stakes question,
    `standard` for an ordinary launch, and `deep` for a high-value launch,
    uncertain audience or material multi-platform decision. Current format,
    feature, discovery, licence and analytics claims require current inspection.
-4. Prefer official platform or creator guidance, then primary research,
+6. Prefer official platform or creator guidance, then primary research,
    credible industry research and clearly labelled observed examples. Preserve
    the retrieval evidence. Each meaningful recommendation records
    `SOURCE -> FINDING -> DECISION`, access date, source quality and one of:
    `documented`, `observed`, `researched`, `inferred`, or `speculative`.
    Time-sensitive evidence older than 180 days is not current evidence.
-5. Recommend one to three platforms. Give each a project-specific fit, native
-   treatment and test. Record relevant platforms deliberately not recommended
-   and why. Never spread one generic draft across every platform.
-6. Define three to five content pillars only when the project naturally
+7. Recommend one to three platforms and native formats as downstream consequences of the selected angle:
+   - give each platform a specific fit with the angle and audience;
+   - choose the communicative format (text post, carousel, short video, thread, case-study breakdown, process note) motivated by the idea and available visuals;
+   - record relevant platforms deliberately not recommended and why;
+   - distinguish evidence-backed timing from contextual recommendations or unknown evidence (never invent universal "best time" rules).
+8. Define three to five content pillars only when the project naturally
    sustains them. Otherwise state why a smaller one-off sequence is better.
-7. Produce three to six strong post concepts. Each needs an ID, platform,
-   format, hook, complete draft, purpose, real visual asset or explicit
-   `to-create`/`missing` status, CTA or `none`, evidence basis and falsifiable
-   hypothesis. Use one changing variable per test.
-8. Use existing visuals only when their paths can be hashed. If an image,
-   recording, crop or diagram does not exist, say what must be created; never
-   present it as available evidence.
-9. Match the user's voice only when at least two supplied writing examples are
-   recorded as evidence. With less evidence, label all copy `rough-draft` and
-   use concrete project language without pretending to imitate the user.
-10. Reject generic announcement structures, fake enthusiasm, corporate claims,
+9. Produce three to six strong post concepts. Each needs an ID, platform,
+   format, hook, hook score (1-5 with evidence-based rationale, minimum 4 required to draft without revision),
+   complete draft, purpose, real visual asset or explicit `to-create`/`missing` status,
+   CTA or `none`, evidence basis and falsifiable hypothesis. Use one changing variable per test.
+10. Use existing visuals only when their paths can be hashed. If an image,
+    recording, crop or diagram does not exist, say what must be created; never
+    present it as available evidence.
+11. Match the user's voice only when at least two supplied writing examples are
+    recorded as evidence. With less evidence, label all copy `rough-draft` and
+    use concrete project language without pretending to imitate the user.
+12. Reject generic announcement structures, fake enthusiasm, corporate claims,
     invented achievements, engagement bait and promises of performance. Prefer
-    an actual decision, number, failure, tension or observation from the work.
-11. Fill `SOCIAL-STRATEGY.md`, record a contract-version 2 `social-strategy`
+    an actual decision, number, failure, tension or observation from the work. Let
+    writing structure emerge from the angle (narrative, post-mortem, argument, technical explanation, demonstration) rather than imposing one formula.
+13. Fill `SOCIAL-STRATEGY.md`, record a contract-version 3 `social-strategy`
     event, then run `ariadne.py operations-check --require social`. A revised
     strategy gets a new ID and names its prior `revises` ID.
 
