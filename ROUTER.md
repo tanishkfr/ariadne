@@ -47,6 +47,26 @@ Referenced by ID from everywhere else in the system. Change the rule here, not t
 | [Content system](modes/content-system.md) | Writing for an audience, with a learning loop |
 | [Audit / review](modes/audit-review.md) | Judgement of something that already exists |
 
+### Writing intent
+
+When `OBJECT` is writing, the router records one writing intent before the
+content method begins. This is a method choice inside the existing workflow,
+not a sixth mode or a second router. Use [WRITING-POLICY.md](WRITING-POLICY.md)
+for the method and review lens.
+
+| Intent | Signal | Method owner |
+|---|---|---|
+| `CREATIVE` | Original literary, narrative or imaginative artifact | `WRITING-POLICY.md` creative method |
+| `ACADEMIC` | Assignment, argument or source-based analysis | `WRITING-POLICY.md` academic method |
+| `SCIENTIFIC` | Scientific, technical or evidence-reporting document | `WRITING-POLICY.md` scientific method |
+| `HUMAN-DRAFT TRANSFORMATION` | User supplies a draft and asks to improve, revise or transform it | `WRITING-POLICY.md` transformation contract |
+| `SOCIAL` | Posts, threads, distribution strategy or supplied social results | `CONTENT-SYSTEM.md` and `skills/social-strategy.md` only |
+
+Do not infer SOCIAL from the fact that writing has an audience. Do not apply
+social hook, anti-voice or platform rules to academic, scientific or creative
+writing. If a request says "improve my writing," preserve the draft by default
+and resolve the requested intervention before replacing its voice.
+
 Modes are **workflows**, not subject matter. "A dashboard" is not a mode; *building a stateful thing* is.
 
 ---
@@ -145,7 +165,7 @@ Reached only once `ACTION` is CREATE or TRANSFORM **and** `OBJECT` is resolved.
 | A site whose job is reputation — yours or a client's | client-or-portfolio |
 | Something whose **state outlives the session** — accounts, saved data, returning users | product-app |
 | A playable, experimental, or exhibited piece — **any medium, any input device** | game-experiment |
-| Writing for an audience | content-system |
+| Writing for an audience | content-system, with a recorded writing intent |
 
 **State outliving the session wins over appearance.** A "game" where you log in to save a high score is a product-app. That is a property of the object, not a keyword.
 
@@ -226,14 +246,14 @@ Everything else is conditional. Creating a document nobody will read is worse th
 | `RESEARCH.md` | A fact about the world blocks a decision |
 | `AGENTS.md` | An AI tool will build it (almost always) |
 | `RETROSPECTIVE.md` | The project shipped, or taught you something |
-| `CONTENT-LEARNINGS.md` | Content mode only |
+| `CONTENT-LEARNINGS.md` | SOCIAL intent only; it is the social learning loop |
 
 | Mode | Required | Usually also |
 |---|---|---|
 | Client or portfolio | the four | AGENTS, ASSETS, RETROSPECTIVE |
 | Product app | the four + **ARCHITECTURE** | TASKS, AGENTS, RETROSPECTIVE |
 | Game / experiment | PROJECT, DESIGN | — |
-| Content system | PROJECT, CONTENT-LEARNINGS | RESEARCH |
+| Content / writing system | PROJECT, intent-specific method output | SOCIAL adds CONTENT-LEARNINGS; RESEARCH only when a fact blocks a decision |
 | Audit / review | QA only | — |
 
 ## 7. Skills
@@ -243,7 +263,7 @@ Everything else is conditional. Creating a document nobody will read is worse th
 | Client or portfolio | [intake](skills/intake.md), [reference-analysis](skills/reference-analysis.md), [design-direction](skills/design-direction.md), [component-research](skills/component-research.md), [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md) |
 | Product app | intake, component-research, design-direction, EVALUATION-RUBRICS |
 | Game / experiment | intake (light), design-direction (light) |
-| Content system | intake, [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md), EVALUATION-RUBRICS |
+| Content / writing system | intake, [WRITING-POLICY.md](WRITING-POLICY.md), EVALUATION-RUBRICS; SOCIAL also uses [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md) |
 | Audit / review | reference-analysis, EVALUATION-RUBRICS |
 
 **Any frame with a non-empty `REFERENCE` activates [reference-analysis](skills/reference-analysis.md)** — in any mode, whatever the action.

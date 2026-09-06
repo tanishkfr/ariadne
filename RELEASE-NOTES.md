@@ -1,4 +1,26 @@
-# Ariadne 1.6.3
+# Ariadne 1.6.3.1
+
+Ariadne 1.6.3.1 is a local writing-architecture candidate. It is not
+published.
+
+## Added
+
+- Writing intent distinguishes CREATIVE, ACADEMIC, SCIENTIFIC,
+  HUMAN-DRAFT TRANSFORMATION and SOCIAL within the existing workflow.
+- `WRITING-POLICY.md` defines genre methods, general anti-generic quality
+  principles, Evidence Ladder reuse, transformation provenance and independent
+  editorial review lenses.
+- A twelve-case writing benchmark and deterministic architecture self-test
+  cover routing, genre methods, evidence boundaries, transformation and review
+  independence.
+- General writing no longer requires SOCIAL-only voice profiles, content
+  pillars or `CONTENT-LEARNINGS.md`; those remain conditional on SOCIAL.
+
+## Candidate status
+
+- This candidate has not been pushed, tagged or released.
+- Existing social behavior, including Contract v2 compatibility and Contract v3
+  strictness, remains covered by the existing social suite.
 
 Ariadne 1.6.3 is a focused social-creative contract patch. It strengthens
 strategy quality before drafting without changing the general workflow or

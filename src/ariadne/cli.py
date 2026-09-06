@@ -48,7 +48,7 @@ CLAUDE_SKILL_MARKER = ".ariadne-managed-claude-reasoner.json"
 CODEX_BASELINE_RELATIVE = Path("adapters") / "codex-baseline.md"
 CODEX_BASELINE_NAME = "AGENTS.md"
 CODEX_BASELINE_MARKER = ".ariadne-managed-agents.json"
-VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?$")
+VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:(a|b|rc)(\d+))?$")
 BASE_REQUIRED_RUNTIME_FILES = {
     "VERSION",
     "ROUTER.md",
@@ -173,10 +173,11 @@ def version_key(value: str) -> tuple:
     if not match:
         raise ProductError(f"Unsupported Ariadne version: {value}")
     major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
-    label = match.group(4)
-    number = int(match.group(5) or 0)
+    revision = int(match.group(4) or 0)
+    label = match.group(5)
+    number = int(match.group(6) or 0)
     prerelease_order = {"a": 0, "b": 1, "rc": 2, None: 3}
-    return major, minor, patch, prerelease_order[label], number
+    return major, minor, patch, revision, prerelease_order[label], number
 
 
 def user_data_home(

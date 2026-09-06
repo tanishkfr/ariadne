@@ -61,7 +61,7 @@ def digest(path: Path) -> str:
 
 def version() -> str:
     value = VERSION_PATH.read_text(encoding="utf-8").strip()
-    if not value or not __import__("re").fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?", value):
+    if not value or not __import__("re").fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc)\d+)?", value):
         raise ReleaseError(f"VERSION is not a supported release version: {value!r}")
     return value
 

@@ -1,6 +1,12 @@
 # CONTENT SYSTEM
 
-A system for writing posts that sound like a person, for X and LinkedIn, that gets better because it looks at what actually happened.
+A system for SOCIAL writing on X and LinkedIn that gets better because it looks at what actually happened.
+
+This document is not the general writing policy. For creative, academic,
+scientific/technical or human-draft writing, route by intent and use
+[WRITING-POLICY.md](WRITING-POLICY.md). The rules below must not leak into
+those intents. Social keeps its own hook, platform, voice-evidence and
+publishing boundary.
 
 **The hard constraint:** nothing publishes automatically. Ever. G5 is per-post, every post, no standing approval. See [WORKFLOW.md](WORKFLOW.md).
 

@@ -344,7 +344,7 @@ def check_distribution_texts(texts):
     """Guard the release boundary without making generated artifacts canonical."""
     problems = []
     release_version = texts["VERSION"].strip()
-    if not re.fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?", release_version):
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc)\d+)?", release_version):
         problems.append("VERSION is not a supported release version")
     pyproject = texts["pyproject.toml"]
     for token in (
@@ -410,7 +410,8 @@ def check_distribution_texts(texts):
         problems.append("Codex baseline contains Ariadne workflow or project policy")
     install_url = (
         "https://github.com/tanishkfr/ariadne/releases/download/"
-        f"v{release_version}/ariadne-{release_version}-py3-none-any.whl"
+        f"v{release_version if release_version.count('.') == 2 else release_version.rsplit('.', 1)[0]}"
+        f"/ariadne-{release_version if release_version.count('.') == 2 else release_version.rsplit('.', 1)[0]}-py3-none-any.whl"
     )
     for path in ("README.md", "QUICKSTART.md", "INSTALL.md", "GETTING-STARTED.md"):
         if install_url not in texts[path]:
@@ -1584,12 +1585,13 @@ def self_test_distribution_contract():
     future = dict(actual)
     future["VERSION"] = "9.8.7\n"
     release_version = actual["VERSION"].strip()
+    install_version = release_version if release_version.count(".") == 2 else release_version.rsplit(".", 1)[0]
     future["RELEASE-NOTES.md"] = future["RELEASE-NOTES.md"].replace(
         f"# Ariadne {release_version}", "# Ariadne 9.8.7", 1
     )
     for path in ("README.md", "QUICKSTART.md", "INSTALL.md", "GETTING-STARTED.md"):
         future[path] = future[path].replace(
-            f"/v{release_version}/ariadne-{release_version}-py3-none-any.whl",
+            f"/v{install_version}/ariadne-{install_version}-py3-none-any.whl",
             "/v9.8.7/ariadne-9.8.7-py3-none-any.whl",
             1,
         )
