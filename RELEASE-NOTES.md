@@ -1,4 +1,38 @@
-# Ariadne 1.6.3.2
+# Ariadne 1.6.4
+
+Ariadne 1.6.4 is the canonical three-part release of the writing architecture
+and executable writing workflow. It preserves the validated writing changes
+from the 1.6.3.x releases and corrects their runtime packaging omission.
+
+## Added and fixed
+
+- Writing policy and compact genre-specific guidance for creative, academic,
+  scientific/technical and human-draft transformation work.
+- Existing transport supports `draft`, `review` and `revise` writing packets
+  with provider/model identity, source hashes and S4/S5 boundaries.
+- Human-draft transformation packets preserve the original draft for review;
+  independent review packets exclude drafting rationale and implementation
+  history.
+- `WRITING-POLICY.md` is included in the runtime allowlist alongside the
+  writing skills and `scripts/prepare-stage.py`.
+- Development-only tests, validation fixtures and maintainer-only files remain
+  excluded from runtime artifacts.
+
+## Version history
+
+The four-part `1.6.3.1` and `1.6.3.2` releases remain published historical
+releases. Ariadne 1.6.4 is the normal three-part release that an immutable
+1.6.3 launcher can parse and discover through `ariadne update`.
+
+## Evidence limits
+
+Structural, packet, distribution and live updater validation are reported by
+the release process. This release does not claim detector evasion or live
+provider equivalence.
+
+---
+
+## Ariadne 1.6.3.2
 
 Ariadne 1.6.3.2 is a packaging correction for the 1.6.3.1 writing release.
 It adds the omitted `WRITING-POLICY.md` file to the runtime allowlist so the

@@ -10,6 +10,17 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.6.4 — 2026-09-06 · CANONICAL WRITING RELEASE
+
+This release makes the writing architecture and executable writing workflow
+available under normal three-part semantic versioning so immutable Ariadne
+1.6.3 installations can discover it through the existing updater.
+
+It carries the writing policy, genre-specific guidance, draft/review/revise
+packet flow, human-draft transformation handling, independent-review boundary,
+evidence discipline and corrected runtime packaging. The earlier 1.6.3.1 and
+1.6.3.2 four-part releases remain historical and unchanged.
+
 ## 1.6.3.2 — 2026-09-06 · RUNTIME PACKAGING CORRECTION
 
 The 1.6.3.1 private release omitted `WRITING-POLICY.md` from the runtime
