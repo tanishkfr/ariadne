@@ -1,7 +1,8 @@
 # Ariadne 1.6.3.1
 
-Ariadne 1.6.3.1 is a local writing-architecture candidate. It is not
-published.
+Ariadne 1.6.3.1 adds a writing architecture and executable writing packet
+workflow. It is a focused release and does not change the existing workflow
+stage model or social strategy system.
 
 ## Added
 
@@ -10,17 +11,24 @@ published.
 - `WRITING-POLICY.md` defines genre methods, general anti-generic quality
   principles, Evidence Ladder reuse, transformation provenance and independent
   editorial review lenses.
+- The existing transport now prepares `draft`, `review` and `revise` writing
+  packets with provider/model identity, source hashes and explicit S4/S5
+  boundaries.
+- Human-draft transformation packets preserve the original draft for reviewer
+  comparison, while review packets exclude drafting rationale and implementation
+  history.
 - A twelve-case writing benchmark and deterministic architecture self-test
   cover routing, genre methods, evidence boundaries, transformation and review
   independence.
 - General writing no longer requires SOCIAL-only voice profiles, content
   pillars or `CONTENT-LEARNINGS.md`; those remain conditional on SOCIAL.
 
-## Candidate status
+## Evidence limits
 
-- This candidate has not been pushed, tagged or released.
 - Existing social behavior, including Contract v2 compatibility and Contract v3
   strictness, remains covered by the existing social suite.
+- Structural and packet-level tests pass. The release does not claim live
+  provider equivalence or a live independent-review session.
 
 Ariadne 1.6.3 is a focused social-creative contract patch. It strengthens
 strategy quality before drafting without changing the general workflow or

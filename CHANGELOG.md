@@ -10,7 +10,7 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
-## 1.6.3.1 — 2026-09-06 · WRITING ARCHITECTURE CANDIDATE
+## 1.6.3.1 — 2026-09-06 · WRITING ARCHITECTURE AND EXECUTION
 
 The existing writing path now records a writing intent before selecting a
 method: CREATIVE, ACADEMIC, SCIENTIFIC, HUMAN-DRAFT TRANSFORMATION or SOCIAL.
@@ -24,8 +24,9 @@ academic, scientific and transformation lenses. A small twelve-case benchmark
 catches routing, evidence, transformation and review-contract regressions.
 
 SOCIAL remains owned by its existing system and does not impose its platform,
-hook or anti-voice rules on general writing. This is a local candidate only;
-it is not a published release.
+hook or anti-voice rules on general writing. The architecture was validated by
+structural and packet-level tests; live provider equivalence and independent
+reviewer-session separation remain outside those guarantees.
 
 ## 1.6.3 — 2026-09-06 · SOCIAL CREATIVE CONTRACT PATCH
 
