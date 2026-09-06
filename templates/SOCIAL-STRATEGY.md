@@ -5,7 +5,7 @@
 
 **Status:** <draft / revised>
 
-**Contract version:** 2
+**Contract version:** 3
 
 **Activated by:** <the user's request>
 
@@ -17,6 +17,7 @@
 
 ## What I recommend
 
+- **Primary objective:** <hiring proof / peer critique / adoption / technical insight / cultural signal>
 - **Primary audience:** <who should care and why they are first>
 - **Selected platforms:** <one to three>
 - **Not recommended:** <relevant exclusions and why>
@@ -36,11 +37,29 @@
 |---|---|---|
 | | | |
 
+## Creative angles
+
+> Explore 2-4 genuinely distinct underlying stories or mechanisms before selecting one.
+
+| Angle | Core idea | Project evidence | Why audience cares | Emotional / curiosity driver | Platform & format fit | Main risk |
+|---|---|---|---|---|---|---|
+| A | | | | | | |
+| B | | | | | | |
+| C | | | | | | |
+
+**Selected angle:** <Angle ID / name>
+**Selection rationale:** <qualitative reason grounded in project evidence and objective>
+
+### Reason to exist test
+
+- **Why this deserves to become social content:** <specific value: surprising finding / demonstrated result / useful disagreement / important failure / distinctive perspective>
+- **What is explicitly rejected:** <generic announcement / superficial inspiration / interchangeable take>
+
 ## Platform decisions
 
-| Platform | Why this project fits | Native treatment | First test |
-|---|---|---|---|
-| | | | |
+| Platform | Why this project fits | Native format | Why this format | First test |
+|---|---|---|---|---|
+| | | | | |
 
 ### Platforms considered but not recommended
 
@@ -79,13 +98,17 @@
 
 ## What I'd post
 
-| ID | Platform | Format | Purpose | Hook | Visual asset | CTA | Evidence class |
-|---|---|---|---|---|---|---|---|
-| | | | | | | none / specific action | |
+| ID | Platform | Format | Purpose | Hook | Hook score | Visual asset | CTA | Evidence class |
+|---|---|---|---|---|---|---|---|---|
+| | | | | | 1-5 | | none / specific action | |
 
 ### Draft: <post ID>
 
-<complete platform-specific rough or voice-supported draft>
+**Hook:** <actual hook line>
+**Hook score:** <1-5> (Score >= 4 required for draft; score < 4 requires revision rationale)
+**Hook rationale:** <evidence-based evaluation of tension, specificity, and originality>
+
+<complete platform-specific rough or voice-supported draft, shaped by the selected angle>
 
 **Hypothesis:** <specific and falsifiable>
 

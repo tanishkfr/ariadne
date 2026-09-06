@@ -597,8 +597,8 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
     if not strategy_id or any(item.get("id") == strategy_id for item in ledger.get("social_strategies", [])):
         raise OperationsError("social strategy needs a new non-empty ID")
     contract_version = event.get("contract_version", 1)
-    if contract_version not in (1, 2):
-        raise OperationsError("social strategy contract_version must be 1 or 2")
+    if contract_version not in (1, 2, 3):
+        raise OperationsError("social strategy contract_version must be 1, 2, or 3")
     activation = str(event.get("activated_by", "")).strip()
     if not activation:
         raise OperationsError("social strategy needs the user's explicit activation request")
@@ -619,7 +619,12 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
     excluded_platforms = []
     conflicts = []
     voice_evidence = []
-    if contract_version == 2:
+    objective = ""
+    competing_angles = []
+    selected_angle = ""
+    selection_rationale = ""
+    reason_to_exist = {}
+    if contract_version in (2, 3):
         research_depth = str(event.get("research_depth", "")).strip()
         if research_depth not in SOCIAL_RESEARCH_DEPTHS:
             raise OperationsError("social intelligence needs minimal, standard, or deep research depth")
@@ -683,6 +688,39 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
                 raise OperationsError("each social content pillar needs name, why, and post_type")
         if not pillars and not pillars_decision:
             raise OperationsError("omitted social content pillars need a project-specific reason")
+        objective = str(event.get("objective", "")).strip()
+        competing_angles = event.get("competing_angles", [])
+        if contract_version == 3 and not competing_angles:
+            raise OperationsError("contract version 3 social strategy requires competing_angles")
+        if competing_angles:
+            if not isinstance(competing_angles, list) or not 2 <= len(competing_angles) <= 4:
+                raise OperationsError("social creative angles must contain two to four distinct angles")
+            angle_names = set()
+            angle_ideas = set()
+            for angle in competing_angles:
+                if not isinstance(angle, dict) or any(
+                    not str(angle.get(field, "")).strip()
+                    for field in ("name", "core_idea", "project_evidence", "audience_value", "driver", "platform_format_fit", "risk")
+                ):
+                    raise OperationsError("each social creative angle needs name, core_idea, project_evidence, audience_value, driver, platform_format_fit, and risk")
+                norm_name = str(angle["name"]).strip().lower()
+                norm_idea = str(angle["core_idea"]).strip().lower()
+                if norm_name in angle_names or norm_idea in angle_ideas:
+                    raise OperationsError("social creative angles must be distinct and non-duplicate")
+                angle_names.add(norm_name)
+                angle_ideas.add(norm_idea)
+            selected_angle = str(event.get("selected_angle", "")).strip()
+            selection_rationale = str(event.get("selection_rationale", "")).strip()
+            if not selected_angle or not selection_rationale:
+                raise OperationsError("social angle selection needs a selected_angle and selection_rationale")
+            if selected_angle.lower() not in angle_names:
+                raise OperationsError("selected_angle must match one of the competing_angles")
+        reason_to_exist = event.get("reason_to_exist", {})
+        if contract_version == 3 and not reason_to_exist:
+            raise OperationsError("contract version 3 social strategy requires reason_to_exist")
+        if reason_to_exist:
+            if not isinstance(reason_to_exist, dict) or not str(reason_to_exist.get("why", "")).strip() or not str(reason_to_exist.get("rejected", "")).strip():
+                raise OperationsError("social reason_to_exist needs why it deserves to exist and what is rejected")
     recommendations = event.get("recommendations", [])
     if not isinstance(recommendations, list) or not recommendations:
         raise OperationsError("social strategy needs at least one recommendation")
@@ -700,7 +738,7 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
             recommendation["checked_on"] = _checked_date(
                 recommendation.get("checked_on"), current=bool(recommendation.get("time_sensitive"))
             )
-            if contract_version == 2 and str(recommendation.get("source_quality", "")).strip() not in SOCIAL_SOURCE_QUALITIES:
+            if contract_version in (2, 3) and str(recommendation.get("source_quality", "")).strip() not in SOCIAL_SOURCE_QUALITIES:
                 raise OperationsError("source-backed social recommendation needs a supported source_quality")
         if evidence_class in ("inferred", "speculative") and source_ids and any(
             references.get(item, {}).get("state") != "inspected" for item in source_ids
@@ -708,7 +746,7 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
             raise OperationsError("social inference or hypothesis cites an uninspected source")
         if not str(recommendation.get("recommendation", "")).strip() or not str(recommendation.get("reason", "")).strip():
             raise OperationsError("social recommendation needs recommendation and reason")
-        if contract_version == 2 and not str(recommendation.get("finding", "")).strip():
+        if contract_version in (2, 3) and not str(recommendation.get("finding", "")).strip():
             raise OperationsError("social recommendation needs an explicit SOURCE -> FINDING -> DECISION trace")
         copy_problems = _social_copy_problems(
             " ".join(str(recommendation.get(field, "")) for field in ("recommendation", "reason", "finding"))
@@ -735,10 +773,23 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
         if row["id"] in concept_ids:
             raise OperationsError("social content concept IDs must be unique")
         concept_ids.add(row["id"])
-        if contract_version == 2:
+        if contract_version in (2, 3):
             for field in ("purpose", "hypothesis", "draft", "visual_asset_id"):
                 if not str(concept.get(field, "")).strip():
                     raise OperationsError(f"social content concept needs {field}")
+            if contract_version == 3:
+                if "hook_score" not in concept:
+                    raise OperationsError("contract version 3 social concept requires hook_score (1-5)")
+            if "hook_score" in concept:
+                score = concept.get("hook_score")
+                if isinstance(score, bool) or not isinstance(score, (int, float)) or not 1 <= score <= 5:
+                    raise OperationsError("hook_score must be a number between 1 and 5")
+                if score < 4:
+                    row["draft_eligibility"] = "revision-required"
+                    if contract_version == 3:
+                        raise OperationsError("social concept hook_score below 4 is not draft-eligible and requires revision")
+                else:
+                    row["draft_eligibility"] = "eligible"
             if str(concept["visual_asset_id"]).strip() not in visual_ids:
                 raise OperationsError("social content concept cites an unknown visual asset")
             concept_evidence_class = str(concept.get("evidence_class", "")).strip()
@@ -774,7 +825,7 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
     draft_status = str(event.get("draft_status", "")).strip()
     if voice_basis != "provided-examples" and draft_status != "rough-draft":
         raise OperationsError("copy without provided voice examples must be marked rough-draft")
-    if contract_version == 2 and voice_basis == "provided-examples":
+    if contract_version in (2, 3) and voice_basis == "provided-examples":
         voice_evidence = _event_evidence(
             event.get("voice_evidence"), "voice matching", 2, project
         )
@@ -793,7 +844,7 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
                 "source": reference.get("source"),
                 "evidence": dict(reference["evidence"]),
             })
-    ledger.setdefault("social_strategies", []).append({
+    record = {
         "id": strategy_id,
         "contract_version": contract_version,
         "activated_by": activation,
@@ -801,7 +852,7 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
         "platforms": platforms,
         "not_recommended": excluded_platforms,
         "research_depth": research_depth,
-        "project_story": project_story if contract_version == 2 else {},
+        "project_story": project_story if contract_version in (2, 3) else {},
         "project_evidence": project_evidence,
         "visual_assets": visual_assets,
         "content_pillars": pillars,
@@ -821,7 +872,17 @@ def record_social_strategy(project: Path, ledger: dict, event: dict) -> None:
         "artifact": artifact,
         "revises": revises or None,
         "recorded_at": now(),
-    })
+    }
+    if contract_version in (2, 3):
+        if objective:
+            record["objective"] = objective
+        if competing_angles:
+            record["competing_angles"] = competing_angles
+            record["selected_angle"] = selected_angle
+            record["selection_rationale"] = selection_rationale
+        if reason_to_exist:
+            record["reason_to_exist"] = reason_to_exist
+    ledger.setdefault("social_strategies", []).append(record)
 
 
 def record_social_result(ledger: dict, event: dict) -> None:

@@ -383,6 +383,98 @@ def self_test() -> int:
         case("changed learning evidence becomes stale", any("social learning" in item and "changed" in item for item in OPS.ledger_problems(project, fresh)))
         learnings.write_text(saved_learning, encoding="utf-8")
 
+        # Extended Creative Angle & Hook evaluation tests (Contract v3)
+        v3_event = copy.deepcopy(event)
+        v3_event["contract_version"] = 3
+        v3_event["id"] = "strategy-v3-valid"
+        v3_event["objective"] = "hiring proof for senior design roles"
+        v3_event["competing_angles"] = [
+            {
+                "name": "The unexpected failure",
+                "core_idea": "The initial focus order looked neat visually but was a keyboard trap.",
+                "project_evidence": "DESIGN.md keyboard path notes",
+                "audience_value": "Demonstrates humility and true interaction design depth.",
+                "driver": "Curiosity and vulnerability",
+                "platform_format_fit": "LinkedIn carousel with before/after diagrams",
+                "risk": "Might make initial prototype look sloppy if not framed carefully",
+            },
+            {
+                "name": "The technical constraint",
+                "core_idea": "How DOM reordering simplified state management and eliminated focus locks.",
+                "project_evidence": "HANDOFF.md architecture decisions",
+                "audience_value": "Actionable technical takeaway for engineering-minded design leads.",
+                "driver": "Technical clarity and utility",
+                "platform_format_fit": "X thread with code snippets",
+                "risk": "Too technical for general design managers",
+            },
+        ]
+        v3_event["selected_angle"] = "The unexpected failure"
+        v3_event["selection_rationale"] = "Directly aligns with the primary hiring audience of design leads seeking senior interaction reasoning."
+        v3_event["reason_to_exist"] = {
+            "why": "Provides a demonstrable before/after proof of fixing an invisible accessibility trap.",
+            "rejected": "Avoids generic portfolio announcement and celebratory tone.",
+        }
+        for concept in v3_event["content_concepts"]:
+            concept["hook_score"] = 5
+            concept["hook_rationale"] = "Specific tension and maker decision with zero generic boilerplate."
+
+        v3_ledger = OPS.load_ledger(project)
+        OPS.record_social_strategy(project, v3_ledger, v3_event)
+        case("contract v3 valid strategy is accepted", any(item["id"] == "strategy-v3-valid" for item in v3_ledger["social_strategies"]))
+
+        # v3 without angles fails
+        v3_no_angles = copy.deepcopy(v3_event)
+        v3_no_angles["id"] = "v3-no-angles"
+        v3_no_angles.pop("competing_angles", None)
+        case("v3 without competing angles fails", rejected(lambda: OPS.record_social_strategy(project, v3_ledger, v3_no_angles)))
+
+        # v3 without reason_to_exist fails
+        v3_no_r2e = copy.deepcopy(v3_event)
+        v3_no_r2e["id"] = "v3-no-r2e"
+        v3_no_r2e.pop("reason_to_exist", None)
+        case("v3 without reason_to_exist fails", rejected(lambda: OPS.record_social_strategy(project, v3_ledger, v3_no_r2e)))
+
+        # v3 without hook_score fails
+        v3_no_hook_score = copy.deepcopy(v3_event)
+        v3_no_hook_score["id"] = "v3-no-hook-score"
+        v3_no_hook_score["content_concepts"][0].pop("hook_score", None)
+        case("v3 without hook_score fails", rejected(lambda: OPS.record_social_strategy(project, v3_ledger, v3_no_hook_score)))
+
+        # v3 with hook_score < 4 fails (revision required, cannot pass final)
+        v3_sub_hook = copy.deepcopy(v3_event)
+        v3_sub_hook["id"] = "v3-sub-hook"
+        v3_sub_hook["content_concepts"][0]["hook_score"] = 2
+        v3_sub_hook["content_concepts"][0]["hook_revision_rationale"] = "Needs revision."
+        case("v3 with hook_score below 4 fails drafting gate", rejected(lambda: OPS.record_social_strategy(project, v3_ledger, v3_sub_hook)))
+
+        # v3 angle missing differentiation fields fails
+        v3_incomplete_angle = copy.deepcopy(v3_event)
+        v3_incomplete_angle["id"] = "v3-incomplete-angle"
+        v3_incomplete_angle["competing_angles"][0]["risk"] = ""
+        case("v3 angle missing differentiation field fails", rejected(lambda: OPS.record_social_strategy(project, v3_ledger, v3_incomplete_angle)))
+
+        # v3 with duplicate angle names or core ideas fails
+        v3_dup_angle = copy.deepcopy(v3_event)
+        v3_dup_angle["id"] = "v3-dup-angle"
+        v3_dup_angle["competing_angles"] = [
+            copy.deepcopy(v3_event["competing_angles"][0]),
+            copy.deepcopy(v3_event["competing_angles"][0]),
+        ]
+        case("v3 duplicate creative angles are rejected", rejected(lambda: OPS.record_social_strategy(project, v3_ledger, v3_dup_angle)))
+
+        # v3 unmatched selected angle fails
+        v3_unmatched_angle = copy.deepcopy(v3_event)
+        v3_unmatched_angle["id"] = "v3-unmatched-angle"
+        v3_unmatched_angle["selected_angle"] = "An unlisted angle"
+        case("v3 unmatched selected angle is rejected", rejected(lambda: OPS.record_social_strategy(project, v3_ledger, v3_unmatched_angle)))
+
+        # Legacy Contract v2 without angles remains valid
+        v2_legacy = copy.deepcopy(event)
+        v2_legacy["contract_version"] = 2
+        v2_legacy["id"] = "strategy-v2-legacy"
+        OPS.record_social_strategy(project, v3_ledger, v2_legacy)
+        case("legacy contract v2 without angles remains valid", any(item["id"] == "strategy-v2-legacy" for item in v3_ledger["social_strategies"]))
+
     print("V1.5.2 SOCIAL INTELLIGENCE SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)

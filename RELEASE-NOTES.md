@@ -1,6 +1,29 @@
-# Ariadne 1.6.2
+# Ariadne 1.6.3
 
-Ariadne 1.6.2 is a narrow model-routing patch for the 1.6.1 release. It does not
+Ariadne 1.6.3 is a focused social-creative contract patch. It strengthens
+strategy quality before drafting without changing the general workflow or
+legacy Contract v2 behavior.
+
+## Added
+
+- Contract v3 requires two to four genuinely distinct creative angles with
+  differentiation fields, selected-angle consistency and qualitative rationale.
+- Contract v3 requires a reason-to-exist decision that rejects generic social
+  content.
+- Social post concepts record a 1–5 hook score; scores below 4 are a hard
+  drafting failure requiring revision.
+- Social strategy guidance and the conditional template document the new
+  angle-selection and hook-evaluation method.
+
+## Compatibility and evidence limits
+
+- Contract v2 remains supported without Contract v3's angle and hook fields.
+- No semantic-similarity subsystem, AI-detector integration, humanizer or
+  detector-evasion heuristic was added.
+- Social strategy remains optional and does not publish, authenticate,
+  schedule or alter build gates.
+
+Ariadne 1.6.2 was a narrow model-routing patch for the 1.6.1 release. It did not
 change stages, gates, capability classes, provider boundaries or project-state
 compatibility.
 
