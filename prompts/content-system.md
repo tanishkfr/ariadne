@@ -2,7 +2,9 @@
 
 **Paste into:** your reasoning tool. Two prompts here — **setup** (once) and **drafting** (per post).
 
-System: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). **Nothing publishes automatically. Ever.**
+System: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) for SOCIAL. General writing
+uses [WRITING-POLICY.md](../WRITING-POLICY.md). **Nothing publishes
+automatically. Ever.**
 
 ---
 

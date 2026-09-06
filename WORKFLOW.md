@@ -107,7 +107,12 @@ Looks at finished work the way the audience will, with no knowledge of how hard 
 
 ### Content strategist — content mode only
 
-Scoped to [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md). Produces drafts and weekly reviews. **Never publishes** — G5 is per-post, every post, no standing approval.
+Scoped to [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md) for SOCIAL and to the
+intent-specific methods in [WRITING-POLICY.md](WRITING-POLICY.md) for general
+writing. Produces drafts, transformations and editorial review packets.
+**Never publishes** — G5 remains per-post for SOCIAL, with no standing
+approval. The independent reviewer evaluates writing without relying on the
+drafting rationale.
 
 ### Role conflicts
 
@@ -219,7 +224,7 @@ Not every project deserves seven stages. Compression is legitimate; skipping is 
 | Client / portfolio | Full | If needed | Full | Full | Full | Full |
 | Product app | Full | If needed | Light visual, full arch | Full | Full | Full |
 | Game / experiment | Light | Skip | **Light, never none** | Full | Light | Light |
-| Content | Full | Full | N/A | Ongoing | Per post | Weekly |
+| Content / writing | Full | Full | N/A | Ongoing | Editorial review or per-post SOCIAL review | Weekly for SOCIAL |
 | Audit | Light | As needed | N/A | N/A | **Is the mode** | Findings |
 
 **S3 is never skipped for anything with a visual surface.** "Retro" without a thesis produces the same beige pixel-font output every time.

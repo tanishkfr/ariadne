@@ -40,6 +40,15 @@ SCHEMA_VERSION = 1
 PACKET_NAME = "packet.txt"
 MANIFEST_NAME = "manifest.json"
 RECORD_NAME = "continuation.md"
+WRITING_INTENTS = (
+    "CREATIVE", "ACADEMIC", "SCIENTIFIC", "HUMAN-DRAFT TRANSFORMATION", "SOCIAL"
+)
+WRITING_GUIDANCE = {
+    "CREATIVE": "skills/writing-creative.md",
+    "ACADEMIC": "skills/writing-academic.md",
+    "SCIENTIFIC": "skills/writing-scientific.md",
+    "HUMAN-DRAFT TRANSFORMATION": "skills/writing-transformation.md",
+}
 
 
 def load_reasoners():
@@ -524,7 +533,7 @@ def source_entry(label: str, path: Path, kind: str, content: str, delivered: boo
         "label": label,
         "path": (
             str(path.resolve())
-            if kind.startswith(("project", "continuation"))
+            if kind.startswith(("project", "continuation", "writing"))
             else path.relative_to(ROOT).as_posix()
         ),
         "kind": kind,
@@ -537,6 +546,158 @@ def source_entry(label: str, path: Path, kind: str, content: str, delivered: boo
         "delivered": delivered,
         "content": delivered_content,
     }
+
+
+def writing_source(label: str, path: Path, kind: str = "writing-input") -> dict:
+    path = path.resolve()
+    if not path.is_file() or path.stat().st_size == 0:
+        raise PacketError(f"writing input is missing or empty: {path}")
+    return source_entry(label, path, kind, read(path))
+
+
+def writing_packet_sources(args: argparse.Namespace) -> list[dict]:
+    if args.intent == "SOCIAL":
+        raise PacketError("SOCIAL remains owned by the existing social/content system")
+    guidance_path = ROOT / WRITING_GUIDANCE[args.intent]
+    sources = [
+        source_entry("writing root method", ROOT / "skills" / "writing.md", "canonical", read(ROOT / "skills" / "writing.md")),
+        source_entry(f"{args.intent} writing guidance", guidance_path, "canonical", read(guidance_path)),
+        writing_source("original user request", Path(args.request_file), "writing-request"),
+    ]
+    for index, value in enumerate(args.source_file or [], start=1):
+        sources.append(writing_source(f"source material {index}", Path(value)))
+    if args.intent == "HUMAN-DRAFT TRANSFORMATION" and args.phase == "draft":
+        if not args.draft_file:
+            raise PacketError("human-draft transformation requires --draft-file")
+        sources.append(writing_source("original draft", Path(args.draft_file), "writing-original-draft"))
+    if args.intent == "HUMAN-DRAFT TRANSFORMATION" and args.phase in ("review", "revise"):
+        if not args.original_draft_file:
+            raise PacketError(f"human-draft transformation {args.phase} packet requires --original-draft-file")
+        sources.append(writing_source("original draft", Path(args.original_draft_file), "writing-original-draft"))
+    if args.phase in ("review", "revise"):
+        sources.append(writing_source("final writing draft", Path(args.draft_file), "writing-draft"))
+    if args.phase == "revise":
+        sources.append(writing_source("independent editorial review", Path(args.review_file), "writing-review"))
+    return sources
+
+
+def build_writing_packet(args: argparse.Namespace) -> tuple[str, list[dict]]:
+    sources = writing_packet_sources(args)
+    criteria = args.criteria.strip()
+    if not criteria:
+        raise PacketError("writing packet requires --criteria")
+    phase = args.phase
+    lines = [
+        f"ARIADNE WRITING {phase.upper()} PACKET",
+        f"Packet ID: {args.packet_id}",
+        f"Provider: {args.provider}",
+        f"Model: {args.model or 'not specified'}",
+        f"Writing intent: {args.intent}",
+        f"Workflow boundary: {'S5 independent review' if phase == 'review' else 'S4 writing work'}",
+        f"Artifact kind: {'writing-review' if phase == 'review' else 'writing-revision' if phase == 'revise' else 'writing-draft'}",
+        "Status: PREPARED ONLY - THE PROVIDER HAS NOT RUN",
+        "",
+        "EXECUTION CONTRACT",
+        "Use the existing provider/session boundary. This packet proves transport, not live model execution.",
+        "Return the requested writing artifact and preserve the stated evidence boundary.",
+    ]
+    if phase == "review":
+        lines.extend([
+            "",
+            "INDEPENDENCE BOUNDARY",
+            "Review only the request, supplied sources, final draft, intent, and criteria.",
+            "Do not receive or infer drafting rationale, hidden reasoning, self-justification, or implementation history.",
+            "Return PASS, REVISE, or FUNDAMENTALLY RECONSIDER with concise evidence.",
+        ])
+    lines.extend(["", "EVALUATION CRITERIA", criteria])
+    for entry in sources:
+        lines.extend(["", section_header(entry), entry["content"].rstrip(), section_footer(entry)])
+    return "\n".join(lines).rstrip() + "\n", sources
+
+
+def verify_writing_packet(packet_dir: Path) -> list[str]:
+    packet_dir = packet_dir.resolve()
+    manifest_path = packet_dir / MANIFEST_NAME
+    packet_path = packet_dir / PACKET_NAME
+    if not manifest_path.is_file() or not packet_path.is_file():
+        return ["writing packet is missing manifest.json or packet.txt"]
+    manifest = json.loads(read(manifest_path))
+    packet = read(packet_path)
+    problems = []
+    if manifest.get("packet_kind") != "writing":
+        problems.append("packet is not classified as writing")
+    if manifest.get("intent") not in WRITING_INTENTS or manifest.get("intent") == "SOCIAL":
+        problems.append("writing packet has an unsupported or isolated intent")
+    if manifest.get("phase") not in ("draft", "review", "revise"):
+        problems.append("writing packet has an unsupported phase")
+    if sha256_file(packet_path) != manifest.get("packet_sha256"):
+        problems.append("writing packet hash mismatch")
+    if manifest.get("phase") == "review":
+        if not manifest.get("independent_review"):
+            problems.append("review packet is not marked independent")
+        if manifest.get("excluded_inputs") != ["drafting rationale", "hidden reasoning", "implementation history"]:
+            problems.append("review packet exclusion contract is incomplete")
+        delivered = [item["label"] for item in manifest.get("sources", [])]
+        if "original user request" not in delivered or "final writing draft" not in delivered:
+            problems.append("review packet is missing request or final draft")
+        if manifest.get("intent") == "HUMAN-DRAFT TRANSFORMATION" and "original draft" not in delivered:
+            problems.append("transformation review packet is missing the original draft")
+    for entry in manifest.get("sources", []):
+        source_path = resolve_source_path(entry, manifest)
+        if not source_path.is_file():
+            problems.append(f"writing source missing: {entry['path']}")
+            continue
+        if sha256_file(source_path) != entry.get("source_sha256"):
+            problems.append(f"writing source changed: {entry['path']}")
+        if entry.get("delivered", True):
+            if packet.count(section_header(entry)) != 1 or packet.count(section_footer(entry)) != 1:
+                problems.append(f"writing source section missing or duplicated: {entry['label']}")
+    return problems
+
+
+def prepare_writing(args: argparse.Namespace) -> Path:
+    if args.intent == "SOCIAL":
+        raise PacketError("SOCIAL remains isolated in the existing social/content system")
+    validate_packet_id(args.packet_id)
+    output = Path(args.output).resolve()
+    if output.exists():
+        raise PacketError(f"refusing to overwrite existing writing packet: {output}")
+    packet, sources = build_writing_packet(args)
+    output.mkdir(parents=True)
+    packet_path = output / PACKET_NAME
+    packet_path.write_text(packet, encoding="utf-8")
+    manifest = {
+        "schema_version": SCHEMA_VERSION,
+        "packet_kind": "writing",
+        "packet_id": args.packet_id,
+        "phase": args.phase,
+        "intent": args.intent,
+        "provider": args.provider,
+        "model": args.model or "not specified",
+        "packet_file": PACKET_NAME,
+        "packet_sha256": sha256_file(packet_path),
+        "sources": [{key: value for key, value in entry.items() if key != "content"} for entry in sources],
+        "independent_review": args.phase == "review",
+        "excluded_inputs": ["drafting rationale", "hidden reasoning", "implementation history"] if args.phase == "review" else [],
+        "workflow_stages": ["S4"] if args.phase in ("draft", "revise") else ["S5"],
+        "live_execution": False,
+    }
+    (output / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (output / RECORD_NAME).write_text(
+        f"# {args.packet_id} - writing {args.phase} packet\n\n"
+        "**Status:** `PREPARED - NOT RUN`\n\n"
+        "Packet construction proves transport only; no provider/model execution is claimed.\n",
+        encoding="utf-8",
+    )
+    (output / "evidence").mkdir()
+    (output / "evidence" / "_README.md").write_text(
+        "Save the provider transcript here only after a live provider session runs.\n",
+        encoding="utf-8",
+    )
+    problems = verify_writing_packet(output)
+    if problems:
+        raise PacketError("generated writing packet failed verification: " + "; ".join(problems))
+    return output
 
 
 def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tuple[list[dict], list[str]]:
@@ -897,7 +1058,7 @@ No stage events have been recorded. Preparation is not execution.
 
 
 def resolve_source_path(entry: dict, manifest: dict) -> Path:
-    if entry["kind"].startswith(("project", "continuation")):
+    if entry["kind"].startswith(("project", "continuation", "writing")):
         return Path(entry["path"])
     return ROOT / entry["path"]
 
@@ -1666,6 +1827,19 @@ def parser() -> argparse.ArgumentParser:
 
     verify_parser = sub.add_parser("verify", help="verify source parity and packet structure")
     verify_parser.add_argument("--packet-dir", required=True)
+    writing_parser = sub.add_parser("prepare-writing", help="prepare a minimal writing draft, review, or revision packet")
+    writing_parser.add_argument("--phase", required=True, choices=["draft", "review", "revise"])
+    writing_parser.add_argument("--intent", required=True, choices=list(WRITING_INTENTS))
+    writing_parser.add_argument("--request-file", required=True)
+    writing_parser.add_argument("--output", required=True)
+    writing_parser.add_argument("--packet-id", required=True)
+    writing_parser.add_argument("--provider", default="codex", choices=["codex", "claude"])
+    writing_parser.add_argument("--model")
+    writing_parser.add_argument("--criteria", required=True)
+    writing_parser.add_argument("--source-file", action="append")
+    writing_parser.add_argument("--draft-file")
+    writing_parser.add_argument("--original-draft-file")
+    writing_parser.add_argument("--review-file")
     return p
 
 
@@ -1690,6 +1864,19 @@ def main() -> int:
                     print(f"      {problem}")
                 return 1
             print("PASS  packet structure, parent, and source parity verified")
+            return 0
+        if args.command == "prepare-writing":
+            if args.phase in ("review", "revise") and not args.draft_file:
+                raise PacketError(f"writing {args.phase} packet requires --draft-file")
+            if args.phase == "revise" and not args.review_file:
+                raise PacketError("writing revise packet requires --review-file")
+            if args.intent == "HUMAN-DRAFT TRANSFORMATION" and args.phase in ("review", "revise") and not args.original_draft_file:
+                raise PacketError(f"human-draft transformation {args.phase} packet requires --original-draft-file")
+            output = prepare_writing(args)
+            print(f"PREPARED  {output}")
+            print(f"PACKET    {output / PACKET_NAME}")
+            print(f"MANIFEST  {output / MANIFEST_NAME}")
+            print("NEXT      Open the selected provider session and paste packet.txt only.")
             return 0
         parser().print_help()
         return 0

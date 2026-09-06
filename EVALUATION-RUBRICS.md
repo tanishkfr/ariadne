@@ -175,6 +175,25 @@ state, interaction, or system-consistency failures?*
 | Game / experiment | Creative director (light) |
 | Audit / review | Whichever the request named |
 
+## Writing editorial lens
+
+Use this lens in the independent review session for a non-SOCIAL writing
+intent. It supplements the general reviewer rules above and does not replace
+them.
+
+| Intent | Review criteria |
+|---|---|
+| General | Purpose, audience fit, clarity, specificity, structure, coherence, prose quality, rhythm, padding, genericness, unsupported claims |
+| CREATIVE | Voice, specificity, imagery, pacing, subtext, narrative judgment, cliche avoidance |
+| ACADEMIC | Prompt adherence, thesis/argument, reasoning, evidence, synthesis, counterargument, academic register, citation integrity |
+| SCIENTIFIC | Claim discipline, evidence fidelity, uncertainty, methodological precision, reproducibility, causal discipline, terminology, structure |
+| HUMAN-DRAFT TRANSFORMATION | Voice preservation, idea preservation, structural improvement, unnecessary rewriting, homogenisation, authorial intent |
+
+The reviewer receives the final artifact, original draft when applicable,
+intent, audience, purpose and success criteria. It does not receive the
+drafting rationale as proof. Each finding names location, severity, why it
+matters and the smallest useful revision; unknown evidence remains unknown.
+
 **Two lenses is right. Four is a lot.** Beyond that the output gets long and nothing gets acted on.
 
 ## Consolidating

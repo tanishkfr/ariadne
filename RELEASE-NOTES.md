@@ -1,4 +1,56 @@
-# Ariadne 1.6.3
+# Ariadne 1.6.3.2
+
+Ariadne 1.6.3.2 is a packaging correction for the 1.6.3.1 writing release.
+It adds the omitted `WRITING-POLICY.md` file to the runtime allowlist so the
+installed writing skill and its referenced policy travel together.
+
+The existing immutable 1.6.3.1 release is preserved unchanged.
+
+## Fixed
+
+- Fresh wheel and runtime artifacts now include `WRITING-POLICY.md` alongside
+  the writing skills and `scripts/prepare-stage.py`.
+- Development-only tests, validation fixtures and maintainer-only files remain
+  excluded from the runtime release surface.
+
+## Evidence limits
+
+- The correction changes packaging only; it does not change the writing
+  architecture or claim live provider equivalence.
+
+---
+
+## Ariadne 1.6.3.1
+
+Ariadne 1.6.3.1 adds a writing architecture and executable writing packet
+workflow. It is a focused release and does not change the existing workflow
+stage model or social strategy system.
+
+## Added
+
+- Writing intent distinguishes CREATIVE, ACADEMIC, SCIENTIFIC,
+  HUMAN-DRAFT TRANSFORMATION and SOCIAL within the existing workflow.
+- `WRITING-POLICY.md` defines genre methods, general anti-generic quality
+  principles, Evidence Ladder reuse, transformation provenance and independent
+  editorial review lenses.
+- The existing transport now prepares `draft`, `review` and `revise` writing
+  packets with provider/model identity, source hashes and explicit S4/S5
+  boundaries.
+- Human-draft transformation packets preserve the original draft for reviewer
+  comparison, while review packets exclude drafting rationale and implementation
+  history.
+- A twelve-case writing benchmark and deterministic architecture self-test
+  cover routing, genre methods, evidence boundaries, transformation and review
+  independence.
+- General writing no longer requires SOCIAL-only voice profiles, content
+  pillars or `CONTENT-LEARNINGS.md`; those remain conditional on SOCIAL.
+
+## Evidence limits
+
+- Existing social behavior, including Contract v2 compatibility and Contract v3
+  strictness, remains covered by the existing social suite.
+- Structural and packet-level tests pass. The release does not claim live
+  provider equivalence or a live independent-review session.
 
 Ariadne 1.6.3 is a focused social-creative contract patch. It strengthens
 strategy quality before drafting without changing the general workflow or

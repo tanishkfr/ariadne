@@ -10,6 +10,31 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
 
+## 1.6.3.2 — 2026-09-06 · RUNTIME PACKAGING CORRECTION
+
+The 1.6.3.1 private release omitted `WRITING-POLICY.md` from the runtime
+allowlist even though the bundled writing skill references it. This patch adds
+that top-level policy to fresh runtime artifacts. The existing 1.6.3.1 release
+and its history remain unchanged.
+
+## 1.6.3.1 — 2026-09-06 · WRITING ARCHITECTURE AND EXECUTION
+
+The existing writing path now records a writing intent before selecting a
+method: CREATIVE, ACADEMIC, SCIENTIFIC, HUMAN-DRAFT TRANSFORMATION or SOCIAL.
+The new writing policy keeps genre-specific quality criteria and the existing
+Evidence Ladder together without creating another router or workflow stage.
+
+Human-draft transformation now has an explicit provenance contract covering
+the original draft, intervention level, preserved voice, material changes and
+remaining uncertainty. Independent editorial review has general, creative,
+academic, scientific and transformation lenses. A small twelve-case benchmark
+catches routing, evidence, transformation and review-contract regressions.
+
+SOCIAL remains owned by its existing system and does not impose its platform,
+hook or anti-voice rules on general writing. The architecture was validated by
+structural and packet-level tests; live provider equivalence and independent
+reviewer-session separation remain outside those guarantees.
+
 ## 1.6.3 — 2026-09-06 · SOCIAL CREATIVE CONTRACT PATCH
 
 The social strategy contract now requires a deliberate creative choice before

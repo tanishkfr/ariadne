@@ -1,6 +1,10 @@
-# MODE: Content system
+# MODE: Content and writing system
 
-Writing for X and LinkedIn, with analytics and a learning loop. **The only ongoing mode** — it does not ship and finish, it runs weekly.
+Writing for an audience, with a recorded intent. SOCIAL uses X/LinkedIn,
+analytics and a learning loop. General creative, academic, scientific/technical
+and human-draft work uses [WRITING-POLICY.md](../WRITING-POLICY.md) inside the
+existing workflow and does not inherit SOCIAL rules. **The only ongoing mode**
+is SOCIAL; general writing completes through editorial review.
 
 Full method: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). This file is the routing.
 
@@ -8,7 +12,9 @@ Full method: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). This file is the routing
 
 ## Detection
 
-**Reached when the `OBJECT` is writing for an audience** — posts, threads, a publishing practice.
+**Reached when the `OBJECT` is writing for an audience** — a post, assignment,
+technical document, creative artifact or transformation. Record one intent:
+CREATIVE, ACADEMIC, SCIENTIFIC, HUMAN-DRAFT TRANSFORMATION or SOCIAL.
 
 **Not this mode if:** it is copy for a website (that is part of the site's mode), or a blog as a built artifact (personal portfolio).
 
@@ -16,17 +22,17 @@ Full method: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). This file is the routing
 
 ## Questions
 
-1. **Which platforms?** — default: X and LinkedIn
-2. **What are you actually known for, or want to be?** — no default
-3. **What do you refuse to post?** — default: none, but push for at least three. This list is more useful than the topics list.
-4. **Do you have access to past post analytics?** — default: assume no history
-5. **What cadence is realistic?** — default: 2-3 posts a week. Be honest; an unrealistic cadence produces filler, and filler is worse than silence.
+SOCIAL asks the platform, audience, refusal boundary, analytics availability and
+realistic cadence questions below. Other intents ask only for the audience,
+purpose, constraints, source/draft status and success criteria needed by their
+method. Do not ask social questions for an academic or technical request.
 
 ---
 
-## Setup, once
+## SOCIAL setup, once
 
-Three artifacts, built at S1-S2, living **in the content project, never in Ariadne** ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)):
+These artifacts apply only when the recorded intent is SOCIAL. They are built
+at S1-S2 and live **in the content project, never in Ariadne** ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)):
 
 **1. `voice-profile.md`** — from 10-20 things you have actually written. Includes the **anti-voice list**: constructions you find embarrassing. Minimum ten entries. Easier to enforce than a voice list and does more work.
 
@@ -36,13 +42,17 @@ Three artifacts, built at S1-S2, living **in the content project, never in Ariad
 
 ---
 
-## Documents
+## Documents by intent
 
-**Required: `PROJECT.md` and `CONTENT-LEARNINGS.md`. Two.**
+General writing requires `PROJECT.md` plus the artifact and review record called
+for by [WRITING-POLICY.md](../WRITING-POLICY.md). It does not require a voice
+profile, content pillars or `CONTENT-LEARNINGS.md`.
+
+SOCIAL requires `PROJECT.md` and `CONTENT-LEARNINGS.md`.
 
 Add `RESEARCH.md` when a platform specific needs verifying. No `DESIGN.md`, no `ARCHITECTURE.md`, no `HANDOFF.md`, no `QA.md` — per-post checks replace it.
 
-## Skills
+## SOCIAL skills
 
 [intake](../skills/intake.md) — **challenge pass mandatory** · [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) · this file
 
