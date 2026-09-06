@@ -9,6 +9,17 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
+## 1.6.5 — 2026-09-06 · RELEASE SURFACE CORRECTION
+
+This is a corrective release with no product or workflow changes.
+
+It republishes the validated 1.6.4 product under normal three-part semantic
+versioning with the complete release asset surface, including
+`ariadne-release.json`, which the existing updater requires to discover and
+authenticate releases.
+
+The earlier immutable 1.6.4 release remains unchanged.
+
 
 ## 1.6.4 — 2026-09-06 · CANONICAL WRITING RELEASE
 
