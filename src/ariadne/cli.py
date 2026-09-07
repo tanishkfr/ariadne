@@ -1170,7 +1170,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             pointer, available = install_from_descriptor(args.manifest, home, target)
             baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
-            print(f"Updated Ariadne {current['version']} → {available}.")
+            print(f"Updated Ariadne {current['version']} -> {available}.")
             if baseline_message:
                 print(baseline_message)
             print(f"Rollback available: ariadne rollback returns to {current['version']}.")
@@ -1180,7 +1180,7 @@ def main(argv: list[str] | None = None) -> int:
             before = current_install(home)
             pointer = rollback(home, target, args.rollback_to)
             baseline_message = refresh_codex_baseline_if_managed(home, codex_directory)
-            print(f"Rolled back Ariadne {before['version']} → {pointer['version']}.")
+            print(f"Rolled back Ariadne {before['version']} -> {pointer['version']}.")
             if baseline_message:
                 print(baseline_message)
             print("Projects and project evidence were not changed.")
