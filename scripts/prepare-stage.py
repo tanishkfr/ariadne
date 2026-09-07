@@ -19,10 +19,12 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import fnmatch
 import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -40,6 +42,10 @@ SCHEMA_VERSION = 1
 PACKET_NAME = "packet.txt"
 MANIFEST_NAME = "manifest.json"
 RECORD_NAME = "continuation.md"
+WORKER_ROLES = ("bulk", "strong", "senior-reasoning")
+MAX_ROUTINE_REPAIRS = 2
+WORKER_VALIDATION_SCHEMA = 1
+VALIDATION_COMMAND_LIMIT = 8
 WRITING_INTENTS = (
     "CREATIVE", "ACADEMIC", "SCIENTIFIC", "HUMAN-DRAFT TRANSFORMATION", "SOCIAL"
 )
@@ -139,7 +145,7 @@ STAGES = {
         "conditional_inputs": [],
         "allowed_parents": ["S4A", "S4B"],
         "forbidden_inputs": ["earlier reasoning conversation"],
-        "provider": "cursor",
+        "provider": "implementation-worker",
     },
     "S5": {
         "prompt": "prompts/project-review.md",
@@ -240,6 +246,386 @@ def markdown_section(text: str, heading: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def markdown_subsection(text: str, heading: str) -> str:
+    match = re.search(
+        rf"(?ms)^###\s+{re.escape(heading)}\s*$\r?\n(.*?)(?=^###\s|\Z)", text
+    )
+    return match.group(1).strip() if match else ""
+
+
+def markdown_table_rows(section: str) -> list[list[str]]:
+    rows = []
+    for raw in section.splitlines():
+        if not raw.lstrip().startswith("|") or re.match(r"^\s*\|?\s*:?-{3,}", raw):
+            continue
+        cells = [cell.strip().replace("\\|", "|") for cell in re.split(r"(?<!\\)\|", raw.strip().strip("|"))]
+        if cells and not all(not cell for cell in cells):
+            rows.append(cells)
+    return rows
+
+
+def bold_field(section: str, label: str) -> str:
+    match = re.search(rf"(?im)^\*\*{re.escape(label)}:\*\*\s*(.+?)\s*$", section)
+    return match.group(1).strip() if match else ""
+
+
+def safe_validation_argv(command: str) -> tuple[list[str] | None, str | None]:
+    """Return an argv for a bounded read/check command, never a shell command."""
+    value = command.strip().strip("`").strip()
+    if not value:
+        return None, "validation command is empty"
+    if re.search(r"[;&|><`$()\r\n]", value):
+        return None, "validation command contains shell control syntax"
+    try:
+        argv = shlex.split(value, posix=True)
+    except ValueError as exc:
+        return None, f"validation command has invalid quoting: {exc}"
+    if not argv:
+        return None, "validation command is empty"
+    executable = Path(argv[0]).name.lower()
+    if executable.endswith((".cmd", ".exe", ".bat")):
+        executable = Path(executable).stem
+    blocked_tokens = {"-c", "--command", "--dir", "-c", "--cwd", "--prefix", "-C", "--rootdir"}
+    if any(token in blocked_tokens or token.startswith(("--rootdir=", "--cwd=", "--prefix=")) for token in argv[1:]):
+        return None, "validation command may not redirect execution or run arbitrary code"
+
+    if executable in ("pnpm", "npm", "yarn", "bun"):
+        args = argv[1:]
+        if args and args[0] == "run":
+            args = args[1:]
+        if not args or args[0] not in {"build", "test", "lint", "typecheck", "check", "validate", "verify", "tsc"}:
+            return None, "package-manager validation is limited to build/test/lint/typecheck/check/validate/verify"
+        return argv, None
+    if executable in ("pytest", "vitest", "playwright", "eslint", "tsc"):
+        return argv, None
+    if executable in ("python", "python3", "py") or executable.startswith("python3."):
+        python_args = argv[1:]
+        if executable == "py" and python_args and re.fullmatch(r"-\d+(?:\.\d+)?(?:-32)?", python_args[0]):
+            python_args = python_args[1:]
+        if len(python_args) < 2 or python_args[0] != "-m" or python_args[1] not in {"pytest", "unittest", "compileall", "py_compile"}:
+            return None, "Python validation must use pytest, unittest, compileall, or py_compile modules"
+        return argv, None
+    if executable == "git":
+        if len(argv) < 2 or argv[1] not in {"status", "diff"}:
+            return None, "git validation is limited to status and diff checks"
+        if argv[1] == "diff" and not any(token in {"--check", "--name-only", "--stat"} for token in argv[2:]):
+            return None, "git diff validation must request --check, --name-only, or --stat"
+        return argv, None
+    if executable == "cargo":
+        if len(argv) < 2 or argv[1] not in {"test", "check", "clippy"}:
+            return None, "cargo validation is limited to test/check/clippy"
+        return argv, None
+    if executable == "go":
+        if len(argv) < 2 or argv[1] != "test":
+            return None, "go validation is limited to test"
+        return argv, None
+    if executable == "dotnet":
+        if len(argv) < 2 or argv[1] not in {"test", "build"}:
+            return None, "dotnet validation is limited to test/build"
+        return argv, None
+    if executable == "make":
+        targets = [token for token in argv[1:] if not token.startswith("-")]
+        if not targets or any(target not in {"build", "test", "check", "lint", "typecheck", "validate"} for target in targets):
+            return None, "make validation is limited to build/test/check/lint/typecheck/validate"
+        return argv, None
+    if executable == "node" and "--check" in argv[1:]:
+        return argv, None
+    return None, f"unsupported validation executable: {executable}"
+
+
+def worker_contract(handoff_text: str) -> dict:
+    section = markdown_section(handoff_text, "Worker execution contract")
+    scope = markdown_table_rows(markdown_subsection(section, "Permitted files and systems"))
+    validation = markdown_table_rows(markdown_section(handoff_text, "Validation commands"))
+    return {
+        "section": section,
+        "worker_role": bold_field(section, "Worker role").strip("`").strip().lower(),
+        "objective": bold_field(section, "Objective"),
+        "relevant_context": bold_field(section, "Relevant context"),
+        "invariants": bold_field(section, "Invariants"),
+        "permitted_actions": bold_field(section, "Permitted actions"),
+        "prohibited_actions": bold_field(section, "Prohibited actions"),
+        "stop_conditions": bold_field(section, "Stop conditions"),
+        "escalation_conditions": bold_field(section, "Escalation conditions"),
+        "lifecycle": bold_field(section, "Lifecycle"),
+        "routine_repair_limit": bold_field(section, "Routine repair limit"),
+        "scope_rows": scope[1:] if scope and scope[0][0].lower() in ("path / glob", "path", "file / glob") else scope,
+        "validation_rows": validation[1:] if validation and validation[0][0].lower() in ("check", "id") else validation,
+    }
+
+
+def worker_contract_problems(handoff_text: str) -> list[str]:
+    contract = worker_contract(handoff_text)
+    problems = []
+    if not contract["section"]:
+        return ["HANDOFF.md is missing the Worker execution contract section"]
+    required_fields = (
+        "objective", "relevant_context", "invariants", "permitted_actions",
+        "prohibited_actions", "stop_conditions", "escalation_conditions",
+        "lifecycle", "routine_repair_limit",
+    )
+    for field in required_fields:
+        value = contract[field]
+        if not value or re.search(r"<[^>]+>|not yet recorded|not decided", value, re.I):
+            problems.append(f"worker contract has an incomplete {field.replace('_', ' ')}")
+    if contract["worker_role"] not in WORKER_ROLES:
+        problems.append(f"worker contract has unsupported Worker role: {contract['worker_role'] or 'missing'}")
+    try:
+        repair_limit = int(contract["routine_repair_limit"].strip("` "))
+    except ValueError:
+        repair_limit = -1
+    if repair_limit < 0 or repair_limit > MAX_ROUTINE_REPAIRS:
+        problems.append(f"worker contract routine repair limit must be 0-{MAX_ROUTINE_REPAIRS}")
+    lifecycle = contract["lifecycle"].lower()
+    for token in ("baseline", "implementation", "validation", "repair", "result", "checkpoint"):
+        if token not in lifecycle:
+            problems.append(f"worker contract lifecycle omits {token}")
+    for token in ("read", "edit", "test"):
+        if token not in contract["permitted_actions"].lower():
+            problems.append(f"worker contract permitted actions omit {token}")
+    for token in ("push", "reset", "secret", ".env", "deploy"):
+        if token not in contract["prohibited_actions"].lower():
+            problems.append(f"worker contract prohibited actions omit {token}")
+    for token in ("conflict", "invariant", "out-of-scope", "budget"):
+        if token not in contract["stop_conditions"].lower():
+            problems.append(f"worker contract stop conditions omit {token}")
+    for token in ("repeated", "architecture", "high-risk"):
+        if token not in contract["escalation_conditions"].lower():
+            problems.append(f"worker contract escalation conditions omit {token}")
+
+    scope_rows = contract["scope_rows"]
+    if not scope_rows:
+        problems.append("worker contract has no permitted file/system rows")
+    for row in scope_rows:
+        if len(row) < 3 or not row[0] or re.search(r"<[^>]+>", " ".join(row)):
+            problems.append("worker contract has an incomplete permitted file/system row")
+            continue
+        path = row[0].strip("`").replace("\\", "/")
+        if path in ("*", "**", "**/*", ".", "./") or Path(path).is_absolute() or ".." in Path(path).parts:
+            problems.append(f"worker contract scope is too broad or unsafe: {path}")
+        if worker_sensitive_path(path):
+            problems.append(f"worker contract may not permit sensitive path: {path}")
+
+    validation_rows = contract["validation_rows"]
+    if not validation_rows:
+        problems.append("worker contract has no validation commands")
+    elif len(validation_rows) > VALIDATION_COMMAND_LIMIT:
+        problems.append(f"worker contract has more than {VALIDATION_COMMAND_LIMIT} validation commands")
+    required_validation = False
+    for row in validation_rows:
+        if len(row) < 4 or not row[0] or not row[1] or re.search(r"<[^>]+>", " ".join(row)):
+            problems.append("worker contract has an incomplete validation command row")
+            continue
+        argv, error = safe_validation_argv(row[1])
+        if error:
+            problems.append(f"unsafe validation command {row[0]}: {error}")
+        required_value = row[2].strip().lower()
+        if required_value in ("yes", "y", "true", "required"):
+            required_validation = True
+        elif required_value not in ("no", "n", "false", "optional"):
+            problems.append(f"validation command {row[0]} has invalid required value: {row[2]}")
+    if validation_rows and not required_validation:
+        problems.append("worker contract needs at least one required validation command")
+    return problems
+
+
+def validation_commands(handoff_text: str) -> list[dict]:
+    contract = worker_contract(handoff_text)
+    commands = []
+    for row in contract["validation_rows"]:
+        if len(row) < 4:
+            continue
+        argv, error = safe_validation_argv(row[1])
+        commands.append({
+            "id": re.sub(r"[^a-z0-9]+", "-", row[0].strip().lower()).strip("-") or "check",
+            "check": row[0].strip(),
+            "command": row[1].strip().strip("`"),
+            "required": row[2].strip().lower() in ("yes", "y", "true", "required"),
+            "expected": row[3].strip(),
+            "argv": argv,
+            "error": error,
+        })
+    return commands
+
+
+def worker_sensitive_path(path: str) -> bool:
+    normalised = path.replace("\\", "/").lower().strip("/")
+    name = normalised.rsplit("/", 1)[-1]
+    return (
+        name == ".env" or name.startswith(".env.") or name in {"id_rsa", "credentials.json"}
+        or name.endswith((".pem", ".key", ".p12", ".pfx")) or "secret" in name or "credential" in name
+    )
+
+
+def worker_path_matches(path: str, pattern: str) -> bool:
+    path = path.replace("\\", "/").lstrip("./")
+    pattern = pattern.replace("\\", "/").lstrip("./")
+    return fnmatch.fnmatchcase(path, pattern) or (
+        pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/")
+    )
+
+
+def project_git_snapshot(project: Path) -> dict:
+    project = project.resolve()
+    head_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=project, capture_output=True, text=True
+    )
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=project, capture_output=True, text=True,
+    )
+    if status_result.returncode != 0:
+        return {
+            "state": "unknown", "head": head_result.stdout.strip() or "unknown",
+            "entries": [], "error": status_result.stderr.strip() or "git status failed",
+        }
+    entries_by_path = {}
+
+    def record_entry(relative: str, status: str, candidate: Path) -> None:
+        exists = candidate.is_file()
+        sensitive = worker_sensitive_path(relative)
+        entry = {
+            "path": relative,
+            "status": status,
+            "exists": exists,
+            # Never read a sensitive file merely to fingerprint repository scope.
+            "sha256": sha256_file(candidate) if exists and not sensitive else None,
+        }
+        if sensitive and exists:
+            try:
+                stat = candidate.stat()
+                entry.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
+            except OSError:
+                entry.update({"size": None, "mtime_ns": None})
+        entries_by_path[relative] = entry
+
+    for raw in status_result.stdout.splitlines():
+        if len(raw) < 4:
+            continue
+        status = raw[:2]
+        value = raw[3:].strip().strip('"')
+        paths = [item.strip().strip('"') for item in value.split(" -> ")] if " -> " in value else [value]
+        for relative in paths:
+            relative = relative.replace("\\", "/")
+            record_entry(relative, status, project / relative)
+    # Git intentionally hides ignored files. Track root-level environment and
+    # credential files by metadata so a worker cannot silently add one while
+    # Ariadne avoids reading its contents.
+    try:
+        for candidate in project.iterdir():
+            if candidate.is_file() and worker_sensitive_path(candidate.name):
+                relative = candidate.name.replace("\\", "/")
+                if relative not in entries_by_path:
+                    record_entry(relative, "ignored", candidate)
+    except OSError:
+        return {
+            "state": "unknown", "head": head_result.stdout.strip() or "unknown",
+            "entries": [], "error": "could not inspect sensitive root files",
+        }
+    entries = [entries_by_path[path] for path in sorted(entries_by_path)]
+    return {
+        "state": "dirty" if entries else "clean",
+        "head": head_result.stdout.strip() or "unborn",
+        "entries": entries,
+    }
+
+
+def worker_scope_check(
+    baseline: dict,
+    current: dict,
+    patterns: list[str],
+    project: Path | None = None,
+) -> dict:
+    if baseline.get("state") == "unknown" or current.get("state") == "unknown":
+        return {"status": "repository-conflict", "changed": [], "outside": [], "sensitive": [], "immutable": [], "head_changed": False}
+    baseline_entries = {item.get("path"): item for item in baseline.get("entries", [])}
+    current_entries = {item.get("path"): item for item in current.get("entries", [])}
+    changed = []
+    for path in sorted(set(baseline_entries) | set(current_entries)):
+        if baseline_entries.get(path) != current_entries.get(path):
+            changed.append(path)
+    head_changed = (
+        baseline.get("head") not in (None, "", "unknown")
+        and current.get("head") not in (None, "", "unknown")
+        and baseline.get("head") != current.get("head")
+    )
+    committed = []
+    commit_error = None
+    if head_changed and project is not None:
+        comparison = subprocess.run(
+            ["git", "diff", "--name-only", baseline.get("head", ""), current.get("head", "")],
+            cwd=project, capture_output=True, text=True,
+        )
+        if comparison.returncode == 0:
+            committed = [line.strip().replace("\\", "/") for line in comparison.stdout.splitlines() if line.strip()]
+        else:
+            commit_error = comparison.stderr.strip() or "could not inspect committed changes"
+    all_changed = sorted(set(changed) | set(committed))
+    sensitive = [path for path in all_changed if worker_sensitive_path(path)]
+    immutable = [path for path in all_changed if path.replace("\\", "/").lower() in {"handoff.md", "design.md"}]
+    outside = [
+        path for path in all_changed
+        if not any(worker_path_matches(path, pattern) for pattern in patterns)
+    ]
+    if commit_error or immutable:
+        status = "repository-conflict"
+    elif sensitive:
+        status = "dangerous-action"
+    elif outside:
+        status = "out-of-scope"
+    else:
+        status = "within-contract"
+    return {
+        "status": status,
+        "changed": all_changed,
+        "committed": committed,
+        "outside": outside,
+        "sensitive": sensitive,
+        "immutable": immutable,
+        "head_changed": head_changed,
+        "commit_error": commit_error,
+    }
+
+
+def worker_validation_problems(value: dict, packet_id: str | None = None) -> list[str]:
+    problems = []
+    if not isinstance(value, dict):
+        return ["worker validation evidence is not an object"]
+    if value.get("schema_version") != WORKER_VALIDATION_SCHEMA:
+        problems.append("worker validation evidence has wrong schema version")
+    if value.get("kind") != "worker-validation":
+        problems.append("worker validation evidence has wrong kind")
+    if packet_id and value.get("packet_id") != packet_id:
+        problems.append("worker validation evidence has wrong packet ID")
+    if value.get("stage") != "S4B":
+        problems.append("worker validation evidence has wrong stage")
+    if value.get("status") not in ("passed", "failed", "blocked"):
+        problems.append("worker validation evidence has invalid status")
+    if value.get("independent") is not True:
+        problems.append("worker validation evidence is not marked independent")
+    scope = value.get("scope") if isinstance(value.get("scope"), dict) else {}
+    if scope.get("status") not in (
+        "within-contract", "out-of-scope", "dangerous-action", "repository-conflict", "not-run"
+    ):
+        problems.append("worker validation evidence has invalid scope status")
+    if value.get("failure_kind") not in (
+        "none", "routine", "contract", "out-of-scope", "dangerous-action",
+        "repository-conflict", "worker-blocked", "validation-timeout", "validation-command",
+    ):
+        problems.append("worker validation evidence has invalid failure kind")
+    commands = value.get("commands")
+    if not isinstance(commands, list) or len(commands) > VALIDATION_COMMAND_LIMIT:
+        problems.append("worker validation evidence has an invalid command list")
+    else:
+        for command in commands:
+            if not isinstance(command, dict) or not command.get("id") or command.get("status") not in ("passed", "failed", "not-run"):
+                problems.append("worker validation evidence has an invalid command result")
+    for field in ("usage", "cost"):
+        if field not in value:
+            problems.append(f"worker validation evidence is missing {field}; unknown must be explicit")
+    return problems
+
+
 def meaningful_lines(section: str) -> list[str]:
     lines = []
     for raw in section.splitlines():
@@ -308,6 +694,8 @@ RETURN_HANDOFF_HEADINGS = [
     "Dependencies",
     "Tests",
     "Evidence",
+    "Worker validation",
+    "Safety and scope",
     "Known issues",
     "Incomplete work",
     "Accessibility and performance",
@@ -327,19 +715,97 @@ def return_handoff_problems(text: str) -> list[str]:
             problems.append(f"return handoff missing section: {heading}")
         elif len(matches) > 1:
             problems.append(f"return handoff duplicates section: {heading}")
-    for field in ("Status", "Provider", "Model", "Effort", "Started", "Ended"):
+    for field in (
+        "Status", "Task ID", "Worker role", "Provider", "Model", "Effort", "Started", "Ended", "Usage", "Cost",
+        "Scope status", "Unexpected actions or conflicts",
+    ):
         matches = re.findall(rf"(?im)^\*\*{field}:\*\*\s*(.+?)\s*$", text)
         if len(matches) != 1 or re.search(r"<[^>]+>|\bcomplete / partial / blocked\b", matches[0] if matches else ""):
             problems.append(f"return handoff has unfilled field: {field}")
     status = re.search(r"(?im)^\*\*Status:\*\*\s*(.+?)\s*$", text)
     if status and status.group(1).strip().lower() not in ("complete", "partial", "blocked"):
         problems.append("return handoff Status must be complete, partial, or blocked")
+    worker_role = re.search(r"(?im)^\*\*Worker role:\*\*\s*(.+?)\s*$", text)
+    if worker_role and worker_role.group(1).strip().lower() not in WORKER_ROLES:
+        problems.append("return handoff Worker role is unsupported")
+    scope_status = re.search(r"(?im)^\*\*Scope status:\*\*\s*(.+?)\s*$", text)
+    if scope_status and scope_status.group(1).strip().lower() not in (
+        "within-contract", "out-of-scope", "dangerous-action", "repository-conflict", "not checked"
+    ):
+        problems.append("return handoff Scope status is unsupported")
     return problems
 
 
 def return_handoff_status(text: str) -> str:
     match = re.search(r"(?im)^\*\*Status:\*\*\s*(.+?)\s*$", text)
     return match.group(1).strip().lower() if match else ""
+
+
+def compact_worker_text(value: object, limit: int = 800) -> str:
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    if not text:
+        return "not recorded"
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+
+def worker_retry_context(
+    parent: dict | None, evidence_path: Path | None, evidence_kind: str | None
+) -> dict | None:
+    """Carry only bounded repair clues forward; never replay an old transcript."""
+    if (
+        not parent
+        or parent.get("stage") != "S4B"
+        or evidence_path is None
+        or not evidence_path.is_file()
+    ):
+        return None
+    context = {
+        "parent_task_id": parent.get("packet_id", "unknown"),
+        "source": evidence_kind or "unknown",
+    }
+    if evidence_kind == "worker-validation":
+        try:
+            validation = json.loads(read(evidence_path))
+        except (OSError, json.JSONDecodeError):
+            return {**context, "status": "unreadable", "failure_reason": "prior validation evidence could not be read"}
+        scope = validation.get("scope") if isinstance(validation.get("scope"), dict) else {}
+        changed_paths = scope.get("changed") if isinstance(scope.get("changed"), list) else []
+        outside_paths = scope.get("outside") if isinstance(scope.get("outside"), list) else []
+        failed_checks = []
+        for command in validation.get("commands", []):
+            if not isinstance(command, dict) or command.get("status") == "passed":
+                continue
+            detail = command.get("error") or command.get("returncode") or command.get("status")
+            failed_checks.append(
+                compact_worker_text(f"{command.get('id', 'check')}: {detail}", 300)
+            )
+        return {
+            **context,
+            "status": validation.get("status", "unknown"),
+            "failure_kind": validation.get("failure_kind", "unknown"),
+            "failure_reason": compact_worker_text(validation.get("failure_reason")),
+            "failed_checks": failed_checks[:VALIDATION_COMMAND_LIMIT],
+            "changed": [compact_worker_text(path, 240) for path in changed_paths[:20]],
+            "outside": [compact_worker_text(path, 240) for path in outside_paths[:20]],
+        }
+    if evidence_kind == "structured-return-handoff":
+        try:
+            text = read(evidence_path)
+        except OSError:
+            return {**context, "status": "unreadable", "failure_reason": "prior return evidence could not be read"}
+        return {
+            **context,
+            "status": return_handoff_status(text) or "unknown",
+            "known_issues": compact_worker_text(markdown_section(text, "Known issues")),
+            "incomplete_work": compact_worker_text(markdown_section(text, "Incomplete work")),
+            "next_inspection": compact_worker_text(markdown_section(text, "Next inspection")),
+            "safety_and_scope": compact_worker_text(markdown_section(text, "Safety and scope")),
+        }
+    return {
+        **context,
+        "status": "transcript-only",
+        "note": "A prior transcript exists, but its conversation is intentionally not replayed; inspect the current repository and packet.",
+    }
 
 
 def stage_result_problems(path: Path, parent: dict) -> list[str]:
@@ -790,6 +1256,17 @@ def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tupl
 
 
 def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
+    if parent.get("stage") == "S4B":
+        validation = parent_dir / "evidence" / "validation.json"
+        if validation.is_file():
+            try:
+                value = json.loads(read(validation))
+            except (json.JSONDecodeError, OSError) as exc:
+                raise PacketError(f"parent worker validation is malformed: {exc}") from exc
+            problems = worker_validation_problems(value, parent.get("packet_id"))
+            if problems:
+                raise PacketError("parent worker validation is malformed: " + "; ".join(problems))
+            return validation, "worker-validation"
     transcript = parent_dir / parent.get("expected_transcript", "evidence/transcript.md")
     if transcript.is_file():
         return transcript, "verbatim-transcript"
@@ -820,7 +1297,7 @@ def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
         return continuity[0], continuity[0].stem
     raise PacketError(
         f"parent evidence is missing: {transcript}; save the transcript"
-        + (" or ingest the S4B return handoff" if parent.get("stage") == "S4B" else "")
+        + (" or record the S4B worker validation" if parent.get("stage") == "S4B" else "")
         + " or record a structurally verified stage result or reasoner continuity event"
         + " before preparing the continuation"
     )
@@ -850,9 +1327,18 @@ def load_parent(
         raise PacketError(f"same-stage parent requires --retry for {stage}")
 
     evidence, evidence_kind = parent_evidence(parent, parent_dir)
-    if stage == "S5" and evidence_kind == "structured-return-handoff":
-        status = return_handoff_status(read(evidence))
-        if status != "complete":
+    if stage == "S5" and parent_stage == "S4B":
+        if evidence_kind != "worker-validation":
+            raise PacketError(
+                "S5 requires Ariadne's independent worker validation evidence; "
+                "a worker return or transcript alone is not acceptance"
+            )
+        validation = json.loads(read(evidence))
+        if validation.get("status") != "passed":
+            raise PacketError("S5 requires a passed independent worker validation")
+        returned = parent_dir / "evidence" / "return-handoff.md"
+        if not returned.is_file() or return_handoff_status(read(returned)) != "complete":
+            status = return_handoff_status(read(returned)) if returned.is_file() else "missing"
             raise PacketError(
                 f"S5 requires a complete implementation return; current status is {status or 'unknown'}"
             )
@@ -870,8 +1356,18 @@ def section_footer(entry: dict) -> str:
     return f"===== END {entry['label']} ====="
 
 
-def build_packet(stage: str, packet_id: str, provider: str, prompt: dict, sources: list[dict],
-                 parent: dict | None, omitted: list[str], return_target: Path | None = None) -> str:
+def build_packet(
+    stage: str,
+    packet_id: str,
+    provider: str,
+    prompt: dict,
+    sources: list[dict],
+    parent: dict | None,
+    omitted: list[str],
+    return_target: Path | None = None,
+    worker: dict | None = None,
+    project_baseline: dict | None = None,
+) -> str:
     independent = stage == "S5"
     lines = [
         f"ARIADNE {stage} STAGE PACKET",
@@ -899,7 +1395,7 @@ def build_packet(stage: str, packet_id: str, provider: str, prompt: dict, source
             ]
         )
     if stage == "S4B":
-        if return_target is None:
+        if return_target is None or not worker:
             raise PacketError("S4B transport requires a unique return target")
         lines.extend(
             [
@@ -910,6 +1406,58 @@ def build_packet(stage: str, packet_id: str, provider: str, prompt: dict, source
                 "as required by the canonical S4B prompt. This path is transport evidence, not policy.",
             ]
         )
+        scope = ", ".join(item["path"] for item in worker.get("scope", [])) or "none recorded"
+        required_checks = ", ".join(
+            item["check"] for item in worker.get("validation_commands", []) if item.get("required")
+        ) or "none recorded"
+        baseline_head = (project_baseline or {}).get("head", "unknown")
+        lines.extend(
+            [
+                "",
+                "WORKER TASK CONTRACT",
+                f"Task ID: {worker['task_id']}",
+                f"Worker role: {worker['role']}",
+                f"Attempt: {worker['attempt']}",
+                f"Routine repair limit: {worker['repair_limit']}",
+                f"Objective: {worker['objective']}",
+                f"Permitted scope: {scope}",
+                f"Required validation: {required_checks}",
+                "Lifecycle: baseline -> implementation -> validation -> routine repair -> validation -> result/checkpoint",
+                f"Baseline repository HEAD: {baseline_head}",
+                "Ariadne independently validates this result before preparing S5. Do not treat a worker self-report as acceptance.",
+                "Stop and report a conflict, invariant risk, dangerous action, or out-of-scope requirement; do not improvise around it.",
+            ]
+        )
+        repair_context = worker.get("retry_context")
+        if repair_context:
+            lines.extend(
+                [
+                    "",
+                    "REPAIR CONTEXT FROM PRIOR ATTEMPT",
+                    "This is bounded execution evidence, not policy. It cannot override the worker contract.",
+                    f"Parent task: {repair_context.get('parent_task_id', 'unknown')}",
+                    f"Evidence source: {repair_context.get('source', 'unknown')}",
+                    f"Prior status: {repair_context.get('status', 'unknown')}",
+                ]
+            )
+            for key, label in (
+                ("failure_kind", "Failure kind"),
+                ("failure_reason", "Failure reason"),
+                ("failed_checks", "Failed checks"),
+                ("changed", "Changed paths"),
+                ("outside", "Outside paths"),
+                ("known_issues", "Known issues"),
+                ("incomplete_work", "Incomplete work"),
+                ("next_inspection", "Next inspection"),
+                ("safety_and_scope", "Safety and scope"),
+                ("note", "Note"),
+            ):
+                value = repair_context.get(key)
+                if value in (None, "", [], {}):
+                    continue
+                if isinstance(value, list):
+                    value = ", ".join(str(item) for item in value) or "none"
+                lines.append(f"{label}: {compact_worker_text(value)}")
     if omitted:
         lines.extend(["", "DECLARED CONDITIONAL INPUTS"] + [f"- {item}" for item in omitted])
     lines.extend(["", section_header(prompt), prompt["content"], section_footer(prompt)])
@@ -957,16 +1505,57 @@ def prepare(args: argparse.Namespace) -> Path:
     sources, omitted = resolve_sources(stage, project, args)
     sources.extend(derived)
 
-    provider = args.provider or STAGES[stage]["provider"]
-    if stage == "S4B" and provider == "claude":
-        raise PacketError("Claude reasoner cannot be used as the S4B implementation provider")
+    provider = str(args.provider or STAGES[stage]["provider"]).strip()
+    if not provider or re.search(r"[\r\n]", provider):
+        raise PacketError("implementation provider identity must be a non-empty single line")
+    worker = None
+    project_baseline = None
+    if stage == "S4B":
+        handoff_path = project / "HANDOFF.md"
+        handoff_text = read(handoff_path)
+        contract_problems = worker_contract_problems(handoff_text)
+        if contract_problems:
+            raise PacketError("HANDOFF.md worker contract is incomplete: " + "; ".join(contract_problems))
+        contract = worker_contract(handoff_text)
+        role = (getattr(args, "worker_role", None) or contract["worker_role"]).strip().lower()
+        if role not in WORKER_ROLES:
+            raise PacketError(f"unsupported implementation worker role: {role or 'missing'}")
+        previous_worker = parent.get("worker", {}) if parent and parent.get("stage") == "S4B" else {}
+        try:
+            attempt = int(previous_worker.get("attempt", 0)) + 1
+        except (TypeError, ValueError):
+            attempt = 1
+        inherited_baseline = parent.get("project_baseline") if parent and parent.get("stage") == "S4B" else None
+        project_baseline = inherited_baseline if isinstance(inherited_baseline, dict) else project_git_snapshot(project)
+        commands = validation_commands(handoff_text)
+        retry_context = worker_retry_context(
+            parent, parent_evidence_path, parent_evidence_kind
+        )
+        worker = {
+            "task_id": packet_id,
+            "role": role,
+            "attempt": attempt,
+            "repair_limit": MAX_ROUTINE_REPAIRS,
+            "contract_sha256": sha256_file(handoff_path),
+            "objective": contract["objective"],
+            "scope": [
+                {"path": row[0].strip("`"), "actions": row[1], "reason": row[2]}
+                for row in contract["scope_rows"] if len(row) >= 3
+            ],
+            "validation_commands": [
+                {key: value for key, value in command.items() if key != "argv"}
+                for command in commands
+            ],
+            "retry_context": retry_context,
+        }
     return_target = (
         (project / ".ariadne" / "returns" / f"{packet_id}.md").resolve()
         if stage == "S4B"
         else None
     )
     packet_text = build_packet(
-        stage, packet_id, provider, prompt, sources, parent, omitted, return_target
+        stage, packet_id, provider, prompt, sources, parent, omitted, return_target,
+        worker, project_baseline,
     )
 
     output.mkdir(parents=True)
@@ -983,6 +1572,8 @@ def prepare(args: argparse.Namespace) -> Path:
         "packet_id": packet_id,
         "stage": stage,
         "provider": provider,
+        "worker": worker,
+        "project_baseline": project_baseline,
         "ariadne_commit": git_head(),
         "project": str(project),
         "parent_id": parent.get("packet_id") if parent else None,
@@ -1089,6 +1680,33 @@ def verify_packet(packet_dir: Path) -> list[str]:
         problems.append("packet hash mismatch — packet changed after preparation")
     if f"ARIADNE {stage} STAGE PACKET" not in packet.splitlines()[:2]:
         problems.append("packet stage header does not match manifest stage")
+    if stage == "S4B":
+        worker = manifest.get("worker")
+        if not isinstance(worker, dict):
+            problems.append("S4B packet is missing its worker contract manifest")
+        else:
+            if worker.get("task_id") != manifest.get("packet_id"):
+                problems.append("S4B worker task ID does not match packet ID")
+            if worker.get("role") not in WORKER_ROLES:
+                problems.append("S4B worker role is unsupported or missing")
+            try:
+                attempt = int(worker.get("attempt"))
+            except (TypeError, ValueError):
+                attempt = 0
+            if attempt < 1:
+                problems.append("S4B worker attempt must be a positive integer")
+            try:
+                repair_limit = int(worker.get("repair_limit"))
+            except (TypeError, ValueError):
+                repair_limit = -1
+            if repair_limit < 0 or repair_limit > MAX_ROUTINE_REPAIRS:
+                problems.append("S4B worker repair limit is outside the safe bound")
+            if not isinstance(manifest.get("project_baseline"), dict):
+                problems.append("S4B packet is missing its repository baseline")
+            project_path = Path(manifest.get("project", ""))
+            handoff_path = project_path / "HANDOFF.md"
+            if handoff_path.is_file():
+                problems.extend(worker_contract_problems(read(handoff_path)))
     adopt_existing = manifest.get("adopt_existing", False)
     if not isinstance(adopt_existing, bool):
         problems.append("adopt_existing manifest field must be boolean")
@@ -1183,6 +1801,13 @@ def verify_packet(packet_dir: Path) -> list[str]:
         if evidence_kind in REASONERS.CONTINUITY_KINDS and parent_path.is_file():
             parent = json.loads(read(parent_path))
             problems.extend(REASONERS.continuity_problems(parent_evidence, parent))
+        if evidence_kind == "worker-validation":
+            try:
+                validation = json.loads(read(parent_evidence))
+            except (json.JSONDecodeError, OSError) as exc:
+                problems.append(f"parent worker validation is malformed: {exc}")
+            else:
+                problems.extend(worker_validation_problems(validation))
     return problems
 
 
@@ -1215,6 +1840,8 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S5 packet must not deliver optional project runtime context")
     if specs.get("S4B", {}).get("allowed_parents") != ["S4A", "S4B"]:
         problems.append("S4B packet parent contract drifted from S4A -> S4B")
+    if specs.get("S4B", {}).get("provider") != "implementation-worker":
+        problems.append("S4B packet provider default must remain worker-agnostic")
     if specs.get("S1", {}).get("allowed_parents") != ["S1"]:
         problems.append("S1 packet must support a linked same-stage resume")
     if "templates/RETURN-HANDOFF.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
@@ -1225,6 +1852,14 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S4B packet must carry the generated creative-operations plan")
     if "skills/visual-qa.md" not in specs.get("S4B", {}).get("canonical_inputs", []):
         problems.append("S4B packet must deliver the selected visual-QA method")
+    handoff_template = read(ROOT / "templates" / "HANDOFF.md") if (ROOT / "templates" / "HANDOFF.md").is_file() else ""
+    for token in ("## Worker execution contract", "## Validation commands", "Routine repair limit", "Permitted files and systems"):
+        if token not in handoff_template:
+            problems.append(f"HANDOFF template is missing worker contract element: {token}")
+    return_template = read(ROOT / "templates" / "RETURN-HANDOFF.md") if (ROOT / "templates" / "RETURN-HANDOFF.md").is_file() else ""
+    for token in ("**Task ID:**", "**Worker role:**", "## Worker validation", "## Safety and scope"):
+        if token not in return_template:
+            problems.append(f"return handoff template is missing worker evidence element: {token}")
     if specs.get("S2", {}).get("canonical_inputs") != [
         "RESEARCH-POLICY.md", "PRIVACY-POLICY.md", "templates/RESEARCH.md"
     ]:
@@ -1263,6 +1898,14 @@ def self_test() -> int:
 
     def case(name: str, passed: bool) -> None:
         cases.append((name, passed))
+
+    py_validation, py_error = safe_validation_argv("py -3 -m pytest")
+    case(
+        "Windows py validation syntax is accepted",
+        py_error is None and py_validation == ["py", "-3", "-m", "pytest"],
+    )
+    _shell_validation, shell_error = safe_validation_argv("pytest; git reset --hard")
+    case("shell validation syntax is rejected", shell_error is not None)
 
     with self_test_workspace() as first_workspace, self_test_workspace() as second_workspace:
         case(
@@ -1677,7 +2320,25 @@ def self_test() -> int:
         (s4a_dir / "evidence" / "transcript.md").write_text("S4A transcript\n", encoding="utf-8")
 
         (project / "HANDOFF.md").write_text(
-            "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n## Dependencies to install\n\nNone.\n",
+            "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n"
+            "## Dependencies to install\n\nNone.\n\n"
+            "## Worker execution contract\n\n"
+            "**Worker role:** bulk\n\n"
+            "**Objective:** Build the approved fixture.\n\n"
+            "**Relevant context:** HANDOFF.md, DESIGN.md, AGENTS.md, and permitted files.\n\n"
+            "**Invariants:** Preserve the approved direction and acceptance criteria.\n\n"
+            "**Permitted actions:** Read files; edit permitted files; create required files; run tests; inspect git status and diff.\n\n"
+            "**Prohibited actions:** git push, force operations, git reset, git clean, secrets, .env files, deploy, production changes, destructive migrations, unrelated systems.\n\n"
+            "**Stop conditions:** Missing context, packet/repository conflict, invariant risk, out-of-scope or dangerous action, exhausted budget.\n\n"
+            "**Escalation conditions:** Repeated routine failure, architecture conflict or uncertainty, high-risk change, invariant conflict.\n\n"
+            "**Lifecycle:** baseline -> implementation -> validation -> routine repair -> validation -> result/checkpoint\n\n"
+            "**Routine repair limit:** 2\n\n"
+            "### Permitted files and systems\n\n"
+            "| Path / glob | Actions | Reason |\n|---|---|---|\n"
+            "| src/** | read / edit / create | fixture implementation |\n\n"
+            "## Validation commands\n\n"
+            "| Check | Command | Required | Expected |\n|---|---|---|---|\n"
+            "| diff hygiene | `git diff --check` | yes | exit code 0 |\n",
             encoding="utf-8",
         )
         operations_dir = project / ".ariadne"
@@ -1702,9 +2363,9 @@ def self_test() -> int:
             project / ".ariadne" / "returns" / f"{s4b_manifest['packet_id']}.md"
         ).resolve()
         case(
-            "Cursor S4B packet verifies with trace and unique return target (positive control)",
+            "generic S4B packet verifies with trace and unique return target (positive control)",
             not verify_packet(s4b_dir)
-            and s4b_manifest["provider"] == "cursor"
+            and s4b_manifest["provider"] == "implementation-worker"
             and s4b_manifest["return_target"] == str(expected_return_target)
             and any(
                 item["label"] == ".ariadne/creative-operations.json"
@@ -1732,8 +2393,8 @@ def self_test() -> int:
         except PacketError as exc:
             claude_reasoner_misroute_blocked = "reasoner" in str(exc)
         case(
-            "Claude reasoner ID cannot masquerade as an implementation provider",
-            claude_reasoner_misroute_blocked,
+            "provider identity is not used as a core implementation policy",
+            claude_reasoner_misroute_blocked is False,
         )
         s4b_manifest_path = s4b_dir / MANIFEST_NAME
         s4b_manifest_original = read(s4b_manifest_path)
@@ -1757,8 +2418,12 @@ def self_test() -> int:
         operations_path.write_text(operations_original, encoding="utf-8")
         returned = (
             "# IMPLEMENTATION RETURN HANDOFF: fixture\n\n"
-            "**Status:** complete\n**Provider:** fixture\n**Model:** fixture\n"
+            f"**Status:** complete\n**Task ID:** {s4b_manifest['packet_id']}\n"
+            "**Worker role:** bulk\n**Provider:** fixture\n**Model:** fixture\n"
             "**Effort:** medium\n**Started:** 2026-08-23\n**Ended:** 2026-08-23\n\n"
+            "**Usage:** unknown\n**Cost:** unknown\n"
+            "**Scope status:** within-contract\n"
+            "**Unexpected actions or conflicts:** none\n\n"
             + "\n\n".join(f"## {heading}\n\nnone" for heading in RETURN_HANDOFF_HEADINGS)
             + "\n"
         )
@@ -1773,14 +2438,61 @@ def self_test() -> int:
             prepare(ns(stage="S5", project=str(project), output=str(sandbox / "partial-S5"), parent=str(s4b_dir), target="http://127.0.0.1:3000", lenses="creative-director (light)"))
             partial_return_blocked = False
         except PacketError as exc:
-            partial_return_blocked = "requires a complete implementation return" in str(exc)
+            partial_return_blocked = (
+                "requires Ariadne's independent worker validation" in str(exc)
+                or "requires a complete implementation return" in str(exc)
+            )
         case("partial S4B return cannot advance to S5", partial_return_blocked)
         return_path.write_text(returned, encoding="utf-8")
+        validation = {
+            "schema_version": WORKER_VALIDATION_SCHEMA,
+            "kind": "worker-validation",
+            "packet_id": s4b_manifest["packet_id"],
+            "stage": "S4B",
+            "status": "passed",
+            "recorded_at": "2026-08-23T00:00:00+05:30",
+            "independent": True,
+            "scope": {"status": "within-contract", "changed": [], "outside": [], "sensitive": [], "immutable": [], "head_changed": False},
+            "failure_kind": "none",
+            "failure_reason": "none",
+            "commands": [{"id": "diff-hygiene", "status": "passed", "returncode": 0}],
+            "usage": "unknown",
+            "cost": "unknown",
+        }
+        (s4b_dir / "evidence" / "validation.json").write_text(
+            json.dumps(validation, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        failed_validation = copy.deepcopy(validation)
+        failed_validation.update({
+            "status": "failed",
+            "failure_kind": "routine",
+            "failure_reason": "Required validation failed: diff-hygiene",
+        })
+        failed_validation["commands"][0].update({"status": "failed", "returncode": 1})
+        (s4b_dir / "evidence" / "validation.json").write_text(
+            json.dumps(failed_validation, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        repair_dir = sandbox / "R1-S4B-REPAIR"
+        prepare(ns(
+            stage="S4B", project=str(project), output=str(repair_dir),
+            parent=str(s4b_dir), retry=True,
+        ))
+        repair_manifest = json.loads(read(repair_dir / MANIFEST_NAME))
+        repair_context = repair_manifest["worker"]["retry_context"]
+        case(
+            "routine repair packet carries bounded prior failure context",
+            repair_context["failure_kind"] == "routine"
+            and "REPAIR CONTEXT FROM PRIOR ATTEMPT" in read(repair_dir / PACKET_NAME)
+            and "diff-hygiene" in read(repair_dir / PACKET_NAME),
+        )
+        (s4b_dir / "evidence" / "validation.json").write_text(
+            json.dumps(validation, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         s5_dir = sandbox / "R1-S5"
         prepare(ns(stage="S5", project=str(project), output=str(s5_dir), parent=str(s4b_dir), target="http://127.0.0.1:3000", lenses="creative-director (light)"))
         case("isolated S5 packet verifies (positive control)", not verify_packet(s5_dir))
         s5_manifest = json.loads(read(s5_dir / MANIFEST_NAME))
-        case("S4B return handoff supports continuation without a fabricated transcript", s5_manifest.get("parent_evidence_kind") == "structured-return-handoff")
+        case("S4B validation supports continuation without a fabricated transcript", s5_manifest.get("parent_evidence_kind") == "worker-validation")
         delivered_kinds = {s["kind"] for s in s5_manifest["sources"] if s.get("delivered", True)}
         case("S5 delivered sources exclude project context (positive control)", delivered_kinds == {"canonical-prompt", "canonical"})
         (s5_dir / "evidence" / "transcript.md").write_text("Independent S5 transcript\n", encoding="utf-8")
@@ -1809,9 +2521,8 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--packet-id")
     prepare_parser.add_argument("--parent")
     prepare_parser.add_argument("--retry", action="store_true")
-    prepare_parser.add_argument(
-        "--provider", choices=["codex", "claude", "cursor", "claude-code", "other"]
-    )
+    prepare_parser.add_argument("--provider", help="provider or worker environment label; recorded without normalization")
+    prepare_parser.add_argument("--worker-role", choices=list(WORKER_ROLES))
     prepare_parser.add_argument("--request")
     prepare_parser.add_argument("--request-file")
     prepare_parser.add_argument("--references-file")

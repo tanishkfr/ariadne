@@ -1,3 +1,47 @@
+# Ariadne 1.6.6
+
+Ariadne 1.6.6 makes model- and worker-agnostic bulk implementation a first-class,
+bounded workflow.
+
+- S4B handoffs now carry a repo-grounded worker contract covering scope,
+  constraints, safe actions, stop/escalation conditions and validation commands.
+- Worker execution has explicit implementation, validation, routine-repair and
+  escalation boundaries; worker self-reports are not accepted as validation.
+- Ariadne records independent validation, safety/scope outcomes and lightweight
+  implementation telemetry, preserving unknown usage or cost instead of guessing.
+- Provider and model names remain replaceable transport metadata. Command Code GOAT
+  is supported as a first manual/semi-manual worker handoff without becoming a
+  core dependency.
+
+## Ariadne 1.6.5
+
+Ariadne 1.6.5 is a corrective release for the public release surface.
+
+It carries the same validated product and writing architecture as 1.6.4. No
+workflow, writing, routing, social, or runtime behavior has been changed.
+
+## Fixed
+
+- The complete public release asset set is published, including
+  `ariadne-release.json`.
+- The release descriptor contains the exact runtime artifact, launcher,
+  release-note hashes, source commit and project-state schema required by the
+  existing updater.
+- The release uses normal three-part semantic versioning so existing 1.6.3
+  installations can discover it through `ariadne update`.
+
+## Historical releases
+
+The immutable 1.6.4 release remains unchanged.
+
+The historical 1.6.3.1 and 1.6.3.2 releases also remain unchanged.
+
+## Evidence limits
+
+This release does not introduce new product behavior or claim detector evasion
+or live provider equivalence.
+
+
 # Ariadne 1.6.4
 
 Ariadne 1.6.4 is the canonical three-part release of the writing architecture

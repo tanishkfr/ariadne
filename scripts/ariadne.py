@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE_NAME = "ariadne-run.json"
 LOG_NAME = "OPERATIONS.md"
 PREFLIGHT_NAME = "provider-preflight.json"
+TELEMETRY_NAME = "worker-telemetry.jsonl"
 RUNTIME_SCHEMA = 1
 FRIENDLY_STAGES = {
     "S1": "project brief",
@@ -82,6 +83,7 @@ def load_transport():
 
 
 TRANSPORT = load_transport()
+WORKER_ROLE_ORDER = {role: index for index, role in enumerate(TRANSPORT.WORKER_ROLES)}
 
 
 def load_reasoners():
@@ -166,6 +168,94 @@ def write_json(path: Path, value: dict) -> None:
         replace_with_retry(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def append_worker_telemetry(run_root: Path, event: str, **values) -> None:
+    """Append a small provider-neutral event; absent provider usage stays unknown."""
+    record = {
+        "schema_version": 1,
+        "event": event,
+        "recorded_at": now(),
+        "task_id": "unknown",
+        "worker_role": "unknown",
+        "provider": "unknown",
+        "model": "unknown",
+        "start": "unknown",
+        "end": "unknown",
+        "duration_seconds": None,
+        "attempt": 0,
+        "validation_attempts": 0,
+        "files_changed": [],
+        "tests_result": "not run",
+        "escalation_count": 0,
+        "review_outcome": "not reviewed",
+        "accepted": "unknown",
+        "usage": "unknown",
+        "cost": "unknown",
+        "failure_reason": "none",
+    }
+    record.update(values)
+    path = run_root / TELEMETRY_NAME
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def worker_outcome(
+    status_value: str,
+    failure_kind: str = "none",
+    repair_attempts: int = 0,
+    repair_limit: int = TRANSPORT.MAX_ROUTINE_REPAIRS,
+) -> dict:
+    """Classify one independent validation result without selecting a provider."""
+    if status_value == "passed":
+        return {
+            "implementation_state": "IMPLEMENTED",
+            "validation_state": "VALIDATED",
+            "lifecycle": "validated",
+            "retryable": False,
+            "escalation_required": False,
+            "next": "Prepare the isolated independent review.",
+        }
+    if status_value == "blocked" or failure_kind in {
+        "contract", "out-of-scope", "dangerous-action", "repository-conflict", "worker-blocked"
+    }:
+        return {
+            "implementation_state": "IMPLEMENTED",
+            "validation_state": "BLOCKED",
+            "lifecycle": "escalation-required",
+            "retryable": False,
+            "escalation_required": True,
+            "next": "Stop and escalate the worker conflict to a stronger worker or senior reasoning agent.",
+        }
+    if repair_attempts < repair_limit:
+        remaining = repair_limit - repair_attempts
+        return {
+            "implementation_state": "IMPLEMENTED",
+            "validation_state": "FAILED",
+            "lifecycle": "routine-repair",
+            "retryable": True,
+            "escalation_required": False,
+            "next": f"Prepare one bounded routine repair retry ({remaining} remaining).",
+        }
+    return {
+        "implementation_state": "IMPLEMENTED",
+        "validation_state": "FAILED",
+        "lifecycle": "escalation-required",
+        "retryable": False,
+        "escalation_required": True,
+        "next": "Stop: the routine repair budget is exhausted; escalate the implementation.",
+    }
+
+
+def iso_duration(started: str | None, ended: str | None) -> float | None:
+    if not started or not ended:
+        return None
+    try:
+        start_value = datetime.fromisoformat(started)
+        end_value = datetime.fromisoformat(ended)
+    except ValueError:
+        return None
+    return max(0.0, (end_value - start_value).total_seconds())
 
 
 def load_state(run_root: Path) -> dict:
@@ -402,6 +492,10 @@ separate even when both are unavoidable in a particular environment.
 Structured counts and pending decisions live in `{STATE_NAME}`. The purpose is
 to reduce interruption, not to turn it into a score.
 
+Implementation worker events are appended to `{TELEMETRY_NAME}`. Provider usage
+and cost are recorded only when exposed by the worker; otherwise they remain
+`unknown`.
+
 ## Timeline
 """
 
@@ -439,6 +533,7 @@ def ensure_project(project: Path, adopt_existing: bool = False) -> list[str]:
 def transport_namespace(**values) -> argparse.Namespace:
     defaults = dict(
         provider=None,
+        worker_role=None,
         packet_id=None,
         parent=None,
         retry=False,
@@ -762,6 +857,7 @@ def handoff_context_problems(project: Path) -> list[str]:
         handoff_routing(project)
     except RuntimeError_ as exc:
         problems.append(str(exc))
+    problems.extend(TRANSPORT.worker_contract_problems(handoff_text))
     if not (ROOT / "templates" / "RETURN-HANDOFF.md").is_file():
         problems.append("canonical implementation return contract is missing")
     problems.extend(CREATIVE.project_problems(project))
@@ -777,6 +873,8 @@ def packet_evidence(packet: Path, manifest: dict) -> list[str]:
         evidence.append("structural stage result")
     if (packet / "evidence" / "return-handoff.md").is_file():
         evidence.append("structured return handoff")
+    if (packet / "evidence" / "validation.json").is_file():
+        evidence.append("independent worker validation")
     if (packet / "evidence" / "review-judgement.md").is_file():
         evidence.append("independent review judgement")
     return evidence
@@ -788,6 +886,20 @@ def latest_evidence_path(state: dict, name: str) -> Path | None:
         if candidate.is_file():
             return candidate
     return None
+
+
+def current_or_latest_evidence_path(state: dict, name: str) -> Path | None:
+    """Do not let a completed parent make a fresh S4B retry look complete."""
+    packets = state.get("packets", [])
+    if not packets:
+        return None
+    current = packets[-1]
+    candidate = Path(current["path"]) / "evidence" / name
+    if candidate.is_file():
+        return candidate
+    if current.get("stage") == "S4B":
+        return None
+    return latest_evidence_path(state, name)
 
 
 def project_runtime(project: Path) -> dict:
@@ -817,6 +929,52 @@ def retry_count(state: dict, stage: str) -> int:
     return count
 
 
+def worker_state(state: dict) -> dict:
+    return state.setdefault("worker", {})
+
+
+def worker_manifest(packet: Path) -> dict:
+    try:
+        manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError_(f"Worker packet manifest is unavailable: {exc}") from exc
+    value = manifest.get("worker")
+    if not isinstance(value, dict):
+        raise RuntimeError_("Current S4B packet has no worker contract manifest")
+    return manifest
+
+
+def update_worker_state(
+    state: dict,
+    manifest: dict,
+    preflight: dict | None = None,
+    escalation_increment: int = 0,
+) -> dict:
+    value = manifest.get("worker") or {}
+    previous = worker_state(state)
+    preflight = preflight or state.get("provider_preflight") or {}
+    row = {
+        "task_id": value.get("task_id", manifest.get("packet_id")),
+        "worker_role": value.get("role", "unknown"),
+        "provider": manifest.get("provider") or preflight.get("provider", "unknown"),
+        "model": preflight.get("model", previous.get("model", "unknown")),
+        "attempt": value.get("attempt", 1),
+        "repair_limit": value.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS),
+        "repair_attempts": max(0, int(value.get("attempt", 1)) - 1),
+        "validation_attempts": int(previous.get("validation_attempts", 0)),
+        "implementation_state": "NOT_STARTED",
+        "validation_state": "NOT_RUN",
+        "review_state": "NOT_REVIEWED",
+        "acceptance_state": "UNKNOWN",
+        "lifecycle": "baseline",
+        "escalation_count": int(previous.get("escalation_count", 0)) + escalation_increment,
+        "baseline": manifest.get("project_baseline", {}),
+        "telemetry": TELEMETRY_NAME,
+    }
+    state["worker"] = row
+    return row
+
+
 def provider_evidence(run_root: Path, state: dict, return_record: dict) -> dict:
     """Project selected, executed, and successful-return states without inference."""
     preflight = state.get("provider_preflight") or {}
@@ -826,15 +984,8 @@ def provider_evidence(run_root: Path, state: dict, return_record: dict) -> dict:
         "provider": selected_provider or "not recorded",
         "evidence": str(run_root / PREFLIGHT_NAME) if selected_provider else "none",
     }
-    transcript = None
-    for entry in reversed(state.get("packets", [])):
-        if entry.get("stage") != "S4B":
-            continue
-        candidate = Path(entry["path"]) / "evidence" / "transcript.md"
-        if candidate.is_file():
-            transcript = candidate
-            break
-    returned = latest_evidence_path(state, "return-handoff.md")
+    transcript = current_or_latest_evidence_path(state, "transcript.md")
+    returned = current_or_latest_evidence_path(state, "return-handoff.md")
     if transcript:
         executed = {"state": "observed-in-transcript", "evidence": str(transcript)}
     elif returned:
@@ -850,10 +1001,27 @@ def provider_evidence(run_root: Path, state: dict, return_record: dict) -> dict:
         successful_return = {
             "state": f"reported-{return_status or 'unknown'}", "evidence": str(returned)
         }
+    validation_path = current_or_latest_evidence_path(state, "validation.json")
+    validation = {}
+    if validation_path:
+        try:
+            validation = json.loads(read(validation_path))
+        except (OSError, json.JSONDecodeError):
+            validation = {}
+    validation_status = validation.get("status")
+    independent_validation = {
+        "state": (
+            "validated" if validation_status == "passed"
+            else f"{validation_status}" if validation_status in ("failed", "blocked")
+            else "not-run"
+        ),
+        "evidence": str(validation_path) if validation_path else "none",
+    }
     return {
         "selected": selected,
         "executed": executed,
         "returned_successfully": successful_return,
+        "independent_validation": independent_validation,
     }
 
 
@@ -1034,14 +1202,22 @@ def project_intelligence(
     else:
         add("provider", "pending", "Provider readiness is checked immediately before implementation.")
 
-    returned = latest_evidence_path(state, "return-handoff.md")
-    machine_return = latest_evidence_path(state, "return-handoff.json")
+    returned = current_or_latest_evidence_path(state, "return-handoff.md")
+    machine_return = current_or_latest_evidence_path(state, "return-handoff.json")
+    validation_path = current_or_latest_evidence_path(state, "validation.json")
+    validation_record = {}
+    if validation_path:
+        try:
+            validation_record = json.loads(read(validation_path))
+        except (OSError, json.JSONDecodeError):
+            validation_record = {}
     return_record = {}
     if machine_return:
         try:
             return_record = json.loads(read(machine_return))
         except json.JSONDecodeError:
             return_record = {}
+    worker_row = state.get("worker") or {}
     if returned and returned.is_file() and TRANSPORT.return_handoff_status(read(returned)) == "complete":
         add("implementation", "ready", "A complete structured implementation return is recorded.")
     elif stage == "S4B":
@@ -1050,6 +1226,18 @@ def project_intelligence(
         add("implementation", "ready", "Implementation reached verification.")
     else:
         add("implementation", "pending", "Implementation has not started.")
+
+    if validation_record.get("status") == "passed":
+        add("worker validation", "ready", "Ariadne independently reran the required checks and confirmed scope.")
+    elif validation_record.get("status") in ("failed", "blocked"):
+        outcome = worker_outcome(
+            validation_record["status"],
+            validation_record.get("failure_kind", "routine"),
+            int((state.get("worker") or {}).get("repair_attempts", 0)),
+        )
+        add("worker validation", "attention", outcome["next"])
+    elif stage == "S4B" and returned:
+        add("worker validation", "attention", "The implementation is reported; Ariadne independent validation is still pending.")
 
     review_recorded = (packet / "evidence" / "review-judgement.md").is_file()
     if review_recorded or ("**Reviewed independently:** yes" in qa_text):
@@ -1074,6 +1262,15 @@ def project_intelligence(
         human_need = "Confirm the selected provider's current availability and usable quota."
     elif stage == "S4B" and not returned:
         human_need = "Start the selected implementation provider with the prepared handoff."
+    elif stage == "S4B" and validation_record.get("status") == "failed":
+        human_need = worker_outcome(
+            "failed", validation_record.get("failure_kind", "routine"),
+            int((state.get("worker") or {}).get("repair_attempts", 0)),
+        )["next"]
+    elif stage == "S4B" and validation_record.get("status") == "blocked":
+        human_need = "Escalate the blocked worker result with the recorded conflict or safety finding."
+    elif stage == "S4B" and returned and validation_record.get("status") != "passed":
+        human_need = "Run Ariadne's independent worker validation before continuing to review."
     elif stage == "S5" and review_recorded:
         human_need = "Decide whether the combined build and review evidence is acceptable at G3."
     else:
@@ -1105,9 +1302,25 @@ def project_intelligence(
         "important_decisions": [dict(name=row[0], value=row[1] if len(row) > 1 else "") for row in fixed_decisions],
         "implementation": {
             "status": return_record.get("metadata", {}).get("status", "not returned"),
-            "provider": return_record.get("metadata", {}).get("provider", "not yet selected"),
+            "provider": worker_row.get(
+                "provider", return_record.get("metadata", {}).get("provider", "not yet selected")
+            ),
+            "model": worker_row.get(
+                "model", return_record.get("metadata", {}).get("model", "not yet selected")
+            ),
             "completed_work": completed_work,
             "known_issues": known_issues,
+            "files_changed": return_record.get("sections", {}).get("files-changed", "not recorded"),
+            "task_id": worker_row.get("task_id", "not assigned"),
+            "worker_role": worker_row.get("worker_role", "not assigned"),
+            "attempt": worker_row.get("attempt", 0),
+            "validation_attempts": worker_row.get("validation_attempts", 0),
+            "implementation_state": worker_row.get("implementation_state", "UNKNOWN"),
+            "validation_state": worker_row.get("validation_state", "UNKNOWN"),
+            "review_state": worker_row.get("review_state", "UNKNOWN"),
+            "acceptance_state": worker_row.get("acceptance_state", "UNKNOWN"),
+            "escalation_count": worker_row.get("escalation_count", 0),
+            "telemetry": str(run_root / TELEMETRY_NAME),
         },
         "provider_evidence": provider_evidence(run_root, state, return_record),
         "risks_and_evidence_gaps": risks,
@@ -1155,6 +1368,23 @@ def status(args: argparse.Namespace) -> int:
         print(f"Goal: {intelligence['goal']}")
         print(f"Where we left off: {intelligence['current_work']}.")
         print(f"Reasoner: {REASONERS.selected(state)['id']}.")
+        worker_info = intelligence["implementation"]
+        if worker_info["task_id"] != "not assigned":
+            print(
+                f"Worker: {worker_info['worker_role']} via {worker_info['provider']} "
+                f"(attempt {worker_info['attempt']})."
+            )
+            print(
+                "Worker state: "
+                f"{worker_info['implementation_state']} / "
+                f"{worker_info['validation_state']} / "
+                f"{worker_info['review_state']} / "
+                f"{worker_info['acceptance_state']}."
+            )
+            if worker_info["files_changed"] not in ("not recorded", "none"):
+                print(f"Files changed: {worker_info['files_changed']}")
+            if worker_info["completed_work"] not in ("not yet recorded", "none"):
+                print(f"Worker report: {worker_info['completed_work']}")
         if intelligence["approved_direction"] != "not yet approved":
             print(f"Approved direction: {intelligence['approved_direction']}")
         elif intelligence["proposed_direction"] != "none":
@@ -1194,7 +1424,7 @@ def reasoner_status(args: argparse.Namespace) -> int:
         "checked": capability,
         "workflow_capabilities": contract["providers"][identifier]["capabilities"],
         "reasoning_stages": contract["reasoning_stages"],
-        "implementation_boundary": "S4B remains controlled by HANDOFF.md and provider preflight",
+        "implementation_boundary": "S4B remains controlled by HANDOFF.md, the worker contract, independent validation, and provider preflight",
     }
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -1513,7 +1743,8 @@ def recommend_task_routing(task: dict) -> dict:
         or task.get("independent_review", False)
     )
 
-    provider = task.get("provider") or "Cursor"
+    explicit_provider = str(task.get("provider") or "").strip()
+    provider = explicit_provider or "implementation-worker"
     provider_available = task.get("provider_available", True)
     if isinstance(provider_available, str):
         provider_available = provider_available.lower() in ("yes", "true", "available")
@@ -1555,7 +1786,7 @@ def recommend_task_routing(task: dict) -> dict:
     elif task_type == "browser":
         cap_class = "R4"
         cap_desc = "R4 Browser / visual"
-        model = f"{provider} browser tools or Playwright" if provider == "Cursor" else "Playwright script (R6)"
+        model = f"{provider} browser tools or Playwright" if explicit_provider else "browser tools or Playwright"
         effort = "low"
         cap_why = "DOM verification and visual interaction QA belong in R4 browser tooling."
     elif task_type == "generative":
@@ -1567,21 +1798,21 @@ def recommend_task_routing(task: dict) -> dict:
     elif task_type == "reading":
         cap_class = "R3"
         cap_desc = "R3 Long-context reading"
-        model = f"{provider} (codebase indexing)"
+        model = f"{provider} (codebase indexing)" if explicit_provider else "codebase indexing tools"
         effort = "medium"
         cap_why = "Codebase indexing and cross-file search belong in R3; never paste full codebases into R1."
     elif task_type == "implementation":
         cap_class = "R2"
         cap_desc = "R2 Fast implementation"
         if not provider_available or not quota_sufficient:
-            model = task.get("fallback_provider") or "Claude Code"
+            model = task.get("fallback_provider") or "another configured implementation worker"
             effort = "medium"
             cap_why = f"Implementation spec is locked; primary provider {provider} constrained, falling back to {model} without weakening capability."
         else:
             if runtime_model:
-                model = f"{provider} ({runtime_model})"
-            elif task.get("interactive_iteration") and provider == "Cursor":
-                model = "Cursor (Grok implementation model)"
+                model = f"{provider} ({runtime_model})" if explicit_provider else str(runtime_model)
+            elif task.get("interactive_iteration") and explicit_provider:
+                model = f"{provider} (interactive implementation model)"
             else:
                 model = f"{provider} (default implementation model)"
             effort = "medium"
@@ -1638,8 +1869,8 @@ def recommend_task_routing(task: dict) -> dict:
         }
 
         if not provider_available or not quota_sufficient:
-            model = "Claude Code"
-            cap_why = "Primary reasoning provider is constrained; falling back to Claude Code without weakening R1 deep reasoning requirement."
+            model = task.get("fallback_provider") or "configured reasoning fallback"
+            cap_why = "Primary reasoning provider is constrained; using the configured reasoning fallback without weakening the R1 deep reasoning requirement."
         else:
             model = r1_matrix[(difficulty, stakes)]
             cap_why = f"{r1_reasons[model]} (difficulty {difficulty} / stakes {stakes})"
@@ -1781,6 +2012,10 @@ def handoff_routing(project: Path) -> dict[str, str]:
     missing = [name for name in required if not values.get(name) or "<" in values[name]]
     if missing:
         raise RuntimeError_("HANDOFF.md has incomplete implementation routing: " + ", ".join(missing))
+    contract = TRANSPORT.worker_contract(read(handoff))
+    if contract["worker_role"] not in TRANSPORT.WORKER_ROLES:
+        raise RuntimeError_("HANDOFF.md has no supported Worker role in its execution contract")
+    values["worker role"] = contract["worker_role"]
     return values
 
 
@@ -1805,7 +2040,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
     retained = provider.strip().lower() in ("retain in orchestrator", "orchestrator")
     if retained:
         decision = "not-required"
-        reason = "Implementation remains in the orchestrator; no external provider preflight is required."
+        reason = "Implementation remains in the orchestrator; no external worker preflight is required."
     else:
         decision, reason = preflight_decision(args.availability, args.quota, workload)
     recommendation = preflight_recommendation(
@@ -1825,6 +2060,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
         "reason": reason,
         "split": routing["split"],
         "routing_reason": routing["reason"],
+        "worker_role": routing["worker role"],
         "fallback": args.fallback or "not supplied",
         "recommendation": recommendation,
     }
@@ -1991,15 +2227,24 @@ def ingest_return(args: argparse.Namespace) -> int:
     problems = TRANSPORT.return_handoff_problems(text)
     if problems:
         raise RuntimeError_("Return handoff rejected: " + "; ".join(problems))
+    manifest = worker_manifest(packet)
     destination = packet / "evidence" / "return-handoff.md"
     machine_destination = packet / "evidence" / "return-handoff.json"
     if destination.exists() or machine_destination.exists():
         raise RuntimeError_(f"Refusing to overwrite existing return handoff: {destination}")
     destination.write_text(text, encoding="utf-8")
     metadata = {}
-    for field in ("Status", "Provider", "Model", "Effort", "Started", "Ended"):
+    for field in (
+        "Status", "Task ID", "Worker role", "Provider", "Model", "Effort",
+        "Started", "Ended", "Usage", "Cost",
+    ):
         match = re.search(rf"(?im)^\*\*{re.escape(field)}:\*\*\s*(.+?)\s*$", text)
         metadata[field.lower()] = match.group(1).strip() if match else "unrecorded"
+    expected_worker = manifest.get("worker", {})
+    if metadata.get("task id") != entry["id"]:
+        raise RuntimeError_("Return handoff Task ID does not match the current packet")
+    if metadata.get("worker role", "").lower() != str(expected_worker.get("role", "")).lower():
+        raise RuntimeError_("Return handoff Worker role does not match the current packet")
     return_status = metadata["status"].lower()
     sections = {
         slug(heading): safe_section(text, heading).strip()
@@ -2016,20 +2261,56 @@ def ingest_return(args: argparse.Namespace) -> int:
             "metadata": metadata,
             "sections": sections,
             "evidence_class": "structured provider report; not a transcript or independent review",
+            "implementation_state": "IMPLEMENTED" if return_status == "complete" else return_status.upper(),
         },
+    )
+    worker = worker_state(state)
+    worker.update({
+        "task_id": entry["id"],
+        "worker_role": expected_worker.get("role", "unknown"),
+        "provider": metadata.get("provider", "unknown"),
+        "model": metadata.get("model", "unknown"),
+        "started_at": metadata.get("started", "unknown"),
+        "ended_at": metadata.get("ended", "unknown"),
+        "implementation_state": "IMPLEMENTED" if return_status == "complete" else return_status.upper(),
+        "validation_state": "NOT_RUN",
+        "review_state": worker.get("review_state", "NOT_REVIEWED"),
+        "acceptance_state": worker.get("acceptance_state", "UNKNOWN"),
+        "lifecycle": "validation-pending" if return_status == "complete" else "repair-or-escalation",
+    })
+    append_worker_telemetry(
+        run_root,
+        "worker-run",
+        task_id=entry["id"],
+        worker_role=expected_worker.get("role", "unknown"),
+        provider=metadata.get("provider", "unknown"),
+        model=metadata.get("model", "unknown"),
+        start=metadata.get("started", "unknown"),
+        end=metadata.get("ended", "unknown"),
+        duration_seconds=iso_duration(metadata.get("started"), metadata.get("ended")),
+        attempt=expected_worker.get("attempt", 1),
+        validation_attempts=worker.get("validation_attempts", 0),
+        files_changed=sections.get("files-changed", "none"),
+        tests_result=sections.get("tests", "not recorded"),
+        escalation_count=worker.get("escalation_count", 0),
+        review_outcome="not reviewed",
+        accepted="unknown",
+        usage=metadata.get("usage", "unknown"),
+        cost=metadata.get("cost", "unknown"),
+        failure_reason="none" if return_status == "complete" else return_status,
     )
     state["updated_at"] = now()
     state["evidence_state"] = "structured external return; transcript remains separate"
     state["next"] = (
-        "Prepare independent review after verifying QA evidence."
+        "Run Ariadne's independent worker validation before preparing review."
         if return_status == "complete"
         else "Resume from the incomplete-work section or route the blocker."
     )
     ensure_intervention(
         state,
         "necessary",
-        "Start the selected external implementation provider.",
-        "The current provider boundary cannot execute without the human opening or authorising that external environment.",
+        "Start the selected external implementation worker.",
+        "The current worker boundary cannot execute without the human opening or authorising that external environment.",
         "external-provider-launch",
         status="resolved",
         evidence=str(destination),
@@ -2046,6 +2327,342 @@ def ingest_return(args: argparse.Namespace) -> int:
     )
     print(f"Done. The {return_status} implementation return is recorded and ready for continuity.")
     return 0
+
+
+def finish_worker_validation(
+    run_root: Path,
+    state: dict,
+    entry: dict,
+    packet: Path,
+    record: dict,
+) -> int:
+    destination = packet / "evidence" / "validation.json"
+    if destination.exists():
+        raise RuntimeError_(f"Refusing to overwrite existing worker validation: {destination}")
+    problems = TRANSPORT.worker_validation_problems(record, entry["id"])
+    if problems:
+        raise RuntimeError_("Worker validation record is malformed: " + "; ".join(problems))
+    write_json(destination, record)
+    manifest = worker_manifest(packet)
+    manifest_worker = manifest.get("worker", {})
+    row = worker_state(state)
+    if row.get("task_id") != entry["id"]:
+        row = update_worker_state(state, manifest)
+    try:
+        repair_attempts = int(manifest_worker.get("attempt", 1)) - 1
+        repair_limit = int(manifest_worker.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS))
+    except (TypeError, ValueError):
+        repair_attempts = 0
+        repair_limit = TRANSPORT.MAX_ROUTINE_REPAIRS
+    outcome = worker_outcome(
+        record["status"], record.get("failure_kind", "routine"), repair_attempts, repair_limit
+    )
+    escalation_increment = int(outcome["escalation_required"] and row.get("lifecycle") != "escalation-required")
+    row.update({
+        "implementation_state": outcome["implementation_state"],
+        "validation_state": outcome["validation_state"],
+        "lifecycle": outcome["lifecycle"],
+        "validation_attempts": int(row.get("validation_attempts", 0)) + 1,
+        "escalation_count": int(row.get("escalation_count", 0)) + escalation_increment,
+        "last_validation": str(destination),
+    })
+    state["updated_at"] = now()
+    state["evidence_state"] = f"independent worker validation: {outcome['validation_state']}"
+    state["next"] = outcome["next"]
+    write_json(run_root / STATE_NAME, state)
+    command_results = record.get("commands", [])
+    append_worker_telemetry(
+        run_root,
+        "worker-validation",
+        task_id=entry["id"],
+        worker_role=row.get("worker_role", manifest_worker.get("role", "unknown")),
+        provider=row.get("provider", manifest.get("provider", "unknown")),
+        model=row.get("model", "unknown"),
+        start=record.get("started", "unknown"),
+        end=record.get("ended", "unknown"),
+        duration_seconds=record.get("duration_seconds"),
+        attempt=manifest_worker.get("attempt", 1),
+        validation_attempts=row["validation_attempts"],
+        files_changed=record.get("changed_files", []),
+        tests_result={item.get("id", "unknown"): item.get("status", "not-run") for item in command_results},
+        escalation_count=row["escalation_count"],
+        review_outcome="not reviewed",
+        accepted="unknown",
+        failure_reason=record.get("failure_reason", "none"),
+    )
+    append_log(
+        run_root,
+        "Independent worker validation",
+        "A worker self-report is not acceptance; Ariadne reran the bounded checks and inspected repository scope.",
+        f"{outcome['validation_state']}: {record.get('failure_reason', 'none')}",
+        [str(destination)],
+        f"Scope={record.get('scope', {}).get('status', 'unknown')}; commands={len(command_results)}; provider usage and cost remain unknown for this local validation.",
+        state["next"],
+    )
+    print(f"Ariadne worker validation: {outcome['validation_state']}")
+    print(f"Scope: {record.get('scope', {}).get('status', 'unknown')}")
+    scope_value = record.get("scope", {})
+    if scope_value.get("status") != "within-contract":
+        changed_text = ", ".join(scope_value.get("changed", [])) or "none"
+        outside_text = ", ".join(scope_value.get("outside", [])) or "none"
+        print("Changed paths: " + changed_text)
+        print("Outside scope: " + outside_text)
+    print(f"Checks recorded: {len(command_results)}")
+    print(f"Next: {state['next']}")
+    return 0 if record["status"] == "passed" else 2
+
+
+def validate_worker(args: argparse.Namespace) -> int:
+    """Independently validate one S4B result and contain failures before S5."""
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    if entry["stage"] != "S4B":
+        raise RuntimeError_("Independent worker validation belongs to the current S4B boundary")
+    manifest = worker_manifest(packet)
+    validation_path = packet / "evidence" / "validation.json"
+    if validation_path.exists():
+        raise RuntimeError_(f"Worker validation is already recorded: {validation_path}")
+    return_path = packet / "evidence" / "return-handoff.md"
+    if not return_path.is_file():
+        target = structured_return_target(packet)
+        if target is not None and target.is_file():
+            ingest_return(argparse.Namespace(run_root=str(run_root), project=None, input=str(target)))
+            state = load_state(run_root)
+            entry, packet = current_packet(state, allow_project_drift=True)
+            manifest = worker_manifest(packet)
+            return_path = packet / "evidence" / "return-handoff.md"
+    if not return_path.is_file():
+        raise RuntimeError_("Cannot validate S4B before the worker return handoff is recorded")
+
+    started = now()
+    project = Path(state["project"])
+    handoff_path = project / "HANDOFF.md"
+    handoff_text = read(handoff_path) if handoff_path.is_file() else ""
+    commands = TRANSPORT.validation_commands(handoff_text)
+    worker = manifest.get("worker", {})
+    baseline = manifest.get("project_baseline")
+    current = TRANSPORT.project_git_snapshot(project)
+    scope_rows = TRANSPORT.worker_contract(handoff_text).get("scope_rows", [])
+    patterns = [row[0].strip("`") for row in scope_rows if row]
+    patterns.append(f".ariadne/returns/{entry['id']}.md")
+
+    base_record = {
+        "schema_version": TRANSPORT.WORKER_VALIDATION_SCHEMA,
+        "kind": "worker-validation",
+        "packet_id": entry["id"],
+        "stage": "S4B",
+        "independent": True,
+        "executor": "Ariadne local validator",
+        "started": started,
+        "ended": now(),
+        "duration_seconds": 0.0,
+        "scope": {"status": "not-run", "changed": [], "outside": [], "sensitive": [], "immutable": [], "head_changed": False},
+        "changed_files": [],
+        "commands": [],
+        "usage": "unknown",
+        "cost": "unknown",
+    }
+
+    if TRANSPORT.return_handoff_status(read(return_path)) != "complete":
+        base_record.update({
+            "status": "blocked",
+            "failure_kind": "worker-blocked",
+            "failure_reason": "The worker returned partial or blocked evidence; repair or escalate before validation.",
+        })
+        base_record["ended"] = now()
+        base_record["duration_seconds"] = iso_duration(base_record["started"], base_record["ended"]) or 0.0
+        return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    contract_problems = TRANSPORT.worker_contract_problems(handoff_text)
+    if contract_problems:
+        base_record.update({
+            "status": "blocked",
+            "failure_kind": "contract",
+            "failure_reason": "; ".join(contract_problems),
+        })
+        base_record["ended"] = now()
+        base_record["duration_seconds"] = iso_duration(base_record["started"], base_record["ended"]) or 0.0
+        return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    if not isinstance(baseline, dict):
+        base_record.update({
+            "status": "blocked",
+            "failure_kind": "repository-conflict",
+            "failure_reason": "The packet has no repository baseline to contain worker changes.",
+        })
+        base_record["ended"] = now()
+        base_record["duration_seconds"] = iso_duration(base_record["started"], base_record["ended"]) or 0.0
+        return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    scope = TRANSPORT.worker_scope_check(baseline, current, patterns, project)
+    base_record["scope"] = scope
+    base_record["changed_files"] = scope.get("changed", [])
+    contract_hash = worker.get("contract_sha256")
+    if contract_hash and sha256(handoff_path) != contract_hash:
+        scope = dict(scope)
+        scope["status"] = "repository-conflict"
+        scope["immutable"] = sorted(set(scope.get("immutable", [])) | {"HANDOFF.md"})
+        base_record["scope"] = scope
+        base_record.update({
+            "status": "blocked",
+            "failure_kind": "repository-conflict",
+            "failure_reason": "HANDOFF.md changed after packet preparation; the worker contract is immutable for this attempt.",
+        })
+        base_record["ended"] = now()
+        base_record["duration_seconds"] = iso_duration(base_record["started"], base_record["ended"]) or 0.0
+        return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    immutable_sources = {"HANDOFF.md", "DESIGN.md"}
+    for source in manifest.get("sources", []):
+        source_path = Path(source.get("path", ""))
+        if source_path.name.upper() in immutable_sources and source_path.is_file():
+            if sha256(source_path) != source.get("source_sha256"):
+                scope = dict(scope)
+                scope["status"] = "repository-conflict"
+                scope["immutable"] = sorted(set(scope.get("immutable", [])) | {source_path.name})
+                base_record["scope"] = scope
+                base_record.update({
+                    "status": "blocked",
+                    "failure_kind": "repository-conflict",
+                    "failure_reason": f"{source_path.name} changed after packet preparation.",
+                })
+                base_record["ended"] = now()
+                base_record["duration_seconds"] = iso_duration(base_record["started"], base_record["ended"]) or 0.0
+                return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    if scope["status"] != "within-contract":
+        failure_kind = scope["status"]
+        base_record.update({
+            "status": "blocked",
+            "failure_kind": failure_kind,
+            "failure_reason": (
+                f"Worker changes are {scope['status']}: "
+                + ", ".join(scope.get("outside") or scope.get("sensitive") or scope.get("immutable") or ["repository state changed"])
+            ),
+        })
+        base_record["ended"] = now()
+        base_record["duration_seconds"] = iso_duration(base_record["started"], base_record["ended"]) or 0.0
+        return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    reported_scope = re.search(r"(?im)^\*\*Scope status:\*\*\s*(.+?)\s*$", read(return_path))
+    reported_scope = reported_scope.group(1).strip().lower() if reported_scope else "not checked"
+    if reported_scope in ("out-of-scope", "dangerous-action", "repository-conflict"):
+        scope = dict(scope)
+        scope["status"] = reported_scope
+        scope["reported_by_worker"] = True
+        base_record["scope"] = scope
+        base_record.update({
+            "status": "blocked",
+            "failure_kind": reported_scope,
+            "failure_reason": f"Worker reported {reported_scope} in the return handoff; inspect and escalate instead of guessing past the boundary.",
+        })
+        base_record["ended"] = now()
+        base_record["duration_seconds"] = iso_duration(base_record["started"], base_record["ended"]) or 0.0
+        return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    timeout = min(max(int(getattr(args, "timeout", 120)), 1), 600)
+    command_results = []
+    required_failures = []
+    optional_failures = []
+    for command in commands:
+        result = {
+            "id": command["id"],
+            "check": command["check"],
+            "command": command["command"],
+            "required": command["required"],
+            "expected": command["expected"],
+            "status": "not-run",
+            "returncode": None,
+            "duration_seconds": None,
+            "stdout_sha256": None,
+            "stderr_sha256": None,
+            "error": command.get("error"),
+        }
+        if command.get("error"):
+            result["status"] = "failed"
+            (required_failures if command["required"] else optional_failures).append(command["id"])
+            command_results.append(result)
+            continue
+        command_started = time.monotonic()
+        try:
+            completed = subprocess.run(
+                command["argv"], cwd=project, capture_output=True, text=True,
+                timeout=timeout, shell=False,
+            )
+            result.update({
+                "status": "passed" if completed.returncode == 0 else "failed",
+                "returncode": completed.returncode,
+                "duration_seconds": round(time.monotonic() - command_started, 3),
+                "stdout_sha256": hashlib.sha256((completed.stdout or "").encode("utf-8")).hexdigest(),
+                "stderr_sha256": hashlib.sha256((completed.stderr or "").encode("utf-8")).hexdigest(),
+            })
+        except subprocess.TimeoutExpired as exc:
+            result.update({
+                "status": "failed",
+                "duration_seconds": round(time.monotonic() - command_started, 3),
+                "stdout_sha256": hashlib.sha256((str(exc.stdout or "")).encode("utf-8")).hexdigest(),
+                "stderr_sha256": hashlib.sha256((str(exc.stderr or "")).encode("utf-8")).hexdigest(),
+                "error": f"timed out after {timeout}s",
+            })
+        except OSError as exc:
+            result.update({
+                "status": "failed",
+                "duration_seconds": round(time.monotonic() - command_started, 3),
+                "error": f"could not run validation command: {exc}",
+            })
+        if result["status"] == "failed":
+            (required_failures if command["required"] else optional_failures).append(command["id"])
+        command_results.append(result)
+
+    post_validation_scope = TRANSPORT.worker_scope_check(
+        baseline,
+        TRANSPORT.project_git_snapshot(project),
+        patterns,
+        project,
+    )
+    base_record["scope"] = post_validation_scope
+    base_record["changed_files"] = post_validation_scope.get("changed", [])
+    if post_validation_scope["status"] != "within-contract":
+        scope_paths = (
+            post_validation_scope.get("outside")
+            or post_validation_scope.get("sensitive")
+            or post_validation_scope.get("immutable")
+            or ["repository state changed during validation"]
+        )
+        validation_ended = now()
+        base_record.update({
+            "status": "blocked",
+            "failure_kind": post_validation_scope["status"],
+            "failure_reason": (
+                "Validation commands changed repository scope: "
+                + ", ".join(scope_paths)
+            ),
+            "commands": command_results,
+            "ended": validation_ended,
+            "duration_seconds": iso_duration(base_record["started"], validation_ended) or 0.0,
+            "optional_failures": optional_failures,
+        })
+        return finish_worker_validation(run_root, state, entry, packet, base_record)
+
+    ended = now()
+    failure_reason = "none"
+    if required_failures:
+        failure_reason = "Required validation failed: " + ", ".join(required_failures)
+        if optional_failures:
+            failure_reason += "; optional failures: " + ", ".join(optional_failures)
+    elif optional_failures:
+        failure_reason = "Required validation passed; optional checks failed: " + ", ".join(optional_failures)
+    base_record.update({
+        "status": "failed" if required_failures else "passed",
+        "failure_kind": "routine" if required_failures else "none",
+        "failure_reason": failure_reason,
+        "commands": command_results,
+        "ended": ended,
+        "duration_seconds": iso_duration(base_record["started"], ended) or 0.0,
+        "optional_failures": optional_failures,
+    })
+    return finish_worker_validation(run_root, state, entry, packet, base_record)
 
 
 def review_judgement_problems(text: str) -> list[str]:
@@ -2116,6 +2733,31 @@ def ingest_review(args: argparse.Namespace) -> int:
     shutil.copyfile(source, raw_destination)
     block_destination.write_text(block, encoding="utf-8")
     qa_path.write_text(updated, encoding="utf-8")
+    worker = worker_state(state)
+    worker["review_state"] = "REVIEWED"
+    worker["review_outcome"] = re.search(
+        r"(?im)^\*\*Recommendation:\*\*\s*(.+?)\s*$", block
+    ).group(1).strip() if re.search(
+        r"(?im)^\*\*Recommendation:\*\*\s*(.+?)\s*$", block
+    ) else "unknown"
+    worker["lifecycle"] = "reviewed"
+    append_worker_telemetry(
+        run_root,
+        "worker-review",
+        task_id=worker.get("task_id", "unknown"),
+        worker_role=worker.get("worker_role", "unknown"),
+        provider=worker.get("provider", "unknown"),
+        model=worker.get("model", "unknown"),
+        attempt=worker.get("attempt", 0),
+        validation_attempts=worker.get("validation_attempts", 0),
+        files_changed=[],
+        tests_result="not applicable",
+        escalation_count=worker.get("escalation_count", 0),
+        review_outcome=worker["review_outcome"],
+        accepted="unknown",
+        usage="unknown",
+        cost="unknown",
+    )
     state["updated_at"] = now()
     state["evidence_state"] = "independent review response and judgement recorded"
     state["next"] = "Present mechanical and independent evidence for the human G3 decision."
@@ -2147,6 +2789,66 @@ def ingest_review(args: argparse.Namespace) -> int:
     )
     print("Done. Independent review evidence is recorded without changing its judgement.")
     print("Next: present the combined evidence for the human G3 decision.")
+    return 0
+
+
+def record_acceptance(args: argparse.Namespace) -> int:
+    """Record the human acceptance outcome without silently granting a gate."""
+    run_root = resolve_run_root(args)
+    state = load_state(run_root)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    if entry["stage"] != "S5":
+        raise RuntimeError_("Acceptance belongs to the current independent-review boundary")
+    review_path = packet / "evidence" / "review-judgement.md"
+    if not review_path.is_file():
+        raise RuntimeError_("Acceptance requires recorded independent review evidence")
+    outcome = args.outcome.lower()
+    if outcome not in ("accepted", "rejected"):
+        raise RuntimeError_("Acceptance outcome must be accepted or rejected")
+    project = Path(state["project"])
+    gate = project_runtime(project).get("gate", "")
+    if outcome == "accepted" and gate != "G3":
+        raise RuntimeError_("Accepted requires the human G3 decision to already be recorded in AGENTS.md")
+    worker = worker_state(state)
+    worker["acceptance_state"] = "ACCEPTED" if outcome == "accepted" else "REJECTED"
+    worker["lifecycle"] = "accepted" if outcome == "accepted" else "rejected"
+    worker["acceptance_evidence"] = str(review_path)
+    state["updated_at"] = now()
+    state["next"] = (
+        "Continue with the human-authorised release workflow."
+        if outcome == "accepted"
+        else "Record the rejection reason and prepare a bounded corrective implementation loop."
+    )
+    append_worker_telemetry(
+        run_root,
+        "worker-acceptance",
+        task_id=worker.get("task_id", "unknown"),
+        worker_role=worker.get("worker_role", "unknown"),
+        provider=worker.get("provider", "unknown"),
+        model=worker.get("model", "unknown"),
+        attempt=worker.get("attempt", 0),
+        validation_attempts=worker.get("validation_attempts", 0),
+        files_changed=[],
+        tests_result="not applicable",
+        escalation_count=worker.get("escalation_count", 0),
+        review_outcome=worker.get("review_outcome", "unknown"),
+        accepted=outcome,
+        usage="unknown",
+        cost="unknown",
+        failure_reason="none" if outcome == "accepted" else "human rejected the reviewed result",
+    )
+    write_json(run_root / STATE_NAME, state)
+    append_log(
+        run_root,
+        "Worker result acceptance recorded",
+        "Acceptance is a separate human decision after implementation, validation, and review.",
+        f"{outcome}: worker lifecycle is {worker['lifecycle']}.",
+        [str(review_path), str(run_root / TELEMETRY_NAME)],
+        "No gate was granted or inferred by this command.",
+        state["next"],
+    )
+    print(f"Worker result: {worker['acceptance_state']}")
+    print(f"Next: {state['next']}")
     return 0
 
 
@@ -2535,7 +3237,10 @@ def stage_has_evidence(packet: Path) -> bool:
     evidence = packet / "evidence"
     return any(
         (evidence / name).is_file()
-        for name in ("transcript.md", "stage-result.json", "return-handoff.md", "review-judgement.md")
+        for name in (
+            "transcript.md", "stage-result.json", "return-handoff.md",
+            "validation.json", "review-judgement.md",
+        )
     )
 
 
@@ -2565,7 +3270,7 @@ def advance(args: argparse.Namespace) -> int:
     stage = entry["stage"]
     project = Path(state["project"])
 
-    if stage == "S4B" and not stage_has_evidence(packet):
+    if stage == "S4B" and not (packet / "evidence" / "return-handoff.md").is_file():
         target = structured_return_target(packet)
         if target is not None and target.is_file():
             ingest_return(
@@ -2577,6 +3282,55 @@ def advance(args: argparse.Namespace) -> int:
             )
             state = load_state(run_root)
             entry, packet = current_packet(state, allow_project_drift=True)
+
+    if stage == "S4B":
+        returned = packet / "evidence" / "return-handoff.md"
+        validation = packet / "evidence" / "validation.json"
+        if returned.is_file() and TRANSPORT.return_handoff_status(read(returned)) == "complete" and not validation.is_file():
+            result = validate_worker(argparse.Namespace(run_root=str(run_root), project=None, timeout=120))
+            if result != 0:
+                state = load_state(run_root)
+                try:
+                    validation_value = json.loads(read(packet / "evidence" / "validation.json"))
+                except (OSError, json.JSONDecodeError):
+                    return result
+                outcome = worker_outcome(
+                    validation_value.get("status", "blocked"),
+                    validation_value.get("failure_kind", "routine"),
+                    int((state.get("worker") or {}).get("repair_attempts", 0)),
+                )
+                if outcome["retryable"]:
+                    return prepare_next(argparse.Namespace(
+                        run_root=str(run_root), project=None, stage=None, retry=True,
+                        provider=None, worker_role=None, escalate=False,
+                        references_file=None, references_text=None, restart_context=None,
+                        motion=None, assets=None, target=None, lenses=None,
+                        synthetic_validation=getattr(args, "synthetic_validation", False),
+                    ))
+                return result
+            state = load_state(run_root)
+            entry, packet = current_packet(state, allow_project_drift=True)
+        if validation.is_file():
+            try:
+                validation_value = json.loads(read(validation))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError_(f"Worker validation evidence is malformed: {exc}") from exc
+            if validation_value.get("status") != "passed":
+                outcome = worker_outcome(
+                    validation_value.get("status", "blocked"),
+                    validation_value.get("failure_kind", "routine"),
+                    int((state.get("worker") or {}).get("repair_attempts", 0)),
+                )
+                if outcome["retryable"]:
+                    return prepare_next(argparse.Namespace(
+                        run_root=str(run_root), project=None, stage=None, retry=True,
+                        provider=None, worker_role=None, escalate=False,
+                        references_file=None, references_text=None, restart_context=None,
+                        motion=None, assets=None, target=None, lenses=None,
+                        synthetic_validation=getattr(args, "synthetic_validation", False),
+                    ))
+                print("Paused. " + outcome["next"])
+                return 2
 
     if not stage_has_evidence(packet):
         expected = EXPECTED_STAGE_OUTPUTS.get(stage)
@@ -2689,6 +3443,21 @@ def advance(args: argparse.Namespace) -> int:
     if stage == "S4B":
         returned = packet / "evidence" / "return-handoff.md"
         retry = returned.is_file() and TRANSPORT.return_handoff_status(read(returned)) != "complete"
+        if retry and TRANSPORT.return_handoff_status(read(returned)) == "blocked":
+            state["next"] = "Worker returned BLOCKED; inspect the recorded conflict or safety finding and use --escalate for a stronger worker."
+            state["updated_at"] = now()
+            write_json(run_root / STATE_NAME, state)
+            append_log(
+                run_root,
+                "Blocked worker return held",
+                "A blocked worker report is a boundary signal, not a routine repair request.",
+                "No automatic retry was created.",
+                [str(returned)],
+                "Use an explicit stronger worker or senior reasoning escalation after inspecting the return.",
+                state["next"],
+            )
+            print("Paused. " + state["next"])
+            return 2
 
     return prepare_next(
         argparse.Namespace(
@@ -2697,6 +3466,8 @@ def advance(args: argparse.Namespace) -> int:
             stage=None,
             retry=retry,
             provider=args.transport_provider,
+            worker_role=None,
+            escalate=False,
             references_file=args.references_file,
             motion=args.motion,
             assets=args.assets,
@@ -2745,7 +3516,19 @@ def infer_next_stage(state: dict) -> tuple[str | None, str]:
             return None, "Implementation returned partial or blocked; resume it before independent review."
         if not (project / "QA.md").is_file():
             return None, "Implementation or mechanical QA is incomplete."
-        return "S5", "Mechanical QA exists; independent review can be isolated."
+        validation_path = _packet / "evidence" / "validation.json"
+        if not validation_path.is_file():
+            return None, "Ariadne's independent worker validation is missing; do not trust the worker self-report."
+        try:
+            validation = json.loads(read(validation_path))
+        except (OSError, json.JSONDecodeError) as exc:
+            return None, f"Independent worker validation is malformed: {exc}"
+        problems = TRANSPORT.worker_validation_problems(validation, entry["id"])
+        if problems:
+            return None, "Independent worker validation is malformed: " + "; ".join(problems)
+        if validation.get("status") != "passed":
+            return None, "Independent worker validation did not pass; repair or escalate before review."
+        return "S5", "Mechanical QA exists and Ariadne independently validated the worker result; review can be isolated."
     if stage == "S5":
         return None, "The human must decide G3, then explicitly authorise any G4 ship action."
     if stage == "S6":
@@ -2757,6 +3540,13 @@ def prepare_next(args: argparse.Namespace) -> int:
     run_root = resolve_run_root(args)
     state = load_state(run_root)
     entry, parent = current_packet(state, allow_project_drift=True)
+    escalate = bool(getattr(args, "escalate", False))
+    if escalate:
+        if entry["stage"] != "S4B":
+            raise RuntimeError_("Escalation is currently defined for the implementation worker boundary only")
+        if args.stage and args.stage != entry["stage"]:
+            raise RuntimeError_("Worker escalation must remain at the current S4B boundary")
+        args.retry = True
     stage, reason = infer_next_stage(state)
     if args.retry:
         requested = args.stage or entry["stage"]
@@ -2775,6 +3565,58 @@ def prepare_next(args: argparse.Namespace) -> int:
         append_log(run_root, "Continuation paused", reason, "No packet created.", next_action=reason)
         print(f"Paused: {reason}")
         return 2
+    worker_role = getattr(args, "worker_role", None)
+    if stage == "S4B":
+        current_manifest = json.loads(read(parent / TRANSPORT.MANIFEST_NAME))
+        current_worker = current_manifest.get("worker") or {}
+        handoff = Path(state["project"]) / "HANDOFF.md"
+        handoff_contract = TRANSPORT.worker_contract(read(handoff)) if handoff.is_file() else {}
+        current_role = current_worker.get("role") or handoff_contract.get("worker_role")
+        if args.retry and entry["stage"] == "S4B" and not escalate:
+            prior_return_path = parent / "evidence" / "return-handoff.md"
+            if prior_return_path.is_file() and TRANSPORT.return_handoff_status(read(prior_return_path)) == "blocked":
+                raise RuntimeError_(
+                    "Routine worker retry is not permitted after a blocked return. "
+                    "Inspect the recorded conflict and use --escalate with a stronger worker role."
+                )
+            current_attempt = max(1, int(current_worker.get("attempt", 1)))
+            repair_limit = int(current_worker.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS))
+            if current_attempt - 1 >= repair_limit:
+                raise RuntimeError_(
+                    "Routine worker retry is not permitted: the bounded repair budget is exhausted. "
+                    "Use --escalate with a stronger worker role."
+                )
+            prior_validation_path = parent / "evidence" / "validation.json"
+            if prior_validation_path.is_file():
+                prior_validation = json.loads(read(prior_validation_path))
+                prior_outcome = worker_outcome(
+                    prior_validation.get("status", "blocked"),
+                    prior_validation.get("failure_kind", "routine"),
+                    max(0, int(current_worker.get("attempt", 1)) - 1),
+                    int(current_worker.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS)),
+                )
+                if not prior_outcome["retryable"]:
+                    raise RuntimeError_(
+                        "Routine worker retry is not permitted: " + prior_outcome["next"]
+                        + " Use --escalate with a stronger worker role."
+                    )
+        if escalate:
+            if not current_role:
+                raise RuntimeError_("Cannot escalate without a recorded current worker role")
+            if not worker_role:
+                next_roles = [
+                    role for role, index in WORKER_ROLE_ORDER.items()
+                    if index > WORKER_ROLE_ORDER.get(current_role, -1)
+                ]
+                worker_role = next_roles[0] if next_roles else None
+            if worker_role not in TRANSPORT.WORKER_ROLES:
+                raise RuntimeError_("Escalation requires a stronger supported worker role")
+            if WORKER_ROLE_ORDER[worker_role] <= WORKER_ROLE_ORDER.get(current_role, -1):
+                raise RuntimeError_(f"Escalation role {worker_role} is not stronger than {current_role}")
+        else:
+            worker_role = worker_role or current_role or "bulk"
+        if worker_role not in TRANSPORT.WORKER_ROLES:
+            raise RuntimeError_(f"Unsupported worker role: {worker_role}")
     if entry["stage"] == "S3" and stage == "S4A":
         ensure_intervention(
             state,
@@ -2826,6 +3668,7 @@ def prepare_next(args: argparse.Namespace) -> int:
         parent=str(parent),
         retry=args.retry,
         provider=packet_provider,
+        worker_role=worker_role,
         references_file=args.references_file,
         references_text=getattr(args, "references_text", None),
         restart_context=getattr(args, "restart_context", None),
@@ -2837,12 +3680,37 @@ def prepare_next(args: argparse.Namespace) -> int:
         request=state.get("request"),
     )
     TRANSPORT.prepare(transport_namespace(**kwargs))
+    prepared_manifest = json.loads(read(output / TRANSPORT.MANIFEST_NAME))
     state["packets"].append({
         "id": packet_id,
         "stage": stage,
         "path": str(output),
         "reasoner_output_baseline": reasoner_output_baseline(Path(state["project"]), stage),
     })
+    if stage == "S4B":
+        worker = update_worker_state(
+            state,
+            prepared_manifest,
+            state.get("provider_preflight"),
+            escalation_increment=1 if escalate else 0,
+        )
+        append_worker_telemetry(
+            run_root,
+            "worker-prepared",
+            task_id=worker.get("task_id", packet_id),
+            worker_role=worker.get("worker_role", worker_role),
+            provider=worker.get("provider", packet_provider or "unknown"),
+            model=worker.get("model", "unknown"),
+            attempt=worker.get("attempt", 1),
+            validation_attempts=worker.get("validation_attempts", 0),
+            files_changed=[],
+            tests_result="not run",
+            escalation_count=worker.get("escalation_count", 0),
+            review_outcome="not reviewed",
+            accepted="unknown",
+            usage="unknown",
+            cost="unknown",
+        )
     state["updated_at"] = now()
     state["evidence_state"] = "verified-transport; stage not yet observed"
     state["next"] = f"Continue with {FRIENDLY_STAGES.get(stage, stage)}."
@@ -2850,8 +3718,8 @@ def prepare_next(args: argparse.Namespace) -> int:
         ensure_intervention(
             state,
             "necessary",
-            "Start the selected external implementation provider.",
-            "The current provider boundary cannot execute without the human opening or authorising that external environment.",
+            "Start the selected external implementation worker.",
+            "The current worker boundary cannot execute without the human opening or authorising that external environment.",
             "external-provider-launch",
         )
     elif stage == "S5":
@@ -2874,7 +3742,7 @@ def prepare_next(args: argparse.Namespace) -> int:
     )
     print(f"Done. I prepared everything needed for {FRIENDLY_STAGES.get(stage, stage)}.")
     if stage == "S4B":
-        print("From you: start the selected implementation provider when you are ready.")
+        print(f"Worker task: {worker_role}; start the selected implementation worker when you are ready.")
     elif stage == "S5":
         print("From you: open one fresh independent review session with the prepared context.")
     else:
@@ -2885,14 +3753,8 @@ def prepare_next(args: argparse.Namespace) -> int:
 def transport_provider(preflight: dict | None) -> str | None:
     if not preflight:
         return None
-    value = str(preflight.get("provider", "")).lower()
-    if "cursor" in value:
-        return "cursor"
-    if "claude code" in value or "claude-code" in value:
-        return "claude-code"
-    if "codex" in value or "orchestrator" in value:
-        return "codex"
-    return "other" if value else None
+    value = str(preflight.get("provider", "")).strip()
+    return value or None
 
 
 def operations_log_problems(text: str) -> list[str]:
@@ -2944,7 +3806,8 @@ def skill_contract_problems(
         "scripts/ariadne.py", "discover --project", "provider preflight",
         "handoff-readiness", "ariadne.py advance", "record-note",
         "restart-direction",
-        "ingest-return", "ingest-review", "same-stage retry", "--adopt-existing",
+        "ingest-return", "validate-worker", "ingest-review", "record-acceptance",
+        "worker-telemetry.jsonl", "same-stage retry", "--adopt-existing",
         "creative-plan", "record-creative", "creative-check",
         "operations-plan", "record-operations", "operations-check",
         "skill-activation",
@@ -2996,6 +3859,10 @@ def repository_contract_problems() -> list[str]:
         "## Content readiness",
         "## Implementer discretion",
         "## Implementation routing",
+        "## Worker execution contract",
+        "## Validation commands",
+        "Routine repair limit",
+        "Permitted files and systems",
         "## Return handoff",
         "provider preflight",
     ):
@@ -3009,6 +3876,9 @@ def repository_contract_problems() -> list[str]:
         "templates/RETURN-HANDOFF.md",
         "BEGIN/END markers",
         "provider availability",
+        "bounded contract",
+        "routine repair",
+        "independent validation",
     ):
         if token not in build:
             problems.append(f"S4 prompt missing runtime contract: {token}")
@@ -3044,12 +3914,15 @@ def self_test_workspace():
                 raise last_error
 
 
-def filled_return(status_value: str = "complete") -> str:
+def filled_return(status_value: str = "complete", task_id: str = "fixture-S4B") -> str:
     sections = "\n\n".join(f"## {heading}\n\nnone" for heading in TRANSPORT.RETURN_HANDOFF_HEADINGS)
     return (
         "# IMPLEMENTATION RETURN HANDOFF: Fixture\n\n"
-        f"**Status:** {status_value}\n**Provider:** fixture\n**Model:** fixture-model\n"
-        "**Effort:** medium\n**Started:** 2026-08-23\n**Ended:** 2026-08-23\n\n"
+        f"**Status:** {status_value}\n**Task ID:** {task_id}\n**Worker role:** bulk\n"
+        "**Provider:** fixture\n**Model:** fixture-model\n"
+        "**Effort:** medium\n**Started:** 2026-08-23\n**Ended:** 2026-08-23\n"
+        "**Usage:** unknown\n**Cost:** unknown\n"
+        "**Scope status:** within-contract\n**Unexpected actions or conflicts:** none\n\n"
         + sections
         + "\n"
     )
@@ -3176,6 +4049,44 @@ A small typographic interaction for testing the Ariadne runtime.
 | Split | none |
 | Reason | Normal visual implementation. |
 
+## Worker execution contract
+
+**Worker role:** bulk
+
+**Objective:** Test a typographic interaction.
+
+**Relevant context:** HANDOFF.md, locked DESIGN.md, project AGENTS.md, permitted files, and directly relevant repository files.
+
+**Invariants:** Preserve the approved thesis, signature interaction, and acceptance criterion.
+
+**Permitted actions:** Read relevant repository files; edit permitted files; create required files; run tests and validation; inspect git status and diff; repair routine validation failures.
+
+**Prohibited actions:** git push, force operations, git reset or git clean, deleting significant data, reading or writing secrets or .env files, deployment or production changes, destructive migrations, unapproved dependencies, unrelated systems.
+
+**Stop conditions:** Missing context, packet/repository conflict, invariant risk, out-of-scope or dangerous action, or exhausted repair budget.
+
+**Escalation conditions:** Repeated routine failure, architecture conflict or uncertainty, high-risk change, or invariant conflict.
+
+**Lifecycle:** baseline -> implementation -> validation -> routine repair -> validation -> result/checkpoint
+
+**Routine repair limit:** 2
+
+### Permitted files and systems
+
+| Path / glob | Actions | Reason |
+|---|---|---|
+| src/** | read / edit / create | implementation fixture |
+| QA.md | read / edit / create | mechanical evidence |
+| AGENTS.md | read / edit | stage state |
+| .ariadne/creative-operations.json | read / edit | implementation and visual evidence |
+| status-observation.txt | read / create | fixture observation evidence |
+
+## Validation commands
+
+| Check | Command | Required | Expected |
+|---|---|---|---|
+| diff hygiene | `git diff --check` | yes | exit code 0 |
+
 ## Motion requirements
 
 | Element | Purpose | Trigger | Duration | Easing | Reduced-motion state |
@@ -3266,15 +4177,69 @@ def self_test() -> int:
     )
     case(
         "Claude Code retains an explicit implementation transport identity",
-        transport_provider({"provider": "Claude Code"}) == "claude-code",
+        transport_provider({"provider": "Claude Code"}) == "Claude Code",
     )
     case(
         "a model name is not relabelled as the Cursor provider",
-        transport_provider({"provider": "Grok"}) == "other",
+        transport_provider({"provider": "Grok"}) == "Grok",
     )
     case("complete return handoff passes (positive control)", not TRANSPORT.return_handoff_problems(filled_return()))
     case("missing return section fails", bool(TRANSPORT.return_handoff_problems(filled_return().replace("## Known issues", "## Notes"))))
     case("invalid return status fails", bool(TRANSPORT.return_handoff_problems(filled_return("done"))))
+    case(
+        "worker lifecycle A: routine implementation can validate immediately",
+        worker_outcome("passed")["validation_state"] == "VALIDATED"
+        and not worker_outcome("passed")["escalation_required"],
+    )
+    first_failure = worker_outcome("failed", "routine", 0, 2)
+    repaired = worker_outcome("passed", "none", 1, 2)
+    case(
+        "worker lifecycle B: one routine validation failure has a bounded repair path",
+        first_failure["retryable"] and first_failure["lifecycle"] == "routine-repair"
+        and repaired["validation_state"] == "VALIDATED",
+    )
+    exhausted = worker_outcome("failed", "routine", 2, 2)
+    case(
+        "worker lifecycle C: repeated routine failure stops and escalates",
+        not exhausted["retryable"] and exhausted["escalation_required"]
+        and exhausted["lifecycle"] == "escalation-required",
+    )
+    conflict = worker_outcome("blocked", "repository-conflict", 0, 2)
+    case(
+        "worker lifecycle D: repository conflict escalates without speculative repair",
+        conflict["escalation_required"] and not conflict["retryable"],
+    )
+    blocked_routine = worker_outcome("blocked", "routine", 0, 2)
+    case(
+        "worker lifecycle D2: any blocked result cannot enter routine repair",
+        blocked_routine["escalation_required"] and not blocked_routine["retryable"],
+    )
+    dangerous_scope = TRANSPORT.worker_scope_check(
+        {"state": "clean", "head": "fixture", "entries": []},
+        {"state": "dirty", "head": "fixture", "entries": [{"path": ".env", "status": "??", "exists": True, "sha256": "x"}]},
+        ["src/**"],
+    )
+    case(
+        "worker lifecycle E: sensitive or out-of-scope changes are blocked",
+        dangerous_scope["status"] == "dangerous-action",
+    )
+    validation_unknowns = {
+        "schema_version": TRANSPORT.WORKER_VALIDATION_SCHEMA,
+        "kind": "worker-validation", "packet_id": "fixture", "stage": "S4B",
+        "status": "passed", "independent": True,
+        "scope": {"status": "within-contract"}, "failure_kind": "none",
+        "commands": [], "usage": "unknown", "cost": "unknown",
+    }
+    case(
+        "worker lifecycle F: unavailable usage and cost remain explicitly unknown",
+        not TRANSPORT.worker_validation_problems(validation_unknowns, "fixture"),
+    )
+    case(
+        "worker lifecycle G: provider/model swaps preserve the same role contract",
+        transport_provider({"provider": "Command Code GOAT"}) == "Command Code GOAT"
+        and transport_provider({"provider": "OpenCode"}) == "OpenCode"
+        and TRANSPORT.worker_contract(filled_handoff())["worker_role"] == "bulk",
+    )
     review_block = extract_marked_block(
         filled_review(), "BEGIN QA JUDGEMENT", "END QA JUDGEMENT", "Review response"
     )
@@ -3772,7 +4737,7 @@ def self_test() -> int:
         s4b_manifest = json.loads(read(s4b_packet / TRANSPORT.MANIFEST_NAME))
         case(
             "cleared preflight prepares a Cursor-labelled S4B packet",
-            s4b_entry["stage"] == "S4B" and s4b_manifest["provider"] == "cursor",
+            s4b_entry["stage"] == "S4B" and s4b_manifest["provider"] == "Cursor",
         )
         operations_ledger = OPERATIONS.load_ledger(project)
         case(
@@ -3893,7 +4858,14 @@ def self_test() -> int:
         transcript_only.unlink()
 
         partial_path = s4b_packet / "evidence" / "return-handoff.md"
-        partial_path.write_text(filled_return("partial"), encoding="utf-8")
+        partial_path.write_text(filled_return("blocked", s4b_entry["id"]), encoding="utf-8")
+        blocked_advance_result = advance(runtime_args())
+        case(
+            "blocked worker return stops without an automatic retry",
+            blocked_advance_result == 2
+            and current_packet(load_state(run_root), allow_project_drift=True)[0]["id"] == s4b_entry["id"],
+        )
+        partial_path.write_text(filled_return("partial", s4b_entry["id"]), encoding="utf-8")
         (project / "QA.md").write_text(
             "# QA\n\n## Mechanical\n\n| # | Check | Result | Evidence |\n|---|---|---|---|\n"
             "| 1 | Build | pass | fixture |\n\n## Judgement\n\nPending.\n\n"
@@ -3915,7 +4887,7 @@ def self_test() -> int:
         case(
             "reasoner switch cannot rewrite a partial Cursor implementation boundary",
             queued_entry["id"] == s4b_entry["id"]
-            and queued_manifest["provider"] == "cursor"
+            and queued_manifest["provider"] == "Cursor"
             and sha256(partial_path) == partial_hash
             and REASONERS.selected(queued_state)["id"] == "claude",
         )
@@ -3939,15 +4911,16 @@ def self_test() -> int:
         )
         unexpected_return = project / ".ariadne" / "returns" / "wrong-packet.md"
         unexpected_return.parent.mkdir(parents=True, exist_ok=True)
-        unexpected_return.write_text(filled_return(), encoding="utf-8")
+        unexpected_return.write_text(filled_return(task_id="wrong-packet"), encoding="utf-8")
         advance_result = advance(runtime_args())
         case(
             "an unrelated project return cannot be ingested as the current packet",
             advance_result == 2
             and not (retry_packet / "evidence" / "return-handoff.md").exists(),
         )
+        unexpected_return.unlink()
         expected_return = Path(retry_manifest["return_target"])
-        expected_return.write_text(filled_return(), encoding="utf-8")
+        expected_return.write_text(filled_return(task_id=retry_entry["id"]), encoding="utf-8")
         advance(
             runtime_args(
                 target="http://127.0.0.1:3000",
@@ -3956,8 +4929,14 @@ def self_test() -> int:
         )
         state = load_state(run_root)
         external = next(
-            item for item in state["human_interventions"]
-            if item["need"] == "Start the selected external implementation provider."
+            (
+                item for item in state["human_interventions"]
+                if item["need"] in {
+                    "Start the selected external implementation worker.",
+                    "Start the selected external implementation provider.",
+                }
+            ),
+            {"status": "missing"},
         )
         case("provider return resolves the external human action", external["status"] == "resolved")
         return_record_path = retry_packet / "evidence" / "return-handoff.json"
@@ -3967,6 +4946,19 @@ def self_test() -> int:
             and json.loads(read(return_record_path))["metadata"]["status"] == "complete"
             and json.loads(read(return_record_path))["source_sha256"]
             == sha256(retry_packet / "evidence" / "return-handoff.md"),
+        )
+        telemetry_path = run_root / TELEMETRY_NAME
+        telemetry_rows = [
+            json.loads(line) for line in read(telemetry_path).splitlines()
+        ] if telemetry_path.is_file() else []
+        case(
+            "worker telemetry records validation and preserves unavailable usage as unknown",
+            any(
+                row.get("event") == "worker-validation"
+                and row.get("usage") == "unknown"
+                and row.get("cost") == "unknown"
+                for row in telemetry_rows
+            ),
         )
         state = load_state(run_root)
         returned_entry, returned_packet = retry_entry, retry_packet
@@ -4152,7 +5144,7 @@ def self_test() -> int:
         case(
             "routing scenario 4: clear implementation selects R2 not R1",
             rec_s4["capability_class"] == "R2"
-            and "Cursor" in rec_s4["model"],
+            and rec_s4["model"] == "implementation-worker (default implementation model)",
         )
 
         rec_s5 = recommend_task_routing({
@@ -4200,7 +5192,7 @@ def self_test() -> int:
         case(
             "routing scenario 9: provider unavailable falls back without weakening capability",
             rec_s9["capability_class"] == "R1"
-            and rec_s9["model"] == "Claude Code",
+            and rec_s9["model"] == "configured reasoning fallback",
         )
 
         rec_s10 = recommend_task_routing({
@@ -4208,7 +5200,7 @@ def self_test() -> int:
             "runtime_model": "Grok",
         })
         case(
-            "routing scenario 10: cursor implementation supports runtime model selection",
+            "routing scenario 10: implementation supports runtime model selection",
             rec_s10["capability_class"] == "R2"
             and "Grok" in rec_s10["model"],
         )
@@ -4621,9 +5613,21 @@ def parser() -> argparse.ArgumentParser:
     run_selector(return_p)
     return_p.add_argument("--input", required=True)
 
+    validate_worker_p = sub.add_parser(
+        "validate-worker", help="independently validate the current implementation result before review"
+    )
+    run_selector(validate_worker_p)
+    validate_worker_p.add_argument("--timeout", type=int, default=120)
+
     review_p = sub.add_parser("ingest-review", help="preserve and apply a marked independent-review judgement")
     run_selector(review_p)
     review_p.add_argument("--input", required=True)
+
+    acceptance_p = sub.add_parser(
+        "record-acceptance", help="record the human acceptance outcome after independent review"
+    )
+    run_selector(acceptance_p)
+    acceptance_p.add_argument("--outcome", required=True, choices=["accepted", "rejected"])
 
     creative_plan_p = sub.add_parser(
         "creative-plan", help="select project-specific skills and research depth from a structured assessment"
@@ -4708,9 +5712,7 @@ def parser() -> argparse.ArgumentParser:
     run_selector(advance_p)
     advance_p.add_argument("--provider", default="orchestrator")
     advance_p.add_argument("--model", default="not recorded")
-    advance_p.add_argument(
-        "--transport-provider", choices=["codex", "cursor", "claude-code", "other"]
-    )
+    advance_p.add_argument("--transport-provider", help="provider or worker environment label")
     advance_p.add_argument("--references-file")
     advance_p.add_argument("--motion", choices=["yes", "no"])
     advance_p.add_argument("--assets", choices=["yes", "no"])
@@ -4722,8 +5724,11 @@ def parser() -> argparse.ArgumentParser:
     run_selector(next_p)
     next_p.add_argument("--stage", choices=list(TRANSPORT.STAGES))
     next_p.add_argument("--retry", action="store_true")
+    next_p.add_argument("--provider", help="provider or worker environment label")
+    next_p.add_argument("--worker-role", choices=list(TRANSPORT.WORKER_ROLES))
     next_p.add_argument(
-        "--provider", choices=["codex", "claude", "cursor", "claude-code", "other"]
+        "--escalate", action="store_true",
+        help="prepare a stronger worker role at the same bounded implementation boundary",
     )
     next_p.add_argument("--references-file")
     next_p.add_argument("--motion", choices=["yes", "no"])
@@ -4752,7 +5757,9 @@ def main() -> int:
             "record-result": structural_result,
             "record-transcript": record_transcript,
             "ingest-return": ingest_return,
+            "validate-worker": validate_worker,
             "ingest-review": ingest_review,
+            "record-acceptance": record_acceptance,
             "creative-plan": creative_plan,
             "record-creative": record_creative,
             "creative-check": creative_check,

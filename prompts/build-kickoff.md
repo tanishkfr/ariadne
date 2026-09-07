@@ -62,6 +62,12 @@ Include:
   - implementation routing: capability class, provider recommendation, model
     if known, effort, workload, any split, and the reason. Do not guess live
     availability or quota; Ariadne checks those immediately before handoff.
+  - a Worker execution contract: worker role, objective, relevant context,
+    invariants, permitted files/actions, prohibited actions, stop and escalation
+    conditions, lifecycle, and a routine repair limit no greater than two
+  - task-specific validation commands that Ariadne can safely rerun from the
+    project root, with required/optional status and expected results. Ariadne
+    performs independent validation before the S5 review packet exists.
 
 UPDATE AGENTS.md - Implementation constraints section only:
 commands, environment assumptions, token system path, project-specific
@@ -103,6 +109,7 @@ REQUIRED INPUTS
 - .ariadne/creative-operations.json, containing the approved requirement trace
   and project-specific visual-QA plan.
 - skills/visual-qa.md.
+- The Worker execution contract and Validation commands in HANDOFF.md.
 
 IF MISSING
 Verify every input before editing code. If any is missing, STOP. Name it; do not
@@ -137,6 +144,9 @@ RULES
 6. A feature-branch preview may proceed without G4 only when the repository is
    already connected to the preview platform. STOP before connecting an account
    or repository. NEVER push, merge, or deploy to production without G4.
+7. Treat the packet as a bounded contract. Read and edit only the permitted
+   scope, stop on a conflict or dangerous action, and use at most the stated
+   routine repair attempts. Do not invent acceptance criteria.
 
 IF THE DESIGN CANNOT BE BUILT AS SPECIFIED
 Do not substitute something easier. Raise:

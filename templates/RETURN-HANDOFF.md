@@ -6,11 +6,19 @@
 > leaving a blank.
 
 **Status:** complete / partial / blocked
+**Task ID:** <packet ID>
+**Worker role:** bulk / strong / senior-reasoning
 **Provider:** <>
 **Model:** <>
 **Effort:** low / medium / high / unrecorded
 **Started:** <>
 **Ended:** <>
+**Usage:** provider-reported usage, or unknown
+**Cost:** provider-reported cost, or unknown
+
+> `IMPLEMENTED` means the worker reports a complete implementation. Ariadne
+> records `VALIDATED` only after independently rerunning the required checks and
+> confirming scope. `REVIEWED` and `ACCEPTED` belong to later boundaries.
 
 ## What was built
 
@@ -53,6 +61,21 @@
 ## Evidence
 
 <Commit, command outputs, screenshots, QA.md path, or `none captured`.>
+
+## Worker validation
+
+| Check | Worker result | Ariadne result | Evidence |
+|---|---|---|---|
+| <required or optional check> | pass / fail / not run | pending | <path or reason> |
+
+Do not mark Ariadne result as passed. Ariadne fills that state from its
+independent validation record.
+
+## Safety and scope
+
+**Scope status:** within-contract / out-of-scope / dangerous-action / repository-conflict / not checked
+
+**Unexpected actions or conflicts:** <none, or the exact path/action and why it needs escalation>
 
 ## Known issues
 

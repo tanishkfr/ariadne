@@ -9,6 +9,36 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
+## 1.6.6 — 2026-09-07 · BOUNDED WORKER IMPLEMENTATION
+
+Cheap implementation workers now receive a repo-grounded contract instead of
+being asked to rediscover Ariadne's architecture. S4B packets record a worker
+role, bounded scope, invariants, permitted and prohibited actions, explicit
+acceptance checks, safe validation commands, stop conditions and escalation
+conditions.
+
+The runtime now separates `IMPLEMENTED`, `VALIDATED`, `REVIEWED` and `ACCEPTED`,
+independently validates worker results, allows only bounded routine repair, and
+stops cleanly for repeated failure, repository conflict, invariant risk or
+out-of-scope changes. Worker/provider/model identity is transport metadata, so
+the implementation layer can be replaced without changing the task definition.
+
+Each worker run appends lightweight telemetry for timing, attempts, validation,
+changed files, escalation and outcome. Provider usage and cost remain `unknown`
+when they are not exposed. Command Code GOAT is supported as a first manual or
+semi-manual worker environment, without a provider-specific core integration.
+
+## 1.6.5 — 2026-09-06 · RELEASE SURFACE CORRECTION
+
+This is a corrective release with no product or workflow changes.
+
+It republishes the validated 1.6.4 product under normal three-part semantic
+versioning with the complete release asset surface, including
+`ariadne-release.json`, which the existing updater requires to discover and
+authenticate releases.
+
+The earlier immutable 1.6.4 release remains unchanged.
+
 
 ## 1.6.4 — 2026-09-06 · CANONICAL WRITING RELEASE
 

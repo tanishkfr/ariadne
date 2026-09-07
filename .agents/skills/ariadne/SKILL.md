@@ -74,8 +74,9 @@ to switch back. Never edit reasoner metadata or packet provider labels by hand.
 A switch before material current-stage output creates a linked same-stage child.
 A switch after material output applies at the next reasoning boundary. If a
 reasoner fails, use `record-reasoner-failure`; automatic Codex fallback is safe
-only before material output exists. S4B still follows `HANDOFF.md` and provider
-preflight, and S5 still receives only its isolated packet.
+only before material output exists. S4B follows `HANDOFF.md`, its bounded
+Worker execution contract, and provider preflight; S5 still receives only its
+isolated packet.
 
 ## Creative intelligence
 
@@ -116,6 +117,20 @@ one clickable packet artifact to attach or paste after they open the selected
 provider; never make them search for it. Keep hashes and stage mechanics in
 `OPERATIONS.md`.
 
+## External implementation worker
+
+The S4B packet carries a task ID, worker role, objective, permitted scope,
+invariants, prohibited actions, stop/escalation conditions, a two-repair maximum,
+and task-specific validation commands. A bulk worker may read relevant code,
+edit the permitted scope, run tests/builds/lint/typecheck, inspect git status and
+diff, and repair routine failures. It must stop for packet/repository conflict,
+invariant risk, dangerous or unrelated changes, or an exhausted repair budget.
+
+Provider and model names are metadata, not workflow logic. Any CLI, API, editor,
+or future implementation environment can receive the same packet. Taste or
+provider memory may improve convenience, but the HANDOFF, packet manifest, and
+repository-controlled policies remain the source of truth.
+
 ## External return
 
 The S4B packet names a unique project-local return target. Ask the external
@@ -123,9 +138,19 @@ implementer to write the complete marked return block there as well as emitting
 it in the response. `ariadne.py advance` ingests only the target belonging to
 the current packet; a retry gets a new target and cannot overwrite prior
 evidence. If the provider cannot write that target, save the returned block to a
-temporary file and use `ariadne.py ingest-return` as recovery. Do not turn a
-summary into a verbatim transcript. The return handoff can support continuation,
-but it does not prove unobserved provider behaviour or independent QA.
+temporary file and use `ariadne.py ingest-return` as recovery. After a complete
+return, `advance` runs Ariadne's independent `validate-worker` boundary before
+it can prepare S5. A worker saying “done” is therefore only `IMPLEMENTED`, not
+`VALIDATED`, `REVIEWED`, or `ACCEPTED`. Do not turn a summary into a verbatim
+transcript. The return handoff can support continuation, but it does not prove
+unobserved provider behaviour or independent QA.
+
+If validation fails for a routine reason, `advance` can prepare the next
+non-overwriting S4B repair packet while the bounded repair budget remains. A
+repository conflict, dangerous/out-of-scope change, or repeated failure stops
+and exposes the recorded escalation path. Worker events are appended to
+`worker-telemetry.jsonl`; usage and cost stay `unknown` when the provider does
+not expose them.
 
 For independent review, give the reviewer only the generated isolated packet.
 When its marked QA judgement returns, save the response temporarily and run
@@ -152,7 +177,9 @@ retained in the orchestrator when it is within the approved handoff. For work
 owned by an external implementer, diagnose the failure and generate a
 same-stage retry from the partial/blocked return; do not ask the user to rebuild packet
 lineage. A retry never overwrites prior evidence and never reopens G1 unless the
-finding changes the approved direction.
+finding changes the approved direction. Record `record-acceptance --outcome
+accepted` only after the human has recorded G3; this command records the result
+but never grants a gate.
 
 When the user explicitly requests social strategy, use
 `<root>/skills/social-strategy.md` and the conditional

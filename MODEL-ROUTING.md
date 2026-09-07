@@ -65,7 +65,11 @@ Route work to a *class* first. This is the layer that does not change.
   compatibility is implemented; live implementation equivalence remains
   unverified. See [adapters/claude-code.md](adapters/claude-code.md).
 
-If any one of these disappears tomorrow, the other two absorb its classes and the system still runs. That is the test of provider-neutrality, and it is the reason no Ariadne document outside [adapters/](adapters/) names a product.
+These are current optional adapters, not the S4B contract. If one disappears,
+another worker can receive the same bounded packet; that replaceability is the
+provider-neutrality test. Provider-specific setup and model notes belong in
+[adapters/](adapters/), while the core workflow uses capability, role and
+evidence state.
 
 ### Runtime model landscape and freshness
 
@@ -187,6 +191,42 @@ If implementation stays with the orchestrator, external preflight is recorded
 as not required. A blocked or human-check-required result cannot produce the
 external build handoff. Change the provider mapping, split, or effort in the
 handoff; do not weaken the capability class merely because a product is limited.
+
+### Worker roles and bounded execution
+
+The implementation layer is selected by capability and role, not by a product
+name. A provider or model is a replaceable runtime value in preflight and
+telemetry.
+
+| Worker role | Appropriate work | Escalates when |
+|---|---|---|
+| `bulk` | Routine, well-specified implementation and mechanical repair | The contract conflicts, the repair budget is exhausted, or architecture becomes uncertain |
+| `strong` | Harder implementation, multi-file repair, or a bulk-worker escalation | The approved architecture or invariant is in doubt |
+| `senior-reasoning` | Architectural uncertainty and high-risk implementation decisions | A human decision or gate is required |
+
+Every S4B task follows this bounded lifecycle:
+
+```
+baseline → implementation → validation → routine repair → validation → result/checkpoint
+```
+
+`HANDOFF.md` is the canonical worker contract. It carries the objective,
+context, invariants, permitted scope/actions, prohibited actions, stop and
+escalation conditions, and task-specific validation commands. The packet adds a
+unique task ID, role, attempt number, repository baseline, and a maximum of two
+routine repair attempts. A worker may inspect directly relevant files, make
+normal implementation decisions inside the scope, run checks, and repair
+ordinary failures; it must stop rather than guess past a boundary.
+
+The runtime independently inspects the repository delta and reruns safe,
+shell-free required validation commands. It records the distinct states
+`IMPLEMENTED`, `VALIDATED`, `REVIEWED`, and `ACCEPTED`. A worker report alone
+cannot move the workflow to S5. Repeated failures, dangerous or out-of-scope
+changes, packet/repository conflicts, and invariant risks produce an explicit
+escalation instead of an unbounded retry loop. Append-only worker telemetry is
+kept small: task, role/provider/model, timing, attempts, changed files,
+validation/review/acceptance result, escalation count, failure reason, and
+provider usage/cost only when exposed; otherwise usage and cost are `unknown`.
 
 ---
 

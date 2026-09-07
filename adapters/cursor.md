@@ -83,8 +83,8 @@ the operator does not assemble it. The low-level recovery command remains:
 python scripts/prepare-stage.py prepare --stage S4B --project <project> --output <new-packet-directory> --parent <S4A-packet-directory>
 ```
 
-The S4B default provider in the manifest is `cursor`. The packet contains the
-current canonical Part B, `HANDOFF.md`, locked `DESIGN.md`, project `AGENTS.md`,
+The S4B manifest records the selected provider and model without normalizing
+their names. The packet contains the current canonical Part B, `HANDOFF.md`, locked `DESIGN.md`, project `AGENTS.md`,
 `.ariadne/creative-operations.json`, `QA-POLICY.md`, `templates/QA.md`,
 `templates/RETURN-HANDOFF.md`, and `skills/visual-qa.md`; it contains no
 reasoning transcript. The packet names one project-local structured return
@@ -92,8 +92,9 @@ target. Writing the marked return block there lets `ariadne.py advance` ingest
 it without manual copying; each retry has a different non-overwriting target.
 Open Cursor at the project repository, start a fresh chat, paste `packet.txt`,
 and return the completed `templates/RETURN-HANDOFF.md` block at the packet's
-return target. Ariadne ingests that block and manages its evidence path. A verbatim transcript is preserved
-when available but is never reconstructed from the return summary.
+return target. Ariadne ingests that block, records `IMPLEMENTED`, independently
+runs `validate-worker`, and only then prepares S5. A verbatim transcript is
+preserved when available but is never reconstructed from the return summary.
 
 ### Cursor validation handover
 

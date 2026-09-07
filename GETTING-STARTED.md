@@ -36,7 +36,7 @@ python --version
 Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.4/ariadne-1.6.4-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.6/ariadne-1.6.6-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 ```
@@ -50,10 +50,11 @@ The optional generic Codex baseline is not installed by default. If you want
 it, run `python -m ariadne codex-baseline install`; existing user instructions
 are never overwritten. Restart Codex afterwards.
 
-Codex remains the default and Claude is not installed or enabled by this
-process. If Claude Code is already installed and you explicitly want it as the
-reasoner, run `python -m ariadne enable-claude`. Use `disable-claude` to
-remove only that optional entry. Cursor remains the default external S4B tool.
+Codex remains the default reasoner and Claude is not installed or enabled by
+this process. If Claude Code is already installed and you explicitly want it as
+the reasoner, run `python -m ariadne enable-claude`. Use `disable-claude` to
+remove only that optional entry. The external S4B worker is selected by role and
+runtime capability; Ariadne does not require one fixed provider.
 
 ---
 
@@ -77,9 +78,11 @@ do not subscribe merely to complete installation.
 
 ---
 
-## Step 4 — Set up your build tool (Cursor)
+## Step 4 — Set up your implementation worker
 
-This is the tool that **builds**. It does not decide direction.
+This is the environment that **builds**. It does not decide direction. Use the
+provider or CLI that matches the worker role in the packet; the contract and
+validation boundary stay the same when the environment changes.
 
 1. Sign in only when Ariadne has selected an external implementation handoff.
 2. Open the project directory and paste the one verified handoff Ariadne gives you.
@@ -89,11 +92,11 @@ You do not need to copy project rules or canonical QA files manually; they are
 inside the verified handoff packet. Let the project-brief pass create root
 `AGENTS.md`; do not pre-create it.
 
-Claude Code uses the same S4B packet contract as an optional fallback — see
-[adapters/claude-code.md](adapters/claude-code.md). Its transport is prepared,
-but live equivalence remains unverified. **Read the cautions in that file**,
-particularly about design skills whose house style can override your
-`DESIGN.md`.
+The existing Cursor and Claude Code adapters use this same S4B packet contract;
+see [adapters/cursor.md](adapters/cursor.md) and
+[adapters/claude-code.md](adapters/claude-code.md) for their provider-specific
+setup. Command Code GOAT can be the first manual/semi-manual worker test, but
+it is not a runtime dependency or source of Ariadne policy.
 
 ---
 

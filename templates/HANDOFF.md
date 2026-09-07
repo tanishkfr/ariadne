@@ -116,6 +116,70 @@
 Before an external build packet is created, Ariadne runs provider preflight.
 Availability and quota are runtime facts; do not invent them in this document.
 
+## Worker execution contract
+
+> This is the bounded contract between the planning layer and the implementation
+> worker. It is canonical project context, not provider memory. A worker may use
+> normal implementation judgement inside these boundaries, but must stop when a
+> boundary conflicts with the repository or the approved direction.
+
+**Worker role:** <bulk | strong | senior-reasoning>
+
+**Objective:** <repeat the outcome above in one testable sentence>
+
+**Relevant context:** `HANDOFF.md`, locked `DESIGN.md`, project `AGENTS.md`, the
+permitted files below, and directly relevant repository files discovered while
+implementing. No earlier chat history is required.
+
+**Invariants:** <approved thesis, acceptance criteria, compatibility rules, and
+anything that must remain true>
+
+**Permitted actions:** Read relevant repository files; edit permitted files;
+create required files; run the listed validation commands; inspect git status and
+diff; and repair routine validation failures within the stated limit.
+
+**Prohibited actions:** `git push`; force operations; `git reset`, `git clean`, or
+discarding unrelated changes; deleting significant data; reading or writing
+secrets or `.env` files unnecessarily; deployment or production changes;
+destructive migrations; installing unapproved dependencies; and changes to
+unrelated systems.
+
+**Stop conditions:** Missing required context; a packet/repository conflict; an
+invariant at risk; an out-of-scope or dangerous action; or the routine repair
+budget is exhausted.
+
+**Escalation conditions:** Repeated routine failure; architecture conflict or
+uncertainty; a high-risk change; or any invariant conflict.
+
+**Lifecycle:** baseline → implementation → validation → routine repair →
+validation → result/checkpoint
+
+**Routine repair limit:** 2
+
+### Permitted files and systems
+
+| Path / glob | Actions | Reason |
+|---|---|---|
+| <relative path or narrow glob> | read / edit / create | <why this scope is needed> |
+
+The worker may discover directly relevant files, but must add any newly needed
+path to the return handoff and stop for an out-of-scope decision when it is not
+covered by this table. Broad roots, secrets, environment files, and repository
+control directories are never permitted here.
+
+## Validation commands
+
+> These are task-specific commands Ariadne can independently rerun from the
+> project root. Use shell-free, bounded commands only. A worker report is not
+> evidence of validation; Ariadne runs the required rows again before S5.
+
+| Check | Command | Required | Expected |
+|---|---|---|---|
+| <unique check> | `<command>` | yes / no | <exit code or observable result> |
+
+Use `not run` in the return handoff when an optional check is unavailable. A
+required command that fails is a validation failure, not an acceptance.
+
 ## Motion requirements
 
 | Element | Purpose | Trigger | Duration | Easing | Reduced-motion state |

@@ -205,9 +205,11 @@ Risks:       <what could make this fail>
 
 **If you cannot state what the direction rejects, there is no direction.**
 
-**S4 Build** — token system first, signature moment early. Production build passes before any task is done. No dependency without G2.
+**S4 Build** — token system first, signature moment early. Production build passes before any task is done. No dependency without G2. The Architect's `HANDOFF.md` is a bounded worker contract: the implementation worker receives an objective, invariants, permitted scope, prohibited actions, stop/escalation rules, and task-specific validation commands.
 
-**S5 Verify** — two halves, both mandatory. Mechanical ([QA-POLICY.md](QA-POLICY.md)) run by the Implementer; judgement ([EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md)) run by a Reviewer in a fresh session. **A build that passes every mechanical check and scores 2/5 on creative direction has failed S5.**
+**S5 Verify** — two halves, both mandatory. Ariadne independently reruns the bounded required checks and inspects worker scope before preparing the isolated packet; mechanical ([QA-POLICY.md](QA-POLICY.md)) remains run by the Implementer; judgement ([EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md)) runs by a Reviewer in a fresh session. **A build that passes every mechanical check and scores 2/5 on creative direction has failed S5.**
+
+The implementation lifecycle is deliberately finite: `baseline → implementation → validation → routine repair → validation → result/checkpoint`. A complete worker return is `IMPLEMENTED`, not evidence of acceptance. Ariadne records `VALIDATED` only after independent checks pass, then `REVIEWED` after S5 judgement and `ACCEPTED` only after the human G3 decision is recorded. Two routine repair attempts are the default maximum; packet/repository conflict, dangerous or out-of-scope changes, invariant risk, and repeated failure stop for escalation.
 
 **S6 Ship & Learn** — G4, then the retrospective. Fifteen minutes, four questions, in [templates/RETROSPECTIVE.md](templates/RETROSPECTIVE.md).
 
