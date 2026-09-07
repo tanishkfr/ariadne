@@ -1,4 +1,21 @@
-# Ariadne 1.6.6
+# Ariadne 1.6.7
+
+Ariadne 1.6.7 is the public release of the completed worker-orchestration
+improvements developed for 1.6.6.
+
+- Formal model/provider-neutral worker contracts reduce the architecture and
+  success criteria a bulk implementation worker must infer.
+- Implementation and routine repair are bounded by explicit validation,
+  safety/scope rules, stop conditions and escalation conditions.
+- Worker outcomes move through explicit `IMPLEMENTED`, `VALIDATED`, `REVIEWED`
+  and `ACCEPTED` states, with lightweight implementation telemetry.
+- Worker roles remain replaceable across providers and models, supporting
+  inexpensive, high-volume implementation workers without provider coupling.
+
+This release supersedes the unavailable public 1.6.6 release identifier. The
+completed worker architecture is unchanged.
+
+## Ariadne 1.6.6
 
 Ariadne 1.6.6 makes model- and worker-agnostic bulk implementation a first-class,
 bounded workflow.

@@ -9,6 +9,18 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
+## 1.6.7 — 2026-09-07 · PUBLIC RELEASE RECOVERY
+
+Ariadne 1.6.7 publicly releases the completed worker-orchestration improvements
+developed for 1.6.6. It adds formal model/provider-neutral worker contracts,
+bounded implementation and repair, independent validation, explicit
+`IMPLEMENTED` → `VALIDATED` → `REVIEWED` → `ACCEPTED` states, safety and scope
+boundaries, provider-neutral escalation roles, and lightweight implementation
+telemetry for inexpensive, high-volume workers.
+
+This release supersedes the unavailable public 1.6.6 release identifier; the
+validated worker architecture is unchanged.
+
 ## 1.6.6 — 2026-09-07 · BOUNDED WORKER IMPLEMENTATION
 
 Cheap implementation workers now receive a repo-grounded contract instead of

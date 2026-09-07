@@ -36,7 +36,7 @@ python --version
 Install the current public version directly from GitHub:
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.6/ariadne-1.6.6-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.7/ariadne-1.6.7-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 ```
