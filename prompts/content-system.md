@@ -2,8 +2,8 @@
 
 **Paste into:** your reasoning tool. Two prompts here — **setup** (once) and **drafting** (per post).
 
-System: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) for SOCIAL. General writing
-uses [WRITING-POLICY.md](../WRITING-POLICY.md). **Nothing publishes
+System: [CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md) for SOCIAL. General writing
+uses [WRITING-POLICY.md](../docs/policies/WRITING-POLICY.md). **Nothing publishes
 automatically. Ever.**
 
 ---
@@ -206,4 +206,4 @@ Pillars -> Idea (from real work) -> Hook (4+) -> Draft -> Originality checks
 
 **The loop closes at `CONTENT-LEARNINGS.md`.** A weekly review that does not change that file means the system is producing, not learning.
 
-**Best idea source:** your `RETROSPECTIVE.md` files. Real instances, with specifics, already written down ([CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) section 4).
+**Best idea source:** your `RETROSPECTIVE.md` files. Real instances, with specifics, already written down ([CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md) section 4).

@@ -129,7 +129,7 @@ Carries more of the "expensive" signal than any other variable, and is where gen
 
 ## 7. Building an original direction
 
-Reference *analysis* — how to extract mechanisms from a reference — is [skills/reference-analysis.md](skills/reference-analysis.md). This is what you do with the results.
+Reference *analysis* — how to extract mechanisms from a reference — is [skills/reference-analysis.md](../../skills/reference-analysis.md). This is what you do with the results.
 
 1. **Pool the mechanisms** from all references, attribution dropped.
 2. **Pick two or three that conflict.** Conflict is what makes a direction original. Three harmonious mechanisms from three similar sites is a copy of the genre; a rigorous archival grid plus playful physical motion is a direction.
@@ -139,7 +139,7 @@ Reference *analysis* — how to extract mechanisms from a reference — is [skil
 
 ### Avoiding a copy
 
-- **No single reference contributes more than two mechanisms** ([skills/reference-analysis.md](skills/reference-analysis.md)).
+- **No single reference contributes more than two mechanisms** ([skills/reference-analysis.md](../../skills/reference-analysis.md)).
 - **Never lift layout structure.** Mechanisms transfer; page structure does not.
 - **The attribution test:** could the referenced designer recognise their own site in your output? If yes, you copied. A shared *sensibility* is the goal.
 - **Record it.** `DESIGN.md` has a mandatory "What NOT to copy" section.

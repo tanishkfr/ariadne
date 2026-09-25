@@ -1,7 +1,7 @@
 # DESIGN: <name>
 
 > Template. Owner: Design director · Stage: S3 · Skill: [design-direction](../skills/design-direction.md)
-> Rules: [DESIGN-TASTE.md](../DESIGN-TASTE.md). **Approved at G1 before anything is built.**
+> Rules: [DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md). **Approved at G1 before anything is built.**
 
 **Status:** <draft | locked at G1 on (date)>
 
@@ -63,7 +63,7 @@
 | Display leading | <> | Tight: 0.9-1.05 |
 | Body leading | <> | Generous: 1.5-1.7 |
 | Tracking | <by size> | Negative at large, positive at small |
-| Licence | <> | [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) 9 |
+| Licence | <> | [LIBRARY-POLICY.md](../docs/policies/LIBRARY-POLICY.md) 9 |
 
 ## Palette
 
@@ -93,7 +93,7 @@
 
 ## Motion principles
 
-> [DESIGN-MOTION.md](../DESIGN-MOTION.md).
+> [DESIGN-MOTION.md](../docs/policies/DESIGN-MOTION.md).
 
 - **Purpose of motion here:** <orientation / feedback / continuity / hierarchy / character>
 - **Timing set:** response <ms>, transition <ms>, narrative <ms>
@@ -102,7 +102,7 @@
 
 ## Signature moment
 
-> [DESIGN-TASTE.md](../DESIGN-TASTE.md) 1.4. Built FIRST at S4.
+> [DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) 1.4. Built FIRST at S4.
 
 - **What / where:** <>
 - **Why memorable:** <>
@@ -110,7 +110,7 @@
 
 ## Asset direction
 
-> [DESIGN-ASSETS.md](../DESIGN-ASSETS.md). **If the direction depends on assets that cannot be made, change the direction.**
+> [DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md). **If the direction depends on assets that cannot be made, change the direction.**
 
 | Asset | Exists? | Plan | Blocking? |
 |---|---|---|---|
@@ -130,7 +130,7 @@
 
 ## Anti-patterns for this project
 
-> Beyond the global table in [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6.
+> Beyond the global table in [DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) section 6.
 > Minimum three. "Avoid generic design" is not one.
 
 1. <>
@@ -151,7 +151,7 @@
 ## G1 direction check
 
 > Qualitative, **not scored.** Numeric scoring happens at S5, by a reviewer who did not write this
-> ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
+> ([EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)).
 >
 > **Any "no" is a blocker.**
 

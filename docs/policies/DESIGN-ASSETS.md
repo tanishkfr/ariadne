@@ -2,7 +2,7 @@
 
 Principles and procedure for imagery, texture, and anything that has to be made. Separate from [DESIGN-TASTE.md](DESIGN-TASTE.md) so an asset task does not load the whole taste document.
 
-Register: [templates/ASSETS.md](templates/ASSETS.md) — created only when the design depends on assets that do not yet exist.
+Register: [templates/ASSETS.md](../../templates/ASSETS.md) — created only when the design depends on assets that do not yet exist.
 
 ---
 

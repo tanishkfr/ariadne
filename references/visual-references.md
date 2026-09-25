@@ -45,7 +45,7 @@ Analysing them all now, out of context, would produce generic notes — which is
 
 The six extraction questions, the mechanism test, and the two-per-reference cap are in
 [skills/reference-analysis.md](../skills/reference-analysis.md). Synthesis into a direction is
-[DESIGN-TASTE.md](../DESIGN-TASTE.md) section 7.
+[DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) section 7.
 
 ---
 
@@ -61,4 +61,4 @@ Record: URL, what caught your attention, and the mechanism once you have extract
 
 It is not a style guide, and it is not a target. The house style shared across these sites — art-directed, editorial, typographic, motion-conscious — is a *sensibility*, not a template.
 
-**The attribution test:** could one of these designers recognise their own site in your output? If yes, you copied. Recognising a shared sensibility is the goal; recognising a specific site is the failure ([DESIGN-TASTE.md](../DESIGN-TASTE.md) section 10).
+**The attribution test:** could one of these designers recognise their own site in your output? If yes, you copied. Recognising a shared sensibility is the goal; recognising a specific site is the failure ([DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) section 10).

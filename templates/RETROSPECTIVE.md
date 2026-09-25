@@ -103,7 +103,7 @@ Complexity:   <+N words, +N files>
 | Was `HANDOFF.md` sufficient, or was context re-derived? | |
 | Estimated usage spent vs value returned | |
 
-> Repeatedly exhausting `R1` means S3 is under-specified and work is leaking into the expensive tier — not that you need a bigger plan. See [BUDGET-POLICY.md](../BUDGET-POLICY.md) section 8.
+> Repeatedly exhausting `R1` means S3 is under-specified and work is leaking into the expensive tier — not that you need a bigger plan. See [BUDGET-POLICY.md](../docs/policies/BUDGET-POLICY.md) section 8.
 
 ## Gates
 
@@ -136,13 +136,13 @@ Complexity:   <+N words, +N files>
 |---|---|---|
 | | | <which Ariadne rule, new or amended> |
 
-> Write the **lesson**, not the case ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md) section 1).
+> Write the **lesson**, not the case ([PRIVACY-POLICY.md](../docs/policies/PRIVACY-POLICY.md) section 1).
 > Not: "Client X's font was personal-use only."
 > Instead: "Verify font licences at S3, before the direction depends on the face."
 
 ## Content ideas generated
 
-> Retrospectives are the best content source you have — real instances, with specifics ([CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) section 4).
+> Retrospectives are the best content source you have — real instances, with specifics ([CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md) section 4).
 
 | Idea | The only-you element | Pillar |
 |---|---|---|

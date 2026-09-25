@@ -4,7 +4,7 @@ Which tool does which job, and how to not burn your subscription limits doing it
 
 **Provider-neutrality rule:** this file routes by *capability class*, never by brand. The capability classes are stable; the products filling them are not. When a product changes, you edit the one mapping table in section 3 and nothing else in Ariadne changes.
 
-Related: [adapters/](adapters/) for tool-specific mechanics · [BUDGET-POLICY.md](BUDGET-POLICY.md) for cost.
+Related: [adapters/](../../adapters) for tool-specific mechanics · [BUDGET-POLICY.md](BUDGET-POLICY.md) for cost.
 
 ---
 
@@ -63,12 +63,12 @@ Route work to a *class* first. This is the layer that does not change.
 - **Claude Code (`R2` fallback, `R4`)** — accepts the same S4B transport
   contract and can handle agentic multi-file work in a terminal. Transport
   compatibility is implemented; live implementation equivalence remains
-  unverified. See [adapters/claude-code.md](adapters/claude-code.md).
+  unverified. See [adapters/claude-code.md](../../adapters/claude-code.md).
 
 These are current optional adapters, not the S4B contract. If one disappears,
 another worker can receive the same bounded packet; that replaceability is the
 provider-neutrality test. Provider-specific setup and model notes belong in
-[adapters/](adapters/), while the core workflow uses capability, role and
+[adapters/](../../adapters), while the core workflow uses capability, role and
 evidence state.
 
 ### Runtime model landscape and freshness
@@ -321,7 +321,7 @@ Build output. Test output. Lint errors with an obvious fix. File listings. Git o
 
 Enforced by four rules:
 
-1. Ariadne documents outside [adapters/](adapters/) refer to `R1`-`R6` and role names, never product names. Section 3 is the single exception, by design.
+1. Ariadne documents outside [adapters/](../../adapters) refer to `R1`-`R6` and role names, never product names. Section 3 is the single exception, by design.
 2. Every adapter implements the same contract: read `HANDOFF.md`, respect `AGENTS.md`, honour gates, report in the `QA.md` format.
 3. Handoffs are plain markdown files, readable by any tool and by you.
 4. Nothing depends on a proprietary feature. If a tool offers a shortcut, it goes in that tool's adapter as an *optimisation*, never as a requirement.

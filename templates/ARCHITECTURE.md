@@ -1,7 +1,7 @@
 # ARCHITECTURE: <name>
 
 > Template. Owner: Architect · Stage: S3 (parallel with DESIGN.md)
-> Default stack assumptions: [ROUTER.md](../ROUTER.md) section 5. Dependencies: [LIBRARY-POLICY.md](../LIBRARY-POLICY.md).
+> Default stack assumptions: [ROUTER.md](../docs/policies/ROUTER.md) section 5. Dependencies: [LIBRARY-POLICY.md](../docs/policies/LIBRARY-POLICY.md).
 
 **Status:** <draft | locked> · **Last updated:** <date>
 

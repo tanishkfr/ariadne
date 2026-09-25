@@ -96,10 +96,32 @@ def tracked_dirty() -> list[str]:
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
+
+# Public-repository layout: policy files live under docs/policies/ but are
+# packed at the runtime bundle root so the engine's source paths are unchanged.
+RUNTIME_SOURCE_OVERRIDES: dict[str, str] = {
+    "ROUTER.md": "docs/policies/ROUTER.md",
+    "WORKFLOW.md": "docs/policies/WORKFLOW.md",
+    "DESIGN-TASTE.md": "docs/policies/DESIGN-TASTE.md",
+    "DESIGN-MOTION.md": "docs/policies/DESIGN-MOTION.md",
+    "DESIGN-ASSETS.md": "docs/policies/DESIGN-ASSETS.md",
+    "QA-POLICY.md": "docs/policies/QA-POLICY.md",
+    "EVALUATION-RUBRICS.md": "docs/policies/EVALUATION-RUBRICS.md",
+    "LIBRARY-POLICY.md": "docs/policies/LIBRARY-POLICY.md",
+    "RESEARCH-POLICY.md": "docs/policies/RESEARCH-POLICY.md",
+    "PRIVACY-POLICY.md": "docs/policies/PRIVACY-POLICY.md",
+    "MODEL-ROUTING.md": "docs/policies/MODEL-ROUTING.md",
+    "BUDGET-POLICY.md": "docs/policies/BUDGET-POLICY.md",
+    "CONTENT-SYSTEM.md": "docs/policies/CONTENT-SYSTEM.md",
+    "WRITING-POLICY.md": "docs/policies/WRITING-POLICY.md",
+}
+
+
 def runtime_sources() -> list[tuple[str, Path]]:
     rows: list[tuple[str, Path]] = []
     for relative in RUNTIME_TOP_LEVEL + RUNTIME_SCRIPTS:
-        path = ROOT / relative
+        source = RUNTIME_SOURCE_OVERRIDES.get(relative, relative)
+        path = ROOT / source
         if not path.is_file():
             raise ReleaseError(f"runtime source is missing: {relative}")
         rows.append((PurePosixPath(relative).as_posix(), path))

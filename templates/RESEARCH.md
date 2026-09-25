@@ -1,9 +1,9 @@
 # RESEARCH: <name>
 
-> Template. Owner: Researcher · Stage: S2 · Skill: [RESEARCH-POLICY.md](../RESEARCH-POLICY.md)
-> Policy: [RESEARCH-POLICY.md](../RESEARCH-POLICY.md)
+> Template. Owner: Researcher · Stage: S2 · Skill: [RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md)
+> Policy: [RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md)
 > **Every claim carries a claim status, date, URL, and source-confidence level.** Definitions, freshness windows, source
-> ranking, and how to handle disagreement all live in [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) — this is just the register.
+> ranking, and how to handle disagreement all live in [RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md) — this is just the register.
 
 **Last updated:** <date>
 
@@ -11,7 +11,7 @@
 
 Claim status: **OBSERVED** · **SUPPORTED** · **INFERRED** · **HYPOTHESIS** · **ASSUMPTION**.
 
-Source confidence: **Verified** · **Reported** · **Unverified** · **Contradicted** — see [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 4.
+Source confidence: **Verified** · **Reported** · **Unverified** · **Contradicted** — see [RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md) section 4.
 
 ---
 
@@ -77,4 +77,4 @@ Source confidence: **Verified** · **Reported** · **Unverified** · **Contradic
 |---|---|---|---|
 | | <1-2 / 5-8 / 10-15 lookups> | | resolved / reported unresolved |
 
-> Set the budget before searching, and stop when it is spent ([RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 2).
+> Set the budget before searching, and stop when it is spent ([RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md) section 2).

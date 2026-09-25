@@ -30,7 +30,7 @@ Question 2 is the highest-leverage question in this mode. "It saves your work" m
 
 | Area | Default |
 |---|---|
-| Auth | **None.** Requires an explicit requirement, and it is a scope change ([WORKFLOW.md](../WORKFLOW.md)). |
+| Auth | **None.** Requires an explicit requirement, and it is a scope change ([WORKFLOW.md](../docs/policies/WORKFLOW.md)). |
 | Database | **None** until persistence across devices is genuinely required |
 | Persistence | localStorage or URL state first |
 | Admin panel | **Never** by default |
@@ -52,13 +52,13 @@ Usually also `TASKS.md`, `AGENTS.md`, `RETROSPECTIVE.md`.
 
 ## Skills
 
-[intake](../skills/intake.md) — **challenge pass mandatory** · [component-research](../skills/component-research.md) · [design-direction](../skills/design-direction.md) · [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)
+[intake](../skills/intake.md) — **challenge pass mandatory** · [component-research](../skills/component-research.md) · [design-direction](../skills/design-direction.md) · [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)
 
 Motion is lighter than in visual modes: feedback and continuity, rarely character.
 
 ## Stages
 
-S3 is **light on visual direction, full on architecture**. When design and architecture conflict in this mode, **architecture wins** and design adapts ([WORKFLOW.md](../WORKFLOW.md) role conflicts).
+S3 is **light on visual direction, full on architecture**. When design and architecture conflict in this mode, **architecture wins** and design adapts ([WORKFLOW.md](../docs/policies/WORKFLOW.md) role conflicts).
 
 ## Gates
 
@@ -105,5 +105,5 @@ If the answer is no, it is a non-goal. Write it in `PROJECT.md` so it stays one.
 | A dashboard because apps have dashboards | The table above |
 | Happy path only | Every state designed, in the quality bar |
 | Design locked before the data model | Architecture first in this mode |
-| Component-library soup | G2 on every package ([LIBRARY-POLICY.md](../LIBRARY-POLICY.md)) |
+| Component-library soup | G2 on every package ([LIBRARY-POLICY.md](../docs/policies/LIBRARY-POLICY.md)) |
 | "It's a tool so it can look plain" | Quieter, yes. Unconsidered, no. |

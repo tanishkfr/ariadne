@@ -14,7 +14,7 @@ Compressed, not skipped. The compression is the point: heavy process on a two-da
 
 **Installations and physical pieces route here.** They are not a separate mode — they are this mode with a different input and display target, which question 2 establishes. Web tech usually still applies: a Capacitor build on a tablet, a kiosk browser, a projected canvas. What changes is the composition, not the stack.
 
-**Mode switch warning:** an experiment that grows accounts has become a product app — state outliving the session is what decides it. Re-fire the router ([ROUTER.md](../ROUTER.md) 3.6) rather than quietly upgrading.
+**Mode switch warning:** an experiment that grows accounts has become a product app — state outliving the session is what decides it. Re-fire the router ([ROUTER.md](../docs/policies/ROUTER.md) 3.6) rather than quietly upgrading.
 
 **Adding a feature is not a mode switch.** Extending an experiment inherits this mode; only persistent state re-routes it.
 

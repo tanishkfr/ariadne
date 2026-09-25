@@ -33,7 +33,7 @@ Referenced by ID from everywhere else in the system. Change the rule here, not t
 | **Frame** | The router's interpretation of a request. Ten slots, section 3.1. |
 | **Mode** | The kind of project. One of 5. |
 | **Stage** | S0-S6. [WORKFLOW.md](WORKFLOW.md). |
-| **Skill** | A method in [skills/](skills/). |
+| **Skill** | A method in [skills/](../../skills). |
 | **Role** | One of 5 jobs. [WORKFLOW.md](WORKFLOW.md). |
 | **Gate** | A named human approval. G1-G5. |
 
@@ -41,11 +41,11 @@ Referenced by ID from everywhere else in the system. Change the rule here, not t
 
 | Mode | The work is |
 |---|---|
-| [Client or portfolio](modes/client-or-portfolio.md) | A site whose job is reputation — yours or someone else's |
-| [Product app](modes/product-app.md) | Something with state that outlives the session |
-| [Game / experiment](modes/game-experiment.md) | A playable or experimental piece, any medium |
-| [Content system](modes/content-system.md) | Writing for an audience, with a learning loop |
-| [Audit / review](modes/audit-review.md) | Judgement of something that already exists |
+| [Client or portfolio](../../modes/client-or-portfolio.md) | A site whose job is reputation — yours or someone else's |
+| [Product app](../../modes/product-app.md) | Something with state that outlives the session |
+| [Game / experiment](../../modes/game-experiment.md) | A playable or experimental piece, any medium |
+| [Content system](../../modes/content-system.md) | Writing for an audience, with a learning loop |
+| [Audit / review](../../modes/audit-review.md) | Judgement of something that already exists |
 
 ### Writing intent
 
@@ -122,7 +122,7 @@ Fill these ten slots before deciding anything. Slots may be `UNRESOLVED` — tha
 
 A request to *create* never becomes a review because a reference was mentioned. A request to *review* never becomes a build because the subject happens to be buildable.
 
-**R-REF-1 — Reference handling.** A reference is a **modifier of the work, never a selector of the mode.** It flows to [reference-analysis](skills/reference-analysis.md) at S2/S3 and changes the design direction. It does not change what is being built.
+**R-REF-1 — Reference handling.** A reference is a **modifier of the work, never a selector of the mode.** It flows to [reference-analysis](../../skills/reference-analysis.md) at S2/S3 and changes the design direction. It does not change what is being built.
 
 | Request | ACTION | ARTIFACT | Routes to |
 |---|---|---|---|
@@ -210,7 +210,7 @@ Cap: five. Batched, numbered, each with a proposed default so the reply can be "
 
 Never ask: which framework · whether it should be responsive or accessible · whether quality matters · anything already stated.
 
-**When the object is UNRESOLVED**, the one question that matters is *what kind of thing is this?* — offered as concrete options drawn from the modes, not as an open prompt. Per-mode question sets live in each [mode file](modes/).
+**When the object is UNRESOLVED**, the one question that matters is *what kind of thing is this?* — offered as concrete options drawn from the modes, not as an open prompt. Per-mode question sets live in each [mode file](../../modes).
 
 ## 5. Default assumptions
 
@@ -260,13 +260,13 @@ Everything else is conditional. Creating a document nobody will read is worse th
 
 | Mode | Skills |
 |---|---|
-| Client or portfolio | [intake](skills/intake.md), [reference-analysis](skills/reference-analysis.md), [design-direction](skills/design-direction.md), [component-research](skills/component-research.md), [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md) |
+| Client or portfolio | [intake](../../skills/intake.md), [reference-analysis](../../skills/reference-analysis.md), [design-direction](../../skills/design-direction.md), [component-research](../../skills/component-research.md), [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md) |
 | Product app | intake, component-research, design-direction, EVALUATION-RUBRICS |
 | Game / experiment | intake (light), design-direction (light) |
 | Content / writing system | intake, [WRITING-POLICY.md](WRITING-POLICY.md), EVALUATION-RUBRICS; SOCIAL also uses [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md) |
 | Audit / review | reference-analysis, EVALUATION-RUBRICS |
 
-**Any frame with a non-empty `REFERENCE` activates [reference-analysis](skills/reference-analysis.md)** — in any mode, whatever the action.
+**Any frame with a non-empty `REFERENCE` activates [reference-analysis](../../skills/reference-analysis.md)** — in any mode, whatever the action.
 
 ---
 
@@ -287,9 +287,9 @@ Everything else is conditional. Creating a document nobody will read is worse th
 
 ## 9. Handling inputs
 
-**References.** Governed by **R-REF-1** — a reference modifies the work, never the mode. Route to [reference-analysis](skills/reference-analysis.md) before any design work. **Three minimum** — one produces imitation, three force synthesis. If only one is supplied, ask for two more or name two from [references/visual-references.md](references/visual-references.md) and say which.
+**References.** Governed by **R-REF-1** — a reference modifies the work, never the mode. Route to [reference-analysis](../../skills/reference-analysis.md) before any design work. **Three minimum** — one produces imitation, three force synthesis. If only one is supplied, ask for two more or name two from [references/visual-references.md](../../references/visual-references.md) and say which.
 
-**Screenshots of existing products.** Evidence, not instruction — run every observed pattern through [reference-analysis](skills/reference-analysis.md) before adopting it.
+**Screenshots of existing products.** Evidence, not instruction — run every observed pattern through [reference-analysis](../../skills/reference-analysis.md) before adopting it.
 
 **Missing assets.** Resolved at S3, never at S4. No project reaches S4 with an unresolved asset on the critical path — either it exists, it gets made, or **the direction changes so it is not needed.** See [DESIGN-ASSETS.md](DESIGN-ASSETS.md).
 

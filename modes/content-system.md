@@ -2,11 +2,11 @@
 
 Writing for an audience, with a recorded intent. SOCIAL uses X/LinkedIn,
 analytics and a learning loop. General creative, academic, scientific/technical
-and human-draft work uses [WRITING-POLICY.md](../WRITING-POLICY.md) inside the
+and human-draft work uses [WRITING-POLICY.md](../docs/policies/WRITING-POLICY.md) inside the
 existing workflow and does not inherit SOCIAL rules. **The only ongoing mode**
 is SOCIAL; general writing completes through editorial review.
 
-Full method: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md). This file is the routing.
+Full method: [CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md). This file is the routing.
 
 ---
 
@@ -32,7 +32,7 @@ method. Do not ask social questions for an academic or technical request.
 ## SOCIAL setup, once
 
 These artifacts apply only when the recorded intent is SOCIAL. They are built
-at S1-S2 and live **in the content project, never in Ariadne** ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)):
+at S1-S2 and live **in the content project, never in Ariadne** ([PRIVACY-POLICY.md](../docs/policies/PRIVACY-POLICY.md)):
 
 **1. `voice-profile.md`** — from 10-20 things you have actually written. Includes the **anti-voice list**: constructions you find embarrassing. Minimum ten entries. Easier to enforce than a voice list and does more work.
 
@@ -45,7 +45,7 @@ at S1-S2 and live **in the content project, never in Ariadne** ([PRIVACY-POLICY.
 ## Documents by intent
 
 General writing requires `PROJECT.md` plus the artifact and review record called
-for by [WRITING-POLICY.md](../WRITING-POLICY.md). It does not require a voice
+for by [WRITING-POLICY.md](../docs/policies/WRITING-POLICY.md). It does not require a voice
 profile, content pillars or `CONTENT-LEARNINGS.md`.
 
 SOCIAL requires `PROJECT.md` and `CONTENT-LEARNINGS.md`.
@@ -54,7 +54,7 @@ Add `RESEARCH.md` when a platform specific needs verifying. No `DESIGN.md`, no `
 
 ## SOCIAL skills
 
-[intake](../skills/intake.md) — **challenge pass mandatory** · [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) · this file
+[intake](../skills/intake.md) — **challenge pass mandatory** · [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md) · this file
 
 Grilling is mandatory because question 2 — what you are actually known for — collapses under the first push almost every time, and an unresolved answer produces generic posts forever.
 
@@ -86,7 +86,7 @@ Per post, all of these:
 
 - **The only-you element** — one thing nobody else could have written. **Without it, do not post.**
 - **Hook scores 4+** — below 4 does not get drafted
-- All five originality checks pass ([CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) section 8)
+- All five originality checks pass ([CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md) section 8)
 - Passes the read-aloud test
 - Zero fabricated metrics, clients, results, or experiences
 
@@ -95,7 +95,7 @@ Per post, all of these:
 - **Nothing publishes automatically.** Ever.
 - No account connections, no scheduling, no bulk posting.
 - Analytics come from you, pasted in. The system has no account access and must not imply otherwise.
-- Never invent a number, a client, or an experience. [WORKFLOW.md](../WORKFLOW.md) Red tier.
+- Never invent a number, a client, or an experience. [WORKFLOW.md](../docs/policies/WORKFLOW.md) Red tier.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Template. Owner: Architect · Written at the end of S3, consumed at S4.
 > **This is the compression layer of the whole system.** It exists so the implementer never re-derives what the director already decided.
-> Re-deriving context is the single largest waste of subscription usage — see [MODEL-ROUTING.md](../MODEL-ROUTING.md) section 8.
+> Re-deriving context is the single largest waste of subscription usage — see [MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md) section 8.
 >
 > Write it so a tool that has never seen this project can start work from this file alone.
 
@@ -196,7 +196,7 @@ required command that fails is a validation failure, not an acceptance.
 
 ## QA requirements
 
-> What "done" means for this project, beyond the standard checklist in [QA-POLICY.md](../QA-POLICY.md).
+> What "done" means for this project, beyond the standard checklist in [QA-POLICY.md](../docs/policies/QA-POLICY.md).
 
 - Production build passes, zero type errors, zero console errors
 - Responsive at 375, 768, 900, 1280, 1920
@@ -240,4 +240,4 @@ claim checks that were not run.
 
 ## If the design cannot be built as specified
 
-Raise a `BUILD FINDING` ([WORKFLOW.md](../WORKFLOW.md) step 7) and wait for a decision. **Never substitute silently.**
+Raise a `BUILD FINDING` ([WORKFLOW.md](../docs/policies/WORKFLOW.md) step 7) and wait for a decision. **Never substitute silently.**

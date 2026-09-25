@@ -5,7 +5,7 @@
 **Inputs** — `PROJECT.md`; `RESEARCH.md` when produced; pooled mechanisms from [reference-analysis](reference-analysis.md) only when that skill was selected
 **Output** — [`DESIGN.md`](../templates/DESIGN.md) and the G1 presentation
 
-**This is the stage that decides whether the output looks generic.** Every rule in [DESIGN-TASTE.md](../DESIGN-TASTE.md) applies here, not at S4. Fixing genericness at build time costs ten times more and usually fails.
+**This is the stage that decides whether the output looks generic.** Every rule in [DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) applies here, not at S4. Fixing genericness at build time costs ten times more and usually fails.
 
 **Evidence boundary** — only inspected references may inform the direction.
 Trace each such reference through observation, principle, exact DESIGN.md
@@ -35,22 +35,22 @@ them.
 
 **4. Derive, do not decide.** Every subsequent choice descends from the thesis and is written with its reason:
 
-- **Typography** — face, scale ratio, extreme size contrast, leading, tracking. See [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 2.
+- **Typography** — face, scale ratio, extreme size contrast, leading, tracking. See [DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) section 2.
 - **Colour** — achromatic base first, one accent with a stated source. Section 3.
 - **Layout** — grid, where it breaks and why, edge behaviour, density. Section 4.
 - **Material** — texture, image treatment, elevation. Section 5.
-- **Motion** — what motion is *for* in this project. Section 6, and [DESIGN-MOTION.md](../DESIGN-MOTION.md).
+- **Motion** — what motion is *for* in this project. Section 6, and [DESIGN-MOTION.md](../docs/policies/DESIGN-MOTION.md).
 - **Responsive** — how the direction changes at 375, not how it shrinks. Section 7.
 
 A decision without a reason traceable to the thesis is a decision that will drift at S4.
 
-**5. Name the signature moment** ([DESIGN-TASTE.md](../DESIGN-TASTE.md) 1.4). Where it lives, what happens, why it is memorable, and its mobile equivalent. Build it first at S4 — anything left to the end gets cut.
+**5. Name the signature moment** ([DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) 1.4). Where it lives, what happens, why it is memorable, and its mobile equivalent. Build it first at S4 — anything left to the end gets cut.
 
 **6. Write the project's rejection list.** Minimum three, specific to this project, beyond the global anti-generic table. "No scroll-triggered fade-ups anywhere" is a real constraint. "Avoid generic design" is not.
 
-**7. Resolve the asset question now** ([DESIGN-ASSETS.md](../DESIGN-ASSETS.md)). Does the direction depend on assets that do not exist? Either commission them, generate them ([DESIGN-ASSETS.md](../DESIGN-ASSETS.md)), or **change the direction so it does not need them.** A type-led direction eliminates the dependency entirely and is usually the better answer.
+**7. Resolve the asset question now** ([DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md)). Does the direction depend on assets that do not exist? Either commission them, generate them ([DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md)), or **change the direction so it does not need them.** A type-led direction eliminates the dependency entirely and is usually the better answer.
 
-**8. Run the G1 check.** The ten Y/N questions in [templates/DESIGN.md](../templates/DESIGN.md). **Any N is a blocker — do not present it.** Numeric scoring happens at S5, by a reviewer who did not write the direction ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
+**8. Run the G1 check.** The ten Y/N questions in [templates/DESIGN.md](../templates/DESIGN.md). **Any N is a blocker — do not present it.** Numeric scoring happens at S5, by a reviewer who did not write the direction ([EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)).
 
 ---
 

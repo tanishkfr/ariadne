@@ -1,6 +1,6 @@
 # ROUTER REGRESSION SUITE
 
-Persistent test cases for the interpretation frame in [ROUTER.md](../ROUTER.md).
+Persistent test cases for the interpretation frame in [ROUTER.md](../docs/policies/ROUTER.md).
 
 **Why this file exists:** the v0.2 refactor deleted `validation/` on the grounds that it had no consumer. That was right about dry-run narratives and wrong about executable test cases — **their consumer is every future router change.** For one version this suite existed only in a chat log and could not be re-run.
 

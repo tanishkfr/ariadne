@@ -1,6 +1,6 @@
 # QA: <name>
 
-> Template. Owner: QA engineer · Stage: S5 · Policy: [QA-POLICY.md](../QA-POLICY.md)
+> Template. Owner: QA engineer · Stage: S5 · Policy: [QA-POLICY.md](../docs/policies/QA-POLICY.md)
 > **Every row needs evidence: a command output, a measured number, or a screenshot.**
 > A check that was not run is recorded as **not run** — never as passed, never left blank.
 
@@ -50,11 +50,11 @@
 
 > **Filled in from a different session.** The Reviewer does not read the mechanical half above and has not
 > seen `DESIGN.md` — it gets the deployed URL and the success criteria, nothing else
-> ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)). Paste its output here when it comes back.
+> ([EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)). Paste its output here when it comes back.
 
 ### Anti-generic sweep
 
-> [DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6. **Any present is Blocking**, unless declared as an
+> [DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) section 6. **Any present is Blocking**, unless declared as an
 > accepted pattern in `PROJECT.md` — those drop to Note and are marked `accepted` below.
 
 | Pattern | Present? | Accepted? | Where |
@@ -82,7 +82,7 @@
 
 ### Review lenses
 
-> [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md). Run in sessions that did not build this.
+> [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md). Run in sessions that did not build this.
 
 | Lens | Score | Verdict | The one thing |
 |---|---|---|---|

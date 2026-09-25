@@ -43,7 +43,7 @@ The first answers are always the plausible ones. Agreeable discovery produces a 
 
 **Attack the scope.** Which single piece delivers most of the value? If half the time vanished, what gets cut — that answer reveals actual priority, which is rarely the stated priority. What is here because it is expected? What is here because it is fun to build?
 
-**Attack the differentiation.** Name three things that already exist doing roughly this. What does this do differently? Would it survive the swap test ([DESIGN-TASTE.md](../DESIGN-TASTE.md) section 6)? What will someone remember a day later?
+**Attack the differentiation.** Name three things that already exist doing roughly this. What does this do differently? Would it survive the swap test ([DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) section 6)? What will someone remember a day later?
 
 **Attack the success criteria.** How would you know this failed? Who decides, and when?
 

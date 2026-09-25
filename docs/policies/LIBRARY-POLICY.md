@@ -2,7 +2,7 @@
 
 How a package gets into a project, and how it gets out.
 
-The problem this solves: **component libraries are a substitute for design decisions.** Installing five UI libraries produces five visual languages, none of them yours. The libraries in [references/ui-libraries.md](references/ui-libraries.md) are excellent as *research* and dangerous as *dependencies*.
+The problem this solves: **component libraries are a substitute for design decisions.** Installing five UI libraries produces five visual languages, none of them yours. The libraries in [references/ui-libraries.md](../../references/ui-libraries.md) are excellent as *research* and dangerous as *dependencies*.
 
 Rule of thumb: **every dependency is a decision you have outsourced.** Outsource the boring ones. Never outsource the ones your work is judged on.
 
@@ -55,7 +55,7 @@ meets the project need without weakening accessibility or the approved design:
 Record the rejected rung and reason in the G2 proposal. Discovery never grants
 permission to install, and a familiar package name is not evidence of need.
 
-The dated [capability registry](references/capabilities.json) is an advisory
+The dated [capability registry](../../references/capabilities.json) is an advisory
 comparison index for rung 5. It records what a source may provide, provenance,
 licence, side effects, and design-authority risk. It is not a preferred-library
 list, does not replace current source inspection, and cannot approve G2. When a
@@ -84,7 +84,7 @@ Legitimate, but each brings a cost that must be worth paying. State the reason i
 
 **Read these. Do not install them.** Study how a component is built, then build your own in your own token system.
 
-All of the UI/motion sources you collected — Aceternity, Magic UI, React Bits, Kokonut, Motion Primitives, 8bitcn, bklit, watermelon — are research-only by default. Full list and rationale: [references/ui-libraries.md](references/ui-libraries.md).
+All of the UI/motion sources you collected — Aceternity, Magic UI, React Bits, Kokonut, Motion Primitives, 8bitcn, bklit, watermelon — are research-only by default. Full list and rationale: [references/ui-libraries.md](../../references/ui-libraries.md).
 
 Why:
 

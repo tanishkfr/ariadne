@@ -5,7 +5,7 @@
 **Inputs** — locked `DESIGN.md`, `HANDOFF.md`, `PROJECT.md`, `AGENTS.md`, rendered target, `.ariadne/creative-operations.json`
 **Output** — hashed visual evidence and drift findings in `.ariadne/creative-operations.json`; mechanical results remain in `QA.md`
 
-This skill applies [QA-POLICY.md](../QA-POLICY.md) to the project-specific
+This skill applies [QA-POLICY.md](../docs/policies/QA-POLICY.md) to the project-specific
 requirements derived from the approved direction. It does not replace that
 policy, grant G3, or enter the independent S5 review context.
 

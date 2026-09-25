@@ -2,7 +2,7 @@
 
 **Role in the system: the orchestrator.** It decides; it does not build.
 
-Capability classes: **`R1`** (deep reasoning), with `R4` where browsing is available. See [MODEL-ROUTING.md](../MODEL-ROUTING.md).
+Capability classes: **`R1`** (deep reasoning), with `R4` where browsing is available. See [MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md).
 
 > Adapters are the only files allowed to name products. Everything Codex-specific lives here, so replacing it means rewriting this file and nothing else.
 
@@ -34,7 +34,7 @@ high-risk integration, or twice-failed diagnosis. It then consumes the same S4B
 contract, runs free checks locally, and returns the same structured handoff. It
 does not reinterpret the direction or grant G3.
 
-**The rule that saves the most usage: never paste a codebase into Codex.** Paste the interface, the error, and the constraint. Context is what exhausts limits ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 8).
+**The rule that saves the most usage: never paste a codebase into Codex.** Paste the interface, the error, and the constraint. Context is what exhausts limits ([MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md) section 8).
 
 ---
 
@@ -103,7 +103,7 @@ If a required input is unavailable, use the stage prompt's **IF MISSING** path.
 Do not replace the missing canonical file from memory and do not emit the next
 stage's transition.
 
-The S5 row is the important one. **A reviewer given the design document defends the design.** Independence is the whole point of the lens ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
+The S5 row is the important one. **A reviewer given the design document defends the design.** Independence is the whole point of the lens ([EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)).
 
 ---
 
@@ -117,15 +117,15 @@ Test before handing off: **could a tool that has never seen this project start w
 
 ## Browsing
 
-Where browsing is available, use it for [RESEARCH-POLICY.md](../RESEARCH-POLICY.md): primary sources, dated, with URLs.
+Where browsing is available, use it for [RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md): primary sources, dated, with URLs.
 
-Set the lookup budget before searching, then stop and report ([RESEARCH-POLICY.md](../RESEARCH-POLICY.md) section 2).
+Set the lookup budget before searching, then stop and report ([RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md) section 2).
 
 ---
 
 ## Limits
 
-When Codex is exhausted mid-project: **stop deciding**, and do already-specified build work instead. Never let the implementation tool invent direction — see the recovery rule in [MODEL-ROUTING.md](../MODEL-ROUTING.md) section 9.
+When Codex is exhausted mid-project: **stop deciding**, and do already-specified build work instead. Never let the implementation tool invent direction — see the recovery rule in [MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md) section 9.
 
 If you are at S3 without an approved thesis and Codex is out, wait. Waiting is cheaper than rebuilding.
 

@@ -29,7 +29,7 @@
 
 ## Findings raised
 
-> From [WORKFLOW.md](../WORKFLOW.md) step 7. Design could not be built as specified.
+> From [WORKFLOW.md](../docs/policies/WORKFLOW.md) step 7. Design could not be built as specified.
 > **Never resolved by silent substitution.**
 
 | # | Task | Specified | Problem | Options | Decision |
@@ -38,7 +38,7 @@
 
 ## Dependency requests
 
-> G2. Full format in [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 6.
+> G2. Full format in [LIBRARY-POLICY.md](../docs/policies/LIBRARY-POLICY.md) section 6.
 
 | Package | Requested | Status | Decided |
 |---|---|---|---|

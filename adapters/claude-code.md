@@ -4,9 +4,9 @@
 contract as Cursor.** Transport-ready; live implementation equivalence remains
 unverified.
 
-Capability classes: **`R2`**, **`R3`**, **`R4`**, **`R6`**. See [MODEL-ROUTING.md](../MODEL-ROUTING.md).
+Capability classes: **`R2`**, **`R3`**, **`R4`**, **`R6`**. See [MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md).
 
-**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in Ariadne changes. That is the portability test ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
+**By design, this adapter is replaceable.** If Claude Code disappeared, [cursor.md](cursor.md) absorbs its classes and nothing else in Ariadne changes. That is the portability test ([MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md) section 10).
 
 ---
 
@@ -47,17 +47,17 @@ as a bounded comparison checklist, not a recommendation.
 |---|---|---|
 | [intake](../skills/intake.md) | `grill-me` | Closest direct match in the set |
 | [design-direction](../skills/design-direction.md) | `design-taste-frontend`, `high-end-visual-design`, `impeccable` | Three overlapping options — pick one and stay with it, or they will fight each other |
-| [DESIGN-MOTION.md](../DESIGN-MOTION.md) | `design-motion-principles` | Has an audit mode for catching generic motion |
-| [QA-POLICY.md](../QA-POLICY.md) | `webapp-testing` | Playwright-based |
-| [DESIGN-ASSETS.md](../DESIGN-ASSETS.md) | `banana`, `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile` | **Check whether any bills per token** before use ([BUDGET-POLICY.md](../BUDGET-POLICY.md)) |
+| [DESIGN-MOTION.md](../docs/policies/DESIGN-MOTION.md) | `design-motion-principles` | Has an audit mode for catching generic motion |
+| [QA-POLICY.md](../docs/policies/QA-POLICY.md) | `webapp-testing` | Playwright-based |
+| [DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md) | `banana`, `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile` | **Check whether any bills per token** before use ([BUDGET-POLICY.md](../docs/policies/BUDGET-POLICY.md)) |
 | [component-research](../skills/component-research.md) | `ui-ux-pro-max` | Local database of patterns |
-| [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) | `humanizer` | Useful for the anti-AI-tell sweep specifically |
-| [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) | `claude-mem:design-is`, `design-motion-principles` (audit mode) | Neither replaces the rubrics in [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md) |
+| [CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md) | `humanizer` | Useful for the anti-AI-tell sweep specifically |
+| [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md) | `claude-mem:design-is`, `design-motion-principles` (audit mode) | Neither replaces the rubrics in [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md) |
 | [reference-analysis](../skills/reference-analysis.md) | **none** | Use the skill file's method |
-| [QA-POLICY.md](../QA-POLICY.md) | **none directly** | Use the skill file's method |
-| [QA-POLICY.md](../QA-POLICY.md) | **none directly** | Use the skill file's method |
-| [RESEARCH-POLICY.md](../RESEARCH-POLICY.md) | built-in web search | |
-| [QA-POLICY.md](../QA-POLICY.md) | built-in bash | |
+| [QA-POLICY.md](../docs/policies/QA-POLICY.md) | **none directly** | Use the skill file's method |
+| [QA-POLICY.md](../docs/policies/QA-POLICY.md) | **none directly** | Use the skill file's method |
+| [RESEARCH-POLICY.md](../docs/policies/RESEARCH-POLICY.md) | built-in web search | |
+| [QA-POLICY.md](../docs/policies/QA-POLICY.md) | built-in bash | |
 
 Built-in commands worth knowing: `/code-review` (diff review, user-triggered), `/security-review`, `/init`, `/run`.
 
@@ -67,7 +67,7 @@ First, several of these skills carry **their own strong aesthetic opinions** —
 
 Second, having three overlapping design skills is itself a risk. Pick one, learn its behaviour, and record which one you chose and why in the retrospective.
 
-Third, image-generation skills may use paid APIs. Verify before running one — pay-per-token is Amber ([BUDGET-POLICY.md](../BUDGET-POLICY.md)).
+Third, image-generation skills may use paid APIs. Verify before running one — pay-per-token is Amber ([BUDGET-POLICY.md](../docs/policies/BUDGET-POLICY.md)).
 
 ---
 
@@ -92,7 +92,7 @@ You are moving toward Codex + Cursor. During that period:
 | Long agentic multi-file work in a terminal | Claude Code — genuinely better at this |
 | You want to compare the two | [CHANGELOG.md](../CHANGELOG.md), same handoff, one variable |
 
-Full sequence: [MIGRATION-CHECKLIST.md](../MIGRATION-CHECKLIST.md).
+Full sequence: [MIGRATION-CHECKLIST.md](../docs/guides/MIGRATION-CHECKLIST.md).
 
 ---
 

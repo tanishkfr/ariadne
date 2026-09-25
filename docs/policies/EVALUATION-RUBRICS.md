@@ -2,7 +2,7 @@
 
 The judgement half of S5. Five lenses, each a different person with different priorities, who disagree on purpose.
 
-Also the whole deliverable in [audit / review](modes/audit-review.md) mode.
+Also the whole deliverable in [audit / review](../../modes/audit-review.md) mode.
 
 ---
 

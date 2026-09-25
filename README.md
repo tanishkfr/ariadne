@@ -121,7 +121,7 @@ python -m ariadne doctor
 | macOS | `~/Library/Application Support/Ariadne` |
 | Linux | `$XDG_DATA_HOME/ariadne`, otherwise `~/.local/share/ariadne` |
 
-If `python -m pip show ariadne` describes a GraphQL library, stop and use a separate Python environment. The two distributions cannot coexist in one environment. More detail is in [Installation](INSTALL.md).
+If `python -m pip show ariadne` describes a GraphQL library, stop and use a separate Python environment. The two distributions cannot coexist in one environment. More detail is in [Installation](docs/guides/INSTALL.md).
 
 ## Quick start
 
@@ -171,7 +171,7 @@ Verification  ≠  Acceptance
 
 An approval binds a gate, a target, a revision and an identity. A review binds two distinct executions, so an implementer cannot certify their own work. An acceptance spends exactly one human approval. The engine can stop and ask, and it cannot manufacture the answer.
 
-The full statement of what the engine does and does not guarantee is in [Trust boundaries](TRUST.md).
+The full statement of what the engine does and does not guarantee is in [Trust boundaries](docs/guides/TRUST.md).
 
 ## Design Intelligence
 
@@ -218,7 +218,7 @@ python -m ariadne migrate --dry-run --project <project>
 python -m ariadne migrate --apply --project <project>
 ```
 
-An apply preserves the pre-migration bytes and creates no approval, review or verification record. Rollback restores the preserved bytes while that remains honest, and refuses once v2-only work exists. The full guide is [MIGRATING-v1-to-v2.md](MIGRATING-v1-to-v2.md).
+An apply preserves the pre-migration bytes and creates no approval, review or verification record. Rollback restores the preserved bytes while that remains honest, and refuses once v2-only work exists. The full guide is [MIGRATING-v1-to-v2.md](docs/guides/MIGRATING-v1-to-v2.md).
 
 ## Updates, rollback and removal
 
@@ -250,18 +250,18 @@ Ariadne enforces its own state transitions, approval binding, revision freshness
 - one install path was verified on one platform; other platforms use the same Python entry point but were not executed here;
 - migration rollback stops being available once v2-only work exists.
 
-These are stated precisely in [TRUST.md](TRUST.md).
+These are stated precisely in [TRUST.md](docs/guides/TRUST.md).
 
 ## Documentation
 
-- [Quick start](QUICKSTART.md) · [Installation](INSTALL.md) · [Getting started](GETTING-STARTED.md)
-- [Updates and rollback](UPDATE.md) · [Troubleshooting](TROUBLESHOOTING.md)
+- [Quick start](docs/guides/QUICKSTART.md) · [Installation](docs/guides/INSTALL.md) · [Getting started](docs/guides/GETTING-STARTED.md)
+- [Updates and rollback](docs/guides/UPDATE.md) · [Troubleshooting](docs/guides/TROUBLESHOOTING.md)
 - [Python and CLI API](docs/v2/AR-205/06-RELEASE-API.md) · [Integration protocol](docs/v2/AR-205/04-INTEGRATION-CONTRACT.md)
-- [Architecture](docs/v2/AR-200/03-ARCHITECTURE.md) · [Workflow](WORKFLOW.md) · [Router](ROUTER.md)
+- [Architecture](docs/v2/AR-200/03-ARCHITECTURE.md) · [Workflow](docs/policies/WORKFLOW.md) · [Router](docs/policies/ROUTER.md)
 - [Decision Intelligence](docs/v2/AR-205D/01-DECISION-COMPILER.md) · [Decision Graph](docs/v2/AR-205D/02-DECISION-GRAPH.md)
-- [Design Intelligence](docs/v2/AR-202D/02-REFERENCE-INTELLIGENCE.md) · [Design direction](docs/v2/AR-202D/04-DESIGN-DIRECTION.md) · [Design taste](DESIGN-TASTE.md)
-- [Trust boundaries](TRUST.md) · [Privacy](PRIVACY-POLICY.md) · [Model routing](MODEL-ROUTING.md)
-- [Migration guide](MIGRATING-v1-to-v2.md) · [Examples](examples/README.md) · [Benchmarks](benchmarks/README.md)
+- [Design Intelligence](docs/v2/AR-202D/02-REFERENCE-INTELLIGENCE.md) · [Design direction](docs/v2/AR-202D/04-DESIGN-DIRECTION.md) · [Design taste](docs/policies/DESIGN-TASTE.md)
+- [Trust boundaries](docs/guides/TRUST.md) · [Privacy](docs/policies/PRIVACY-POLICY.md) · [Model routing](docs/policies/MODEL-ROUTING.md)
+- [Migration guide](docs/guides/MIGRATING-v1-to-v2.md) · [Examples](examples/README.md) · [Benchmarks](benchmarks/README.md)
 - [Release notes](RELEASE-NOTES.md) · [Changelog](CHANGELOG.md)
 
 ## Licence

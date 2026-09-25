@@ -4,12 +4,12 @@ Stages, gates, roles, and what an agent may do without asking. One file, because
 
 | Stage | Name | Entry point | Role | Produces | Ends at |
 |---|---|---|---|---|---|
-| **S0-S1** | Route + Discover | [prompts/project-start.md](prompts/project-start.md) | Strategist | Routing Block, `PROJECT.md` | Scope agreed |
-| **S2** | Research | [prompts/research.md](prompts/research.md) *(on trigger)* | Strategist | `RESEARCH.md` *(conditional)* | Facts dated |
-| **S3** | Direct | [prompts/design-direction.md](prompts/design-direction.md) | Design director + Architect | `DESIGN.md` (+`ARCHITECTURE.md`) | **G1** |
-| **S4** | Build | [prompts/build-kickoff.md](prompts/build-kickoff.md) | Architect, then Implementer | `HANDOFF.md`, working code | Build passes |
-| **S5** | Verify | *(mechanical: in build-kickoff)* → [prompts/project-review.md](prompts/project-review.md) | Implementer, then Reviewer | `QA.md` | **G3** |
-| **S6** | Ship & Learn | [prompts/retrospective.md](prompts/retrospective.md) | Implementer + Strategist | Deploy, `RETROSPECTIVE.md` | **G4** |
+| **S0-S1** | Route + Discover | [prompts/project-start.md](../../prompts/project-start.md) | Strategist | Routing Block, `PROJECT.md` | Scope agreed |
+| **S2** | Research | [prompts/research.md](../../prompts/research.md) *(on trigger)* | Strategist | `RESEARCH.md` *(conditional)* | Facts dated |
+| **S3** | Direct | [prompts/design-direction.md](../../prompts/design-direction.md) | Design director + Architect | `DESIGN.md` (+`ARCHITECTURE.md`) | **G1** |
+| **S4** | Build | [prompts/build-kickoff.md](../../prompts/build-kickoff.md) | Architect, then Implementer | `HANDOFF.md`, working code | Build passes |
+| **S5** | Verify | *(mechanical: in build-kickoff)* → [prompts/project-review.md](../../prompts/project-review.md) | Implementer, then Reviewer | `QA.md` | **G3** |
+| **S6** | Ship & Learn | [prompts/retrospective.md](../../prompts/retrospective.md) | Implementer + Strategist | Deploy, `RETROSPECTIVE.md` | **G4** |
 
 **Every stage ends by naming the next entry point.** You should never finish a stage and have to browse this repository to work out what happens next. A stage that ends in "let me know how you would like to proceed" has failed.
 
@@ -48,7 +48,7 @@ Turns a vague request into a scoped, falsifiable project. Owns the router and th
 - **Produces:** Routing Block, `PROJECT.md`, `RESEARCH.md`, `RETROSPECTIVE.md`, Ariadne amendments
 - **May:** ask questions, log assumptions, declare mode, define non-goals, halt the project
 - **Must not:** design, choose libraries, write code
-- **Skill:** [intake](skills/intake.md)
+- **Skill:** [intake](../../skills/intake.md)
 
 ### 2. Design director — S3, and rejection authority at S5
 
@@ -57,7 +57,7 @@ Produces an original design thesis and defends it against genericness. **This ro
 - **Produces:** `DESIGN.md`, the G1 presentation
 - **May:** set typography, palette, layout, motion purpose, the signature moment; **reject an implementation for drifting from the thesis**
 - **Must not:** pick packages, write production CSS, or approve its own direction
-- **Skills:** [reference-analysis](skills/reference-analysis.md), [design-direction](skills/design-direction.md). Rules: [DESIGN-TASTE.md](DESIGN-TASTE.md), [DESIGN-MOTION.md](DESIGN-MOTION.md), [DESIGN-ASSETS.md](DESIGN-ASSETS.md)
+- **Skills:** [reference-analysis](../../skills/reference-analysis.md), [design-direction](../../skills/design-direction.md). Rules: [DESIGN-TASTE.md](DESIGN-TASTE.md), [DESIGN-MOTION.md](DESIGN-MOTION.md), [DESIGN-ASSETS.md](DESIGN-ASSETS.md)
 
 **Rejection authority.** The only role that can send S4 work back. It must cite a specific clause of `DESIGN.md` or [DESIGN-TASTE.md](DESIGN-TASTE.md). "I don't like it" is not a rejection; "this violates the type-led thesis by using a stock hero image" is.
 
@@ -68,7 +68,7 @@ Decides structure so the Implementer never invents it. Writes the handoff.
 - **Produces:** `ARCHITECTURE.md` *(conditional)*, `TASKS.md` *(conditional)*, **`HANDOFF.md`**
 - **May:** define routes, component map, state model, file structure; sequence tasks; declare a backend or CMS unnecessary
 - **Must not:** install anything; add auth, a database, a CMS, or an API layer without a stated requirement
-- **Skill:** [component-research](skills/component-research.md)
+- **Skill:** [component-research](../../skills/component-research.md)
 
 On small projects the Strategist wears this role. `HANDOFF.md` is the only mandatory output.
 
@@ -183,11 +183,11 @@ This is what makes almost all agent work reversible with `git checkout`, and it 
 
 ## Stage detail
 
-**S1 Discover** — [intake](skills/intake.md). Done when you can answer, without hedging: what is this · who is it for · what is deliberately not in it · how will we know it worked · what do we not know yet. Vague scope produces generic design; this is the highest-leverage stage.
+**S1 Discover** — [intake](../../skills/intake.md). Done when you can answer, without hedging: what is this · who is it for · what is deliberately not in it · how will we know it worked · what do we not know yet. Vague scope produces generic design; this is the highest-leverage stage.
 
 **S2 Research** — conditional. Only when a fact about the world blocks a decision. See [RESEARCH-POLICY.md](RESEARCH-POLICY.md).
 
-**S3 Direct** — [design-direction](skills/design-direction.md). Produces the thesis: one sentence specific enough that a template would fail it. Design and architecture run in parallel.
+**S3 Direct** — [design-direction](../../skills/design-direction.md). Produces the thesis: one sentence specific enough that a template would fail it. Design and architecture run in parallel.
 
 ### G1 presentation
 
@@ -211,9 +211,9 @@ Risks:       <what could make this fail>
 
 The implementation lifecycle is deliberately finite: `baseline → implementation → validation → routine repair → validation → result/checkpoint`. A complete worker return is `IMPLEMENTED`, not evidence of acceptance. Ariadne records `VALIDATED` only after independent checks pass, then `REVIEWED` after S5 judgement and `ACCEPTED` only after the human G3 decision is recorded. Two routine repair attempts are the default maximum; packet/repository conflict, dangerous or out-of-scope changes, invariant risk, and repeated failure stop for escalation.
 
-**S6 Ship & Learn** — G4, then the retrospective. Fifteen minutes, four questions, in [templates/RETROSPECTIVE.md](templates/RETROSPECTIVE.md).
+**S6 Ship & Learn** — G4, then the retrospective. Fifteen minutes, four questions, in [templates/RETROSPECTIVE.md](../../templates/RETROSPECTIVE.md).
 
-The last one — *what changes in the Ariadne?* — is answered **by editing the file**, then logging it in [CHANGELOG.md](CHANGELOG.md). A retrospective that changes nothing was not a retrospective.
+The last one — *what changes in the Ariadne?* — is answered **by editing the file**, then logging it in [CHANGELOG.md](../../CHANGELOG.md). A retrospective that changes nothing was not a retrospective.
 
 ---
 

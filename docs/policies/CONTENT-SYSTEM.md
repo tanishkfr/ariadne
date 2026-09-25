@@ -10,7 +10,7 @@ publishing boundary.
 
 **The hard constraint:** nothing publishes automatically. Ever. G5 is per-post, every post, no standing approval. See [WORKFLOW.md](WORKFLOW.md).
 
-Owned by the Content strategist ([WORKFLOW.md](WORKFLOW.md)). Mode: [modes/content-system.md](modes/content-system.md).
+Owned by the Content strategist ([WORKFLOW.md](WORKFLOW.md)). Mode: [modes/content-system.md](../../modes/content-system.md).
 
 ---
 
@@ -201,7 +201,7 @@ Caveats to write down and keep writing down: small samples, platform algorithm c
 
 ## 11. Weekly review
 
-Twenty minutes. Output: an appended entry in [`CONTENT-LEARNINGS.md`](templates/CONTENT-LEARNINGS.md).
+Twenty minutes. Output: an appended entry in [`CONTENT-LEARNINGS.md`](../../templates/CONTENT-LEARNINGS.md).
 
 1. What went out, and how did each do?
 2. Best and worst — and is the difference explainable, or noise?

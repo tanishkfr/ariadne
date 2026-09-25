@@ -2,7 +2,7 @@
 
 What to open, in what order, for the work in front of you.
 
-Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](WORKFLOW.md).
+Setup: [GETTING-STARTED.md](GETTING-STARTED.md). Detail: [WORKFLOW.md](../policies/WORKFLOW.md).
 
 ---
 
@@ -42,7 +42,7 @@ belong in the build tool without making the operator choose a stage manually.
 
 Prompts, packet IDs, manifests, hashes, parent records, evidence paths, and stage
 names are debugging details. Ariadne manages them. The low-level commands in
-[adapters/codex.md](adapters/codex.md) remain available for recovery.
+[adapters/codex.md](../../adapters/codex.md) remain available for recovery.
 
 The same applies to creative evidence machinery. You should see a concise
 summary of useful research and its effect on the direction, not a skill matrix
@@ -108,22 +108,22 @@ Anything you will check twice becomes a Playwright test. Writing it costs about 
 
 ### "It's done"
 
-1. The implementation provider runs the mechanical checklist ([QA-POLICY.md](QA-POLICY.md) section 3) and returns its structured handoff.
+1. The implementation provider runs the mechanical checklist ([QA-POLICY.md](../policies/QA-POLICY.md) section 3) and returns its structured handoff.
 2. Capture screenshots — **and look at them yourself**.
 3. Give Ariadne's isolated review handoff to a **fresh independent session**.
 4. Present G3.
 5. On approval: G4 to ship.
-6. Fifteen minutes on `RETROSPECTIVE.md`. Record proposals; edit Ariadne only after human approval, then log the approved change in [CHANGELOG.md](CHANGELOG.md).
+6. Fifteen minutes on `RETROSPECTIVE.md`. Record proposals; edit Ariadne only after human approval, then log the approved change in [CHANGELOG.md](../../CHANGELOG.md).
 
 ### "I want to write a post"
 
-[prompts/content-system.md](prompts/content-system.md), prompt 2. Start from something that actually happened — your `RETROSPECTIVE.md` files are the best source you have.
+[prompts/content-system.md](../../prompts/content-system.md), prompt 2. Start from something that actually happened — your `RETROSPECTIVE.md` files are the best source you have.
 
 If there is no only-you element, do not post it.
 
 ### "I want feedback on my portfolio"
 
-[prompts/portfolio-evaluation.md](prompts/portfolio-evaluation.md), in a fresh session, against the deployed URL. Expect it to hurt.
+[prompts/portfolio-evaluation.md](../../prompts/portfolio-evaluation.md), in a fresh session, against the deployed URL. Expect it to hurt.
 
 ### "I was interrupted"
 
@@ -152,7 +152,7 @@ see what happened, why, what changed, what was verified, and the next action.
 
 ## Conserving usage
 
-The five that matter most ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 8):
+The five that matter most ([MODEL-ROUTING.md](../policies/MODEL-ROUTING.md) section 8):
 
 1. **Never paste a codebase into the reasoning tool.** Paste the interface, the error, the constraint.
 2. **Let `HANDOFF.md` do the explaining.** Re-deriving decided context is the biggest recurring waste in this system.
@@ -173,7 +173,7 @@ The five that matter most ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 8):
 | Both | Mechanical QA, retrospectives, reference research. All human-doable. |
 | At S3 with no approved thesis | **Wait.** Waiting is cheaper than rebuilding. |
 
-**The rule:** when a class is unavailable, do work from a *different class* — never the same work at a lower class ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 9).
+**The rule:** when a class is unavailable, do work from a *different class* — never the same work at a lower class ([MODEL-ROUTING.md](../policies/MODEL-ROUTING.md) section 9).
 
 ---
 
@@ -186,10 +186,10 @@ The five that matter most ([MODEL-ROUTING.md](MODEL-ROUTING.md) section 8):
 
 ## Monthly
 
-- Re-verify anything in [BUDGET-POLICY.md](BUDGET-POLICY.md) older than 30 days.
+- Re-verify anything in [BUDGET-POLICY.md](../policies/BUDGET-POLICY.md) older than 30 days.
 - Which subscription earned its cost this month?
 - Which Ariadne documents did you actually open? **Delete the ones you did not.**
-- At 30 days: [CHANGELOG.md](CHANGELOG.md) "30-day check".
+- At 30 days: [CHANGELOG.md](../../CHANGELOG.md) "30-day check".
 
 ---
 

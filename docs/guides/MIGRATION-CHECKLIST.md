@@ -24,19 +24,19 @@ Moving from "Claude Code does everything" to "Codex decides, Cursor builds".
 ## Phase 0 — Prerequisites
 
 - [ ] **Install pnpm** — `corepack enable`, then `pnpm --version`. Not currently installed on this machine, and every default assumes it.
-- [ ] **Confirm the ₹650 Cursor India plan at checkout.** It is not on the international pricing page. Record it in [BUDGET-POLICY.md](BUDGET-POLICY.md) section 3 with the date.
+- [ ] **Confirm the ₹650 Cursor India plan at checkout.** It is not on the international pricing page. Record it in [BUDGET-POLICY.md](../policies/BUDGET-POLICY.md) section 3 with the date.
 - [ ] **Confirm your actual ChatGPT charge in INR.** The official pricing page returned 403 during this build, so nothing about it here is verified.
 - [ ] Update the cost table with both real numbers.
 
-**Expected: around ₹2,649/month**, inside your ideal band. If the ₹650 plan does not exist, read [BUDGET-POLICY.md](BUDGET-POLICY.md) section 4 before subscribing to anything — the fallback order changes the answer.
+**Expected: around ₹2,649/month**, inside your ideal band. If the ₹650 plan does not exist, read [BUDGET-POLICY.md](../policies/BUDGET-POLICY.md) section 4 before subscribing to anything — the fallback order changes the answer.
 
 ---
 
 ## Phase 1 — Set up the reasoning tool
 
-- [ ] Create the Codex/ChatGPT project with the instruction block from [adapters/codex.md](adapters/codex.md)
-- [ ] Upload **[ROUTER.md](ROUTER.md)** and **[DESIGN-TASTE.md](DESIGN-TASTE.md)** only
-- [ ] Test it: paste [prompts/project-start.md](prompts/project-start.md) with a fake request and check it emits a proper Routing Block
+- [ ] Create the Codex/ChatGPT project with the instruction block from [adapters/codex.md](../../adapters/codex.md)
+- [ ] Upload **[ROUTER.md](../policies/ROUTER.md)** and **[DESIGN-TASTE.md](../policies/DESIGN-TASTE.md)** only
+- [ ] Test it: paste [prompts/project-start.md](../../prompts/project-start.md) with a fake request and check it emits a proper Routing Block
 
 **Test it is working:** it should refuse to write implementation code and should end with one concrete next action. If it starts writing components, the instructions did not take.
 
@@ -44,7 +44,7 @@ Moving from "Claude Code does everything" to "Codex decides, Cursor builds".
 
 ## Phase 2 — Set up the build tool
 
-- [ ] Configure Cursor per [adapters/cursor.md](adapters/cursor.md)
+- [ ] Configure Cursor per [adapters/cursor.md](../../adapters/cursor.md)
 - [ ] Add the project rules block
 - [ ] Confirm it uses pnpm, not npm
 - [ ] Test: give it a filled `HANDOFF.md` and see whether it starts without asking you to re-explain the project
@@ -55,7 +55,7 @@ Moving from "Claude Code does everything" to "Codex decides, Cursor builds".
 
 ## Phase 3 — Run one project in the new split
 
-- [ ] Pick something small. [game-experiment](modes/game-experiment.md) mode.
+- [ ] Pick something small. [game-experiment](../../modes/game-experiment.md) mode.
 - [ ] Reasoning tool: S0-S3, ending at **G1**
 - [ ] Build tool: S4, from `HANDOFF.md` alone
 - [ ] Build tool: S5 mechanical QA
@@ -75,10 +75,10 @@ Do not uninstall it. It stays useful:
 | Long agentic multi-file work in a terminal | Genuinely better at this |
 | When Cursor hits its limit | Same `HANDOFF.md`, no rework |
 | Worktree-based parallel tasks | Handles them cleanly |
-| Benchmarking against Cursor | [CHANGELOG.md](CHANGELOG.md), same handoff, one variable |
+| Benchmarking against Cursor | [CHANGELOG.md](../../CHANGELOG.md), same handoff, one variable |
 
-- [ ] Copy [templates/AGENTS.md](templates/AGENTS.md) into projects so both tools read the same rules
-- [ ] Read the cautions in [adapters/claude-code.md](adapters/claude-code.md) — particularly that several installed design skills carry their own house style that can override `DESIGN.md`
+- [ ] Copy [templates/AGENTS.md](../../templates/AGENTS.md) into projects so both tools read the same rules
+- [ ] Read the cautions in [adapters/claude-code.md](../../adapters/claude-code.md) — particularly that several installed design skills carry their own house style that can override `DESIGN.md`
 
 ---
 
@@ -99,8 +99,8 @@ Each "yes" points at a specific fix: tighten the adapter instructions, improve t
 ## What NOT to migrate
 
 - **Do not** rebuild existing projects to fit this system. Apply it to new work.
-- **Do not** move private material into the Ariadne repo ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
-- **Do not** encode design judgement into a plugin or a skill — the thesis is per-project ([adapters/cursor.md](adapters/cursor.md)).
+- **Do not** move private material into the Ariadne repo ([PRIVACY-POLICY.md](../policies/PRIVACY-POLICY.md)).
+- **Do not** encode design judgement into a plugin or a skill — the thesis is per-project ([adapters/cursor.md](../../adapters/cursor.md)).
 - **Do not** subscribe to anything until Phase 0 is done.
 
 ---

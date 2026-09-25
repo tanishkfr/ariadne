@@ -11,7 +11,7 @@ Ask once: **is this yours, or someone else's?**
 | | Portfolio (yours) | Client (someone else's) |
 |---|---|---|
 | Review lens | Portfolio reviewer | Strict client |
-| Privacy | Normal | [PRIVACY-POLICY.md](../PRIVACY-POLICY.md) applies; private repo |
+| Privacy | Normal | [PRIVACY-POLICY.md](../docs/policies/PRIVACY-POLICY.md) applies; private repo |
 | Costs | Yours; Vercel Hobby is free | **Billed to the client**; Vercel needs a paid plan |
 | Approval chain | You | **Ask at S1 who signs off** |
 
@@ -23,7 +23,7 @@ Everything else — questions, documents, skills, gates, quality bar — is the 
 
 **Reached when the `OBJECT` is a site whose job is reputation** — yours or someone else's.
 
-**The word "portfolio" does not route here** ([ROUTER.md](../ROUTER.md) R-DEST-1). "Create my portfolio" does, because the object is the site. "Create something for my portfolio" does not — there the portfolio is the *destination* and the object is unresolved, which is LOW confidence and a question.
+**The word "portfolio" does not route here** ([ROUTER.md](../docs/policies/ROUTER.md) R-DEST-1). "Create my portfolio" does, because the object is the site. "Create something for my portfolio" does not — there the portfolio is the *destination* and the object is unresolved, which is LOW confidence and a question.
 
 **Not this mode if:** state outlives the session ([product app](product-app.md)), or `ACTION = ANALYZE` ([audit / review](audit-review.md)).
 
@@ -51,7 +51,7 @@ Home / work / about / contact until told otherwise · real copy drafted by you, 
 
 ## Skills
 
-[intake](../skills/intake.md) — **challenge pass mandatory** · [reference-analysis](../skills/reference-analysis.md) · [design-direction](../skills/design-direction.md) · [component-research](../skills/component-research.md) · [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)
+[intake](../skills/intake.md) — **challenge pass mandatory** · [reference-analysis](../skills/reference-analysis.md) · [design-direction](../skills/design-direction.md) · [component-research](../skills/component-research.md) · [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)
 
 ## Gates
 
@@ -71,7 +71,7 @@ Creative director **40+/50** · the mode's review lens **32+/40** (client: 35+ t
 
 **Case studies that describe features.** "I built a filter system" is a feature. "The filter had to work before the data loaded, so I inverted the fetch order" is a decision. Reviewers hire for decisions.
 
-**Assets that "will come later".** They arrive late or never. Make the direction type-led so photography enhances rather than blocks, and design a fallback per image slot ([DESIGN-ASSETS.md](../DESIGN-ASSETS.md)).
+**Assets that "will come later".** They arrive late or never. Make the direction type-led so photography enhances rather than blocks, and design a fallback per image slot ([DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md)).
 
 **Font licensing.** Free-for-personal-use faces on client work are a real liability. Caught at S3 via G2, it is one email. Caught after launch, it is a rebuild of the type system.
 

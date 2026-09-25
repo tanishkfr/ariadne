@@ -6,7 +6,7 @@ The judgement half — is it any good — runs in a **separate session** by a Re
 
 **A build that passes everything here and scores 2/5 on creative direction has failed S5.** Both halves are pass/fail.
 
-Output: [templates/QA.md](templates/QA.md).
+Output: [templates/QA.md](../../templates/QA.md).
 
 ---
 

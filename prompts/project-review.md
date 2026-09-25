@@ -186,7 +186,7 @@ it never grants either gate.
 
 **Two lenses is right. Four is a lot.** Beyond that the output gets long and nothing gets acted on.
 
-Full definitions: [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md). Accessibility and performance are **not** lenses — they are mechanical checks in [QA-POLICY.md](../QA-POLICY.md), run by the builder before this prompt is used.
+Full definitions: [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md). Accessibility and performance are **not** lenses — they are mechanical checks in [QA-POLICY.md](../docs/policies/QA-POLICY.md), run by the builder before this prompt is used.
 
 ## After
 

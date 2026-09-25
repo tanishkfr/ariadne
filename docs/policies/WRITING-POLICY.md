@@ -166,7 +166,7 @@ author its own passing judgement.
 
 ## Benchmark
 
-The focused regression fixture is [tests/writing-benchmark.md](tests/writing-benchmark.md).
+The focused regression fixture is [tests/writing-benchmark.md](../../tests/writing-benchmark.md).
 It contains twelve high-value cases across the four general writing intents.
 The benchmark catches routing, method, evidence, transformation and review
 contract failures; it does not pretend to score literary quality automatically.

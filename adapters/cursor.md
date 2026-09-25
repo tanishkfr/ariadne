@@ -2,7 +2,7 @@
 
 **Role in the system: the builder.** It implements; it does not decide direction.
 
-Capability classes: **`R2`** (fast implementation), **`R3`** (codebase reading), **`R4`** (browser). See [MODEL-ROUTING.md](../MODEL-ROUTING.md).
+Capability classes: **`R2`** (fast implementation), **`R3`** (codebase reading), **`R4`** (browser). See [MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md).
 
 Roughly **80% of hours on a healthy project happen here.** If most of your time is in the reasoning tool instead, S3 is under-specified.
 
@@ -20,7 +20,7 @@ Roles: Implementer, Motion specialist, QA engineer, and the mechanical half of t
 
 ## Does not own
 
-The design thesis. Architecture decisions. Whether a package may be installed. Judgement-half QA — a tool that built the thing cannot review it ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
+The design thesis. Architecture decisions. Whether a package may be installed. Judgement-half QA — a tool that built the thing cannot review it ([EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)).
 
 ---
 
@@ -124,7 +124,7 @@ Acceptance criterion: <paste it>
 Branch: s4/<slug>
 ```
 
-**One task, one branch.** Never on `main`. This is what makes almost all agent work reversible with `git checkout`, and it is why the Green tier in [WORKFLOW.md](../WORKFLOW.md) can be as permissive as it is.
+**One task, one branch.** Never on `main`. This is what makes almost all agent work reversible with `git checkout`, and it is why the Green tier in [WORKFLOW.md](../docs/policies/WORKFLOW.md) can be as permissive as it is.
 
 **Let it read the codebase; do not paste the codebase.** Cursor's indexing is `R3` — that is what it is for. Pasting files into a reasoning tool is the expensive alternative.
 
@@ -149,20 +149,20 @@ Cursor operates as the `R2` adapter. Concrete model selection takes place inside
 
 Use the browser tooling for `R4` work: loading routes, reading the console, checking responsive widths, capturing screenshots.
 
-Browser-agent passes are where usage disappears; scripts are free. Turn repeat checks into Playwright tests ([QA-POLICY.md](../QA-POLICY.md)).
+Browser-agent passes are where usage disappears; scripts are free. Turn repeat checks into Playwright tests ([QA-POLICY.md](../docs/policies/QA-POLICY.md)).
 
-Escalation ladder, cheapest first: production build → typecheck → Playwright → browser agent → your own eyes. Do not skip rungs upward ([QA-POLICY.md](../QA-POLICY.md)).
+Escalation ladder, cheapest first: production build → typecheck → Playwright → browser agent → your own eyes. Do not skip rungs upward ([QA-POLICY.md](../docs/policies/QA-POLICY.md)).
 
 ---
 
 ## Cloud agents, MCP, hooks, plugins
 
-Cursor offers these. Treat them as **optimisations, never requirements** — that is what keeps the system portable ([MODEL-ROUTING.md](../MODEL-ROUTING.md) section 10).
+Cursor offers these. Treat them as **optimisations, never requirements** — that is what keeps the system portable ([MODEL-ROUTING.md](../docs/policies/MODEL-ROUTING.md) section 10).
 
 | Feature | Sensible use | Caution |
 |---|---|---|
 | Cloud agents | Long refactors, parallel independent tasks | Still one task per branch; still G2 and G4 |
-| MCP servers | Reaching a real data source during a build | Each one is a dependency and a privacy surface ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)) |
+| MCP servers | Reaching a real data source during a build | Each one is a dependency and a privacy surface ([PRIVACY-POLICY.md](../docs/policies/PRIVACY-POLICY.md)) |
 | Hooks | Auto-running build or lint after edits | Genuinely useful; catches things early for free |
 | Plugins / skills | Repeated project setup | Do not encode design judgement into a plugin |
 

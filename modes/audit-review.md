@@ -6,7 +6,7 @@ Critique something that already exists. **QA *is* the deliverable** — there is
 
 ## Detection
 
-**Reached when `ACTION = ANALYZE`** and the artifact role is `subject` — the thing exists and you want judgement of it, not a new version of it ([ROUTER.md](../ROUTER.md) R-ACT-1).
+**Reached when `ACTION = ANALYZE`** and the artifact role is `subject` — the thing exists and you want judgement of it, not a new version of it ([ROUTER.md](../docs/policies/ROUTER.md) R-ACT-1).
 
 **Not this mode** when the artifact is a `reference` (R-REF-1) or a `source` for transformation (R-XFM-1). "Build something like this" and "turn this into that" are creation actions that happen to mention an existing thing. **The presence of an artifact never routes here on its own.**
 
@@ -16,7 +16,7 @@ Critique something that already exists. **QA *is* the deliverable** — there is
 
 Three, and question 1 is the one that matters.
 
-1. **Which lens?** — the five in [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md). Default: creative director + one more matched to the artifact.
+1. **Which lens?** — the five in [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md). Default: creative director + one more matched to the artifact.
 2. **Yours or someone else's?** — changes how blunt to be, and whether privacy rules apply
 3. **Findings only, or fixes too?** — default: findings with fixes attached, but no code written
 
@@ -32,7 +32,7 @@ Nothing else. No `PROJECT.md`, no `DESIGN.md`.
 
 ## Skills
 
-[reference-analysis](../skills/reference-analysis.md) (to judge against a stated intent), [EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)
+[reference-analysis](../skills/reference-analysis.md) (to judge against a stated intent), [EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)
 
 ## Stages
 
@@ -54,7 +54,7 @@ If the intent is not stated, infer it, **say you inferred it**, and score agains
 
 **2. Use it properly.** Load it. Scroll it. Phone. Keyboard. Try the primary task. Five minutes of real use beats any amount of reasoning about a description or a screenshot.
 
-**3. Run the lenses in separate sessions.** They contaminate each other ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
+**3. Run the lenses in separate sessions.** They contaminate each other ([EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)).
 
 **4. Evidence for every finding.** Where (route, element, viewport), what (the observation), why (which criterion). A finding without evidence is an opinion.
 
@@ -62,7 +62,7 @@ If the intent is not stated, infer it, **say you inferred it**, and score agains
 
 **6. Name the one thing.** Mandatory. Twelve equal findings get ignored; one clear priority gets acted on.
 
-**7. Run the three feel tests** — five-second, swap, recall ([EVALUATION-RUBRICS.md](../EVALUATION-RUBRICS.md)).
+**7. Run the three feel tests** — five-second, swap, recall ([EVALUATION-RUBRICS.md](../docs/policies/EVALUATION-RUBRICS.md)).
 
 ---
 

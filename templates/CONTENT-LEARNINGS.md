@@ -1,10 +1,10 @@
 # CONTENT LEARNINGS
 
 > Template. Owner: Content strategist · Updated weekly.
-> System: [CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md)
+> System: [CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md)
 > **This file is where the loop closes.** A weekly review that does not change this file means the system is producing, not learning.
 >
-> Lives in the content project, **never** in Ariadne ([PRIVACY-POLICY.md](../PRIVACY-POLICY.md)).
+> Lives in the content project, **never** in Ariadne ([PRIVACY-POLICY.md](../docs/policies/PRIVACY-POLICY.md)).
 
 **Started:** <date> · **Last review:** <date>
 
@@ -65,7 +65,7 @@
 | 1 | <specific and falsifiable> | <the single thing changing> | <IDs> | <dates> | supported / contradicted / **inconclusive** | weak / limited / moderate | <one variable> |
 
 > One experiment at a time. One variable. **Inconclusive is the most common correct result**
-> ([CONTENT-SYSTEM.md](../CONTENT-SYSTEM.md) section 12).
+> ([CONTENT-SYSTEM.md](../docs/policies/CONTENT-SYSTEM.md) section 12).
 
 ## Voice drift
 

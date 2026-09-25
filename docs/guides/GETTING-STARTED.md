@@ -73,7 +73,7 @@ and performs same-session reasoning work. It asks you only for a real decision
 or an unavoidable external action.
 
 Subscription and provider costs matter only if the chosen project reaches that
-need. Verify current prices then and record them under [BUDGET-POLICY.md](BUDGET-POLICY.md);
+need. Verify current prices then and record them under [BUDGET-POLICY.md](../policies/BUDGET-POLICY.md);
 do not subscribe merely to complete installation.
 
 ---
@@ -93,8 +93,8 @@ inside the verified handoff packet. Let the project-brief pass create root
 `AGENTS.md`; do not pre-create it.
 
 The existing Cursor and Claude Code adapters use this same S4B packet contract;
-see [adapters/cursor.md](adapters/cursor.md) and
-[adapters/claude-code.md](adapters/claude-code.md) for their provider-specific
+see [adapters/cursor.md](../../adapters/cursor.md) and
+[adapters/claude-code.md](../../adapters/claude-code.md) for their provider-specific
 setup. Command Code GOAT can be the first manual/semi-manual worker test, but
 it is not a runtime dependency or source of Ariadne policy.
 
@@ -104,7 +104,7 @@ it is not a runtime dependency or source of Ariadne policy.
 
 Do not read the rest of the documentation first. Run something small and real.
 
-**Pick a [game-experiment](modes/game-experiment.md).** It is the lightest mode: three questions, two documents, and it finishes in a day.
+**Pick a [game-experiment](../../modes/game-experiment.md).** It is the lightest mode: three questions, two documents, and it finishes in a day.
 
 1. Choose or create an empty project directory. Ariadne will initialise its
    local Git repository if required. For an existing repository, say explicitly
@@ -202,15 +202,15 @@ Do not read all of it now. Read each file the first time you hit its stage.
 | When | Read |
 |---|---|
 | Right now | This file, then [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md) |
-| Starting any project | Invoke `$ariadne`; it loads [ROUTER.md](ROUTER.md) when needed |
-| Debugging transport | [scripts/prepare-stage.py](scripts/prepare-stage.py) |
-| At your first G1 | [DESIGN-TASTE.md](DESIGN-TASTE.md) — the most valuable file here |
-| First time an agent wants to install something | [LIBRARY-POLICY.md](LIBRARY-POLICY.md) |
-| First time you run QA | [QA-POLICY.md](QA-POLICY.md) |
-| First review | [EVALUATION-RUBRICS.md](EVALUATION-RUBRICS.md) |
-| First client project | [modes/client-or-portfolio.md](modes/client-or-portfolio.md), [PRIVACY-POLICY.md](PRIVACY-POLICY.md) |
-| Starting content | [CONTENT-SYSTEM.md](CONTENT-SYSTEM.md) |
-| After 30 days | [CHANGELOG.md](CHANGELOG.md) "30-day check" |
+| Starting any project | Invoke `$ariadne`; it loads [ROUTER.md](../policies/ROUTER.md) when needed |
+| Debugging transport | [scripts/prepare-stage.py](../../scripts/prepare-stage.py) |
+| At your first G1 | [DESIGN-TASTE.md](../policies/DESIGN-TASTE.md) — the most valuable file here |
+| First time an agent wants to install something | [LIBRARY-POLICY.md](../policies/LIBRARY-POLICY.md) |
+| First time you run QA | [QA-POLICY.md](../policies/QA-POLICY.md) |
+| First review | [EVALUATION-RUBRICS.md](../policies/EVALUATION-RUBRICS.md) |
+| First client project | [modes/client-or-portfolio.md](../../modes/client-or-portfolio.md), [PRIVACY-POLICY.md](../policies/PRIVACY-POLICY.md) |
+| Starting content | [CONTENT-SYSTEM.md](../policies/CONTENT-SYSTEM.md) |
+| After 30 days | [CHANGELOG.md](../../CHANGELOG.md) "30-day check" |
 
 ---
 
@@ -243,6 +243,6 @@ If you remember nothing else:
 
 It might be. **The honest fix is to cut, not to push through.**
 
-After 30 days, run the review in [CHANGELOG.md](CHANGELOG.md) "30-day check". Any document you wrote and never opened again should be deleted — a document nobody reads is worse than no document, because it creates the illusion of process.
+After 30 days, run the review in [CHANGELOG.md](../../CHANGELOG.md) "30-day check". Any document you wrote and never opened again should be deleted — a document nobody reads is worse than no document, because it creates the illusion of process.
 
-The success criterion is deliberately narrow, and it is in [CHANGELOG.md](CHANGELOG.md) under "The 30-day check".
+The success criterion is deliberately narrow, and it is in [CHANGELOG.md](../../CHANGELOG.md) under "The 30-day check".

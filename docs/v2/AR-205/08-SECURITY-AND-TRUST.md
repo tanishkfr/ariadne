@@ -1,6 +1,6 @@
 # AR-205 — 08 — Security and trust (milestone record)
 
-The public-facing statement is [TRUST.md](../../../TRUST.md) at the repository
+The public-facing statement is [TRUST.md](../../guides/TRUST.md) at the repository
 root. This page records what AR-205 verified, and what remains a documented
 boundary rather than a claim.
 

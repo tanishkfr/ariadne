@@ -2,11 +2,11 @@
 
 How this system has changed, and why.
 
-**Every retrospective that changes an Ariadne file logs it here.** A retrospective that changes nothing was not a retrospective ([WORKFLOW.md](WORKFLOW.md) S6).
+**Every retrospective that changes an Ariadne file logs it here.** A retrospective that changes nothing was not a retrospective ([WORKFLOW.md](docs/policies/WORKFLOW.md) S6).
 
 **Name the cause, not just the change.** "Added a check for X" is useless in six months. "Added a check for X because a font licence was discovered at S5 and cost a day" tells you whether the rule still earns its place.
 
-Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
+Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
 ## 2.0.0 — 2026-09-25 · PUBLIC RELEASE
@@ -788,7 +788,7 @@ Four structural blockers from the V1 readiness review, closed. **No redesign.** 
 
 v0.3 had entry points for **2 of 7 stages**. S3 — design direction, the stage the whole system exists to protect — had none. You were expected to know to open `skills/design-direction.md`, read `templates/DESIGN.md`, and compose your own prompt.
 
-Added [prompts/design-direction.md](prompts/design-direction.md), [prompts/build-kickoff.md](prompts/build-kickoff.md), [prompts/retrospective.md](prompts/retrospective.md). Each stage now **ends by naming the next entry point**, and [WORKFLOW.md](WORKFLOW.md) carries an entry-point column so a future gap is visible in the stage table itself.
+Added [prompts/design-direction.md](prompts/design-direction.md), [prompts/build-kickoff.md](prompts/build-kickoff.md), [prompts/retrospective.md](prompts/retrospective.md). Each stage now **ends by naming the next entry point**, and [WORKFLOW.md](docs/policies/WORKFLOW.md) carries an entry-point column so a future gap is visible in the stage table itself.
 
 *Cause: the readiness review traced the first 30 minutes literally and found design thinking beginning at minute 30 with no support. The predicted failure was pasting DESIGN-TASTE into a chat and skipping reference analysis, the thesis test, and G1 — the three mechanisms that prevent generic output.*
 
@@ -890,14 +890,14 @@ Router stress test run against the eight cases in section "Week 3" below. **3 PA
 
 - **game-experiment input/display defaults.** Question 2 had a default of "keyboard and mouse, desktop-first" and the assumptions table said "desktop-first". For an installation or a phone piece every one of those is wrong, and the router batches questions *with defaults* so "all defaults" silently produced a desktop build. Question 2 now has **no default**, and installations route here explicitly rather than needing a sixth mode.
   *Cause: stress case 6, "make this into an interactive installation". Confirmed by inspection — the three physical projects in this workspace are all web tech (Capacitor, kiosk browser), so the gap was the defaults, not a missing mode.*
-- **Secret protection documented as portable and manual** ([QA-POLICY.md](QA-POLICY.md) section 9). Hooks in `.git/hooks` do not survive a clone, so the hook lives in a committed `.githooks/` directory and `core.hooksPath` is set per clone. `templates/AGENTS.md` now carries a **status line stating whether it is installed**, because nothing installs it automatically and an agent must not assume a net exists.
+- **Secret protection documented as portable and manual** ([QA-POLICY.md](docs/policies/QA-POLICY.md) section 9). Hooks in `.git/hooks` do not survive a clone, so the hook lives in a committed `.githooks/` directory and `core.hooksPath` is set per clone. `templates/AGENTS.md` now carries a **status line stating whether it is installed**, because nothing installs it automatically and an agent must not assume a net exists.
 - **Scorecard leftovers from 0.2.0.** `skills/design-direction.md` still instructed a self-scored G1 with a "below 35" threshold, directly contradicting the 0.2.0 change; `templates/DESIGN.md` still carried a `Scorecard: <n>/50` field directly above a section reading "not scored". Also a stale section reference.
   *Cause: found while trimming DESIGN.md. The duplicate-sentence checker cannot catch a contradiction between two differently-worded rules — only a human reading can.*
 
 ### Known failures, not yet fixed
 
-1. **Tie-break 1 is too aggressive** ([ROUTER.md](ROUTER.md) 3.2). "An existing artifact is supplied → Audit/review, unless the request says rebuild or redesign." The exception list is missing `like`, `inspired by`, `in the style of`, `into`, and `based on`. Causes 2 of 8 failures: "build something like Burocratik" and "make this into an installation" both route to critique instead of build.
-2. **Accepted-pattern counting is undefined** ([ROUTER.md](ROUTER.md) 10). "SaaS dashboard with 17 cards and glassmorphism" is either 3 acceptances (proceeds) or 4 (router halts) depending on how rows are counted. At the boundary the escape hatch re-creates the fight it was built to end.
+1. **Tie-break 1 is too aggressive** ([ROUTER.md](docs/policies/ROUTER.md) 3.2). "An existing artifact is supplied → Audit/review, unless the request says rebuild or redesign." The exception list is missing `like`, `inspired by`, `in the style of`, `into`, and `based on`. Causes 2 of 8 failures: "build something like Burocratik" and "make this into an installation" both route to critique instead of build.
+2. **Accepted-pattern counting is undefined** ([ROUTER.md](docs/policies/ROUTER.md) 10). "SaaS dashboard with 17 cards and glassmorphism" is either 3 acceptances (proceeds) or 4 (router halts) depending on how rows are counted. At the boundary the escape hatch re-creates the fight it was built to end.
 3. **"portfolio" does not distinguish container from contents.** "Something cool for my portfolio" scores one clean signal → High confidence → builds a website, when it probably meant a piece to put in one.
 4. **Nothing routes to the restart procedure.** Section 11 is complete but no signal fires on "scrap the direction"; you only reach it by knowing it exists.
 
@@ -911,9 +911,9 @@ Restructured after an independent audit of v0.1.0. **71 files to 49.** No rule w
 
 - **Scorecard moved out of the author's session.** Self-scoring a direction you just wrote clusters at 4 and measures nothing. Scoring now happens at S5 by a Reviewer with no build context, and **every score below 4 must cite a specific comparison** that does it better. G1 uses a qualitative 10-question check instead.
   *Cause: the audit could find no mechanism preventing a generous 44/50 every time, which invalidated the primary quality claim.*
-- **Added accepted patterns** ([ROUTER.md](ROUTER.md) §10). A blocking anti-generic pattern can be chosen deliberately — declared in `PROJECT.md` before it is built, with a reason, maximum three. It drops to a Note and stays visible.
+- **Added accepted patterns** ([ROUTER.md](docs/policies/ROUTER.md) §10). A blocking anti-generic pattern can be chosen deliberately — declared in `PROJECT.md` before it is built, with a reason, maximum three. It drops to a Note and stays visible.
   *Cause: stress-testing "build a SaaS dashboard with 17 cards and glassmorphism" showed the system would block a build the user explicitly asked for. The rules assumed genericness always came from the tool.*
-- **Added direction restart** ([ROUTER.md](ROUTER.md) §11): what survives, what dies, and a requirement to write down why the old direction failed before writing the new one.
+- **Added direction restart** ([ROUTER.md](docs/policies/ROUTER.md) §11): what survives, what dies, and a requirement to write down why the old direction failed before writing the new one.
   *Cause: the most common creative event had no defined path, so the default was quietly patching a dead direction.*
 - **Required document set cut to four** — `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. Everything else is conditional with a stated trigger.
   *Cause: `TASKS.md` and `ASSETS.md` on a two-day experiment are ceremony.*
@@ -935,7 +935,7 @@ Restructured after an independent audit of v0.1.0. **71 files to 49.** No rule w
 
 ### Split
 
-`DESIGN-TASTE.md` into three, so a motion task loads ~900 words instead of 2,652: [DESIGN-TASTE.md](DESIGN-TASTE.md), [DESIGN-MOTION.md](DESIGN-MOTION.md), [DESIGN-ASSETS.md](DESIGN-ASSETS.md).
+`DESIGN-TASTE.md` into three, so a motion task loads ~900 words instead of 2,652: [DESIGN-TASTE.md](docs/policies/DESIGN-TASTE.md), [DESIGN-MOTION.md](docs/policies/DESIGN-MOTION.md), [DESIGN-ASSETS.md](docs/policies/DESIGN-ASSETS.md).
 
 ### Known weaknesses carried forward
 
@@ -966,7 +966,7 @@ Three real-world tests are defined in [tests/validation-protocol.md](tests/valid
 are complete, because nothing before that point is evidence about real work.
 
 Before day 1: `corepack enable` (pnpm is not installed) · confirm the Cursor India and ChatGPT
-prices **at checkout** and date them in [BUDGET-POLICY.md](BUDGET-POLICY.md) · record your baseline
+prices **at checkout** and date them in [BUDGET-POLICY.md](docs/policies/BUDGET-POLICY.md) · record your baseline
 honestly — how long did your last comparable project take, and what would you have shipped?
 
 ---

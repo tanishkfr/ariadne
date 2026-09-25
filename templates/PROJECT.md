@@ -60,11 +60,11 @@
 
 ## Accepted patterns
 
-> Optional, and **there is no limit on how many.** Patterns from the [DESIGN-TASTE.md](../DESIGN-TASTE.md) blocking
+> Optional, and **there is no limit on how many.** Patterns from the [DESIGN-TASTE.md](../docs/policies/DESIGN-TASTE.md) blocking
 > list that you are choosing **on purpose**. Declaring one here drops it from Blocking to Note at QA — it stays
 > visible in the report but no longer stops G3.
 >
-> **R-PAT-1** ([ROUTER.md](../ROUTER.md) section 10): declared **before** it is built, never at S5 to rescue a
+> **R-PAT-1** ([ROUTER.md](../docs/policies/ROUTER.md) section 10): declared **before** it is built, never at S5 to rescue a
 > failing build · the reason must be conceptual, narrative, functional, historical, medium-specific, or
 > interaction-based — not "I like this style" · the *pattern* is accepted, the *execution* is still reviewable.
 

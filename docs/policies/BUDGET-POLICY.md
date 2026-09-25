@@ -69,7 +69,7 @@ Based on the snapshot above, and on your stated split of Codex for reasoning and
 
 This lands **inside your ideal band** with roughly ₹350 of headroom. That headroom is the reason the ₹650 plan matters: on the international $20 Cursor tier the same pair would sit near or above ₹4,000 once GST is applied, which is your justification-required territory.
 
-**If the ₹650 plan turns out not to exist or not to fit** — the fallback order is: (a) Cursor Hobby free tier plus heavier use of `R1` for implementation, accepting slower work; (b) drop to ChatGPT Go (₹399) and put the savings into Cursor's paid tier, accepting weaker reasoning; (c) accept ~₹4,000 for one month and reassess at the 30-day benchmark ([CHANGELOG.md](CHANGELOG.md)).
+**If the ₹650 plan turns out not to exist or not to fit** — the fallback order is: (a) Cursor Hobby free tier plus heavier use of `R1` for implementation, accepting slower work; (b) drop to ChatGPT Go (₹399) and put the savings into Cursor's paid tier, accepting weaker reasoning; (c) accept ~₹4,000 for one month and reassess at the 30-day benchmark ([CHANGELOG.md](../../CHANGELOG.md)).
 
 Option (a) is the honest default if the ₹650 plan is unavailable. Option (b) trades away the thing this system depends on most — reasoning quality at S1 and S3 — so treat it as a last resort.
 
@@ -128,6 +128,6 @@ The binding constraint is monthly usage limits, not rupees. The full technique l
 
 **Monthly:** what did each subscription actually get used for? A tool used for one thing that another tool also does is a cancellation candidate.
 
-**At 30 days:** run [CHANGELOG.md](CHANGELOG.md) and decide with evidence rather than impression.
+**At 30 days:** run [CHANGELOG.md](../../CHANGELOG.md) and decide with evidence rather than impression.
 
 **Whenever a limit is hit:** record which stage was running. Repeatedly exhausting `R1` means S3 is under-specified and work is leaking into the expensive tier, not that you need a bigger plan. Buying more capacity to cover a process problem is the expensive mistake this policy exists to prevent.

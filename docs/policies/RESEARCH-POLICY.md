@@ -4,7 +4,7 @@ How the system tells a fact from a memory.
 
 **A model's training data is a snapshot of the past presented with the confidence of the present.** Anything that changes over time gets looked up, dated, and sourced — or explicitly marked unverified.
 
-S2 is **conditional**. Run it only when a fact about the world blocks a decision. Output: [templates/RESEARCH.md](templates/RESEARCH.md).
+S2 is **conditional**. Run it only when a fact about the world blocks a decision. Output: [templates/RESEARCH.md](../../templates/RESEARCH.md).
 
 ---
 
@@ -132,6 +132,6 @@ Different rules — this is inspiration, not fact, so mechanism matters more tha
 
 Studio and designer sites **live, not screenshot galleries**. Print, editorial, packaging, signage, and film titles are **often better sources than other websites**, because the mechanism has to survive translation to a different medium — which is exactly the test that separates a mechanism from a surface.
 
-Standing set: [references/visual-references.md](references/visual-references.md). Method: [skills/reference-analysis.md](skills/reference-analysis.md).
+Standing set: [references/visual-references.md](../../references/visual-references.md). Method: [skills/reference-analysis.md](../../skills/reference-analysis.md).
 
 **Warning:** inspiration galleries homogenise. Everything on them looks like everything else on them, because one taste curated it. If every reference comes from the same gallery, you will produce that gallery's house style.

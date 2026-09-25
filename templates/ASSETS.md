@@ -1,7 +1,7 @@
 # ASSETS: <name>
 
-> Template. Owner: Asset specialist · Stages S3-S4 · Skill: [DESIGN-ASSETS.md](../DESIGN-ASSETS.md)
-> Nothing on the critical path may be unresolved at S4 — see [DESIGN-ASSETS.md](../DESIGN-ASSETS.md).
+> Template. Owner: Asset specialist · Stages S3-S4 · Skill: [DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md)
+> Nothing on the critical path may be unresolved at S4 — see [DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md).
 
 **Last updated:** <date>
 
@@ -23,17 +23,17 @@
 
 > Resolution order, best first:
 > Real asset → typographic/CSS/SVG solution → generated → stock.
-> Reasoning and procedure: [DESIGN-ASSETS.md](../DESIGN-ASSETS.md).
+> Reasoning and procedure: [DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md).
 
 ## Fonts
 
-> The highest visual leverage and the worst licensing risk. See [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 9.
+> The highest visual leverage and the worst licensing risk. See [LIBRARY-POLICY.md](../docs/policies/LIBRARY-POLICY.md) section 9.
 
 | Font | Foundry | Licence type | Cost (INR) | Webfont rights? | Pageview cap? | Licence document |
 |---|---|---|---|---|---|---|
 | | | <open / commercial / free-personal> | | yes/no | | <where it lives> |
 
-> Licensing rules: [LIBRARY-POLICY.md](../LIBRARY-POLICY.md) section 9.
+> Licensing rules: [LIBRARY-POLICY.md](../docs/policies/LIBRARY-POLICY.md) section 9.
 
 ## Treatment
 
@@ -55,5 +55,5 @@
 
 ## Before filling this in
 
-Read [DESIGN-ASSETS.md](../DESIGN-ASSETS.md) — it carries the hard rules (no placeholders, no generated
+Read [DESIGN-ASSETS.md](../docs/policies/DESIGN-ASSETS.md) — it carries the hard rules (no placeholders, no generated
 people, no raster logos, no client material to third parties without approval).
