@@ -9,6 +9,29 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](PRIVACY-POLICY.md)).
 
 ---
+## 2.0.0 — 2026-09-25 · PUBLIC RELEASE
+
+Ariadne v2 makes the orchestration core, the Decision Plane and the recorded
+evidence chain a stable public release. The launcher, runtime and documentation
+carry one version and the artifacts are built from the tagged commit, while the
+release gate refuses to call a build ready if a version surface, an artifact
+hash, a migration rule or an experimental default disagrees with what the
+release claims. Version `2.0.0`, Python `>=3.10`; the `2.0.0rc1` candidate
+identifier is superseded and no candidate artifact is reused.
+
+Explicit migration arrives with `ariadne migrate --dry-run|--apply|--rollback`.
+It is additive: the pre-migration state is preserved, no approval is created,
+document gate mirrors stay mirrors, and rollback refuses once v2-only work
+exists rather than discarding it. A versioned, provider-neutral consumer
+contract and deterministic fixtures make the integration boundary testable
+without a consumer application or a paid provider.
+
+The AR-204 behavior-sensitive optimizations remain experimental and off by
+default, because no live provider-quality comparison was executed. A genuine
+retry defect was found and fixed while verifying the failure/repair workflow: an
+escalated attempt at the same boundary flagged the previous attempt's
+engine-written return file as out-of-scope.
+
 ## 1.6.7 — 2026-09-07 · PUBLIC RELEASE RECOVERY
 
 Ariadne 1.6.7 publicly releases the completed worker-orchestration improvements

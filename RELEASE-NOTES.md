@@ -1,221 +1,142 @@
-# Ariadne 1.6.7
+# Ariadne 2.0.0
 
-Ariadne 1.6.7 is the public release of the completed worker-orchestration
-improvements developed for 1.6.6.
+Ariadne 2.0.0 is the first stable release of the v2 execution engine. It turns
+the runtime into an executable orchestration core with recorded evidence, and it
+adds bounded Decision Intelligence as a normal way to answer closed questions
+without calling a generative model.
 
-- Formal model/provider-neutral worker contracts reduce the architecture and
-  success criteria a bulk implementation worker must infer.
-- Implementation and routine repair are bounded by explicit validation,
-  safety/scope rules, stop conditions and escalation conditions.
-- Worker outcomes move through explicit `IMPLEMENTED`, `VALIDATED`, `REVIEWED`
-  and `ACCEPTED` states, with lightweight implementation telemetry.
-- Worker roles remain replaceable across providers and models, supporting
-  inexpensive, high-volume implementation workers without provider coupling.
+Install from the GitHub release artifacts. PyPI publication stays deferred
+because the `ariadne` distribution name belongs to an unrelated GraphQL server;
+this release is delivered as an immutable wheel and runtime bundle.
 
-This release supersedes the unavailable public 1.6.6 release identifier. The
-completed worker architecture is unchanged.
+## Highlights
 
-## Ariadne 1.6.6
+### Adaptive execution
 
-Ariadne 1.6.6 makes model- and worker-agnostic bulk implementation a first-class,
-bounded workflow.
+A task is characterised before work begins, and context, routing and recovery
+are traced decisions with explicit policies and recorded inputs. Each stage
+transports only the sources it declared, and the decision layer may omit a
+source only when the transport marked it removable.
 
-- S4B handoffs now carry a repo-grounded worker contract covering scope,
-  constraints, safe actions, stop/escalation conditions and validation commands.
-- Worker execution has explicit implementation, validation, routine-repair and
-  escalation boundaries; worker self-reports are not accepted as validation.
-- Ariadne records independent validation, safety/scope outcomes and lightweight
-  implementation telemetry, preserving unknown usage or cost instead of guessing.
-- Provider and model names remain replaceable transport metadata. Command Code GOAT
-  is supported as a first manual/semi-manual worker handoff without becoming a
-  core dependency.
+### Decision Intelligence
 
-## Ariadne 1.6.5
+The Decision Plane classifies every unresolved requirement as deterministic,
+bounded, generative, human or unresolved. Deterministic facts are answered by
+code first. Bounded questions use a declared option set and a minimal state
+projection, are batched with independent siblings, and are cached only against a
+concrete provider model version. Ambiguity escalates instead of resolving into a
+confident guess, and a protected action is refused under every confidence.
 
-Ariadne 1.6.5 is a corrective release for the public release surface.
+### Verification hardening
 
-It carries the same validated product and writing architecture as 1.6.4. No
-workflow, writing, routing, social, or runtime behavior has been changed.
+Execution identity, provider observation and measured usage are separate
+records. A verification binds its revision and its evidence level, stale
+evidence cannot close a gate, and capability evidence advances only from
+`DECLARED` through `OBSERVED` and `EXERCISED` to `VERIFIED`. Review independence
+is enforced at the engine level, so an implementer cannot certify their own work.
 
-## Fixed
+### Design Intelligence
 
-- The complete public release asset set is published, including
-  `ariadne-release.json`.
-- The release descriptor contains the exact runtime artifact, launcher,
-  release-note hashes, source commit and project-state schema required by the
-  existing updater.
-- The release uses normal three-part semantic versioning so existing 1.6.3
-  installations can discover it through `ariadne update`.
+Design provenance is recorded rather than described: requirements, reference
+findings, component candidates, an approved direction, rendered evidence with
+capture parameters, an independent critique and bounded refinements. Source
+inspection cannot close a rendered-quality requirement.
 
-## Historical releases
+### Context economics
 
-The immutable 1.6.4 release remains unchanged.
+Task-level usage, context attribution and verified-completion cost are derived
+from records, and unknown values stay unknown. Byte or turn reductions are never
+presented as a quality or cost saving, because no live provider comparison was
+executed.
 
-The historical 1.6.3.1 and 1.6.3.2 releases also remain unchanged.
+### Standalone API
 
-## Evidence limits
+A versioned, provider-neutral consumer contract and a stability-classified
+Python surface let another application drive the engine. The contract is
+verified against Ariadne's own side with deterministic fixtures; it is
+contract-verified, not a live editor integration.
 
-This release does not introduce new product behavior or claim detector evasion
-or live provider equivalence.
+### Migration and release safety
 
+`ariadne migrate --dry-run` inventories a v1-era run and states its plan without
+writing. `ariadne migrate --apply` is additive, preserves the original bytes and
+creates no approval, review, validation or capability record. The release gate
+refuses to call a build ready while a version surface, an artifact hash, a
+migration rule or an experimental default disagrees with what the release claims.
 
-# Ariadne 1.6.4
+## Compatibility and breaking notes
 
-Ariadne 1.6.4 is the canonical three-part release of the writing architecture
-and executable writing workflow. It preserves the validated writing changes
-from the 1.6.3.x releases and corrects their runtime packaging omission.
+- A run state written before the engine contract marker is refused until it is
+  migrated explicitly. Read-only inspection of project documents and legacy
+  ledgers continues to work.
+- Fresh installs register the managed skill under `~/.agents/skills/ariadne`;
+  an earlier Ariadne-managed skill under a legacy Codex path is reused in place.
+- The Python distribution and import name is still `ariadne`, shared on paper
+  with the unrelated GraphQL project. The two cannot share one Python
+  environment.
+- No new environment variable is required, and the declared exit codes are
+  unchanged: `0` success, `1` stopped or refused, `2` paused or needs-human.
 
-## Added and fixed
+## Migration
 
-- Writing policy and compact genre-specific guidance for creative, academic,
-  scientific/technical and human-draft transformation work.
-- Existing transport supports `draft`, `review` and `revise` writing packets
-  with provider/model identity, source hashes and S4/S5 boundaries.
-- Human-draft transformation packets preserve the original draft for review;
-  independent review packets exclude drafting rationale and implementation
-  history.
-- `WRITING-POLICY.md` is included in the runtime allowlist alongside the
-  writing skills and `scripts/prepare-stage.py`.
-- Development-only tests, validation fixtures and maintainer-only files remain
-  excluded from runtime artifacts.
+The migration path is explicit and reversible where it can be honest. It is
+described in full in `MIGRATING-v1-to-v2.md`:
 
-## Version history
+```bash
+python -m ariadne migrate --dry-run --project <project>
+python -m ariadne migrate --apply --project <project>
+python -m ariadne migrate --rollback --project <project>
+```
 
-The four-part `1.6.3.1` and `1.6.3.2` releases remain published historical
-releases. Ariadne 1.6.4 is the normal three-part release that an immutable
-1.6.3 launcher can parse and discover through `ariadne update`.
+Rollback restores the preserved bytes while the migrated state is unchanged, and
+refuses after further v2 work instead of discarding records.
 
-## Evidence limits
+## Experimental features
 
-Structural, packet, distribution and live updater validation are reported by
-the release process. This release does not claim detector evasion or live
-provider equivalence.
+Seven behavior-sensitive settings from the harness-economics work remain
+experimental and off (or at their legacy default) until a measured
+quality comparison exists: `prompt_profile`, `tool_loading`, `compaction`,
+`context_reduction`, `history_format`, `routing_economics` and `packet_order`.
+The evidence-preserving `output_externalization` default is unchanged. The
+release gate fails if any of these defaults moves. Details are in
+`docs/v2/AR-205/09-EXPERIMENTAL-FEATURES.md`.
 
----
+## Known limitations
 
-## Ariadne 1.6.3.2
+- No live decision provider or model-quality comparison was executed, so no
+  calibration, threshold or provider-quality claim is made. Structural counters
+  are not money.
+- The Jev-shaped decision-provider boundary is present but unexercised. It is an
+  example of a possible provider, not a dependency or an identity.
+- Boreal compatibility was inspected read-only and is contract-verified only;
+  no live Boreal runtime verification was performed.
+- Ariadne does not sandbox the operating system, does not cryptographically
+  attest local run-state files, and cannot prove an observation a provider never
+  reported.
+- Prompt injection from external text remains possible inside a model's own
+  authority; the engine limits the blast radius rather than eliminating it.
+- Release artifacts are authenticated by digest and by an embedded manifest, not
+  by a maintainer signing key.
+- Migration rollback is unavailable once a migrated run contains v2-only work;
+  the preserved pre-migration bytes remain for manual recovery.
+- Artifact signing is not implemented. Clean-install verification was performed
+  on Windows; macOS and Linux share the same Python entry point but were not
+  executed in this release run.
 
-Ariadne 1.6.3.2 is a packaging correction for the 1.6.3.1 writing release.
-It adds the omitted `WRITING-POLICY.md` file to the runtime allowlist so the
-installed writing skill and its referenced policy travel together.
+## Platforms and installation
 
-The existing immutable 1.6.3.1 release is preserved unchanged.
-
-## Fixed
-
-- Fresh wheel and runtime artifacts now include `WRITING-POLICY.md` alongside
-  the writing skills and `scripts/prepare-stage.py`.
-- Development-only tests, validation fixtures and maintainer-only files remain
-  excluded from the runtime release surface.
-
-## Evidence limits
-
-- The correction changes packaging only; it does not change the writing
-  architecture or claim live provider equivalence.
-
----
-
-## Ariadne 1.6.3.1
-
-Ariadne 1.6.3.1 adds a writing architecture and executable writing packet
-workflow. It is a focused release and does not change the existing workflow
-stage model or social strategy system.
-
-## Added
-
-- Writing intent distinguishes CREATIVE, ACADEMIC, SCIENTIFIC,
-  HUMAN-DRAFT TRANSFORMATION and SOCIAL within the existing workflow.
-- `WRITING-POLICY.md` defines genre methods, general anti-generic quality
-  principles, Evidence Ladder reuse, transformation provenance and independent
-  editorial review lenses.
-- The existing transport now prepares `draft`, `review` and `revise` writing
-  packets with provider/model identity, source hashes and explicit S4/S5
-  boundaries.
-- Human-draft transformation packets preserve the original draft for reviewer
-  comparison, while review packets exclude drafting rationale and implementation
-  history.
-- A twelve-case writing benchmark and deterministic architecture self-test
-  cover routing, genre methods, evidence boundaries, transformation and review
-  independence.
-- General writing no longer requires SOCIAL-only voice profiles, content
-  pillars or `CONTENT-LEARNINGS.md`; those remain conditional on SOCIAL.
+Install with `python -m pip install --user` and the release wheel URL, then run
+`python -m ariadne doctor`. The launcher is a single dependency-free Python
+entry point used on Windows, macOS and Linux, and the installed runtime stays
+offline. The stage packets are written so that a first-time-user can follow them,
+and the platform names, comprehension guidance and Codex skill location are
+documented in `INSTALL.md` and `QUICKSTART.md`.
 
 ## Evidence limits
 
-- Existing social behavior, including Contract v2 compatibility and Contract v3
-  strictness, remains covered by the existing social suite.
-- Structural and packet-level tests pass. The release does not claim live
-  provider equivalence or a live independent-review session.
-
-Ariadne 1.6.3 is a focused social-creative contract patch. It strengthens
-strategy quality before drafting without changing the general workflow or
-legacy Contract v2 behavior.
-
-## Added
-
-- Contract v3 requires two to four genuinely distinct creative angles with
-  differentiation fields, selected-angle consistency and qualitative rationale.
-- Contract v3 requires a reason-to-exist decision that rejects generic social
-  content.
-- Social post concepts record a 1–5 hook score; scores below 4 are a hard
-  drafting failure requiring revision.
-- Social strategy guidance and the conditional template document the new
-  angle-selection and hook-evaluation method.
-
-## Compatibility and evidence limits
-
-- Contract v2 remains supported without Contract v3's angle and hook fields.
-- No semantic-similarity subsystem, AI-detector integration, humanizer or
-  detector-evasion heuristic was added.
-- Social strategy remains optional and does not publish, authenticate,
-  schedule or alter build gates.
-
-Ariadne 1.6.2 was a narrow model-routing patch for the 1.6.1 release. It did not
-change stages, gates, capability classes, provider boundaries or project-state
-compatibility.
-
-## Fixed
-
-- `R1` model selection no longer escalates on a single elevated signal. Model
-  and effort are decided by two orthogonal gates -- difficulty (complexity,
-  ambiguity, context requirements) and stakes (consequence, reversibility,
-  visual value) -- and escalation now requires both.
-- A task marked `novel` no longer implies the highest-cost model on its own.
-  Novelty is an operator's assessment of a task, not evidence that the largest
-  model is required, so novel work that is cheap to retry stays on a cheaper
-  tier.
-- Reasoning effort no longer rises merely because a stronger model was chosen.
-  When being wrong is cheap to detect and cheap to undo, effort is held at
-  medium however difficult the problem looks.
-- The routing recommendation reported its model-landscape evidence as a
-  constant. It is now a real classification -- `unverified`, `operator-reported`
-  or omitted -- and never claims verification, since Ariadne performs no live
-  capability lookup.
-- The routing self-test printed non-ASCII test names and crashed on consoles
-  using a legacy code page. Runtime output is ASCII and is exercised under
-  `cp1252`.
-
-## Added
-
-- `python scripts/ariadne.py route ...` recommends capability class, model,
-  effort and session strategy, with the reasoning behind each.
-- `--visual-importance` and `--context-requirements` expose the two remaining
-  per-task judgements that materially change a routing decision.
-- Decision-boundary and cost tests, including an invariant that no single
-  elevated dimension alone reaches the highest model or effort, and a check
-  that no input combination recommends an effort its model cannot run.
-
-## Compatibility and evidence limits
-
-- Python 3.10 or newer; Windows is directly exercised.
-- Existing project-state schema 1 remains supported; no migration is required.
-- Codex remains the default. Claude remains optional.
-- The routing tier boundaries are argued from cost reasoning, not measured
-  against outcomes. Nothing here establishes that a cheaper model matches a
-  more expensive one on the work now routed to it; treat the recommendation as
-  a default to override, not a verdict.
-- The model-landscape mapping is dated source knowledge, not a live lookup.
-- Native macOS/Linux behaviour, live Claude or Cursor execution and
-  first-time-user comprehension remain unverified.
-- The Python distribution/import name `ariadne` is also used by Ariadne
-  GraphQL; use a separate interpreter or virtual environment when needed.
+This release was verified with deterministic offline tests: the repository
+contract, engine-core checks, the full benchmark, the release suite, a clean
+wheel installation, and the migration and decision-mutation checks. It makes no
+claim about model output quality, provider equivalence, sandboxing or live
+integration with any consumer application. See `TRUST.md` for the exact
+boundaries.

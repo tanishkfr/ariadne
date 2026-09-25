@@ -1,0 +1,603 @@
+{
+  "environment": {
+    "cwd": "<path>",
+    "machine": "AMD64",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.9",
+    "python_executable": "<path>"
+  },
+  "label": "ar-204-final",
+  "local_performance": {
+    "cold_ms": {
+      "packet_map": 6.8966,
+      "packet_render": 8.9014
+    },
+    "memo": {
+      "entries": 1,
+      "hits": 29,
+      "invalidations": 0,
+      "memo": "perf-source",
+      "misses": 1,
+      "note": "a memo accelerates a deterministic computation; it never satisfies evidence",
+      "version": 1
+    },
+    "notes": [
+      "each operation is warmed up and repeated; medians are reported, not single samples",
+      "cold figures clear the section-analysis memo first, so they are genuine first-render costs",
+      "timings are from this host and this packet; they are comparable with each other, not with another machine"
+    ],
+    "timings_ms": {
+      "canonical_json": {
+        "max_ms": 0.0592,
+        "median_ms": 0.0356,
+        "min_ms": 0.0324,
+        "p90_ms": 0.0542,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "compact_packet_text": {
+        "max_ms": 0.1696,
+        "median_ms": 0.1157,
+        "min_ms": 0.1128,
+        "p90_ms": 0.1195,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "history_compact": {
+        "max_ms": 1.6155,
+        "median_ms": 0.8252,
+        "min_ms": 0.5861,
+        "p90_ms": 1.2742,
+        "repeats": 15,
+        "warmup": 3
+      },
+      "history_economics": {
+        "max_ms": 0.3439,
+        "median_ms": 0.1172,
+        "min_ms": 0.1035,
+        "p90_ms": 0.1366,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "memoised_source_hash": {
+        "max_ms": 0.0097,
+        "median_ms": 0.0083,
+        "min_ms": 0.008,
+        "p90_ms": 0.0089,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "pack_sizes": {
+        "max_ms": 0.3795,
+        "median_ms": 0.1992,
+        "min_ms": 0.1404,
+        "p90_ms": 0.267,
+        "repeats": 15,
+        "warmup": 3
+      },
+      "packet_map": {
+        "max_ms": 0.815,
+        "median_ms": 0.62,
+        "min_ms": 0.3937,
+        "p90_ms": 0.749,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "path_plan": {
+        "max_ms": 0.0038,
+        "median_ms": 0.0028,
+        "min_ms": 0.0025,
+        "p90_ms": 0.0033,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "raw_source_hash": {
+        "max_ms": 0.1032,
+        "median_ms": 0.0595,
+        "min_ms": 0.0573,
+        "p90_ms": 0.0888,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "render_request": {
+        "max_ms": 1.4146,
+        "median_ms": 0.9134,
+        "min_ms": 0.8063,
+        "p90_ms": 1.0974,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "stable_prefix": {
+        "max_ms": 0.1138,
+        "median_ms": 0.0443,
+        "min_ms": 0.0262,
+        "p90_ms": 0.0731,
+        "repeats": 25,
+        "warmup": 5
+      },
+      "task_tree": {
+        "max_ms": 0.0638,
+        "median_ms": 0.002,
+        "min_ms": 0.0017,
+        "p90_ms": 0.0113,
+        "repeats": 25,
+        "warmup": 5
+      }
+    }
+  },
+  "measurement_boundaries": {
+    "cost": 0.0,
+    "model_calls": 0,
+    "note": "This run is deterministic and offline. Model-backed metrics are NOT measured here.",
+    "token_usage": "UNKNOWN - no model provider was invoked"
+  },
+  "packet_economics": {
+    "note": "bytes are measured from real packet artifacts; the compact-profile delta is structural and no model-quality parity is implied",
+    "prompt_audit": {
+      "bytes": 35200,
+      "delete_bytes": 0,
+      "files": 3,
+      "keep_bytes": 35168,
+      "move_bytes": 0,
+      "rewrite_bytes": 0
+    },
+    "stages": {
+      "S1": {
+        "buckets": {
+          "POLICY": 5626,
+          "SYSTEM": 15818
+        },
+        "bytes": 21444,
+        "compact_profile_removed_bytes": 166,
+        "compact_profile_removed_share": 0.0077,
+        "compact_sources_untouched": true,
+        "redactions": 0,
+        "section_rows": [
+          {
+            "bucket": "SYSTEM",
+            "bytes": 398,
+            "label": "packet preamble and transport scaffolding",
+            "per_request": [
+              "packet-reference",
+              "record-id"
+            ],
+            "stability": "volatile",
+            "stability_basis": "the transport scaffolding carries the packet identity and the repository head"
+          },
+          {
+            "bucket": "SYSTEM",
+            "bytes": 15420,
+            "label": "current S1 prompt block",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "POLICY",
+            "bytes": 5626,
+            "label": "skills/intake.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          }
+        ],
+        "sections": 3,
+        "stable_prefix_bytes": 21046,
+        "stable_ratio": 0.9814,
+        "volatile_bytes": 398,
+        "volatile_kinds": [
+          "content-digest",
+          "packet-reference",
+          "provider-identity",
+          "record-id",
+          "source-commit"
+        ]
+      },
+      "S3": {
+        "buckets": {
+          "DESIGN_CONTEXT": 17593,
+          "POLICY": 5843,
+          "PROJECT_FACTS": 17737,
+          "SYSTEM": 9136
+        },
+        "bytes": 50309,
+        "compact_profile_removed_bytes": 152,
+        "compact_profile_removed_share": 0.003,
+        "compact_sources_untouched": true,
+        "redactions": 0,
+        "section_rows": [
+          {
+            "bucket": "SYSTEM",
+            "bytes": 808,
+            "label": "packet preamble and transport scaffolding",
+            "per_request": [
+              "packet-reference",
+              "record-id"
+            ],
+            "stability": "volatile",
+            "stability_basis": "the transport scaffolding carries the packet identity and the repository head"
+          },
+          {
+            "bucket": "SYSTEM",
+            "bytes": 8328,
+            "label": "current S3 prompt block",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 644,
+            "label": "PROJECT.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "DESIGN_CONTEXT",
+            "bytes": 11953,
+            "label": ".ariadne/creative-evidence.json",
+            "per_request": [
+              "timestamp"
+            ],
+            "stability": "volatile",
+            "stability_basis": "a per-request value was detected: timestamp"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 11054,
+            "label": "DESIGN-TASTE.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 6039,
+            "label": "PRIVACY-POLICY.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "DESIGN_CONTEXT",
+            "bytes": 5640,
+            "label": "templates/DESIGN.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "POLICY",
+            "bytes": 5843,
+            "label": "skills/design-direction.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          }
+        ],
+        "sections": 8,
+        "stable_prefix_bytes": 37548,
+        "stable_ratio": 0.7463,
+        "volatile_bytes": 12761,
+        "volatile_kinds": [
+          "content-digest",
+          "environment-path",
+          "packet-reference",
+          "provider-identity",
+          "record-id",
+          "source-commit",
+          "timestamp"
+        ]
+      },
+      "S4A": {
+        "buckets": {
+          "DESIGN_CONTEXT": 1845,
+          "PROJECT_FACTS": 10404,
+          "SYSTEM": 4433
+        },
+        "bytes": 16682,
+        "compact_profile_removed_bytes": 152,
+        "compact_profile_removed_share": 0.0091,
+        "compact_sources_untouched": true,
+        "redactions": 0,
+        "section_rows": [
+          {
+            "bucket": "SYSTEM",
+            "bytes": 386,
+            "label": "packet preamble and transport scaffolding",
+            "per_request": [
+              "packet-reference",
+              "record-id"
+            ],
+            "stability": "volatile",
+            "stability_basis": "the transport scaffolding carries the packet identity and the repository head"
+          },
+          {
+            "bucket": "SYSTEM",
+            "bytes": 4047,
+            "label": "current S4A prompt block",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 644,
+            "label": "PROJECT.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "DESIGN_CONTEXT",
+            "bytes": 1845,
+            "label": "DESIGN.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 453,
+            "label": "AGENTS.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 9307,
+            "label": "templates/HANDOFF.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          }
+        ],
+        "sections": 6,
+        "stable_prefix_bytes": 16296,
+        "stable_ratio": 0.9769,
+        "volatile_bytes": 386,
+        "volatile_kinds": [
+          "content-digest",
+          "environment-path",
+          "packet-reference",
+          "provider-identity",
+          "record-id",
+          "source-commit"
+        ]
+      },
+      "S4B": {
+        "buckets": {
+          "DESIGN_CONTEXT": 12143,
+          "POLICY": 7764,
+          "PROJECT_FACTS": 19760,
+          "SYSTEM": 6177
+        },
+        "bytes": 45844,
+        "compact_profile_removed_bytes": 183,
+        "compact_profile_removed_share": 0.004,
+        "compact_sources_untouched": true,
+        "redactions": 0,
+        "section_rows": [
+          {
+            "bucket": "SYSTEM",
+            "bytes": 1408,
+            "label": "packet preamble and transport scaffolding",
+            "per_request": [
+              "packet-reference",
+              "record-id"
+            ],
+            "stability": "volatile",
+            "stability_basis": "the transport scaffolding carries the packet identity and the repository head"
+          },
+          {
+            "bucket": "SYSTEM",
+            "bytes": 4769,
+            "label": "current S4B prompt block",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 4533,
+            "label": "HANDOFF.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "DESIGN_CONTEXT",
+            "bytes": 1845,
+            "label": "DESIGN.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 453,
+            "label": "AGENTS.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "DESIGN_CONTEXT",
+            "bytes": 10298,
+            "label": ".ariadne/creative-operations.json",
+            "per_request": [
+              "timestamp"
+            ],
+            "stability": "volatile",
+            "stability_basis": "a per-request value was detected: timestamp"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 11694,
+            "label": "QA-POLICY.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "POLICY",
+            "bytes": 4438,
+            "label": "templates/QA.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "PROJECT_FACTS",
+            "bytes": 3080,
+            "label": "templates/RETURN-HANDOFF.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          },
+          {
+            "bucket": "POLICY",
+            "bytes": 3326,
+            "label": "skills/visual-qa.md",
+            "per_request": [],
+            "stability": "stable",
+            "stability_basis": "the header records a content digest, so the section is content-addressed"
+          }
+        ],
+        "sections": 10,
+        "stable_prefix_bytes": 34138,
+        "stable_ratio": 0.7447,
+        "volatile_bytes": 11706,
+        "volatile_kinds": [
+          "baseline-head",
+          "content-digest",
+          "environment-path",
+          "packet-reference",
+          "provider-identity",
+          "record-id",
+          "source-commit",
+          "timestamp"
+        ]
+      }
+    },
+    "thresholds": {
+      "excerpt_bytes": 2048,
+      "externalize_at_bytes": 8192,
+      "tail_bytes": 1024
+    },
+    "tool_schemas": {
+      "core_bytes": 2896,
+      "deferrable_bytes": 107777,
+      "deferrable_share": 0.9738,
+      "packs": {
+        "capture": 0,
+        "core": 2896,
+        "design": 36900,
+        "research": 26970,
+        "social": 8441,
+        "verification": 33053,
+        "writing": 2413
+      }
+    },
+    "totals": {
+      "bytes": 134279,
+      "compact_profile_removed_bytes": 653,
+      "compact_profile_removed_share": 0.0049,
+      "packets": 4,
+      "stable_prefix_bytes": 109028,
+      "stable_ratio": 0.812,
+      "volatile_bytes": 25251
+    }
+  },
+  "recorded_at": "2026-09-24T17:55:13+00:00",
+  "runtime": {
+    "dirty_entries": 0,
+    "git_branch": "v2/ar-204-harness-economics",
+    "git_head": "7a4fc8a650faece6a0218d25b6d322ae982e02ff",
+    "repo_root": "<path>",
+    "version_file": "1.6.7"
+  },
+  "source": "extracted from the AR-204 final full benchmark run on commit 7a4fc8a",
+  "summary": {
+    "cases": 226,
+    "counts": {
+      "error": 0,
+      "fail": 0,
+      "observed": 5,
+      "pass": 219,
+      "skip": 2
+    },
+    "total_duration_seconds": 618.125,
+    "totals": {
+      "api_bypasses": 0,
+      "approval_reuse": 0,
+      "artifacts": 3,
+      "blocking_problems": 3,
+      "bypasses_allowed": 0,
+      "bytes": 38451,
+      "cache_hits": 8,
+      "candidates": 10,
+      "checks": 462,
+      "cold_packet_map_ms": 6.8966,
+      "compact_profile_removed_bytes": 653,
+      "cost": 0.0,
+      "depth_is_deep": 0,
+      "duration_seconds": 124.52900000000001,
+      "events": 4,
+      "executions": 4,
+      "fabricated_review_accepted": 0,
+      "failed": 0,
+      "false_acceptance": 0,
+      "files_deleted": 0,
+      "files_scanned": 24,
+      "findings": 3,
+      "forged_refusals": 1,
+      "gate_bypass": 0,
+      "inaccessible_recorded": 1,
+      "independent_executions": 2,
+      "inspections": 2,
+      "invalidations": 4,
+      "invented_approvals": 0,
+      "memo_hits": 29,
+      "migrations_implicit": 0,
+      "mismatches_recorded": 1,
+      "model_calls": 0,
+      "operations": 12,
+      "orphans_adopted": 0,
+      "packet_bytes": 330774,
+      "packets": 4,
+      "packets_created": 0,
+      "passed": 415,
+      "recoveries_applied": 2,
+      "references": 0,
+      "refinement_attempts": 3,
+      "rendered_evidence": 1,
+      "repetitions": 5,
+      "replay_acceptance": 0,
+      "requirements_satisfied": 3,
+      "research_stages_selected": 0,
+      "results_fabricated": 0,
+      "return_recorded": 0,
+      "runs": 1,
+      "s1_packet_bytes": 21889,
+      "s3_packet_bytes": 51451,
+      "s3_sources": 7,
+      "self_authorization": 0,
+      "slowest_median_ms": 0.9134,
+      "sources_checked": 7,
+      "sources_considered": 22,
+      "sources_included": 16,
+      "stable_prefix_bytes": 109028,
+      "stages_selected": 9,
+      "stages_skipped": 9,
+      "stale_refusals": 1,
+      "stale_results_refused": 1,
+      "telemetry_rows": 30,
+      "unauthorized_operations": 0,
+      "validation_commands": 1,
+      "volatile_bytes": 25251
+    }
+  }
+}

@@ -46,6 +46,16 @@ WORKER_ROLES = ("bulk", "strong", "senior-reasoning")
 MAX_ROUTINE_REPAIRS = 2
 WORKER_VALIDATION_SCHEMA = 1
 VALIDATION_COMMAND_LIMIT = 8
+RUNTIME_EVIDENCE_PATTERNS = (
+    ".ariadne/creative-evidence.json",
+    ".ariadne/creative-operations.json",
+)
+"""Ariadne's own evidence ledgers, treated as in-contract during worker validation.
+
+The worker never edits these directly: the runtime's ``record-creative`` and
+``record-operations`` commands do. Without this, a run could not record the skill
+and operations evidence that the S5 continuation precondition requires, and the
+worker contract would be failing the runtime's own evidence writes."""
 WRITING_INTENTS = (
     "CREATIVE", "ACADEMIC", "SCIENTIFIC", "HUMAN-DRAFT TRANSFORMATION", "SOCIAL"
 )
@@ -993,9 +1003,19 @@ def check_project_boundary(stage: str, project: Path, adopt_existing: bool = Fal
             raise PacketError("QA.md has no recognisable independent judgement evidence")
 
 
-def source_entry(label: str, path: Path, kind: str, content: str, delivered: bool = True) -> dict:
+def source_entry(
+    label: str,
+    path: Path,
+    kind: str,
+    content: str,
+    delivered: bool = True,
+    *,
+    reuse: dict | None = None,
+    context_reason: str = "",
+    duplicate_of: str = "",
+) -> dict:
     delivered_content = content.rstrip()
-    return {
+    entry = {
         "label": label,
         "path": (
             str(path.resolve())
@@ -1003,15 +1023,36 @@ def source_entry(label: str, path: Path, kind: str, content: str, delivered: boo
             else path.relative_to(ROOT).as_posix()
         ),
         "kind": kind,
-        "source_sha256": sha256_file(path),
         # `content_sha256` is the backward-compatible, newline-normalised hash
         # of the complete source file. Older runtimes use it when raw checkout
         # bytes differ only by line endings.
-        "content_sha256": sha256_text(read(path)),
         "delivered_content_sha256": sha256_text(delivered_content),
         "delivered": delivered,
         "content": delivered_content,
     }
+    reused = False
+    if isinstance(reuse, dict) and str(reuse.get("source_sha256", "")):
+        try:
+            info = path.stat()
+        except OSError:
+            info = None
+        if (
+            info is not None
+            and int(reuse.get("size", -1)) == int(info.st_size)
+            and int(reuse.get("mtime_ns", -1)) == int(info.st_mtime_ns)
+        ):
+            entry["source_sha256"] = str(reuse["source_sha256"])
+            entry["content_sha256"] = str(reuse.get("content_sha256", ""))
+            entry["hashed_from"] = "cache"
+            reused = True
+    if not reused:
+        entry["source_sha256"] = sha256_file(path)
+        entry["content_sha256"] = sha256_text(read(path))
+    if context_reason:
+        entry["context_reason"] = context_reason
+    if duplicate_of:
+        entry["duplicate_of"] = duplicate_of
+    return entry
 
 
 def writing_source(label: str, path: Path, kind: str = "writing-input") -> dict:
@@ -1166,31 +1207,58 @@ def prepare_writing(args: argparse.Namespace) -> Path:
     return output
 
 
-def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tuple[list[dict], list[str]]:
+def plan_sources(stage: str, project: Path, args: argparse.Namespace) -> list[dict]:
+    """Candidate context sources for one stage, without reading their content.
+
+    This is the single implementation of the source-selection rules:
+    :func:`resolve_sources` materialises exactly these candidates, in this
+    order. Each candidate declares its bucket, whether the stage *requires* it,
+    whether the adaptive decision layer may omit it, and why an absent or
+    unselected candidate is not delivered. The decision layer may only omit a
+    candidate marked ``removable``; it can never add one.
+    """
     spec = STAGES[stage]
-    sources = []
-    omitted = []
+    project = Path(project)
+    candidates: list[dict] = []
+
+    def add(label: str, path: Path, kind: str, bucket: str, *, required: bool, removable: bool = False,
+            absent_reason: str = "", selection_reason: str = "", selectable: bool = False,
+            requires: str = "", declared_name: str = "", deliverable: bool | None = None) -> None:
+        path = Path(path)
+        deliverable = path.is_file() if deliverable is None else (bool(deliverable) and path.is_file())
+        candidates.append({
+            "label": label,
+            "path": (
+                str(path.resolve())
+                if kind.startswith(("project", "continuation", "writing"))
+                else path.relative_to(ROOT).as_posix()
+            ),
+            "source_path": str(path),
+            "declared_name": declared_name,
+            "kind": kind,
+            "bucket": bucket,
+            "required": required,
+            "removable": removable or not required,
+            "exists": deliverable,
+            "absent_reason": absent_reason,
+            "selection_reason": selection_reason,
+            "selectable": selectable,
+            "requires": requires,
+        })
 
     for name in spec["project_inputs"]:
-        path = project / name
-        if not path.is_file():
-            raise PacketError(f"{stage} required project input is missing: {name}")
-        sources.append(source_entry(name, path, "project", read(path)))
-
+        add(name, project / name, "project", "project", required=True, declared_name=name)
     for name in spec.get("optional_project_inputs", []):
-        path = project / name
-        if path.is_file():
-            sources.append(source_entry(name, path, "project-runtime", read(path)))
-        else:
-            omitted.append(f"{name} absent — legacy creative provenance remains explicitly untracked")
-
+        add(
+            name, project / name, "project-runtime", "optional", required=False, removable=True,
+            absent_reason="OPTIONAL_NOT_SELECTED", declared_name=name,
+            selection_reason=f"{name} absent — legacy creative provenance remains explicitly untracked",
+            requires="creative" if name.endswith("creative-evidence.json") else "",
+        )
     for name in spec["canonical_inputs"]:
-        path = ROOT / name
-        if not path.is_file():
-            raise PacketError(f"{stage} canonical input is missing: {name}")
-        sources.append(source_entry(name, path, "canonical", read(path)))
+        add(name, ROOT / name, "canonical", "canonical", required=True, declared_name=name)
 
-    selected_skills = set()
+    selected_skills: set[str] = set()
     creative_path = project / ".ariadne" / "creative-evidence.json"
     if creative_path.is_file():
         try:
@@ -1211,33 +1279,42 @@ def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tupl
             "component-research": "skills/component-research.md",
         }
         for skill_name, name in selected_sources.items():
-            if skill_name in selected_skills:
-                path = ROOT / name
-                sources.append(source_entry(name, path, "canonical-selected-skill", read(path)))
-            else:
-                omitted.append(f"{name} not selected by the project creative plan")
-        if "component-research" in selected_skills:
-            path = ROOT / "references" / "capabilities.json"
-            sources.append(source_entry(
-                "references/capabilities.json", path, "canonical-selected-capability", read(path)
-            ))
-        else:
-            omitted.append("references/capabilities.json not needed — component research was not selected")
-
-    if stage == "S3":
+            selected = skill_name in selected_skills
+            add(
+                name, ROOT / name, "canonical-selected-skill", "conditional",
+                required=selected, removable=not selected,
+                absent_reason="OPTIONAL_NOT_SELECTED", declared_name=name,
+                selection_reason=f"{name} not selected by the project creative plan",
+                selectable=selected, deliverable=selected,
+            )
+        component_selected = "component-research" in selected_skills
+        add(
+            "references/capabilities.json", ROOT / "references" / "capabilities.json",
+            "canonical-selected-capability", "conditional",
+            required=component_selected, removable=not component_selected,
+            absent_reason="DEPENDENCY_OF_INCLUDED_SOURCE" if not component_selected else "MISSING",
+            selection_reason="references/capabilities.json not needed — component research was not selected",
+            selectable=component_selected, declared_name="references/capabilities.json",
+            deliverable=component_selected,
+        )
         if args.motion not in ("yes", "no") or args.assets not in ("yes", "no"):
             raise PacketError("S3 requires explicit --motion yes|no and --assets yes|no")
         research = project / "RESEARCH.md"
-        if research.exists():
-            sources.append(source_entry("RESEARCH.md", research, "project", read(research)))
-        else:
-            omitted.append("RESEARCH.md absent — no S2 output to carry")
+        add(
+            "RESEARCH.md", research, "project", "conditional",
+            required=research.exists(), removable=not research.exists(),
+            absent_reason="MISSING", declared_name="RESEARCH.md",
+            selection_reason="RESEARCH.md absent — no S2 output to carry",
+        )
         for choice, name in ((args.motion, "DESIGN-MOTION.md"), (args.assets, "DESIGN-ASSETS.md")):
-            if choice == "yes":
-                path = ROOT / name
-                sources.append(source_entry(name, path, "canonical", read(path)))
-            else:
-                omitted.append(f"{name} not triggered — explicitly declared no")
+            selected = choice == "yes"
+            add(
+                name, ROOT / name, "canonical", "conditional",
+                required=selected, removable=not selected,
+                absent_reason="OPTIONAL_NOT_SELECTED", declared_name=name,
+                selection_reason=f"{name} not triggered — explicitly declared no",
+                selectable=selected, deliverable=selected,
+            )
         restart_context = getattr(args, "restart_context", None)
         if restart_context:
             if not args.retry:
@@ -1245,13 +1322,82 @@ def resolve_sources(stage: str, project: Path, args: argparse.Namespace) -> tupl
             path = Path(restart_context).resolve()
             if not path.is_file() or path.stat().st_size == 0:
                 raise PacketError("S3 restart context is missing or empty")
-            sources.append(source_entry(
-                "rejected S3 direction and human restart reason",
-                path,
-                "continuation-restart-context",
-                read(path),
-            ))
+            add(
+                "rejected S3 direction and human restart reason", path,
+                "continuation-restart-context", "conditional",
+                required=True, removable=False,
+                declared_name="restart context",
+            )
+    return candidates
 
+
+def omission_message(candidate: dict, reason: str) -> str:
+    """The operator-visible omission line for one candidate and reason code."""
+    evidence = str(candidate.get("selection_reason", "") or "")
+    if reason in ("OPTIONAL_NOT_SELECTED", "MISSING", "DEPENDENCY_OF_INCLUDED_SOURCE") and evidence:
+        return evidence
+    return f"{candidate.get('path')} omitted by the adaptive context decision: {reason}"
+
+
+def resolve_sources(
+    stage: str,
+    project: Path,
+    args: argparse.Namespace,
+    context_plan: dict | None = None,
+) -> tuple[list[dict], list[str]]:
+    """Materialise the candidate sources for a stage under an optional context plan.
+
+    The plan can only omit a candidate the stage declared removable and reuse the
+    recorded hashes of a candidate it still delivers. A plan that tries to omit a
+    required source is refused, so adaptive context can never weaken a packet.
+    """
+    plan = context_plan if isinstance(context_plan, dict) else {}
+    omissions = {str(key): str(value) for key, value in (plan.get("omit") or {}).items()}
+    reuse = {str(key): value for key, value in (plan.get("reuse") or {}).items()}
+    deduplicate = bool(plan.get("deduplicate", False))
+    sources: list[dict] = []
+    omitted: list[str] = []
+    seen_content: dict[str, str] = {}
+
+    for candidate in plan_sources(stage, project, args):
+        path_id = str(candidate["path"])
+        source_path = Path(str(candidate["source_path"]))
+        bucket = str(candidate["bucket"])
+        required = bool(candidate["required"])
+        if not candidate["exists"]:
+            if required and bucket in ("project", "canonical"):
+                name = str(candidate.get("declared_name") or path_id)
+                raise PacketError(f"{stage} required {bucket} input is missing: {name}")
+            omitted.append(omission_message(candidate, str(candidate.get("absent_reason", "MISSING"))))
+            continue
+        if path_id in omissions:
+            if not candidate.get("removable"):
+                raise PacketError(
+                    "the adaptive context plan may not omit a required source: " + path_id
+                )
+            omitted.append(omission_message(candidate, omissions[path_id]))
+            continue
+        reason = "REQUIRED_BY_STAGE" if bucket in ("project", "canonical") else "REQUIRED_BY_TASK_TYPE"
+        reuse_entry = reuse.get(path_id) if isinstance(reuse.get(path_id), dict) else None
+        if reuse_entry:
+            reason = "UNCHANGED_CACHED_INPUT"
+        entry = source_entry(
+            str(candidate["label"]), source_path, str(candidate["kind"]), read(source_path),
+            reuse=reuse_entry, context_reason=reason,
+        )
+        content_hash = str(entry.get("delivered_content_sha256", ""))
+        if deduplicate and content_hash and content_hash in seen_content:
+            entry["delivered"] = False
+            entry["context_reason"] = "SUPERSEDED"
+            entry["duplicate_of"] = seen_content[content_hash]
+            omitted.append(
+                f"{candidate['label']} omitted as duplicate content of {seen_content[content_hash]} (SUPERSEDED)"
+            )
+            sources.append(entry)
+            continue
+        if content_hash:
+            seen_content.setdefault(content_hash, str(candidate["label"]))
+        sources.append(entry)
     return sources, omitted
 
 
@@ -1473,7 +1619,14 @@ def validate_packet_id(value: str) -> None:
         raise PacketError("packet ID must contain only letters, numbers, dot, underscore, or hyphen")
 
 
-def prepare(args: argparse.Namespace) -> Path:
+def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
+    """Build one stage packet.
+
+    ``context_plan`` is the optional AR-202 adaptive-context plan: it may omit a
+    candidate the stage declared removable and reuse recorded hashes for an
+    included source. Omitting a required source is refused. Without a plan the
+    packet is byte-identical to the pre-AR-202 compiler's output.
+    """
     stage = args.stage.upper()
     if stage not in STAGES:
         raise PacketError(f"unsupported stage {stage}; choose one of {list(STAGES)}")
@@ -1502,7 +1655,7 @@ def prepare(args: argparse.Namespace) -> Path:
     prompt = source_entry(
         f"current {stage} prompt block", prompt_path, "canonical-prompt", block
     )
-    sources, omitted = resolve_sources(stage, project, args)
+    sources, omitted = resolve_sources(stage, project, args, context_plan=context_plan)
     sources.extend(derived)
 
     provider = str(args.provider or STAGES[stage]["provider"]).strip()
@@ -1592,6 +1745,14 @@ def prepare(args: argparse.Namespace) -> Path:
         "omitted_conditionals": omitted,
         "forbidden_inputs": STAGES[stage]["forbidden_inputs"],
     }
+    if isinstance(context_plan, dict) and context_plan:
+        manifest["context_decision"] = {
+            "decision_id": str(context_plan.get("decision_id", "")),
+            "policy_version": str(context_plan.get("policy_version", "")),
+            "omit": {str(key): str(value) for key, value in (context_plan.get("omit") or {}).items()},
+            "reuse": sorted(str(key) for key in (context_plan.get("reuse") or {})),
+            "deduplicate": bool(context_plan.get("deduplicate", False)),
+        }
     (output / MANIFEST_NAME).write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

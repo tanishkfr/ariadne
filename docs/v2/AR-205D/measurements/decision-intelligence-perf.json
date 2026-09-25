@@ -1,0 +1,42 @@
+{
+  "environment": {
+    "platform": "win32",
+    "python": "3.11.9"
+  },
+  "iterations": 200,
+  "measurements": {
+    "batch_planning": {
+      "iterations": 200,
+      "median_us": 27.0,
+      "p95_us": 49.3
+    },
+    "build_decision_graph": {
+      "iterations": 200,
+      "median_us": 52.6,
+      "p95_us": 137.0
+    },
+    "cache_lookup_hit": {
+      "iterations": 200,
+      "median_us": 20.4,
+      "p95_us": 37.5
+    },
+    "compile_plan": {
+      "iterations": 200,
+      "median_us": 33.1,
+      "p95_us": 69.5
+    },
+    "state_projection": {
+      "iterations": 200,
+      "median_us": 13.4,
+      "p95_us": 25.1
+    },
+    "trace_generation": {
+      "iterations": 50,
+      "median_us": 16.7,
+      "p95_us": 31.0
+    }
+  },
+  "milestone": "AR-205D",
+  "note": "local wall-clock only: these are structural overheads of the decision layer, not provider latency and not a benchmark of model quality",
+  "schema_version": 1
+}

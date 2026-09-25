@@ -37,7 +37,6 @@ STATE_NAME = "ariadne-run.json"
 LOG_NAME = "OPERATIONS.md"
 PREFLIGHT_NAME = "provider-preflight.json"
 TELEMETRY_NAME = "worker-telemetry.jsonl"
-RUNTIME_SCHEMA = 1
 FRIENDLY_STAGES = {
     "S1": "project brief",
     "S2": "focused research",
@@ -86,6 +85,95 @@ TRANSPORT = load_transport()
 WORKER_ROLE_ORDER = {role: index for index, role in enumerate(TRANSPORT.WORKER_ROLES)}
 
 
+def load_engine():
+    """Load the AR-201 orchestration core from the same checkout (no installation required)."""
+    package = ROOT / "src" / "ariadne_engine" / "__init__.py"
+    if not package.is_file():
+        raise RuntimeError_(
+            "The Ariadne orchestration core is missing from this runtime: " + str(package)
+        )
+    spec = importlib.util.spec_from_file_location(
+        "ariadne_engine", package, submodule_search_locations=[str(package.parent)]
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError_("Ariadne orchestration core could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["ariadne_engine"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+ENGINE = load_engine()
+CONTRACTS = ENGINE.contracts
+STATEMACHINE = ENGINE.statemachine
+POLICY = ENGINE.policy
+REVIEWS = ENGINE.review
+PERSISTENCE = ENGINE.persistence
+ENGINE_API = ENGINE.api
+EXECUTION = ENGINE.execution
+ROUTING = ENGINE.routing
+CONTEXT = ENGINE.context
+RECOVERY = ENGINE.recovery
+EVENTS = ENGINE.events
+DESIGN = ENGINE.design
+REFERENCES = ENGINE.references
+COMPONENTS = ENGINE.components
+RENDER = ENGINE.render
+CRITIQUE = ENGINE.critique
+CAPABILITIES = ENGINE.capabilities
+VERIFICATION = ENGINE.verification
+PROVENANCE = ENGINE.provenance
+DECISIONS = ENGINE.decisions
+# AR-204 harness economics. The runtime exposes the same engine functions the API
+# and the benchmark drive, so no optimisation rule is duplicated on a surface.
+ECONOMICS = ENGINE.economics
+EFFICIENCY = ENGINE.efficiency
+HARNESS = ENGINE.harness
+TOOLING = ENGINE.tooling
+ARTIFACTS = ENGINE.artifacts
+HISTORY = ENGINE.history
+ORCHESTRATION = ENGINE.orchestration
+PROMPTING = ENGINE.prompting
+SERIALIZATION = ENGINE.serialization
+MIGRATION = ENGINE.migration
+
+# The run-state *file* schema is unchanged in AR-201: new authority lives in
+# versioned records inside the state, so published runtimes keep reading it.
+RUNTIME_SCHEMA = CONTRACTS.SCHEMA_RUN
+ENGINE_ERRORS = (CONTRACTS.EngineError,)
+def _runtime_module():
+    """The loaded runtime module, resolved when the API is actually used."""
+    return sys.modules.get(__name__)
+
+
+ENGINE_API.bind(_runtime_module)
+PERSISTENCE.bind_logger(
+    lambda run_root, report: (
+        append_log(
+            run_root,
+            "Run state migrated",
+            "A readable run state written before the AR-201 engine contract was upgraded explicitly.",
+            (
+                f"schema {report.get('from_version')} -> record contract {report.get('to_version')}; "
+                f"backup {report.get('backup') or 'already present'}; "
+                "no approval was created and no gate was granted."
+            ),
+            [str(run_root / STATE_NAME)],
+            "Explicit, additive, reversible by restoring the preserved pre-migration file.",
+            "Re-check any human gate this run still needs.",
+        ),
+        append_worker_telemetry(
+            run_root,
+            "state-migration",
+            provider=str(report.get("engine_contract", "ariadne-engine-1")),
+            model=f"schema {report.get('from_version')} -> {report.get('to_version')}",
+            failure_reason="none",
+        ),
+    )
+)
+
+
+
 def load_reasoners():
     path = ROOT / "scripts" / "reasoners.py"
     spec = importlib.util.spec_from_file_location("ariadne_reasoners", path)
@@ -123,6 +211,11 @@ def load_creative_operations():
 
 
 OPERATIONS = load_creative_operations()
+
+# The engine owns gate policy and continuation preconditions; the transport and
+# the two creative ledgers stay where they are and are injected, never re-implemented.
+POLICY.bind(transport=TRANSPORT, creative=CREATIVE, operations=OPERATIONS)
+
 
 
 def now() -> str:
@@ -200,50 +293,76 @@ def append_worker_telemetry(run_root: Path, event: str, **values) -> None:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
+def project_engine_event(run_root: Path, event: dict) -> None:
+    """Compatibility projection: one legacy telemetry row per canonical engine event.
+
+    ``engine-events.jsonl`` is the structured source of truth; this keeps the
+    AR-201 telemetry row schema working for existing consumers without asking
+    them to understand the new event contract.
+    """
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    append_worker_telemetry(
+        run_root,
+        f"engine:{event.get('type', 'unknown')}",
+        task_id=str(event.get("task_id") or "unknown"),
+        worker_role=str(data.get("worker_role") or data.get("role") or "unknown"),
+        provider=str(data.get("provider") or data.get("requested_provider") or "unknown"),
+        model=str(data.get("model") or data.get("requested_model") or "unknown"),
+        review_outcome=str(data.get("review_outcome") or "not reviewed"),
+        failure_reason=str(data.get("failure_class") or "none"),
+        usage="unknown",
+        cost="unknown",
+        execution=str(event.get("execution") or ""),
+    )
+
+
+EVENTS.bind_projector(project_engine_event)
+
+
+def emit_event(
+    run_root: Path,
+    event_type: str,
+    *,
+    state: dict | None = None,
+    task_id: str = "",
+    stage: str = "",
+    execution: str = "",
+    actor: str = "",
+    **data,
+) -> dict:
+    """Append one canonical engine event and return it. Never rewrites the log."""
+    state = state or {}
+    return EVENTS.emit(
+        Path(run_root),
+        event_type,
+        run_id=str(state.get("run_id", "")),
+        task_id=str(task_id or ""),
+        stage=str(stage or ""),
+        execution=str(execution or ""),
+        actor=str(actor or ""),
+        **data,
+    )
+
+
 def worker_outcome(
     status_value: str,
     failure_kind: str = "none",
     repair_attempts: int = 0,
     repair_limit: int = TRANSPORT.MAX_ROUTINE_REPAIRS,
 ) -> dict:
-    """Classify one independent validation result without selecting a provider."""
-    if status_value == "passed":
-        return {
-            "implementation_state": "IMPLEMENTED",
-            "validation_state": "VALIDATED",
-            "lifecycle": "validated",
-            "retryable": False,
-            "escalation_required": False,
-            "next": "Prepare the isolated independent review.",
-        }
-    if status_value == "blocked" or failure_kind in {
-        "contract", "out-of-scope", "dangerous-action", "repository-conflict", "worker-blocked"
-    }:
-        return {
-            "implementation_state": "IMPLEMENTED",
-            "validation_state": "BLOCKED",
-            "lifecycle": "escalation-required",
-            "retryable": False,
-            "escalation_required": True,
-            "next": "Stop and escalate the worker conflict to a stronger worker or senior reasoning agent.",
-        }
-    if repair_attempts < repair_limit:
-        remaining = repair_limit - repair_attempts
-        return {
-            "implementation_state": "IMPLEMENTED",
-            "validation_state": "FAILED",
-            "lifecycle": "routine-repair",
-            "retryable": True,
-            "escalation_required": False,
-            "next": f"Prepare one bounded routine repair retry ({remaining} remaining).",
-        }
+    """Classify one independent validation result without selecting a provider.
+
+    The classification itself lives in the engine's transition table so the
+    runtime cannot invent a lifecycle value the table does not permit.
+    """
+    outcome = STATEMACHINE.worker_transition_for(status_value, failure_kind, repair_attempts, repair_limit)
     return {
-        "implementation_state": "IMPLEMENTED",
-        "validation_state": "FAILED",
-        "lifecycle": "escalation-required",
-        "retryable": False,
-        "escalation_required": True,
-        "next": "Stop: the routine repair budget is exhausted; escalate the implementation.",
+        "implementation_state": outcome["fields"].get("implementation_state", "IMPLEMENTED"),
+        "validation_state": outcome["fields"].get("validation_state", "UNKNOWN"),
+        "lifecycle": outcome["to"],
+        "retryable": outcome["retryable"],
+        "escalation_required": outcome["escalation_required"],
+        "next": outcome["next"],
     }
 
 
@@ -258,17 +377,21 @@ def iso_duration(started: str | None, ended: str | None) -> float | None:
     return max(0.0, (end_value - start_value).total_seconds())
 
 
-def load_state(run_root: Path) -> dict:
-    path = run_root / STATE_NAME
-    if not path.is_file():
-        raise RuntimeError_(f"No Ariadne run found at {run_root}")
-    try:
-        state = json.loads(read(path))
-    except json.JSONDecodeError as exc:
-        raise RuntimeError_(f"Run state is malformed: {exc}") from exc
-    if state.get("schema_version") != RUNTIME_SCHEMA:
-        raise RuntimeError_("Run state schema is unsupported")
-    return state
+def load_state(run_root: Path, *, migrate: bool | None = None) -> dict:
+    """Read run state through the engine (schema gate, explicit migration, no implicit writes)."""
+    return PERSISTENCE.load_state(Path(run_root), migrate_state=bool(migrate))
+
+
+def write_state(run_root: Path, state: dict) -> None:
+    """Persist run state through the engine (atomic replace, engine contract marker)."""
+    PERSISTENCE.write_state(Path(run_root), state)
+
+
+def resolve_and_load(args: argparse.Namespace) -> tuple[Path, dict]:
+    """Resolve the run root and read state, honouring an explicit --migrate."""
+    run_root = resolve_run_root(args)
+    return run_root, load_state(run_root, migrate=getattr(args, "migrate", False))
+
 
 
 def slug(value: str) -> str:
@@ -653,12 +776,7 @@ def start(args: argparse.Namespace) -> int:
         "request": request.strip(),
         "adopt_existing": adopt_existing,
         "evidence_state": "verified-transport; provider stage not yet observed",
-        "packets": [{
-            "id": packet_id,
-            "stage": "S1",
-            "path": str(output),
-            "reasoner_output_baseline": reasoner_output_baseline(project, "S1"),
-        }],
+        "packets": [],
         "provider_preflight": None,
         "reasoner": reasoner,
         "reasoner_history": [reasoner],
@@ -667,7 +785,25 @@ def start(args: argparse.Namespace) -> int:
         "creative_evidence_required": True,
         "next": "Complete the project brief from the prepared context.",
     }
-    write_json(run_root / STATE_NAME, state)
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="stage",
+            to="S1",
+            reason="A new run starts at the prepared brief boundary.",
+            evidence=(str(output), packet_id),
+            packet={
+                "id": packet_id,
+                "stage": "S1",
+                "path": str(output),
+                "reasoner_output_baseline": reasoner_output_baseline(project, "S1"),
+            },
+            actor="human",
+            operation="start",
+        ),
+        permitted=True,
+    )
+    write_state(run_root, state)
     append_log(
         run_root,
         "Project started",
@@ -776,12 +912,8 @@ def project_mode(project_text: str) -> str:
 
 
 def design_thesis(text: str) -> str:
-    section = safe_section(text, "Design thesis")
-    for line in section.splitlines():
-        match = re.match(r"^\s*\*\*(.+?)\*\*\s*$", line)
-        if match and "<" not in match.group(1):
-            return plain_markdown(match.group(1))
-    return ""
+    """The design thesis line. Single implementation lives in the engine (used by fingerprints)."""
+    return POLICY.design_thesis(text)
 
 
 def canonical_handoff_headings() -> list[str]:
@@ -949,10 +1081,13 @@ def update_worker_state(
     manifest: dict,
     preflight: dict | None = None,
     escalation_increment: int = 0,
+    execution: dict | None = None,
 ) -> dict:
     value = manifest.get("worker") or {}
     previous = worker_state(state)
+    previous_lifecycle = STATEMACHINE.lifecycle_of(state)
     preflight = preflight or state.get("provider_preflight") or {}
+    execution = execution or {}
     row = {
         "task_id": value.get("task_id", manifest.get("packet_id")),
         "worker_role": value.get("role", "unknown"),
@@ -962,16 +1097,32 @@ def update_worker_state(
         "repair_limit": value.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS),
         "repair_attempts": max(0, int(value.get("attempt", 1)) - 1),
         "validation_attempts": int(previous.get("validation_attempts", 0)),
-        "implementation_state": "NOT_STARTED",
-        "validation_state": "NOT_RUN",
-        "review_state": "NOT_REVIEWED",
-        "acceptance_state": "UNKNOWN",
-        "lifecycle": "baseline",
         "escalation_count": int(previous.get("escalation_count", 0)) + escalation_increment,
         "baseline": manifest.get("project_baseline", {}),
         "telemetry": TELEMETRY_NAME,
+        "lifecycle": previous_lifecycle,
+        "execution_id": str(execution.get("execution_id", "")),
+        "execution_binding": str(execution.get("adapter", "")),
     }
     state["worker"] = row
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="worker-lifecycle",
+            to="baseline",
+            reason="A new worker attempt starts from the recorded baseline.",
+            evidence=(str(row.get("task_id", "")),),
+            fields={
+                "implementation_state": "NOT_STARTED",
+                "validation_state": "NOT_RUN",
+                "review_state": "NOT_REVIEWED",
+                "acceptance_state": "UNKNOWN",
+            },
+            actor="runtime",
+            operation="worker-attempt",
+        ),
+        permitted=True,
+    )
     return row
 
 
@@ -1341,8 +1492,7 @@ def project_intelligence(
 
 
 def status(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
     intelligence = project_intelligence(run_root, state, entry, packet, manifest)
@@ -1412,8 +1562,7 @@ def status(args: argparse.Namespace) -> int:
 
 
 def reasoner_status(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     contract = REASONERS.load_contract()
     selection = REASONERS.selected(state, contract)
     identifier = args.reasoner or selection["id"]
@@ -1504,8 +1653,7 @@ def reasoner_retry_args(run_root: Path, entry: dict, packet: Path) -> argparse.N
 
 
 def select_reasoner(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     contract = REASONERS.load_contract()
     capability = REASONERS.detect(args.reasoner, contract)
@@ -1516,7 +1664,7 @@ def select_reasoner(args: argparse.Namespace) -> int:
         )
         state.setdefault("reasoner_history", []).append(blocked)
         state["updated_at"] = now()
-        write_json(run_root / STATE_NAME, state)
+        write_state(run_root, state)
         append_log(
             run_root,
             "Reasoner selection blocked",
@@ -1533,7 +1681,7 @@ def select_reasoner(args: argparse.Namespace) -> int:
         state["reasoner"] = selection
         state.setdefault("reasoner_history", []).append(selection)
         state["updated_at"] = now()
-        write_json(run_root / STATE_NAME, state)
+        write_state(run_root, state)
         print(f"Done. {args.reasoner} remains the selected reasoner; capability evidence was refreshed.")
         return 0
 
@@ -1545,7 +1693,7 @@ def select_reasoner(args: argparse.Namespace) -> int:
         state["next"] = (
             f"Finish the current {entry['stage']} boundary; {args.reasoner} applies at the next reasoning stage."
         )
-        write_json(run_root / STATE_NAME, state)
+        write_state(run_root, state)
         append_log(
             run_root,
             "Reasoner switch queued",
@@ -1570,7 +1718,7 @@ def select_reasoner(args: argparse.Namespace) -> int:
     state["reasoner"] = selection
     state.setdefault("reasoner_history", []).append(selection)
     state["updated_at"] = now()
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Reasoner switched",
@@ -1584,8 +1732,7 @@ def select_reasoner(args: argparse.Namespace) -> int:
 
 
 def record_reasoner_failure(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
     contract = REASONERS.load_contract()
@@ -1612,7 +1759,7 @@ def record_reasoner_failure(args: argparse.Namespace) -> int:
             if material
             else "Resolve the Codex failure before continuing; no unverified automatic fallback is selected."
         )
-        write_json(run_root / STATE_NAME, state)
+        write_state(run_root, state)
         append_log(
             run_root,
             "Reasoner failure recorded",
@@ -1634,7 +1781,7 @@ def record_reasoner_failure(args: argparse.Namespace) -> int:
     state["reasoner"] = fallback
     state.setdefault("reasoner_history", []).append(fallback)
     state["updated_at"] = now()
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Reasoner fallback prepared",
@@ -2020,8 +2167,7 @@ def handoff_routing(project: Path) -> dict[str, str]:
 
 
 def provider_preflight(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     project = Path(state["project"])
     context_problems = handoff_context_problems(project)
     if context_problems:
@@ -2080,7 +2226,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
             "A large external task cannot safely proceed from an unobserved capacity assumption.",
             "routine-confirmation",
         )
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Provider preflight",
@@ -2097,8 +2243,7 @@ def provider_preflight(args: argparse.Namespace) -> int:
 
 
 def handoff_readiness_command(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     project = Path(state["project"])
     problems = handoff_context_problems(project)
     preflight = state.get("provider_preflight") or {}
@@ -2135,8 +2280,7 @@ def handoff_readiness_command(args: argparse.Namespace) -> int:
 
 
 def structural_result(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     destination = packet / "evidence" / "stage-result.json"
     if destination.exists():
@@ -2152,6 +2296,16 @@ def structural_result(args: argparse.Namespace) -> int:
         if not path.is_file():
             raise RuntimeError_(f"Stage output does not exist: {path}")
         files.append({"path": str(path), "sha256": sha256(path)})
+    # AR-202 T2: a same-session stage result is still bound to an engine-created
+    # execution, so later validation and review can name what produced it.
+    reasoner_execution, _execution_problems = execution_for_task(
+        state, task_id=entry["id"], role="reasoner",
+        adapter=f"scripts/ariadne.py:record-result ({args.provider})",
+        invocation=f"record-result --status {args.status}",
+        requested={"provider": str(args.provider or ""), "model": str(args.model or "")},
+        packet=packet,
+        reason=f"recorded {entry['stage']} stage outputs",
+    )
     result = {
         "schema_version": 1,
         "packet_id": entry["id"],
@@ -2163,12 +2317,29 @@ def structural_result(args: argparse.Namespace) -> int:
         "summary": args.summary,
         "evidence_class": "structurally-verified; provider transcript not captured",
         "files": files,
+        "execution": str((reasoner_execution or {}).get("execution_id", "")),
     }
     write_json(destination, result)
+    if reasoner_execution is not None:
+        EXECUTION.report(
+            state, str(reasoner_execution["execution_id"]),
+            provider=str(args.provider or ""), model=str(args.model or ""),
+            evidence=f"stage-result {entry['id']}",
+        )
+        EXECUTION.complete(
+            state, str(reasoner_execution["execution_id"]),
+            result={"packet_id": entry["id"], "status": args.status, "artifact": str(destination)},
+            evidence=tuple(item["path"] for item in files),
+        )
+        emit_event(
+            run_root, "execution_completed", state=state, task_id=entry["id"], stage=entry["stage"],
+            execution=str(reasoner_execution["execution_id"]), role="reasoner", status=args.status,
+            provider=str(args.provider or ""), model=str(args.model or ""),
+        )
     state["updated_at"] = now()
     state["evidence_state"] = result["evidence_class"]
     state["next"] = "Discover and prepare the next valid boundary."
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         f"{entry['stage']} result recorded",
@@ -2183,8 +2354,7 @@ def structural_result(args: argparse.Namespace) -> int:
 
 
 def record_transcript(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     _entry, packet = current_packet(state, allow_project_drift=True)
     source = Path(args.input).resolve()
     if not source.is_file() or source.stat().st_size == 0:
@@ -2205,14 +2375,13 @@ def record_transcript(args: argparse.Namespace) -> int:
     state["evidence_state"] = "verbatim transcript recorded"
     state["updated_at"] = now()
     state["next"] = "Discover and prepare the next valid boundary."
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     print("Done. The transcript was preserved verbatim.")
     return 0
 
 
 def ingest_return(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     if entry["stage"] != "S4B":
         raise RuntimeError_("Implementation return handoffs belong to the current S4B boundary")
@@ -2232,7 +2401,46 @@ def ingest_return(args: argparse.Namespace) -> int:
     machine_destination = packet / "evidence" / "return-handoff.json"
     if destination.exists() or machine_destination.exists():
         raise RuntimeError_(f"Refusing to overwrite existing return handoff: {destination}")
-    destination.write_text(text, encoding="utf-8")
+    # AR-202 T2: this result must belong to an execution the engine created. A
+    # caller-supplied id is verified, never quietly replaced by an adopted one.
+    supplied_execution = str(getattr(args, "execution", "") or "").strip()
+    implementer, execution_problems = (None, [])
+    if supplied_execution:
+        implementer, execution_problems = named_execution(
+            state, supplied_execution, role="implementer", task_id=entry["id"]
+        )
+    if implementer is None and not supplied_execution:
+        implementer, execution_problems = execution_for_task(
+            state, task_id=entry["id"], role="implementer",
+            adapter="scripts/ariadne.py:ingest-return",
+            invocation="ingest-return (adopted: the packet predates execution binding)",
+            requested={
+                "provider": str(manifest.get("provider", "")),
+                "model": str((state.get("provider_preflight") or {}).get("model", "") or ""),
+                "worker_role": str((manifest.get("worker") or {}).get("role", "")),
+            },
+            packet=packet,
+            reason="the return arrived for a packet prepared before execution binding; an engine identity is adopted",
+        )
+    if execution_problems or implementer is None:
+        raise RuntimeError_(
+            "Return handoff rejected: "
+            + "; ".join(execution_problems or ["no engine-created execution matches this result"])
+        )
+    verification = execution_verify_result(state, implementer, entry, packet)
+    if verification:
+        record_failure(
+            state,
+            source="stale-revision" if any("revision" in item for item in verification) else "duplicate-result",
+            operation=f"ingest-return:{entry['id']}",
+            evidence=[str(source)] + verification,
+            execution_id=str(implementer.get("execution_id", "")),
+            task_id=entry["id"],
+            revision_hash=str((implementer.get("revision") or {}).get("revision_hash", "")),
+            detail="the submitted return does not belong to the open execution for this boundary",
+        )
+        write_state(run_root, state)
+        raise RuntimeError_("Return handoff rejected: " + "; ".join(verification))
     metadata = {}
     for field in (
         "Status", "Task ID", "Worker role", "Provider", "Model", "Effort",
@@ -2250,6 +2458,43 @@ def ingest_return(args: argparse.Namespace) -> int:
         slug(heading): safe_section(text, heading).strip()
         for heading in TRANSPORT.RETURN_HANDOFF_HEADINGS
     }
+    # AR-202 T14: the worker's runtime claim is recorded as *reported* identity.
+    # Only the runtime can observe identity, and this runtime cannot, so observed
+    # stays UNKNOWN rather than being manufactured from the claim.
+    reported_provider = str(metadata.get("provider", "") or "")
+    reported_model = str(metadata.get("model", "") or "")
+    EXECUTION.report(
+        state, str(implementer["execution_id"]),
+        provider=reported_provider, model=reported_model,
+        evidence=f"return handoff {machine_destination.name}",
+    )
+    identity = EXECUTION.identity_view(state, str(implementer["execution_id"]))
+    handoff_routing_declared = {}
+    if (Path(state["project"]) / "HANDOFF.md").is_file():
+        try:
+            handoff_routing_declared = handoff_routing(Path(state["project"]))
+        except RuntimeError_:
+            handoff_routing_declared = {}
+    pinned_model = ROUTING.declared_identity_pin(
+        state, {"routing": handoff_routing_declared}
+    )
+    decision, identity_reason = EXECUTION.mismatch_decision(identity, pinned=bool(pinned_model))
+    if decision == "refused":
+        record_failure(
+            state,
+            source="provider-mismatch",
+            operation=f"ingest-return:{entry['id']}",
+            evidence=[str(destination), identity_reason],
+            execution_id=str(implementer["execution_id"]),
+            task_id=entry["id"],
+            revision_hash=str((implementer.get("revision") or {}).get("revision_hash", "")),
+            detail=identity_reason,
+        )
+        write_state(run_root, state)
+        raise RuntimeError_("Return handoff rejected: " + identity_reason)
+    # Every refusal above happens before the artifact is written, so a rejected
+    # return never leaves evidence behind that a later ingest would refuse to replace.
+    destination.write_text(text, encoding="utf-8")
     write_json(
         machine_destination,
         {
@@ -2262,8 +2507,41 @@ def ingest_return(args: argparse.Namespace) -> int:
             "sections": sections,
             "evidence_class": "structured provider report; not a transcript or independent review",
             "implementation_state": "IMPLEMENTED" if return_status == "complete" else return_status.upper(),
+            "execution": {
+                "execution_id": str(implementer["execution_id"]),
+                "role": str(implementer.get("role", "")),
+                "requested": identity["requested"],
+                "reported": identity["reported"],
+                "observed": identity["observed"],
+                "mismatch": identity["mismatch"],
+                "identity_note": identity_reason,
+            },
         },
     )
+    EXECUTION.complete(
+        state, str(implementer["execution_id"]),
+        result={
+            "packet_id": entry["id"],
+            "status": return_status,
+            "artifact": str(machine_destination),
+            "sha256": sha256(machine_destination),
+        },
+        evidence=(str(destination),),
+    )
+    emit_event(
+        run_root, "execution_completed", state=state, task_id=entry["id"], stage="S4B",
+        execution=str(implementer["execution_id"]), role="implementer",
+        status=return_status, mismatch=bool(identity["mismatch"]),
+        provider=reported_provider, model=reported_model,
+    )
+    if identity["mismatch"]:
+        emit_event(
+            run_root, "execution_observed", state=state, task_id=entry["id"], stage="S4B",
+            execution=str(implementer["execution_id"]),
+            requested_provider=str(identity["requested"].get("provider", "")),
+            reported_provider=reported_provider,
+            note=identity_reason,
+        )
     worker = worker_state(state)
     worker.update({
         "task_id": entry["id"],
@@ -2272,11 +2550,32 @@ def ingest_return(args: argparse.Namespace) -> int:
         "model": metadata.get("model", "unknown"),
         "started_at": metadata.get("started", "unknown"),
         "ended_at": metadata.get("ended", "unknown"),
-        "implementation_state": "IMPLEMENTED" if return_status == "complete" else return_status.upper(),
-        "validation_state": "NOT_RUN",
+        "execution_id": str(implementer["execution_id"]),
+        "reported_provider": reported_provider,
+        "reported_model": reported_model,
+    })
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="worker-lifecycle",
+            to=str(
+                STATEMACHINE.validation_pending if return_status == "complete"
+                else STATEMACHINE.repair_or_escalation
+            ),
+            reason=f"Worker returned a structured handoff with status {return_status}.",
+            evidence=(str(machine_destination),),
+            fields={
+                "implementation_state": "IMPLEMENTED" if return_status == "complete" else return_status.upper(),
+                "validation_state": "NOT_RUN",
+            },
+            actor="worker",
+            operation=f"ingest-return:{entry['id']}",
+        ),
+        permitted=True,
+    )
+    worker.update({
         "review_state": worker.get("review_state", "NOT_REVIEWED"),
         "acceptance_state": worker.get("acceptance_state", "UNKNOWN"),
-        "lifecycle": "validation-pending" if return_status == "complete" else "repair-or-escalation",
     })
     append_worker_telemetry(
         run_root,
@@ -2315,7 +2614,7 @@ def ingest_return(args: argparse.Namespace) -> int:
         status="resolved",
         evidence=str(destination),
     )
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Implementation return ingested",
@@ -2327,6 +2626,53 @@ def ingest_return(args: argparse.Namespace) -> int:
     )
     print(f"Done. The {return_status} implementation return is recorded and ready for continuity.")
     return 0
+
+
+def externalize_validation_output(
+    run_root: Path,
+    state: dict,
+    *,
+    command: dict,
+    stdout: str,
+    stderr: str,
+) -> dict:
+    """Preserve a large validation output as an artifact instead of dropping it.
+
+    AR-204 T6: today only a digest of the output survives. With the threshold
+    profile enabled, a large stdout/stderr stream is written *in full* to
+    ``evidence/artifacts`` and the command result keeps the digest, the measured
+    size and a bounded excerpt plus a retrieval reference. Small output is
+    untouched, so nothing changes for the ordinary case.
+    """
+    if EFFICIENCY.setting(state, "output_externalization") != "threshold":
+        return {}
+    threshold = ARTIFACTS.DEFAULT_EXTERNALIZE_AT_BYTES
+    fields: dict = {}
+    for name, text in (("stdout", stdout), ("stderr", stderr)):
+        if len(str(text).encode("utf-8")) <= threshold:
+            continue
+        record = ARTIFACTS.externalize(
+            run_root,
+            data=str(text),
+            tool=f"validation-{name}",
+            command=str(command.get("command", "")),
+            task_id="",
+            run_id=str(state.get("run_id", "")),
+        )
+        CONTRACTS.require_collection_capacity(state, "artifacts")
+        state.setdefault("artifacts", []).append(record)
+        fields[f"{name}_artifact"] = {
+            "artifact_id": record["artifact_id"],
+            "relative_path": record["relative_path"],
+            "sha256": record["sha256"],
+            "size": record["size"],
+            "status": record["status"],
+            "excerpt": record["excerpt"],
+            "summary": record["summary"],
+        }
+    if fields:
+        fields["output_externalized"] = True
+    return fields
 
 
 def finish_worker_validation(
@@ -2342,7 +2688,63 @@ def finish_worker_validation(
     problems = TRANSPORT.worker_validation_problems(record, entry["id"])
     if problems:
         raise RuntimeError_("Worker validation record is malformed: " + "; ".join(problems))
+    # AR-202 T2: validation is its own engine-created execution. It is a fresh
+    # identity per attempt and its parent is the implementation it validated, so
+    # implementation and validation can never collapse into one provenance.
+    implementer = find_implementer_execution(state, task_id=entry["id"])
+    validator, execution_problems = execution_for_task(
+        state, task_id=entry["id"], role="validator",
+        adapter="scripts/ariadne.py:validate-worker",
+        invocation="validate-worker",
+        requested={
+            "provider": str(record.get("executor", "")),
+            "model": "local-independent-validator",
+        },
+        packet=packet,
+        reason="independent worker validation of the recorded implementation",
+        reuse=False,
+        parent=str(implementer.get("execution_id", "")) if implementer else "",
+    )
+    if execution_problems:
+        raise RuntimeError_("Worker validation rejected: " + "; ".join(execution_problems))
+    record = {**record, "execution": {
+        "execution_id": str(validator["execution_id"]),
+        "role": "validator",
+        "parent_execution": str(validator.get("parent_execution", "")),
+        "implementing_execution": str(implementer.get("execution_id", "")) if implementer else "",
+    }}
     write_json(destination, record)
+    if record.get("status") == "passed":
+        EXECUTION.complete(
+            state, str(validator["execution_id"]),
+            result={"packet_id": entry["id"], "status": "passed", "artifact": str(destination)},
+            evidence=(str(destination),),
+        )
+        emit_event(
+            run_root, "execution_completed", state=state, task_id=entry["id"], stage="S4B",
+            execution=str(validator["execution_id"]), role="validator", status="passed",
+        )
+    else:
+        update_record, failure_record = EXECUTION.fail(
+            state,
+            str(validator["execution_id"]),
+            source=str(record.get("failure_kind", "routine")),
+            evidence=[str(destination), str(record.get("failure_reason", ""))],
+            detail=str(record.get("failure_reason", "")),
+        )
+        record["execution"]["failure"] = dict(update_record.get("failure") or {})
+        write_json(destination, record)
+        emit_event(
+            run_root, "execution_failed", state=state, task_id=entry["id"], stage="S4B",
+            execution=str(validator["execution_id"]), role="validator",
+            failure_class=failure_record["class"], status=str(record.get("status", "")),
+        )
+    emit_event(
+        run_root, "validation_recorded", state=state, task_id=entry["id"], stage="S4B",
+        execution=str(validator["execution_id"]),
+        status=str(record.get("status", "")),
+        scope=str((record.get("scope") or {}).get("status", "")),
+    )
     manifest = worker_manifest(packet)
     manifest_worker = manifest.get("worker", {})
     row = worker_state(state)
@@ -2359,17 +2761,30 @@ def finish_worker_validation(
     )
     escalation_increment = int(outcome["escalation_required"] and row.get("lifecycle") != "escalation-required")
     row.update({
-        "implementation_state": outcome["implementation_state"],
-        "validation_state": outcome["validation_state"],
-        "lifecycle": outcome["lifecycle"],
         "validation_attempts": int(row.get("validation_attempts", 0)) + 1,
         "escalation_count": int(row.get("escalation_count", 0)) + escalation_increment,
-        "last_validation": str(destination),
     })
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="worker-lifecycle",
+            to=str(outcome["lifecycle"]),
+            reason=f"Independent validation result: {record['status']}",
+            evidence=(str(destination),),
+            fields={
+                "implementation_state": outcome["implementation_state"],
+                "validation_state": outcome["validation_state"],
+                "last_validation": str(destination),
+            },
+            actor="runtime",
+            operation="independent-validation",
+        ),
+        permitted=True,
+    )
     state["updated_at"] = now()
     state["evidence_state"] = f"independent worker validation: {outcome['validation_state']}"
     state["next"] = outcome["next"]
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     command_results = record.get("commands", [])
     append_worker_telemetry(
         run_root,
@@ -2414,8 +2829,7 @@ def finish_worker_validation(
 
 def validate_worker(args: argparse.Namespace) -> int:
     """Independently validate one S4B result and contain failures before S5."""
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     if entry["stage"] != "S4B":
         raise RuntimeError_("Independent worker validation belongs to the current S4B boundary")
@@ -2446,6 +2860,17 @@ def validate_worker(args: argparse.Namespace) -> int:
     scope_rows = TRANSPORT.worker_contract(handoff_text).get("scope_rows", [])
     patterns = [row[0].strip("`") for row in scope_rows if row]
     patterns.append(f".ariadne/returns/{entry['id']}.md")
+    # A retry at the same boundary inherits the earlier attempt's baseline, so the
+    # earlier attempt's engine-written return file is present on disk but absent
+    # from that baseline. It is Ariadne's own evidence, not this worker's change.
+    for recorded in state.get("packets") or []:
+        if isinstance(recorded, dict) and recorded.get("id"):
+            patterns.append(f".ariadne/returns/{recorded['id']}.md")
+    # Ariadne's own evidence ledgers are written by Ariadne commands, not by the
+    # worker. Treating them as in-contract keeps the runtime from blocking the
+    # evidence that its own continuation preconditions require; it does not widen
+    # the worker's implementation scope.
+    patterns.extend(TRANSPORT.RUNTIME_EVIDENCE_PATTERNS)
 
     base_record = {
         "schema_version": TRANSPORT.WORKER_VALIDATION_SCHEMA,
@@ -2597,6 +3022,10 @@ def validate_worker(args: argparse.Namespace) -> int:
                 "stdout_sha256": hashlib.sha256((completed.stdout or "").encode("utf-8")).hexdigest(),
                 "stderr_sha256": hashlib.sha256((completed.stderr or "").encode("utf-8")).hexdigest(),
             })
+            result.update(externalize_validation_output(
+                run_root, state, command=command, stdout=completed.stdout or "",
+                stderr=completed.stderr or "",
+            ))
         except subprocess.TimeoutExpired as exc:
             result.update({
                 "status": "failed",
@@ -2605,6 +3034,10 @@ def validate_worker(args: argparse.Namespace) -> int:
                 "stderr_sha256": hashlib.sha256((str(exc.stderr or "")).encode("utf-8")).hexdigest(),
                 "error": f"timed out after {timeout}s",
             })
+            result.update(externalize_validation_output(
+                run_root, state, command=command, stdout=str(exc.stdout or ""),
+                stderr=str(exc.stderr or ""),
+            ))
         except OSError as exc:
             result.update({
                 "status": "failed",
@@ -2703,24 +3136,83 @@ def extract_marked_block(text: str, begin: str, end: str, label: str) -> str:
 
 
 def ingest_review(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     if entry["stage"] != "S5":
         raise RuntimeError_("Independent review judgements belong to the current S5 boundary")
     source = Path(args.input).resolve()
     if not source.is_file() or source.stat().st_size == 0:
         raise RuntimeError_(f"Independent review input is missing or empty: {source}")
+    reviewer_identity = str(getattr(args, "reviewer_identity", "") or "").strip()
+    review_kind = str(getattr(args, "kind", "") or "experience").strip().lower()
+    if review_kind not in CONTRACTS.REVIEW_KINDS:
+        raise RuntimeError_(f"Unsupported review kind: {review_kind}")
+    # AR-202 T2: the review names two engine-created executions. The implementer
+    # is the execution that produced the reviewed revision; the reviewer is a
+    # fresh identity for this review, so review and implementation can never be
+    # the same execution.
+    implementing_task = reviewed_implementation_task(state, packet)
+    implementer = find_implementer_execution(state, task_id=implementing_task) if implementing_task else None
+    if implementer is None:
+        raise RuntimeError_(
+            "Independent review rejected: the reviewed implementation has no engine-created "
+            "execution record, so review independence cannot be established"
+        )
+    supplied_execution = str(getattr(args, "execution", "") or "").strip()
+    reviewer_execution, execution_problems = named_execution(
+        state, supplied_execution, role="reviewer", task_id=entry["id"]
+    )
+    if supplied_execution and execution_problems:
+        raise RuntimeError_("Independent review execution rejected: " + "; ".join(execution_problems))
+    if reviewer_execution is None:
+        reviewer_execution, execution_problems = execution_for_task(
+            state, task_id=entry["id"], role="reviewer",
+            adapter="scripts/ariadne.py:ingest-review",
+            invocation=f"ingest-review --kind {review_kind}",
+            requested={"provider": reviewer_identity, "model": "review-session"},
+            packet=packet,
+            reason=f"independent {review_kind} review of {implementing_task or entry['id']}",
+            reuse=False,
+            parent=str(implementer["execution_id"]),
+        )
+    if execution_problems:
+        raise RuntimeError_("Independent review execution rejected: " + "; ".join(execution_problems))
+    identity_problems = REVIEWS.independence_problems(
+        state,
+        reviewer_identity,
+        reviewer_execution=str(reviewer_execution.get("execution_id", "")),
+        implementing_execution=str(implementer.get("execution_id", "")),
+    )
+    if identity_problems:
+        record_failure(
+            state,
+            source="out-of-scope",
+            operation=f"ingest-review:{entry['id']}",
+            evidence=[str(source)] + identity_problems,
+            execution_id=str(reviewer_execution.get("execution_id", "")),
+            task_id=entry["id"],
+            revision_hash=str((reviewer_execution.get("revision") or {}).get("revision_hash", "")),
+            detail="; ".join(identity_problems),
+        )
+        write_state(run_root, state)
+        raise RuntimeError_("Independent review identity rejected: " + "; ".join(identity_problems))
     raw = read(source)
     block = extract_marked_block(raw, "BEGIN QA JUDGEMENT", "END QA JUDGEMENT", "Review response")
     problems = review_judgement_problems(block)
     if problems:
         raise RuntimeError_("Review judgement rejected: " + "; ".join(problems))
+    evidence_problems = REVIEWS.review_evidence_problems(
+        state, packet, review_kind, pending=("recorded review judgement",)
+    )
+    if evidence_problems:
+        raise RuntimeError_("Independent review rejected: " + "; ".join(evidence_problems))
     evidence_dir = packet / "evidence"
     raw_destination = evidence_dir / "review-response.md"
     block_destination = evidence_dir / "review-judgement.md"
     if raw_destination.exists() or block_destination.exists():
         raise RuntimeError_("Refusing to overwrite existing independent review evidence")
+    if REVIEWS.current_review(state, packet_id=entry["id"]) is not None:
+        raise RuntimeError_("Refusing to overwrite the recorded independent review for this revision")
     project = Path(state["project"])
     qa_path = project / "QA.md"
     if not qa_path.is_file():
@@ -2733,14 +3225,66 @@ def ingest_review(args: argparse.Namespace) -> int:
     shutil.copyfile(source, raw_destination)
     block_destination.write_text(block, encoding="utf-8")
     qa_path.write_text(updated, encoding="utf-8")
+    recommendation = re.search(r"(?im)^\*\*Recommendation:\*\*\s*(.+?)\s*$", block)
+    recommendation = recommendation.group(1).strip() if recommendation else "unknown"
+    review_record = REVIEWS.build_record(
+        state,
+        packet,
+        reviewer_identity=reviewer_identity,
+        review_kind=review_kind,
+        reviewer_role=str(getattr(args, "reviewer_role", "") or "independent-reviewer"),
+        block=block,
+        recommendation=recommendation,
+        reviewer_execution=str(reviewer_execution.get("execution_id", "")),
+        implementing_execution=str(implementer.get("execution_id", "")),
+    )
+    review_destination = REVIEWS.store(state, packet, review_record)
+    EXECUTION.complete(
+        state, str(reviewer_execution["execution_id"]),
+        result={
+            "packet_id": entry["id"], "outcome": review_record["outcome"],
+            "artifact": str(block_destination), "sha256": sha256(block_destination),
+        },
+        evidence=(str(block_destination), str(review_destination)),
+    )
+    # The review boundary's own session execution (created when the packet was
+    # prepared) ends with the recorded review, so it is never left open and
+    # reported later as an interruption.
+    for session in EXECUTION.open_executions(state, role="reasoner", task_id=entry["id"]):
+        EXECUTION.complete(
+            state, str(session["execution_id"]),
+            result={"packet_id": entry["id"], "outcome": review_record["outcome"],
+                    "artifact": str(review_destination)},
+            evidence=(str(review_destination),),
+        )
+    emit_event(
+        run_root, "execution_completed", state=state, task_id=entry["id"], stage="S5",
+        execution=str(reviewer_execution["execution_id"]), role="reviewer",
+        status=str(review_record["outcome"]),
+    )
+    emit_event(
+        run_root, "review_recorded", state=state, task_id=entry["id"], stage="S5",
+        execution=str(reviewer_execution["execution_id"]),
+        review_outcome=str(review_record["outcome"]),
+        review_kind=review_kind,
+        implementing_execution=str(implementer.get("execution_id", "")),
+        reviewer_identity=reviewer_identity,
+    )
     worker = worker_state(state)
-    worker["review_state"] = "REVIEWED"
-    worker["review_outcome"] = re.search(
-        r"(?im)^\*\*Recommendation:\*\*\s*(.+?)\s*$", block
-    ).group(1).strip() if re.search(
-        r"(?im)^\*\*Recommendation:\*\*\s*(.+?)\s*$", block
-    ) else "unknown"
-    worker["lifecycle"] = "reviewed"
+    worker["review_outcome"] = recommendation
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="worker-lifecycle",
+            to="reviewed",
+            reason=f"Recorded {review_kind} review by {reviewer_identity}",
+            evidence=(str(block_destination), str(review_destination)),
+            fields={"review_state": "REVIEWED"},
+            actor="reviewer",
+            operation=f"review:{entry['id']}",
+        ),
+        permitted=True,
+    )
     append_worker_telemetry(
         run_root,
         "worker-review",
@@ -2777,7 +3321,62 @@ def ingest_review(args: argparse.Namespace) -> int:
         "Only the human can accept the build and any recorded evidence exception.",
         "review-decision",
     )
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
+    append_log(
+        run_root,
+        "Independent review ingested",
+        "The reviewer output must be preserved and applied without manual rewriting or loss of independence.",
+        (
+            f"Verified marked judgement block; raw response preserved; QA judgement region replaced; "
+            f"reviewer {reviewer_identity} recorded on the {review_kind} channel."
+        ),
+        [str(raw_destination), str(block_destination), str(qa_path), str(review_destination)],
+        (
+            f"Raw SHA-256 {sha256(raw_destination)}; judgement SHA-256 {sha256(block_destination)}; "
+            f"context digest {review_record['context_digest']}"
+        ),
+        state["next"],
+    )
+    print("Done. Independent review evidence is recorded without changing its judgement.")
+    print("Next: present the combined evidence for the human G3 decision.")
+    return 0
+    append_worker_telemetry(
+        run_root,
+        "worker-review",
+        task_id=worker.get("task_id", "unknown"),
+        worker_role=worker.get("worker_role", "unknown"),
+        provider=worker.get("provider", "unknown"),
+        model=worker.get("model", "unknown"),
+        attempt=worker.get("attempt", 0),
+        validation_attempts=worker.get("validation_attempts", 0),
+        files_changed=[],
+        tests_result="not applicable",
+        escalation_count=worker.get("escalation_count", 0),
+        review_outcome=worker["review_outcome"],
+        accepted="unknown",
+        usage="unknown",
+        cost="unknown",
+    )
+    state["updated_at"] = now()
+    state["evidence_state"] = "independent review response and judgement recorded"
+    state["next"] = "Present mechanical and independent evidence for the human G3 decision."
+    ensure_intervention(
+        state,
+        "necessary",
+        "Start the isolated independent review session.",
+        "Creative judgement must remain separate from the build context.",
+        "external-provider-launch",
+        status="resolved",
+        evidence=str(raw_destination),
+    )
+    ensure_intervention(
+        state,
+        "necessary",
+        "Decide G3 from mechanical and independent review evidence.",
+        "Only the human can accept the build and any recorded evidence exception.",
+        "review-decision",
+    )
+    write_state(run_root, state)
     append_log(
         run_root,
         "Independent review ingested",
@@ -2792,10 +3391,115 @@ def ingest_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def approve_gate(args: argparse.Namespace) -> int:
+    """Record a human gate decision as an engine approval bound to the current revision.
+
+    This is the only path that satisfies a gate. It is an operator command: it is
+    not part of the worker's packet contract, and the runtime never grants a gate
+    on the worker's behalf. The record binds the gate to the operation, the
+    subject, the current revision fingerprint and the recorded identity, so an
+    approval for one revision, target or operation cannot authorize another.
+    """
+    run_root, state = resolve_and_load(args)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    gate = str(getattr(args, "gate", "") or "").upper()
+    if gate not in CONTRACTS.GATE_SUBJECT_TYPES:
+        raise RuntimeError_(
+            f"{gate or 'that gate'} is not enforced by the orchestration core; "
+            "G4 ship and G5 publish stay human/operator actions outside the engine"
+        )
+    identity = str(getattr(args, "identity", "") or "").strip()
+    note = str(getattr(args, "note", "") or "").strip()
+    project = Path(state["project"])
+    try:
+        if gate == "G1":
+            subject = POLICY.design_direction_subject(project)
+        elif gate == "G2":
+            subject = POLICY.handoff_subject(project)
+        else:
+            subject = POLICY.review_subject(state, packet)
+            if subject is None:
+                raise RuntimeError_(
+                    "G3 approves a recorded review of the current revision, and no review record exists yet; "
+                    "ingest the independent review first"
+                )
+        record = POLICY.approve(
+            state, gate, subject, identity, note, stage=entry["stage"], packet_id=entry["id"],
+        )
+    except CONTRACTS.EngineError as exc:
+        raise RuntimeError_(str(exc)) from exc
+    mirror_gate_written = mirror_agents_gate(project, POLICY.highest_gate(state))
+    emit_event(
+        run_root, "approval_recorded", state=state, task_id=str(record.get("packet_id", entry["id"])),
+        stage=entry["stage"], gate=gate, approval=str(record.get("approval_id", "")),
+        identity=str(record.get("identity", "")), channel=str(record.get("channel", "")),
+        revision=str(record.get("revision_hash", ""))[:12],
+    )
+    state["updated_at"] = now()
+    state["next"] = (
+        f"Continue from the {gate}-approved boundary."
+        if gate != "G1"
+        else "Prepare the implementation plan from the approved direction."
+    )
+    write_state(run_root, state)
+    append_worker_telemetry(
+        run_root,
+        "gate-approval",
+        task_id=str(record.get("packet_id", "unknown")),
+        provider=record["identity"],
+        model=record["gate"],
+        tests_result="not applicable",
+        review_outcome=str(record.get("subject_type", "unknown")),
+        accepted="unknown",
+        usage="unknown",
+        cost="unknown",
+        failure_reason="none",
+    )
+    append_log(
+        run_root,
+        f"{gate} approval recorded",
+        "A gate is a human decision; the engine records it as a bound approval instead of reading a document field.",
+        (
+            f"{record['approval_id']}: {gate} on {subject.subject_id} "
+            f"at revision {subject.revision_hash[:12]} by {record['identity']} on channel {record['channel']}."
+        ),
+        [str(run_root / STATE_NAME)],
+        f"Subject detail: {subject.detail or 'not recorded'}; document gate fields remain human-readable mirrors.",
+        state["next"],
+    )
+    print(f"Recorded. {gate} approval {record['approval_id']} is bound to this revision.")
+    if gate == "G1" and not mirror_gate_written:
+        print("Note: AGENTS.md already recorded that gate; the mirror was left unchanged.")
+    print(f"From you: nothing right now. Next: {state['next']}")
+    return 0
+
+
+def mirror_agents_gate(project: Path, gate: str | None) -> bool:
+    """Write the human-readable gate mirror into AGENTS.md. Never an enforcement input.
+
+    DESIGN.md is deliberately not rewritten: it is a hash-anchored artifact of the
+    recorded direction work, and editing it after the fact would invalidate the
+    creative evidence the engine just verified.
+    """
+    if not gate:
+        return False
+    path = project / "AGENTS.md"
+    if not path.is_file():
+        return False
+    text = read(path)
+    pattern = r"(?m)^(\|\s*\*\*Last gate passed\*\*\s*\|\s*)`?[^|`]+`?(\s*\|)\s*$"
+    if not re.search(pattern, text):
+        return False
+    updated = re.sub(pattern, rf"\g<1>`{gate}`\g<2>", text, count=1)
+    if updated == text:
+        return False
+    path.write_text(updated, encoding="utf-8")
+    return True
+
+
 def record_acceptance(args: argparse.Namespace) -> int:
     """Record the human acceptance outcome without silently granting a gate."""
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     if entry["stage"] != "S5":
         raise RuntimeError_("Acceptance belongs to the current independent-review boundary")
@@ -2805,14 +3509,54 @@ def record_acceptance(args: argparse.Namespace) -> int:
     outcome = args.outcome.lower()
     if outcome not in ("accepted", "rejected"):
         raise RuntimeError_("Acceptance outcome must be accepted or rejected")
-    project = Path(state["project"])
-    gate = project_runtime(project).get("gate", "")
-    if outcome == "accepted" and gate != "G3":
-        raise RuntimeError_("Accepted requires the human G3 decision to already be recorded in AGENTS.md")
+    review_record = REVIEWS.current_review(state, packet_id=entry["id"])
+    consumed_approval = ""
+    if outcome == "accepted":
+        subject = POLICY.review_subject(state, packet)
+        if review_record is None:
+            raise RuntimeError_(
+                "Acceptance requires a recorded review bound to this revision; "
+                "ingest the independent review with --reviewer-identity first"
+            )
+        operation = f"acceptance:{entry['id']}:{subject.revision_hash[:12]}"
+        satisfied, reason = POLICY.gate_satisfied(
+            state, "G3", subject, consume=operation, operation=operation
+        )
+        if not satisfied:
+            raise RuntimeError_(
+                "Accepted requires the human G3 decision to already be recorded: " + reason
+            )
+        latest = POLICY.approvals(state, "G3")[-1] if POLICY.approvals(state, "G3") else {}
+        consumed_approval = str(latest.get("approval_id", ""))
+    else:
+        # AR-202 approval policy: a rejection is a human decision recorded on its
+        # own terms. It is not an acceptance, so it does not consume a G3
+        # approval and it can never be reused as future acceptance authority.
+        notes = state.setdefault("notes", [])
+        notes.append({
+            "recorded_at": now(),
+            "kind": "recovery",
+            "summary": f"Human rejected the reviewed revision at packet {entry['id']}.",
+            "evidence_state": "verified",
+            "approval_effect": "none: a rejection is not an acceptance and consumes no G3 approval",
+        })
     worker = worker_state(state)
-    worker["acceptance_state"] = "ACCEPTED" if outcome == "accepted" else "REJECTED"
-    worker["lifecycle"] = "accepted" if outcome == "accepted" else "rejected"
-    worker["acceptance_evidence"] = str(review_path)
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="worker-lifecycle",
+            to="accepted" if outcome == "accepted" else "rejected",
+            reason=f"Human acceptance outcome: {outcome}",
+            evidence=(str(review_path),),
+            fields={
+                "acceptance_state": "ACCEPTED" if outcome == "accepted" else "REJECTED",
+                "acceptance_evidence": str(review_path),
+            },
+            actor="human",
+            operation=f"acceptance:{entry['id']}",
+        ),
+        permitted=True,
+    )
     state["updated_at"] = now()
     state["next"] = (
         "Continue with the human-authorised release workflow."
@@ -2837,7 +3581,18 @@ def record_acceptance(args: argparse.Namespace) -> int:
         cost="unknown",
         failure_reason="none" if outcome == "accepted" else "human rejected the reviewed result",
     )
-    write_json(run_root / STATE_NAME, state)
+    if outcome == "accepted" and consumed_approval:
+        emit_event(
+            run_root, "approval_consumed", state=state, task_id=entry["id"], stage="S5",
+            approval=consumed_approval, gate="G3", operation=f"acceptance:{entry['id']}",
+        )
+    elif outcome == "rejected":
+        emit_event(
+            run_root, "approval_recorded", state=state, task_id=entry["id"], stage="S5",
+            gate="G3", decision="rejected",
+            note="rejection recorded separately; no G3 approval was consumed",
+        )
+    write_state(run_root, state)
     append_log(
         run_root,
         "Worker result acceptance recorded",
@@ -2854,8 +3609,7 @@ def record_acceptance(args: argparse.Namespace) -> int:
 
 def creative_plan(args: argparse.Namespace) -> int:
     """Create the hidden skill/research plan after S1 has produced the brief."""
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     project = Path(state["project"])
     if entry["stage"] != "S1":
@@ -2890,7 +3644,7 @@ def creative_plan(args: argparse.Namespace) -> int:
     optional = [item for item in selected if not item.get("mandatory")]
     state["updated_at"] = now()
     state["next"] = "Continue with the focused creative work selected for this project."
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Creative work planned",
@@ -2918,8 +3672,7 @@ def creative_plan(args: argparse.Namespace) -> int:
 
 def record_creative(args: argparse.Namespace) -> int:
     """Apply structured skill, source, conflict, direction, or decision evidence."""
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     project = Path(state["project"])
     ledger = CREATIVE.load_ledger(project)
     if ledger is None:
@@ -2938,7 +3691,7 @@ def record_creative(args: argparse.Namespace) -> int:
         raise RuntimeError_(str(exc)) from exc
     creative_summary = CREATIVE.summary(ledger)
     state["updated_at"] = now()
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Creative evidence recorded",
@@ -2958,8 +3711,7 @@ def record_creative(args: argparse.Namespace) -> int:
 
 
 def creative_check(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, _packet = current_packet(state, allow_project_drift=True)
     project = Path(state["project"])
     ledger = CREATIVE.load_ledger(project)
@@ -2986,8 +3738,7 @@ def creative_check(args: argparse.Namespace) -> int:
 
 def operations_plan(args: argparse.Namespace) -> int:
     """Derive post-G1 implementation and visual-QA targets from locked documents."""
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     project = Path(state["project"])
     if OPERATIONS.ledger_path(project).exists():
         raise RuntimeError_("Creative operations planning is already recorded; do not replace its evidence")
@@ -2997,7 +3748,7 @@ def operations_plan(args: argparse.Namespace) -> int:
     except OPERATIONS.OperationsError as exc:
         raise RuntimeError_(str(exc)) from exc
     state["updated_at"] = now()
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Design-to-implementation trace generated",
@@ -3013,8 +3764,7 @@ def operations_plan(args: argparse.Namespace) -> int:
 
 
 def record_operations(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     project = Path(state["project"])
     ledger = OPERATIONS.load_ledger(project)
     if ledger is None:
@@ -3033,7 +3783,7 @@ def record_operations(args: argparse.Namespace) -> int:
         raise RuntimeError_(str(exc)) from exc
     result = OPERATIONS.summary(ledger)
     state["updated_at"] = now()
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         "Creative operations evidence recorded",
@@ -3056,8 +3806,7 @@ def record_operations(args: argparse.Namespace) -> int:
 
 
 def operations_check(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     project = Path(state["project"])
     ledger = OPERATIONS.load_ledger(project)
     problems = OPERATIONS.project_problems(project, args.require)
@@ -3081,9 +3830,717 @@ def operations_check(args: argparse.Namespace) -> int:
     return 0 if not payload["problems"] else 2
 
 
+# ---------------------------------------------------- AR-202D design intelligence
+
+
+def load_design_input(path_value) -> dict | list:
+    """Read one design-workflow input file: an event list or a declaration document."""
+    source = Path(str(path_value)).resolve()
+    if not source.is_file() or source.stat().st_size == 0:
+        raise RuntimeError_(f"Design input is missing or empty: {source}")
+    try:
+        return json.loads(read(source))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError_(f"Design input is not valid JSON: {exc}") from exc
+
+
+def design_fixture(value: dict | None) -> dict:
+    """The declared deterministic adapters an operator may point design work at.
+
+    Nothing here reaches the network. The only adapters that can *produce*
+    evidence are the offline fixture, the project's own reference directory and a
+    declared observer; every other adapter reports its own unavailability.
+    """
+    value = value if isinstance(value, dict) else {}
+    return {
+        "references": value.get("references_fixture") if isinstance(value.get("references_fixture"), dict) else None,
+        "capture": value.get("capture_fixture") if isinstance(value.get("capture_fixture"), dict) else None,
+        "declared_observer": value.get("declared_observer") if isinstance(value.get("declared_observer"), dict) else None,
+        "fixture_root": str(value.get("fixture_root", "") or ""),
+    }
+
+
+def design_adapters(state: dict, project: Path, fixture: dict) -> tuple[dict, dict]:
+    """Build the declared reference and capture adapters for this run."""
+    fixture_root = Path(fixture["fixture_root"]) if fixture.get("fixture_root") else None
+    run_root = Path(state.get("run_root", "") or project)
+    reference_adapters = REFERENCES.default_adapters(
+        project, fixture=fixture.get("references"), fixture_root=fixture_root,
+    )
+    capture_adapters = RENDER.default_adapters(
+        run_root,
+        fixture=fixture.get("capture"),
+        declared_observer=fixture.get("declared_observer"),
+    )
+    return reference_adapters, capture_adapters
+
+
+def design_revision_hash(state: dict, packet: Path | None) -> str:
+    """The revision a design record binds to: the boundary's own task revision."""
+    return str((EXECUTION.task_revision(state, packet) or {}).get("revision_hash", ""))
+
+
+def design_capture_adapter(capture_adapters: dict, adapter_id: str):
+    adapter = capture_adapters.get(str(adapter_id))
+    if adapter is None:
+        raise RuntimeError_(
+            f"no capture adapter named {adapter_id!r} is configured here; available: "
+            + (", ".join(sorted(capture_adapters)) or "none")
+        )
+    available, reason = adapter.available()
+    if not available:
+        raise RuntimeError_(
+            f"capture adapter {adapter_id!r} reports itself unavailable: {reason or 'no reason recorded'}. "
+            "A capability that is not configured cannot produce rendered evidence."
+        )
+    return adapter
+
+
+def design_plan_command(args: argparse.Namespace) -> int:
+    """Characterise one task for design, select the pipeline, and route its evidence needs."""
+    run_root, state = resolve_and_load(args)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    project = Path(state["project"])
+    state["run_root"] = str(run_root)
+    payload = load_design_input(args.input) if getattr(args, "input", None) else {}
+    fixture = design_fixture(payload)
+    reference_adapters, capture_adapters = design_adapters(state, project, fixture)
+    stage = str(getattr(args, "stage", "") or entry["stage"])
+    request = str(getattr(args, "request", "") or state.get("request", "") or "")
+    characterisation = DESIGN.characterize(
+        state, project=project, stage=stage, request=request, task_id=entry["id"],
+        transport=TRANSPORT, characterisation=ROUTING.latest(state, "characterisations"),
+        reference_adapters=reference_adapters, capture_adapters=capture_adapters,
+        declared=payload.get("declared"),
+    )
+    DESIGN.record_characterisation(state, characterisation)
+    plan = DESIGN.plan(state, characterisation, task_id=entry["id"])
+    characteristics = characterisation["characteristics"]
+    emit_event(
+        run_root, "design_task_characterized", state=state, task_id=entry["id"], stage=stage,
+        characterisation=str(characterisation["characterisation_id"]),
+        depth=str(plan.get("depth", "")),
+        design=str(characteristics["design_task"]["value"]),
+        reference_research=str(characteristics["reference_research"]["value"]),
+        rendered_qa=str(characteristics["rendered_qa"]["value"]),
+    )
+    emit_event(
+        run_root, "design_plan_selected", state=state, task_id=entry["id"], stage=stage,
+        plan=str(plan.get("plan_id", "")), depth=str(plan.get("depth", "")),
+        skipped=",".join(
+            name for name, row in (plan.get("stages") or {}).items() if row.get("selection") == "SKIPPED"
+        ),
+    )
+    evidence_route = ROUTING.route_evidence(
+        state, stage=stage, design_characterisation=characterisation,
+        reference_adapters=reference_adapters, capture_adapters=capture_adapters,
+        task_id=entry["id"],
+        evidence_policy=str(getattr(args, "evidence_policy", "") or "declared"),
+    )
+    ROUTING.record(state, evidence_route)
+    emit_event(
+        run_root, "route_selected", state=state, task_id=entry["id"], stage=stage,
+        decision=str(evidence_route.get("decision_id", "")),
+        route_kind="design-evidence", status=str(evidence_route.get("status", "")),
+        rule=str(evidence_route.get("rule", "")), reason=str(evidence_route.get("reason", "")),
+    )
+    state["updated_at"] = now()
+    blocked = evidence_route.get("status") != "selected"
+    state["next"] = (
+        "Record the design evidence the plan requires, then implement."
+        if not blocked
+        else "Reference or capture capability is unavailable; record the blocker instead of the evidence."
+    )
+    write_state(run_root, state)
+    if getattr(args, "json", False):
+        print(json.dumps({
+            "characterisation": characterisation, "plan": plan, "evidence_route": evidence_route,
+        }, indent=2, sort_keys=True, default=str))
+        return 0 if not blocked else 2
+    print(
+        f"Design task: {characteristics['design_task']['value']} (depth {plan.get('depth')}); "
+        f"visual {characteristics['visual_design']['value']}, "
+        f"reference research {characteristics['reference_research']['value']}, "
+        f"rendered QA {characteristics['rendered_qa']['value']}."
+    )
+    selected = [
+        f"{name}:{row['selection']}" for name, row in (plan.get("stages") or {}).items()
+        if row.get("selection") != "SKIPPED"
+    ]
+    print("Pipeline: " + (", ".join(selected) or "no design stages selected"))
+    if blocked:
+        print("Evidence route blocked: " + str(evidence_route.get("reason")))
+        print("Next: record the blocker honestly; do not describe evidence that was never produced.")
+        return 2
+    print("Next: record the evidence this plan requires before implementing.")
+    print("From you: nothing right now.")
+    return 0
+
+
+def design_capture_event(
+    state: dict, entry: dict, event: dict, run_root: Path, capture_adapters: dict, revision: str,
+) -> dict:
+    """Run one declared capture adapter and record the artifact as rendered evidence."""
+    spec = dict(event.get("capture") or {})
+    if not spec:
+        raise RuntimeError_("a rendered-evidence event must declare the capture it performed")
+    adapter_id = str(spec.get("adapter", "offline-fixture") or "offline-fixture")
+    adapter = design_capture_adapter(capture_adapters, adapter_id)
+    kind = str(spec.get("kind", "screenshot") or "screenshot")
+    if kind not in adapter.capabilities():
+        raise RuntimeError_(
+            f"capture adapter {adapter_id!r} does not declare the {kind!r} capability; "
+            "evidence cannot come from a capability that was never declared"
+        )
+    capture_execution, execution_problems = execution_for_task(
+        state, task_id=entry["id"], role="validator",
+        adapter=f"scripts/ariadne.py:design-capture:{adapter_id}",
+        invocation=f"record-design capture {kind}",
+        requested={"provider": adapter_id, "model": kind},
+        packet=None,
+        reason=f"design capture for {entry['id']}",
+        reuse=False,
+    )
+    if execution_problems:
+        raise RuntimeError_("design capture execution rejected: " + "; ".join(execution_problems))
+    artifact = adapter.capture(spec)
+    extra = dict(artifact.extra)
+    extra["capture_spec"] = spec
+    record_value = RENDER.record(
+        state,
+        task_id=entry["id"],
+        revision_hash=str(event.get("revision_hash", "") or revision),
+        artifact=RENDER.CaptureArtifact(
+            kind=artifact.kind, path=artifact.path, sha256=artifact.sha256,
+            viewport=artifact.viewport, environment=artifact.environment,
+            method=artifact.method, observation=artifact.observation, extra=extra,
+        ),
+        adapter=adapter_id,
+        adapter_available=True,
+        capture_execution=str(capture_execution.get("execution_id", "")),
+        requirement_id=str(event.get("requirement_id", "")),
+        direction_id=str(event.get("direction_id", "")),
+    )
+    emit_event(
+        run_root, "rendered_evidence_recorded", state=state, task_id=entry["id"],
+        stage=entry["stage"], evidence=str(record_value["evidence_id"]),
+        evidence_kind=kind, evidence_state=str(record_value["state"]), adapter=adapter_id,
+        viewport=str((record_value.get("viewport") or {}).get("width", "")),
+        execution=str(capture_execution.get("execution_id", "")),
+    )
+    return record_value
+
+
+def design_implementing_task(state: dict, entry: dict) -> str:
+    """The task whose implementation a design critique reviews.
+
+    Never guesses from a missing packet: the recorded worker row wins, then the
+    most recent packet for this stage, then the current task itself.
+    """
+    worker_task = str((state.get("worker") or {}).get("task_id", "") or "")
+    packets = [item for item in (state.get("packets") or []) if isinstance(item, dict)]
+    if worker_task and any(str(item.get("id", "")) == worker_task for item in packets):
+        return worker_task
+    for stage in ("S4B", str(entry.get("stage", ""))):
+        rows = [str(item.get("id", "")) for item in packets if str(item.get("stage", "")) == stage]
+        if rows:
+            return rows[-1]
+    return str(entry.get("id", ""))
+
+
+def design_review_event(
+    state: dict, entry: dict, event: dict, run_root: Path, revision: str = "",
+) -> dict:
+    """Ingest an independent critique bound to engine-created executions."""
+    reviewer_identity = str(event.get("reviewer_identity", "") or "").strip()
+    implementing_task = design_implementing_task(state, entry)
+    implementer = find_implementer_execution(state, task_id=implementing_task)
+    if implementer is None:
+        raise RuntimeError_(
+            "design review rejected: the reviewed implementation has no engine-created execution, "
+            "so review independence cannot be established (DESIGN_REVIEW_FAILURE). A critique binds "
+            "to an implementer execution and a separate reviewer execution; it cannot be recorded "
+            "before the implementation it judges exists."
+        )
+    reviewer_execution, execution_problems = execution_for_task(
+        state, task_id=entry["id"], role="reviewer",
+        adapter="scripts/ariadne.py:record-design:review",
+        invocation="record-design review",
+        requested={"provider": reviewer_identity, "model": "design-critique"},
+        packet=None,
+        reason=f"independent design critique of {implementing_task}",
+        reuse=False,
+        parent=str(implementer["execution_id"]),
+    )
+    if execution_problems:
+        raise RuntimeError_("design review execution rejected: " + "; ".join(execution_problems))
+    direction = DESIGN.direction(state, str(event.get("direction_id", ""))) or DESIGN.active_direction(
+        state, task_id=entry["id"],
+    )
+    if not direction:
+        raise RuntimeError_(
+            "a design critique needs the approved direction it judges against; none is recorded"
+        )
+    emit_event(
+        run_root, "design_review_started", state=state, task_id=entry["id"], stage=entry["stage"],
+        direction=str(direction.get("direction_id", "")),
+        reviewer_execution=str(reviewer_execution.get("execution_id", "")),
+        implementing_execution=str(implementer["execution_id"]),
+    )
+    record_value = CRITIQUE.build_review(
+        state,
+        task_id=entry["id"],
+        direction_id=str(direction.get("direction_id", "")),
+        findings=event.get("findings") or [],
+        reviewer_identity=reviewer_identity,
+        reviewer_execution=str(reviewer_execution.get("execution_id", "")),
+        implementing_execution=str(implementer["execution_id"]),
+        requirement_ids=event.get("requirement_ids") or [],
+        evidence_ids=event.get("evidence_ids") or [],
+        outcome=str(event.get("outcome", "passed") or "passed"),
+        differential=str(event.get("differential", "")),
+        qa_records=event.get("qa") or {},
+        reviewer_role=str(event.get("reviewer_role", "independent-reviewer")),
+        revision_hash=str(event.get("revision_hash", "") or revision),
+    )
+    emit_event(
+        run_root, "review_recorded", state=state, task_id=entry["id"], stage=entry["stage"],
+        review=str(record_value["review_id"]), outcome=str(record_value["outcome"]),
+        findings=len(record_value.get("findings") or []),
+        direction_revision=str(record_value.get("direction_revision", "")),
+    )
+    for finding in record_value.get("findings") or []:
+        emit_event(
+            run_root, "design_finding_recorded", state=state, task_id=entry["id"], stage=entry["stage"],
+            finding=str(finding.get("finding_id")), dimension=str(finding.get("dimension")),
+            severity=str(finding.get("severity")), finding_state=str(finding.get("state", "open")),
+        )
+    return record_value
+
+
+def _design_reference_event(
+    state: dict, entry: dict, event: dict, kind: str, project: Path, run_root: Path,
+) -> dict:
+    if kind in ("reference", "reference-discovered"):
+        record_value = REFERENCES.register(
+            state,
+            source=str(event.get("source", "")),
+            locator=str(event.get("locator", "")),
+            title=str(event.get("title", "") or event.get("source", "")),
+            source_type=str(event.get("source_type", "local-file")),
+            adapter=str(event.get("adapter", "")),
+            task_id=entry["id"], query=str(event.get("query", "")),
+        )
+        emit_event(
+            run_root, "reference_found", state=state, task_id=entry["id"], stage=entry["stage"],
+            reference=str(record_value["reference_id"]), source=str(record_value["source"]),
+            source_type=str(record_value["source_type"]), adapter=str(record_value["adapter"]),
+        )
+        return record_value
+    if kind == "reference-accessible":
+        record_value = REFERENCES.mark_accessible(
+            state, str(event.get("reference_id", "")),
+            content_sha256=str(event.get("content_sha256", "")),
+            size=int(event.get("size", 0) or 0),
+            mime=str(event.get("mime", "")),
+            licence_note=str(event.get("licence_note", "")),
+            adapter=str(event.get("adapter", "")),
+        )
+        emit_event(
+            run_root, "reference_accessed", state=state, task_id=entry["id"], stage=entry["stage"],
+            reference=str(record_value["reference_id"]),
+            digest=str((record_value.get("content") or {}).get("sha256", ""))[:12],
+        )
+        return record_value
+    if kind == "reference-inaccessible":
+        record_value = REFERENCES.mark_inaccessible(
+            state, str(event.get("reference_id", "")), blocker=str(event.get("blocker", "")),
+        )
+        emit_event(
+            run_root, "reference_inspected", state=state, task_id=entry["id"], stage=entry["stage"],
+            reference=str(record_value["reference_id"]), inspection_outcome="inaccessible",
+            blocker=str(event.get("blocker", "")),
+        )
+        return record_value
+    if kind == "reference-inspection":
+        record_value = REFERENCES.inspect(
+            state, str(event.get("reference_id", "")),
+            inspection_type=str(event.get("inspection_type", "")),
+            observations=[str(item) for item in (event.get("observations") or [])],
+            evidence_path=Path(str(event.get("evidence_path", ""))),
+            project=project,
+            claim_kinds=[str(item) for item in (event.get("claim_kinds") or [])],
+            viewport=event.get("viewport") if isinstance(event.get("viewport"), dict) else None,
+            mechanisms=[str(item) for item in (event.get("mechanisms") or [])],
+        )
+        latest = (record_value.get("inspections") or [{}])[-1]
+        emit_event(
+            run_root, "reference_inspected", state=state, task_id=entry["id"], stage=entry["stage"],
+            reference=str(record_value["reference_id"]), inspection_type=str(latest.get("type", "")),
+            observations=len(latest.get("observations") or []),
+            artifact=str((latest.get("evidence") or {}).get("sha256", ""))[:12],
+        )
+        return record_value
+    if kind == "reference-analysis":
+        record_value = REFERENCES.analyse(
+            state, str(event.get("reference_id", "")), findings=event.get("findings") or [],
+        )
+        emit_event(
+            run_root, "reference_analysed", state=state, task_id=entry["id"], stage=entry["stage"],
+            reference=str(record_value["reference_id"]),
+            findings=len(((record_value.get("analysis") or {}).get("findings")) or []),
+        )
+        return record_value
+    if kind == "reference-used":
+        record_value = REFERENCES.mark_used(
+            state, str(event.get("reference_id", "")),
+            decision=str(event.get("decision", "")), principle=str(event.get("principle", "")),
+            artifact_path=Path(str(event.get("artifact_path", ""))),
+            artifact_anchor=str(event.get("artifact_anchor", "")),
+            requirement_id=str(event.get("requirement_id", "")),
+            direction_id=str(event.get("direction_id", "")),
+            claim_kind=str(event.get("claim_kind", "")),
+        )
+        emit_event(
+            run_root, "reference_used", state=state, task_id=entry["id"], stage=entry["stage"],
+            reference=str(record_value["reference_id"]), decision=str(event.get("decision", "")),
+        )
+        return record_value
+    raise RuntimeError_(f"unsupported design reference event: {kind!r}")
+
+
+REFERENCE_EVENT_TYPES = (
+    "reference", "reference-discovered", "reference-accessible", "reference-inaccessible",
+    "reference-inspection", "reference-analysis", "reference-used",
+)
+
+
+def record_design(args: argparse.Namespace) -> int:
+    """Apply one batch of design-intelligence events through the engine's own enforcement."""
+    run_root, state = resolve_and_load(args)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    project = Path(state["project"])
+    state["run_root"] = str(run_root)
+    value = load_design_input(args.input)
+    events = value.get("events") if isinstance(value, dict) else value
+    if isinstance(events, dict):
+        events = [events]
+    if not isinstance(events, list) or not events:
+        raise RuntimeError_("record-design needs at least one event")
+    fixture = design_fixture(value if isinstance(value, dict) else {})
+    reference_adapters, capture_adapters = design_adapters(state, project, fixture)
+    revision = design_revision_hash(state, packet)
+    applied = 0
+    for event in events:
+        if not isinstance(event, dict):
+            raise RuntimeError_("every design event must be an object")
+        kind = str(event.get("type", "") or "")
+        if kind in REFERENCE_EVENT_TYPES:
+            _design_reference_event(state, entry, event, kind, project, run_root)
+        elif kind == "component":
+            record_value = COMPONENTS.evaluate(
+                state,
+                need=str(event.get("need", "")), task_id=entry["id"],
+                rung=str(event.get("rung", "")), name=str(event.get("name", "")),
+                capability=str(event.get("capability", "")),
+                alternatives=event.get("alternatives") or [],
+                existing_equivalent=event.get("existing_equivalent") or {},
+                findings=event.get("findings") or {},
+                approved_dependencies=[str(item) for item in (event.get("approved_dependencies") or [])],
+                registry=COMPONENTS.default_registry(ROOT),
+                registry_entry=str(event.get("registry_entry", "")),
+                project_paths=[str(item) for item in (event.get("project_paths") or [])],
+                approval_id=str(event.get("approval_id", "")),
+                note=str(event.get("note", "")),
+            )
+            emit_event(
+                run_root, "component_candidate_evaluated", state=state, task_id=entry["id"], stage=entry["stage"],
+                candidate=str(record_value["candidate_id"]),
+                name=str((record_value.get("candidate") or {}).get("name", "")),
+                rung=str(record_value["rung"]), decision=str(record_value["decision"]),
+                approval_required=bool(record_value["approval_required"]),
+            )
+        elif kind == "direction":
+            record_value = DESIGN.create_direction(
+                state,
+                task_id=entry["id"],
+                goal=str(event.get("goal", "")),
+                scope=str(event.get("scope", "")),
+                product_context=event.get("product_context") or [],
+                key_hierarchy=event.get("key_hierarchy") or [],
+                interaction_principles=event.get("interaction_principles") or [],
+                visual_principles=event.get("visual_principles") or [],
+                content_principles=event.get("content_principles") or [],
+                constraints=event.get("constraints") or [],
+                existing_system=event.get("existing_system") or [],
+                reference_findings_adopted=event.get("reference_findings_adopted") or [],
+                findings_rejected=event.get("findings_rejected") or [],
+                accessibility_requirements=event.get("accessibility_requirements") or [],
+                responsive_requirements=event.get("responsive_requirements") or [],
+                approved_deviations=event.get("approved_deviations") or [],
+                revision_hash=revision,
+            )
+            emit_event(
+                run_root, "design_direction_created", state=state, task_id=entry["id"], stage=entry["stage"],
+                direction=str(record_value["direction_id"]), direction_status=str(record_value["status"]),
+                revision=str(record_value["revision_hash"])[:12],
+            )
+        elif kind == "requirement":
+            record_value = DESIGN.record_requirement(
+                state,
+                requirement_id=str(event.get("requirement_id", "")),
+                evidence_kind=str(event.get("evidence_kind", "")),
+                task_id=entry["id"],
+                decision=event.get("decision") or {},
+                implementation=event.get("implementation") or {},
+                evidence_ids=event.get("evidence_ids") or [],
+                state_name=str(event.get("state_name", "")),
+                rejection_reason=str(event.get("rejection_reason", "")),
+                viewport=str(event.get("viewport", "")),
+                revision_hash=str(event.get("revision_hash", "") or revision),
+                note=str(event.get("note", "")),
+            )
+            emit_event(
+                run_root, "design_requirement_recorded", state=state, task_id=entry["id"], stage=entry["stage"],
+                record=str(record_value["record_id"]), requirement=str(record_value["requirement_id"]),
+                requirement_state=str(record_value["state"]), evidence_kind=str(record_value["evidence_kind"]),
+            )
+        elif kind == "source-suggests":
+            record_value = RENDER.record_source_suggests(
+                state, task_id=entry["id"],
+                revision_hash=str(event.get("revision_hash", "") or revision),
+                source_path=Path(str(event.get("source_path", ""))),
+                source_anchor=str(event.get("source_anchor", "")),
+                observation=str(event.get("observation", "")),
+                requirement_id=str(event.get("requirement_id", "")),
+            )
+            emit_event(
+                run_root, "rendered_evidence_recorded", state=state, task_id=entry["id"], stage=entry["stage"],
+                evidence=str(record_value["evidence_id"]), evidence_kind="source",
+                evidence_state="SOURCE_SUGGESTS",
+            )
+        elif kind == "rendered-evidence":
+            design_capture_event(state, entry, event, run_root, capture_adapters, revision)
+        elif kind == "rendered-observe":
+            record_value = RENDER.observe(
+                state, str(event.get("evidence_id", "")),
+                artifact={
+                    "path": str(event.get("artifact_path", "")),
+                    "sha256": str(event.get("artifact_sha256", "")),
+                },
+                observation=str(event.get("observation", "")),
+                kind=str(event.get("kind", "interaction") or "interaction"),
+            )
+            emit_event(
+                run_root, "rendered_evidence_recorded", state=state, task_id=entry["id"], stage=entry["stage"],
+                evidence=str(record_value["evidence_id"]), evidence_kind=str(event.get("kind", "interaction")),
+                evidence_state="OBSERVED",
+            )
+        elif kind == "rendered-verify":
+            evidence_id = str(event.get("evidence_id", ""))
+            original = RENDER.by_id(state, evidence_id)
+            if original is None:
+                raise RuntimeError_(f"no rendered evidence matches {evidence_id!r}")
+            spec = dict(((original.get("extra") or {}).get("capture_spec")) or {})
+            if not spec:
+                raise RuntimeError_(
+                    "this rendered evidence records no capture spec, so it cannot be re-produced by an "
+                    "independent execution; verification is refused rather than declared"
+                )
+            adapter = design_capture_adapter(capture_adapters, str(original.get("adapter", "")))
+            verification_execution, execution_problems = execution_for_task(
+                state, task_id=entry["id"], role="validator",
+                adapter=f"scripts/ariadne.py:design-verify:{adapter.id}",
+                invocation="record-design verify",
+                requested={"provider": adapter.id, "model": "reproduction"},
+                packet=None,
+                reason=f"independent re-production of {evidence_id}",
+                reuse=False,
+            )
+            if execution_problems:
+                raise RuntimeError_("design verification execution rejected: " + "; ".join(execution_problems))
+            reproduced = adapter.capture(spec)
+            record_value = RENDER.verify(
+                state, evidence_id,
+                verification_execution=str(verification_execution.get("execution_id", "")),
+                reproduced_sha256=reproduced.sha256,
+                method=f"independent re-capture by {adapter.id}",
+                tolerance=str(event.get("tolerance", "exact") or "exact"),
+            )
+            emit_event(
+                run_root, "rendered_evidence_verified", state=state, task_id=entry["id"], stage=entry["stage"],
+                evidence=str(record_value["evidence_id"]),
+                execution=str(verification_execution.get("execution_id", "")),
+                digest=str(reproduced.sha256)[:12],
+            )
+        elif kind == "rendered-unverified":
+            record_value = RENDER.mark_unverified(
+                state, task_id=entry["id"],
+                revision_hash=str(event.get("revision_hash", "") or revision),
+                requirement_id=str(event.get("requirement_id", "")),
+                blocker=str(event.get("blocker", "")),
+                viewport=event.get("viewport") if isinstance(event.get("viewport"), dict) else None,
+            )
+            emit_event(
+                run_root, "rendered_evidence_recorded", state=state, task_id=entry["id"], stage=entry["stage"],
+                evidence=str(record_value["evidence_id"]), evidence_state="UNVERIFIED",
+                blocker=str(event.get("blocker", "")),
+            )
+        elif kind == "review":
+            design_review_event(state, entry, event, run_root, revision)
+        elif kind == "refinement":
+            record_value = CRITIQUE.propose_refinement(
+                state, str(event.get("finding_id", "")), task_id=entry["id"],
+                artifact=str(event.get("artifact", "")),
+                intended_change=str(event.get("intended_change", "")),
+                permitted_scope=event.get("permitted_scope") or [],
+                expected_evidence=event.get("expected_evidence") or [],
+                regression_checks=event.get("regression_checks") or [],
+                revision_hash=str(event.get("revision_hash", "") or revision),
+            )
+            emit_event(
+                run_root, "refinement_started", state=state, task_id=entry["id"], stage=entry["stage"],
+                refinement=str(record_value["refinement_id"]), finding=str(record_value["finding_id"]),
+                scope=",".join(str(item) for item in record_value["permitted_scope"]),
+            )
+        elif kind == "refinement-result":
+            record_value = CRITIQUE.record_refinement(
+                state, str(event.get("refinement_id", "")),
+                applied=bool(event.get("applied", True)),
+                changed_artifacts=event.get("changed_artifacts") or [],
+                revalidated=event.get("revalidated") or {},
+                recaptured=event.get("recaptured") or [],
+                regressions=event.get("regressions") or [],
+                notes=str(event.get("notes", "")),
+            )
+            CRITIQUE.resolve_findings(
+                state, str(event.get("refinement_id", "")),
+                resolved=event.get("resolved") or [],
+                still_open=event.get("still_open") or [],
+            )
+            emit_event(
+                run_root, "refinement_completed", state=state, task_id=entry["id"], stage=entry["stage"],
+                refinement=str(record_value["refinement_id"]), refinement_state=str(record_value["state"]),
+                regressions=len(record_value.get("regressions") or []),
+                resolved=bool(record_value.get("resolved")),
+            )
+        else:
+            raise RuntimeError_(f"unsupported design event type: {kind!r}")
+        applied += 1
+    state["updated_at"] = now()
+    state["next"] = "Review the recorded design evidence for gaps before continuing."
+    write_state(run_root, state)
+    print(f"Recorded {applied} design event(s).")
+    print("Evidence states were enforced: a claim the recorded evidence cannot support was refused.")
+    print("From you: nothing right now.")
+    return 0
+
+
+def design_check_command(args: argparse.Namespace) -> int:
+    run_root, state = resolve_and_load(args)
+    project = Path(state["project"])
+    report = DESIGN.report(state)
+    problems = list(report["problems"])
+    requirement = POLICY.design_evidence_requirement(state, project, "S5")
+    if requirement.get("required") and requirement.get("state") != "satisfied":
+        problems.append(str(requirement.get("detail", "")))
+    payload = {
+        "status": "blocked" if problems else "tracked",
+        "project": str(project),
+        "report": report,
+        "problems": list(dict.fromkeys(problems)),
+    }
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0 if not problems else 2
+    if problems:
+        print("I found design-evidence gaps:")
+        for problem in payload["problems"]:
+            print(f"- {problem}")
+        print("Next: record the missing evidence, or record the blocker honestly.")
+        return 2
+    print(
+        "Tracked. References, component choices, direction, requirements, rendered evidence and "
+        "critique remain traceable."
+    )
+    print("From you: nothing right now.")
+    return 0
+
+
+def design_report_command(args: argparse.Namespace) -> int:
+    run_root, state = resolve_and_load(args)
+    report = DESIGN.report(state)
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2, sort_keys=True, default=str))
+        return 0
+    measurements = report["measurements"]
+    references = measurements["references"]
+    print(
+        f"Design depth {report['depth'] or 'not characterised'}; "
+        f"references found {references['found']}, inspected {references['inspected']}, "
+        f"analysed {references['analysed']}, used {references['used']}, "
+        f"inaccessible {references['inaccessible']}."
+    )
+    print(
+        f"Requirements tracked {measurements['requirements']['tracked']} "
+        f"(observed {measurements['requirements']['observed']}, "
+        f"verified {measurements['requirements']['verified']}); "
+        f"rendered evidence {measurements['rendered_evidence']['records']}; "
+        f"critique findings {measurements['critique']['findings']} "
+        f"({measurements['critique']['resolved']} resolved, "
+        f"{measurements['critique']['remaining']} remaining)."
+    )
+    print(
+        f"Component candidates {measurements['components']['candidates']} "
+        f"({measurements['components']['dependencies_avoided']} needs solved without a new dependency); "
+        f"refinement cycles {measurements['refinement']['attempts']} "
+        f"(regressions {measurements['refinement']['regressions']})."
+    )
+    print("From you: nothing right now.")
+    return 0
+
+
+def approve_design_direction(args: argparse.Namespace) -> int:
+    """Record the human G1D approval of one engine design-direction record."""
+    run_root, state = resolve_and_load(args)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    direction_id = str(getattr(args, "direction", "") or "").strip()
+    if not direction_id:
+        direction = DESIGN.latest_direction(state, task_id=entry["id"]) or DESIGN.active_direction(state, task_id=entry["id"])
+        direction_id = str(direction.get("direction_id", ""))
+    if not direction_id:
+        raise RuntimeError_("no design-direction record exists to approve")
+    identity = str(getattr(args, "identity", "") or "").strip()
+    if DESIGN.direction(state, direction_id) is None:
+        raise RuntimeError_(f"no design-direction record matches {direction_id!r}")
+    try:
+        approval = DESIGN.approve_direction(
+            state, direction_id, identity=identity,
+            note=str(getattr(args, "note", "") or ""),
+            stage=entry["stage"], packet_id=entry["id"],
+        )
+    except CONTRACTS.EngineError as exc:
+        raise RuntimeError_(str(exc)) from exc
+    emit_event(
+        run_root, "design_direction_approved", state=state, task_id=entry["id"], stage=entry["stage"],
+        direction=direction_id, approval=str(approval.get("approval_id", "")),
+        identity=str(approval.get("identity", "")), channel=str(approval.get("channel", "")),
+        revision=str(approval.get("revision_hash", ""))[:12],
+    )
+    state["updated_at"] = now()
+    state["next"] = "Implement within the approved design direction."
+    write_state(run_root, state)
+    print(
+        f"Approved design direction {direction_id} for revision "
+        f"{str(approval.get('revision_hash', ''))[:12]} as {identity}."
+    )
+    print("The approval is invalidated automatically if the direction changes materially.")
+    print("From you: nothing right now.")
+    return 0
+
+
 def record_intervention(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     before = len(state.get("human_interventions", []))
     row = ensure_intervention(
         state,
@@ -3097,7 +4554,7 @@ def record_intervention(args: argparse.Namespace) -> int:
     if len(state.get("human_interventions", [])) == before and row.get("status") != "resolved":
         raise RuntimeError_("That human intervention is already recorded")
     state["updated_at"] = now()
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         f"Human intervention classified {args.classification.upper()}",
@@ -3111,8 +4568,7 @@ def record_intervention(args: argparse.Namespace) -> int:
 
 
 def record_note(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     note = {
         "recorded_at": now(),
         "kind": args.kind,
@@ -3129,7 +4585,7 @@ def record_note(args: argparse.Namespace) -> int:
         raise RuntimeError_("That project note is already recorded")
     notes.append(note)
     state["updated_at"] = now()
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         f"Project {args.kind.replace('-', ' ')} recorded",
@@ -3170,8 +4626,7 @@ def preserved_s3_parameters(packet: Path) -> tuple[str, str, str]:
 
 def restart_direction(args: argparse.Namespace) -> int:
     """Archive a rejected S3 direction and prepare its verified same-stage child."""
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     if entry["stage"] != "S3":
         raise RuntimeError_("A design-direction restart belongs to the current S3 boundary")
@@ -3264,8 +4719,7 @@ def structured_return_target(packet: Path) -> Path | None:
 
 def advance(args: argparse.Namespace) -> int:
     """Record obvious same-session outputs and continue through routine boundaries."""
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     stage = entry["stage"]
     project = Path(state["project"])
@@ -3336,17 +4790,12 @@ def advance(args: argparse.Namespace) -> int:
         expected = EXPECTED_STAGE_OUTPUTS.get(stage)
         if stage == "S3":
             design = read(project / "DESIGN.md") if (project / "DESIGN.md").is_file() else ""
-            agents = read(project / "AGENTS.md") if (project / "AGENTS.md").is_file() else ""
-            if design and state.get("creative_evidence_required"):
-                creative_problems = (
-                    CREATIVE.project_problems(project, "S3")
-                    if CREATIVE.load_ledger(project) is not None
-                    else ["the project has no creative plan or skill-execution record"]
-                )
+            if design:
+                creative_problems = POLICY.creative_evidence_problems(state, project)
                 if creative_problems:
                     state["next"] = "Resolve the unsupported creative evidence before asking for G1."
                     state["updated_at"] = now()
-                    write_json(run_root / STATE_NAME, state)
+                    write_state(run_root, state)
                     append_log(
                         run_root,
                         "Creative evidence blocked G1 presentation",
@@ -3360,9 +4809,8 @@ def advance(args: argparse.Namespace) -> int:
                     print("First issue: " + creative_problems[0])
                     print("From you: nothing; I need to resolve or honestly downgrade that claim first.")
                     return 2
-            if not re.search(r"(?im)^\*\*Status:\*\*.*locked at G1", design) or not re.match(
-                r"G1\b", state_field(agents, "Last gate passed")
-            ):
+            gate_problems = POLICY.g1_problems(state, project)
+            if gate_problems:
                 ensure_intervention(
                     state,
                     "necessary",
@@ -3370,14 +4818,17 @@ def advance(args: argparse.Namespace) -> int:
                     "Only the human can approve, reject, or redirect the proposed thesis.",
                     "creative-decision",
                 )
-                state["next"] = "Review the proposed design direction at G1."
+                state["next"] = (
+                    "Only the human can grant G1: approve the proposed design direction with the operator "
+                    "approval command, or redirect it."
+                )
                 state["updated_at"] = now()
-                write_json(run_root / STATE_NAME, state)
+                write_state(run_root, state)
                 append_log(
                     run_root,
                     "Creative decision requested",
                     "The design direction exists, but Ariadne cannot grant G1 for the human.",
-                    "No continuation or stage evidence was created.",
+                    "No continuation or stage evidence was created. " + "; ".join(gate_problems),
                     next_action=state["next"],
                 )
                 print("I have a design direction ready for your judgement.")
@@ -3388,31 +4839,6 @@ def advance(args: argparse.Namespace) -> int:
             if missing:
                 print(f"Paused. {FRIENDLY_STAGES.get(stage, stage).capitalize()} is not complete yet.")
                 print("Missing: " + ", ".join(missing))
-                return 2
-            creative = CREATIVE.load_ledger(project)
-            if state.get("creative_evidence_required") and creative is None:
-                state["next"] = "Finish the internal creative plan from the completed brief."
-                state["updated_at"] = now()
-                write_json(run_root / STATE_NAME, state)
-                print("Paused. I need to finish the project's internal creative plan.")
-                print("From you: nothing right now.")
-                return 2
-            creative_problems = CREATIVE.project_problems(project, stage) if creative is not None else []
-            if creative_problems:
-                state["next"] = "Resolve the named creative evidence gap before continuing."
-                state["updated_at"] = now()
-                write_json(run_root / STATE_NAME, state)
-                append_log(
-                    run_root,
-                    "Creative continuation paused",
-                    "Selected skill work and source claims need evidence before the stage can complete.",
-                    "; ".join(creative_problems),
-                    [str(CREATIVE.ledger_path(project))],
-                    "No stage result or continuation was created.",
-                    state["next"],
-                )
-                print("Paused. Creative evidence is incomplete.")
-                print("First issue: " + creative_problems[0])
                 return 2
             recorded_files = list(expected)
             if CREATIVE.ledger_path(project).is_file():
@@ -3435,7 +4861,7 @@ def advance(args: argparse.Namespace) -> int:
                 else "Complete the independent review and return its marked judgement."
             )
             state["updated_at"] = now()
-            write_json(run_root / STATE_NAME, state)
+            write_state(run_root, state)
             print(f"Paused. {state['next']}")
             return 2
 
@@ -3446,7 +4872,7 @@ def advance(args: argparse.Namespace) -> int:
         if retry and TRANSPORT.return_handoff_status(read(returned)) == "blocked":
             state["next"] = "Worker returned BLOCKED; inspect the recorded conflict or safety finding and use --escalate for a stronger worker."
             state["updated_at"] = now()
-            write_json(run_root / STATE_NAME, state)
+            write_state(run_root, state)
             append_log(
                 run_root,
                 "Blocked worker return held",
@@ -3536,9 +4962,156 @@ def infer_next_stage(state: dict) -> tuple[str | None, str]:
     return None, f"No production transition is defined for {stage}."
 
 
+def execution_for_task(
+    state: dict,
+    *,
+    task_id: str,
+    role: str,
+    adapter: str = "",
+    invocation: str = "",
+    requested: dict | None = None,
+    packet: Path | None = None,
+    reason: str = "",
+    create_if_missing: bool = True,
+    reuse: bool = True,
+    parent: str = "",
+) -> tuple[dict | None, list[str]]:
+    """The engine-owned execution identity for one task and role.
+
+    Reuses the open execution the engine already created for this boundary, or
+    creates one. A caller never chooses the id; ``--execution`` only ever names
+    an execution the engine created. ``reuse=False`` creates a fresh identity
+    for a role that legitimately repeats (each independent validation attempt is
+    its own execution).
+    """
+    if reuse:
+        existing = EXECUTION.latest_execution(state, role=role, task_id=str(task_id))
+        if existing is not None:
+            if str(existing.get("state")) in EXECUTION.TERMINAL_EXECUTION_STATES:
+                return existing, [
+                    f"execution {existing.get('execution_id')} already finished as {existing.get('state')}; "
+                    "a finished execution cannot accept another result"
+                ]
+            return existing, []
+    if not create_if_missing:
+        return None, [
+            f"no engine-created {role} execution exists for task {task_id}; "
+            "the engine creates execution identities at the boundary, they are not supplied"
+        ]
+    record = EXECUTION.create(
+        state,
+        task_id=str(task_id),
+        role=role,
+        adapter=adapter,
+        invocation=invocation,
+        requested=requested or {},
+        revision=EXECUTION.task_revision(state, packet),
+        reason=reason,
+        parent=parent,
+    )
+    EXECUTION.mark_started(state, record["execution_id"])
+    return record, []
+
+
+def named_execution(state: dict, execution_id: str, *, role: str = "", task_id: str = "") -> tuple[dict | None, list[str]]:
+    """Resolve a caller-supplied execution id against the engine's own records."""
+    execution_id = str(execution_id or "").strip()
+    if not execution_id:
+        return None, []
+    record = EXECUTION.execution(state, execution_id)
+    if record is None:
+        return None, [
+            f"execution {execution_id!r} was not created by this engine; a result must name a "
+            "recorded execution, and the engine never accepts a caller-chosen id"
+        ]
+    problems = CONTRACTS.execution_problems(record)
+    if problems:
+        return record, ["the named execution record is not usable: " + "; ".join(problems)]
+    if role and str(record.get("role", "")) != role:
+        problems.append(
+            f"execution {execution_id} is a {record.get('role')} execution, not a {role} execution"
+        )
+    if task_id and str(record.get("task_id", "")) != str(task_id):
+        problems.append(
+            f"execution {execution_id} was created for task {record.get('task_id')}, not {task_id}"
+        )
+    return record, problems
+
+
+def execution_verify_result(state: dict, execution: dict, entry: dict, packet: Path) -> list[str]:
+    """Preconditions for accepting a result for one execution, bound to this revision."""
+    revision = EXECUTION.task_revision(state, packet)["revision_hash"]
+    return EXECUTION.verify_result(
+        state,
+        str(execution.get("execution_id", "")),
+        role=str(execution.get("role", "implementer")),
+        task_id=str(entry.get("id", "")),
+        revision_hash=revision,
+    )
+
+
+def record_failure(
+    state: dict,
+    *,
+    source: str,
+    operation: str,
+    evidence: tuple[str, ...] | list[str],
+    execution_id: str = "",
+    task_id: str = "",
+    revision_hash: str = "",
+    detail: str = "",
+) -> dict:
+    """Classify and record one failure, naming the strategy that produced it."""
+    strategy = ""
+    if execution_id:
+        record_value = EXECUTION.execution(state, str(execution_id))
+        if record_value is not None:
+            strategy = EXECUTION.strategy_id(record_value)
+    return EXECUTION.record_failure(
+        state,
+        source=source,
+        operation=operation,
+        evidence=evidence,
+        execution_id=execution_id,
+        task_id=task_id,
+        revision_hash=revision_hash,
+        detail=detail,
+        strategy=strategy,
+    )
+
+
+def find_implementer_execution(state: dict, *, task_id: str) -> dict | None:
+    """The execution that produced the implementation for a task (any state)."""
+    return EXECUTION.latest_execution(state, role="implementer", task_id=str(task_id))
+
+
+def reviewed_implementation_task(state: dict, packet: Path) -> str:
+    """The implementation task a review boundary reviews.
+
+    The recorded worker row is authoritative when it exists. Otherwise the most
+    recent S4B packet in the recorded chain is used, so a linked S5 -> S5 retry
+    (which parents the previous *review* packet, not the build) still names the
+    build it reviews.
+    """
+    worker_task = str((state.get("worker") or {}).get("task_id", "") or "")
+    packets = [item for item in (state.get("packets") or []) if isinstance(item, dict)]
+    if worker_task and any(str(item.get("id", "")) == worker_task for item in packets):
+        return worker_task
+    s4b = [str(item.get("id", "")) for item in packets if item.get("stage") == "S4B"]
+    if s4b:
+        return s4b[-1]
+    manifest = {}
+    manifest_path = Path(packet) / TRANSPORT.MANIFEST_NAME
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(read(manifest_path))
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+    return str((manifest or {}).get("parent_id", "") or "")
+
+
 def prepare_next(args: argparse.Namespace) -> int:
-    run_root = resolve_run_root(args)
-    state = load_state(run_root)
+    run_root, state = resolve_and_load(args)
     entry, parent = current_packet(state, allow_project_drift=True)
     escalate = bool(getattr(args, "escalate", False))
     if escalate:
@@ -3561,63 +5134,123 @@ def prepare_next(args: argparse.Namespace) -> int:
     if not stage:
         state["next"] = reason
         state["updated_at"] = now()
-        write_json(run_root / STATE_NAME, state)
+        write_state(run_root, state)
         append_log(run_root, "Continuation paused", reason, "No packet created.", next_action=reason)
         print(f"Paused: {reason}")
         return 2
+    # One precondition set for every continuation path (advance delegates here too).
+    continuation = POLICY.continuation_problems(state, stage, project=Path(state["project"]))
+    if continuation:
+        reason = "; ".join(continuation)
+        state["next"] = reason
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        append_log(
+            run_root,
+            "Continuation paused",
+            "The requested boundary does not satisfy its preconditions; no packet was created.",
+            reason,
+            "No stage transition was applied.",
+            next_action=reason,
+        )
+        print(f"Paused: {reason}")
+        return 2
     worker_role = getattr(args, "worker_role", None)
+    project = Path(state["project"])
+    handoff_path = project / "HANDOFF.md"
+    handoff_contract = TRANSPORT.worker_contract(read(handoff_path)) if handoff_path.is_file() else {}
+    packet_id, output = allocate_packet(run_root, state["run_id"], stage)
+    # AR-202 T3: deterministic task characterisation from the evidence that exists.
+    characterisation = ROUTING.characterize(
+        state,
+        project=project,
+        stage=stage,
+        task_id=packet_id,
+        transport=TRANSPORT,
+        request=state.get("request"),
+        dependencies=tuple(POLICY.declared_dependencies(project)),
+    )
+    ROUTING.record_characterisation(state, characterisation)
+    emit_event(
+        run_root, "task_characterized", state=state, task_id=packet_id, stage=stage,
+        characterisation_id=characterisation["characterisation_id"],
+        difficulty=characterisation["difficulty"]["value"],
+        stakes=characterisation["stakes"]["value"],
+        required_capabilities=[item["id"] for item in characterisation["required_capabilities"]],
+    )
+    requested_provider = args.provider
+    routing_decision: dict = {}
     if stage == "S4B":
         current_manifest = json.loads(read(parent / TRANSPORT.MANIFEST_NAME))
         current_worker = current_manifest.get("worker") or {}
-        handoff = Path(state["project"]) / "HANDOFF.md"
-        handoff_contract = TRANSPORT.worker_contract(read(handoff)) if handoff.is_file() else {}
         current_role = current_worker.get("role") or handoff_contract.get("worker_role")
         if args.retry and entry["stage"] == "S4B" and not escalate:
-            prior_return_path = parent / "evidence" / "return-handoff.md"
-            if prior_return_path.is_file() and TRANSPORT.return_handoff_status(read(prior_return_path)) == "blocked":
-                raise RuntimeError_(
-                    "Routine worker retry is not permitted after a blocked return. "
-                    "Inspect the recorded conflict and use --escalate with a stronger worker role."
-                )
-            current_attempt = max(1, int(current_worker.get("attempt", 1)))
-            repair_limit = int(current_worker.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS))
-            if current_attempt - 1 >= repair_limit:
-                raise RuntimeError_(
-                    "Routine worker retry is not permitted: the bounded repair budget is exhausted. "
-                    "Use --escalate with a stronger worker role."
-                )
-            prior_validation_path = parent / "evidence" / "validation.json"
-            if prior_validation_path.is_file():
-                prior_validation = json.loads(read(prior_validation_path))
-                prior_outcome = worker_outcome(
-                    prior_validation.get("status", "blocked"),
-                    prior_validation.get("failure_kind", "routine"),
-                    max(0, int(current_worker.get("attempt", 1)) - 1),
-                    int(current_worker.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS)),
-                )
-                if not prior_outcome["retryable"]:
-                    raise RuntimeError_(
-                        "Routine worker retry is not permitted: " + prior_outcome["next"]
-                        + " Use --escalate with a stronger worker role."
-                    )
-        if escalate:
-            if not current_role:
-                raise RuntimeError_("Cannot escalate without a recorded current worker role")
-            if not worker_role:
-                next_roles = [
-                    role for role, index in WORKER_ROLE_ORDER.items()
-                    if index > WORKER_ROLE_ORDER.get(current_role, -1)
-                ]
-                worker_role = next_roles[0] if next_roles else None
-            if worker_role not in TRANSPORT.WORKER_ROLES:
-                raise RuntimeError_("Escalation requires a stronger supported worker role")
-            if WORKER_ROLE_ORDER[worker_role] <= WORKER_ROLE_ORDER.get(current_role, -1):
-                raise RuntimeError_(f"Escalation role {worker_role} is not stronger than {current_role}")
-        else:
-            worker_role = worker_role or current_role or "bulk"
-        if worker_role not in TRANSPORT.WORKER_ROLES:
-            raise RuntimeError_(f"Unsupported worker role: {worker_role}")
+            retry_problems = POLICY.retry_problems(state, parent)
+            if retry_problems:
+                raise RuntimeError_(" ".join(retry_problems))
+        # AR-202 T5: the worker role is an executable routing decision, not an index lookup.
+        routing_decision = ROUTING.route(
+            state, stage=stage, characterisation=characterisation, task_id=packet_id,
+            declared_role=str(current_role or ""), escalate=escalate,
+            requested_role=str(worker_role or ""),
+        )
+        ROUTING.record(state, routing_decision)
+        emit_event(
+            run_root, "route_selected", state=state, task_id=packet_id, stage=stage,
+            status=routing_decision["status"], rule=routing_decision["rule"],
+            reason=routing_decision["reason"],
+            requested_provider=str((routing_decision.get("requested") or {}).get("provider", "")),
+            worker_role=str((routing_decision.get("chosen") or {}).get("id", "")),
+        )
+        if routing_decision["status"] in ("no-route", "blocked"):
+            return pause_continuation(
+                run_root, state, routing_decision["reason"],
+                why="No authorized execution strategy satisfies this boundary; no packet was created.",
+            )
+        worker_role = str(routing_decision["chosen"]["id"])
+        packet_provider = requested_provider or transport_provider(state.get("provider_preflight"))
+    elif stage in REASONERS.load_contract()["reasoning_stages"]:
+        chosen = REASONERS.selected(state)["id"]
+        if requested_provider and requested_provider != chosen:
+            raise RuntimeError_(
+                f"Reasoner override {requested_provider!r} does not match the recorded selection "
+                f"{chosen!r}; use select-reasoner so the switch is preserved."
+            )
+        capability = REASONERS.detect(chosen)
+        if not REASONERS.selectable(capability):
+            raise RuntimeError_(
+                f"Selected reasoner {chosen} is unavailable: "
+                f"{capability.get('execution', 'not observed')}. No packet was created."
+            )
+        routing_decision = ROUTING.route(
+            state, stage=stage, characterisation=characterisation, task_id=packet_id,
+            reasoner_selection=REASONERS.selected(state),
+            reasoner_contract=REASONERS.load_contract(),
+            reasoner_capability=capability,
+        )
+        ROUTING.record(state, routing_decision)
+        emit_event(
+            run_root, "route_selected", state=state, task_id=packet_id, stage=stage,
+            status=routing_decision["status"], rule=routing_decision["rule"],
+            reason=routing_decision["reason"],
+            requested_provider=str((routing_decision.get("requested") or {}).get("provider", "")),
+        )
+        if routing_decision["status"] in ("no-route", "blocked"):
+            return pause_continuation(
+                run_root, state, routing_decision["reason"],
+                why="No authorized reasoning candidate satisfies this boundary; no packet was created.",
+            )
+        packet_provider = str(routing_decision["chosen"]["id"])
+    else:
+        packet_provider = requested_provider or transport_provider(state.get("provider_preflight"))
     if entry["stage"] == "S3" and stage == "S4A":
+        g1_record = next(
+            (
+                record for record in reversed(POLICY.approvals(state, "G1"))
+                if record.get("channel") == CONTRACTS.APPROVAL_CHANNEL_HUMAN
+            ),
+            None,
+        )
         ensure_intervention(
             state,
             "necessary",
@@ -3625,7 +5258,11 @@ def prepare_next(args: argparse.Namespace) -> int:
             "Only the human can approve, reject, or redirect the proposed thesis.",
             "creative-decision",
             status="resolved",
-            evidence="DESIGN.md locked at G1 and AGENTS.md records G1.",
+            evidence=(
+                f"Recorded G1 approval {g1_record['approval_id']} by {g1_record['identity']} "
+                f"bound to revision {str(g1_record['revision_hash'])[:12]}."
+                if g1_record else "G1 approval recorded."
+            ),
         )
     if stage == "S4B" and OPERATIONS.load_ledger(Path(state["project"])) is None:
         try:
@@ -3642,24 +5279,6 @@ def prepare_next(args: argparse.Namespace) -> int:
             "Derived from locked DESIGN.md, HANDOFF.md, PROJECT.md, and AGENTS.md; no gate was granted.",
             "Prepare the verified implementation packet.",
         )
-    packet_id, output = allocate_packet(run_root, state["run_id"], stage)
-    requested_provider = args.provider
-    if stage in REASONERS.load_contract()["reasoning_stages"]:
-        chosen = REASONERS.selected(state)["id"]
-        if requested_provider and requested_provider != chosen:
-            raise RuntimeError_(
-                f"Reasoner override {requested_provider!r} does not match the recorded selection "
-                f"{chosen!r}; use select-reasoner so the switch is preserved."
-            )
-        capability = REASONERS.detect(chosen)
-        if not REASONERS.selectable(capability):
-            raise RuntimeError_(
-                f"Selected reasoner {chosen} is unavailable: "
-                f"{capability.get('execution', 'not observed')}. No packet was created."
-            )
-        packet_provider = chosen
-    else:
-        packet_provider = requested_provider or transport_provider(state.get("provider_preflight"))
     kwargs = dict(
         stage=stage,
         project=state["project"],
@@ -3679,20 +5298,121 @@ def prepare_next(args: argparse.Namespace) -> int:
         synthetic_validation=args.synthetic_validation,
         request=state.get("request"),
     )
-    TRANSPORT.prepare(transport_namespace(**kwargs))
+    transport_args = transport_namespace(**kwargs)
+    # AR-202 T4: one recorded decision per candidate source, then a plan that can
+    # only omit a source the transport declared removable (never add one).
+    # The cache is guarded by the *project* revision (the baseline head) rather
+    # than the parent packet id, so a same-stage retry reuses unchanged source
+    # hashes while a moved project revision invalidates them conservatively.
+    parent_revision = EXECUTION.task_revision(state, parent)
+    revision_hash = str(parent_revision.get("baseline") or parent_revision.get("revision_hash", ""))
+    candidates = TRANSPORT.plan_sources(stage, project, transport_args)
+    context_decision = CONTEXT.decide(
+        state,
+        stage=stage,
+        candidates=candidates,
+        characterisation=characterisation,
+        run_root=run_root,
+        revision_hash=revision_hash,
+    )
+    context_plan = CONTEXT.plan(context_decision)
+    TRANSPORT.prepare(transport_args, context_plan=context_plan)
     prepared_manifest = json.loads(read(output / TRANSPORT.MANIFEST_NAME))
-    state["packets"].append({
-        "id": packet_id,
-        "stage": stage,
-        "path": str(output),
-        "reasoner_output_baseline": reasoner_output_baseline(Path(state["project"]), stage),
-    })
+    final_context = CONTEXT.finalise(context_decision, prepared_manifest)
+    CONTEXT.record(state, final_context)
+    CONTEXT.update_cache(run_root, state, final_context, prepared_manifest, revision_hash=revision_hash)
+    context_metrics = CONTEXT.summarise(final_context)
+    emit_event(
+        run_root, "context_decided", state=state, task_id=packet_id, stage=stage,
+        decision=final_context["decision_id"], **context_metrics,
+    )
+    for invalidation in (final_context.get("cache") or {}).get("invalidated", []) or []:
+        emit_event(
+            run_root, "context_invalidated", state=state, task_id=packet_id, stage=stage,
+            path=str(invalidation.get("path", "")), reason=str(invalidation.get("reason", "")),
+        )
+    if context_metrics["cache_hits"]:
+        emit_event(
+            run_root, "context_cache_hit", state=state, task_id=packet_id, stage=stage,
+            hits=context_metrics["cache_hits"],
+        )
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="stage",
+            to=stage,
+            reason=reason or f"Prepare {FRIENDLY_STAGES.get(stage, stage)}.",
+            evidence=(str(output), packet_id),
+            packet={
+                "id": packet_id,
+                "stage": stage,
+                "path": str(output),
+                "reasoner_output_baseline": reasoner_output_baseline(Path(state["project"]), stage),
+            },
+            actor="runtime",
+            operation=f"prepare:{stage}",
+        ),
+        permitted=True,
+    )
+    # AR-202 T2: the engine creates the execution identity for the boundary it
+    # just prepared, before any worker or session can claim one.
+    requested_identity = {
+        "provider": str(packet_provider or ""),
+        "model": str((state.get("provider_preflight") or {}).get("model", "") or ""),
+        "effort": str((state.get("provider_preflight") or {}).get("effort", "") or ""),
+        "worker_role": str(worker_role or ""),
+    }
+    boundary_execution = None
+    execution_problems = []
+    if stage == "S4B":
+        boundary_role = "implementer"
+        boundary_adapter = "scripts/prepare-stage.py:worker"
+        boundary_reason = "prepared S4B implementation boundary"
+        boundary_invocation = f"prepare-next --stage S4B (attempt from {entry['id']})"
+    elif stage in REASONERS.load_contract()["reasoning_stages"]:
+        boundary_role = "reasoner"
+        boundary_adapter = f"reasoners.py:{packet_provider}"
+        boundary_reason = f"prepared {stage} reasoning boundary"
+        boundary_invocation = f"prepare-next --stage {stage}"
+    else:
+        boundary_role = ""
+        boundary_adapter = boundary_reason = boundary_invocation = ""
+    if boundary_role:
+        boundary_execution, execution_problems = execution_for_task(
+            state, task_id=packet_id, role=boundary_role,
+            adapter=boundary_adapter, invocation=boundary_invocation,
+            requested=requested_identity, packet=output, reason=boundary_reason,
+        )
+        if execution_problems:
+            # A finished identity is never reused for a boundary that has not run
+            # yet: create the fresh one instead of proceeding with a closed record.
+            boundary_execution, execution_problems = execution_for_task(
+                state, task_id=packet_id, role=boundary_role,
+                adapter=boundary_adapter, invocation=boundary_invocation,
+                requested=requested_identity, packet=output, reason=boundary_reason,
+                reuse=False,
+            )
+        if execution_problems and boundary_execution is None:
+            raise RuntimeError_(" ".join(execution_problems))
+    if boundary_execution is not None:
+        emit_event(
+            run_root, "execution_created", state=state, task_id=packet_id, stage=stage,
+            execution=boundary_execution["execution_id"], role=boundary_execution["role"],
+            adapter=boundary_execution["adapter"],
+            requested_provider=str(requested_identity["provider"]),
+            requested_model=str(requested_identity["model"]),
+        )
+        emit_event(
+            run_root, "execution_started", state=state, task_id=packet_id, stage=stage,
+            execution=boundary_execution["execution_id"], role=boundary_execution["role"],
+        )
     if stage == "S4B":
         worker = update_worker_state(
             state,
             prepared_manifest,
             state.get("provider_preflight"),
             escalation_increment=1 if escalate else 0,
+            execution=boundary_execution or {},
         )
         append_worker_telemetry(
             run_root,
@@ -3710,6 +5430,7 @@ def prepare_next(args: argparse.Namespace) -> int:
             accepted="unknown",
             usage="unknown",
             cost="unknown",
+            execution=str(worker.get("execution_id", "")),
         )
     state["updated_at"] = now()
     state["evidence_state"] = "verified-transport; stage not yet observed"
@@ -3730,7 +5451,7 @@ def prepare_next(args: argparse.Namespace) -> int:
             "Creative judgement must remain separate from the build context.",
             "external-provider-launch",
         )
-    write_json(run_root / STATE_NAME, state)
+    write_state(run_root, state)
     append_log(
         run_root,
         f"Prepared {stage}",
@@ -3748,6 +5469,23 @@ def prepare_next(args: argparse.Namespace) -> int:
     else:
         print("From you: nothing right now.")
     return 0
+
+
+def pause_continuation(run_root: Path, state: dict, reason: str, *, why: str = "") -> int:
+    """Record why no packet was created and pause. Nothing is transitioned."""
+    state["next"] = reason
+    state["updated_at"] = now()
+    write_state(run_root, state)
+    append_log(
+        run_root,
+        "Continuation paused",
+        why or "The requested boundary does not satisfy its preconditions; no packet was created.",
+        reason,
+        "No stage transition was applied.",
+        next_action=reason,
+    )
+    print(f"Paused: {reason}")
+    return 2
 
 
 def transport_provider(preflight: dict | None) -> str | None:
@@ -4272,7 +6010,11 @@ def self_test() -> int:
                 motion=None, assets=None, target=None,
                 lenses=None, synthetic_validation=True,
                 reasoner=None, reason="fixture reason", summary="fixture failure",
-                evidence="blocked", json=False,
+                evidence="blocked", json=False, migrate=False,
+                reviewer_identity="self-test-independent-reviewer", reviewer_role=None,
+                kind=None, gate=None, identity=None, note=None, outcome=None, role=None,
+                escalate=False, worker_role=None, input=None, status=None, file=None,
+                timeout=120,
             )
             defaults.update(values)
             return argparse.Namespace(**defaults)
@@ -4489,6 +6231,59 @@ def self_test() -> int:
             ambiguous_history_blocked = True
         case("ambiguous run history is never guessed", ambiguous_history_blocked)
         shutil.rmtree(duplicate_run)
+        self_test_creative_assessment = workspace / "fixture-assessment.json"
+        write_json(self_test_creative_assessment, CREATIVE.low_assessment())
+        creative_plan(argparse.Namespace(
+            run_root=str(run_root), project=None, input=str(self_test_creative_assessment)
+        ))
+        # The fixture records the S3 direction work here, with real project-local
+        # artifacts, so the ledger the S3 packet delivers is stable for the rest of
+        # the fixture. A live project records these events during the S3 session;
+        # what matters for policy is that the creative-evidence contract is
+        # satisfied before G1 on every continuation path.
+        direction_note = project / ".ariadne" / "creative" / "design-direction.md"
+        direction_note.parent.mkdir(parents=True, exist_ok=True)
+        direction_note.write_text(
+            "# Direction note\n\nA speaking line makes sound visible through one typographic gesture.\n",
+            encoding="utf-8",
+        )
+        direction_invocation = project / ".ariadne" / "creative" / "design-direction-invocation.md"
+        direction_invocation.write_text(
+            "# Design direction work log\n\nFixture record of the S3 direction work.\n",
+            encoding="utf-8",
+        )
+        direction_events = workspace / "direction-events.json"
+        write_json(direction_events, {"events": [
+            {"type": "skill", "skill": "design-direction", "state": "invoked",
+             "evidence_path": str(direction_invocation)},
+            {"type": "skill", "skill": "design-direction", "state": "completed",
+             "output_path": str(direction_note),
+             "result": "Direction selected and recorded for the G1 decision.",
+             "usefulness": "useful"},
+            {"type": "direction", "id": "direction-a",
+             "thesis": "A speaking line makes sound visible through one typographic gesture.",
+             "mechanism": "A single line crosses a listening boundary.",
+             "experience": "The page answers only while someone speaks.",
+             "status": "selected"},
+        ]})
+        record_creative(argparse.Namespace(
+            run_root=str(run_root), project=None, input=str(direction_events)
+        ))
+
+        def fixture_skill_evidence(events_name, skill, output_path, result):
+            """Record one selected skill's execution exactly as a live session would."""
+            invocation = Path(output_path)
+            path = workspace / events_name
+            write_json(path, {"events": [
+                {"type": "skill", "skill": skill, "state": "invoked",
+                 "evidence_path": str(invocation)},
+                {"type": "skill", "skill": skill, "state": "completed",
+                 "output_path": str(output_path), "result": result, "usefulness": "useful"},
+            ]})
+            return record_creative(argparse.Namespace(
+                run_root=str(run_root), project=None, input=str(path)
+            ))
+
         prepare_next(runtime_args(motion="no", assets="no"))
         state = load_state(run_root)
         case("automatic progression selects S3", state["packets"][-1]["stage"] == "S3")
@@ -4611,6 +6406,7 @@ def self_test() -> int:
             "# DESIGN\n\n**Status:** locked at G1 on 2026-08-23\n\n"
             "## Design thesis\n\n"
             "**A speaking line makes sound visible through one typographic gesture.**\n\n"
+            "**The tension:** archival but immediate.\n\n"
             "## Signature moment\n\n"
             "- **What / where:** A speaking line crosses the listening boundary.\n"
             "- **Why memorable:** Sound becomes a typographic gesture.\n"
@@ -4621,7 +6417,23 @@ def self_test() -> int:
             "| 1280 | The line crosses the listening boundary. |\n\n"
             "## Asset direction\n\n"
             "| Asset | Exists? | Plan | Blocking? |\n|---|---|---|---|\n"
-            "| none | yes | no asset required | no |\n",
+            "| none | yes | no asset required | no |\n\n"
+            "## Anti-patterns for this project\n\n"
+            "1. Do not add a waveform visualiser; it is the generic shorthand for sound.\n"
+            "2. Do not animate the whole line; the gesture is the boundary crossing only.\n"
+            "3. Do not introduce a second accent colour; one gesture carries the meaning.\n\n"
+            "## G1 direction check\n\n"
+            "| # | Check | Y/N | If no, why not |\n|---|---|---|---|\n"
+            "| 1 | Thesis tells you what to do about a hero image | y | |\n"
+            "| 2 | No banned mood words | y | |\n"
+            "| 3 | Type ratio at least 4x | y | |\n"
+            "| 4 | Palette has a stated source | y | |\n"
+            "| 5 | Motion has one of the five purposes | y | |\n"
+            "| 6 | Signature moment named, with a mobile equivalent | y | |\n"
+            "| 7 | Three or more specific rejections | y | |\n"
+            "| 8 | All asset dependencies resolved | y | |\n"
+            "| 9 | Survives the swap test | y | |\n"
+            "| 10 | Closest anti-generic row named, and why it is not that | y | |\n",
             encoding="utf-8",
         )
         (project / "AGENTS.md").write_text(
@@ -4629,6 +6441,13 @@ def self_test() -> int:
             "| **Next prompt** | `prompts/build-kickoff.md` |\n",
             encoding="utf-8",
         )
+        # The direction work is recorded with real, project-local artifacts before
+        # the human decision, because the approval binds to the evaluated revision.
+        approve_gate(argparse.Namespace(
+            run_root=str(run_root), project=None, gate="G1", identity="self-test-operator",
+            note="Fixture: the human operator locks the direction.", migrate=False,
+        ))
+        state = load_state(run_root)
         try:
             current_packet(state)
             strict_project_drift = False
@@ -4724,6 +6543,12 @@ def self_test() -> int:
             any("success criteria verbatim" in problem for problem in handoff_context_problems(project)),
         )
         (project / "HANDOFF.md").write_text(filled_handoff(), encoding="utf-8")
+        # AR-202 T1: entering S4B requires evidence that the S4A implementation
+        # planning actually ran, so the fixture records it where an S4A session would.
+        fixture_skill_evidence(
+            "planning-events.json", "implementation-planning", project / "HANDOFF.md",
+            "The handoff became the bounded build context.",
+        )
         provider_preflight(runtime_args(availability="available", quota="sufficient"))
         state = load_state(run_root)
         case(
@@ -4921,6 +6746,26 @@ def self_test() -> int:
         unexpected_return.unlink()
         expected_return = Path(retry_manifest["return_target"])
         expected_return.write_text(filled_return(task_id=retry_entry["id"]), encoding="utf-8")
+        # AR-202 T1: entering S5 requires evidence that the S4B QA work ran and
+        # that the approved requirements carry an implementation trace. The
+        # fixture records both of them before the build boundary closes.
+        fixture_skill_evidence(
+            "qa-events.json", "QA", project / "QA.md",
+            "Mechanical QA evidence was recorded for the reviewed revision.",
+        )
+        fixture_operations = OPERATIONS.load_ledger(project)
+        fixture_implementation_events = workspace / "implementation-events.json"
+        write_json(fixture_implementation_events, {"events": [
+            {
+                "type": "implementation", "requirement_id": item["id"], "status": "implemented",
+                "summary": f"Fixture recorded the implementation of {item['id']} in the build.",
+                "source_path": str(project / "HANDOFF.md"),
+            }
+            for item in fixture_operations["requirements"]
+        ]})
+        record_operations(argparse.Namespace(
+            run_root=str(run_root), project=None, input=str(fixture_implementation_events)
+        ))
         advance(
             runtime_args(
                 target="http://127.0.0.1:3000",
@@ -5495,9 +7340,835 @@ def self_test() -> int:
     return 1 if failed else 0
 
 
+def execution_status_command(args: argparse.Namespace) -> int:
+    """Show what the engine created, routed, decided and failed. Read-only."""
+    run_root, state = resolve_and_load(args)
+    report = EXECUTION.status_report(state)
+    context_decision = ROUTING.latest(state, "context_decisions")
+    payload = {
+        "run_id": state.get("run_id"),
+        "executions": report["executions"],
+        "open_executions": report["open"],
+        "rows": report["rows"],
+        "failures": report["failures"],
+        "failure_classes": report["failure_classes"],
+        "characterisation": ROUTING.latest(state, "characterisations"),
+        "routing": ROUTING.latest(state, "routing_decisions"),
+        "context": CONTEXT.summarise(context_decision) if context_decision else {},
+        "context_policy_version": CONTRACTS.POLICY_VERSION,
+        "events": EVENTS.summarise(run_root),
+        "recoveries": [item for item in (state.get("recoveries") or []) if isinstance(item, dict)],
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    print(f"Executions: {report['executions']} recorded, {report['open']} open.")
+    for row in report["rows"][-8:]:
+        mismatch = " (requested/reported mismatch)" if row.get("mismatch") else ""
+        print(f"  {row['execution_id']} {row['role']} {row['state']} task={row['task_id']}{mismatch}")
+    characterisation = payload["characterisation"]
+    if characterisation:
+        print(
+            f"Task: {characterisation['task_type']['value']}; difficulty "
+            f"{characterisation['difficulty']['value']}; stakes {characterisation['stakes']['value']}."
+        )
+    routing = payload["routing"]
+    if routing:
+        print(f"Route: {ROUTING.describe(routing)}")
+    if payload["context"]:
+        print("Context: " + CONTEXT.describe(context_decision))
+    if report["failure_classes"]:
+        print("Failure classes recorded: " + ", ".join(report["failure_classes"]))
+    print(f"Engine events: {payload['events']['events']} in {payload['events']['path']}")
+    return 0
+
+
+def engine_events_command(args: argparse.Namespace) -> int:
+    """Print the canonical append-only engine event log."""
+    run_root = resolve_run_root(args)
+    events = EVENTS.read(run_root, limit=int(getattr(args, "limit", 50) or 50))
+    payload = {
+        "path": str(EVENTS.log_path(run_root)),
+        "integrity_problems": EVENTS.integrity_problems(run_root),
+        "events": events,
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    print(f"Engine events ({len(events)} shown) — {payload['path']}")
+    for event in events:
+        execution = f" execution={event.get('execution')}" if event.get("execution") else ""
+        print(f"  {event.get('seq')}. {event.get('type')} {event.get('task_id')}{execution}")
+    if payload["integrity_problems"]:
+        print("Integrity: " + "; ".join(payload["integrity_problems"]))
+    return 0
+
+
+def capability_probe_from_spec(
+    spec: dict, *, run_root: Path, reference_adapters: dict, capture_adapters: dict,
+):
+    """Build one deterministic capability probe from a declared input object."""
+    kind = str(spec.get("kind", "") or "")
+    family = str(spec.get("family", "tool") or "tool")
+    capability_id = str(spec.get("capability_id", "") or "")
+    adapter = str(spec.get("adapter", "") or "")
+    if kind == "executable":
+        return CAPABILITIES.ExecutableProbe(
+            str(spec.get("command", "") or capability_id), capability_id=capability_id,
+            adapter=adapter, family=family,
+        )
+    if kind == "fixture-command":
+        argv = [str(item) for item in (spec.get("argv") or [])]
+        if not argv:
+            raise RuntimeError_("a fixture-command probe needs argv")
+        probe_root = Path(run_root) / "capability-probes" / (slug(capability_id or argv[0]) or "probe")
+        return CAPABILITIES.FixtureCommandProbe(
+            argv, cwd=probe_root, capability_id=capability_id or argv[0],
+            adapter=adapter, family=family,
+            timeout=int(spec.get("timeout", CAPABILITIES.DEFAULT_PROBE_TIMEOUT) or CAPABILITIES.DEFAULT_PROBE_TIMEOUT),
+            expect_returncode=int(spec.get("expect_returncode", 0) or 0),
+        )
+    if kind == "adapter-method":
+        pool = {**dict(reference_adapters or {}), **dict(capture_adapters or {})}
+        adapter_id = adapter or str(spec.get("adapter_id", "") or "")
+        target = pool.get(adapter_id)
+        if target is None:
+            raise RuntimeError_(
+                f"no declared adapter matches {adapter_id!r}; a probe cannot invent an adapter surface"
+            )
+        return CAPABILITIES.AdapterMethodProbe(target, capability_id, family=family)
+    raise RuntimeError_(f"unsupported capability probe kind: {kind!r}")
+
+
+def capabilities_command(args: argparse.Namespace) -> int:
+    """Declare, probe and inspect capability evidence. Read-only unless --input is given."""
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+    project = Path(state["project"])
+    payload = load_design_input(args.input) if getattr(args, "input", None) else {}
+    if payload and not isinstance(payload, dict):
+        raise RuntimeError_("capability input must be a JSON object")
+    fixture = design_fixture(payload if isinstance(payload, dict) else None)
+    reference_adapters, capture_adapters = design_adapters(state, project, fixture)
+    declared_rows: list[dict] = []
+    probe_rows: list[dict] = []
+    for item in (payload.get("declarations") or []) if isinstance(payload, dict) else []:
+        record = CAPABILITIES.declare(
+            state,
+            capability_id=str(item.get("capability_id", "")),
+            adapter=str(item.get("adapter", "")),
+            family=str(item.get("family", "tool")),
+            available=bool(item.get("available", True)),
+            reason=str(item.get("reason", "")),
+            version=str(item.get("version", "")),
+            provider=str(item.get("provider", "")),
+            model=str(item.get("model", "")),
+            runtime=str(item.get("runtime", "")),
+        )
+        declared_rows.append(record)
+        emit_event(
+            run_root, "capability_declared", state=state, task_id=str(item.get("task_id", "") or ""),
+            capability=str(record["capability_id"]), adapter=str(record["adapter"]),
+            family=str(record["family"]), status=str(record["status"]),
+        )
+    for item in (payload.get("probes") or []) if isinstance(payload, dict) else []:
+        probe = capability_probe_from_spec(
+            dict(item), run_root=run_root, reference_adapters=reference_adapters,
+            capture_adapters=capture_adapters,
+        )
+        outcome = CAPABILITIES.run_probe(state, probe)
+        probe_rows.append(outcome)
+        event_type = "capability_verified" if outcome["status"] == "VERIFIED" else "capability_observed"
+        emit_event(
+            run_root, event_type, state=state, task_id=str(item.get("task_id", "") or ""),
+            capability=str(probe.capability_id), adapter=str(probe.adapter),
+            family=str(probe.family), status=str(outcome["status"]),
+            mechanism=str(probe.mechanism()), reason=str(outcome.get("reason", "")),
+        )
+    if declared_rows or probe_rows:
+        state["updated_at"] = now()
+        write_state(run_root, state)
+    family_filter = str(getattr(args, "family", "") or "")
+    adapter_filter = str(getattr(args, "adapter", "") or "")
+    registry_rows = [
+        dict(row) for row in CAPABILITIES.records(state)
+        if (not family_filter or str(row.get("family", "")) == family_filter)
+        and (not adapter_filter or str(row.get("adapter", "")) == adapter_filter)
+    ]
+    report = {
+        "summary": CAPABILITIES.summarise(state),
+        "records": registry_rows,
+        "declared": declared_rows,
+        "probes": probe_rows,
+        "reference_capabilities": REFERENCES.capability_matrix(reference_adapters),
+        "capture_capabilities": RENDER.capability_matrix(capture_adapters),
+    }
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2, sort_keys=True, default=str))
+        return 0
+    print(
+        f"Capabilities: {report['summary']['records']} observation(s); "
+        f"declared {report['summary']['statuses'].get('declared', 0)}, "
+        f"available {report['summary']['statuses'].get('available', 0)}, "
+        f"exercised {report['summary']['statuses'].get('exercised', 0)}, "
+        f"verified {report['summary']['statuses'].get('verified', 0)}, "
+        f"unavailable {report['summary']['statuses'].get('unavailable', 0)}."
+    )
+    for row in registry_rows[-10:]:
+        print("  " + CAPABILITIES.describe(row))
+    if probe_rows:
+        for outcome in probe_rows:
+            print(f"  probe {outcome['probe']['probe']} -> {outcome['status']} {outcome.get('reason', '')}".rstrip())
+    return 0
+
+
+def verify_command(args: argparse.Namespace) -> int:
+    """Record or inspect a verification claim. A declaration never verifies itself."""
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+    if getattr(args, "status", False):
+        current = None
+        dependency_values = getattr(args, "dependency", None) or []
+        if dependency_values:
+            current = {}
+            for item in dependency_values:
+                name, _, value = str(item).partition("=")
+                current[name.strip()] = value.strip()
+        report = VERIFICATION.status(state, subject=str(getattr(args, "subject", "") or ""), current=current)
+        payload = {"status": report, "summary": VERIFICATION.summarise(state)}
+        if getattr(args, "json", False):
+            print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Verification: {report['level']} across {report['records']} record(s).")
+            for row in report["details"][-8:]:
+                print(f"  {row['verification_id']} {row['level']} {row['subject']}: {row['claim']}")
+        return 0
+    payload = load_design_input(args.input) if getattr(args, "input", None) else {}
+    if not isinstance(payload, dict) or not payload:
+        raise RuntimeError_("verify needs --input with the claim to record, or --status to inspect")
+    emit_event(
+        run_root, "verification_started", state=state, task_id=str(payload.get("task_id", "") or ""),
+        subject=str(payload.get("subject", "")), level=str(payload.get("level", "")),
+        execution=str(payload.get("execution", "") or ""),
+    )
+    try:
+        record = VERIFICATION.create(
+            state,
+            subject=str(payload.get("subject", "")),
+            claim=str(payload.get("claim", "")),
+            level=str(payload.get("level", "OBSERVED")),
+            method=str(payload.get("method", "")),
+            execution_id=str(payload.get("execution", "") or ""),
+            verifier_execution_id=str(payload.get("verifier_execution", "") or ""),
+            revision=str(payload.get("revision", "") or ""),
+            evidence=payload.get("evidence") or [],
+            reproduced_artifact=payload.get("reproduced_artifact") or None,
+            dependencies=payload.get("dependencies") or {},
+            limitations=payload.get("limitations") or [],
+            task_id=str(payload.get("task_id", "") or ""),
+            subject_type=str(payload.get("subject_type", "") or ""),
+            observed_anchor=str(payload.get("observed_anchor", "") or ""),
+        )
+    except CONTRACTS.ContractError as exc:
+        emit_event(
+            run_root, "verification_failed", state=state, task_id=str(payload.get("task_id", "") or ""),
+            subject=str(payload.get("subject", "")), reason=str(exc),
+        )
+        write_state(run_root, state)
+        raise
+    event_type = {
+        "OBSERVED": "verification_observed",
+        "REPRODUCED": "verification_reproduced",
+        "INDEPENDENTLY_REPRODUCED": "verification_reproduced",
+        "VERIFIED": "verification_reproduced",
+    }.get(str(record.get("level", "")), "verification_observed")
+    emit_event(
+        run_root, event_type, state=state, task_id=str(payload.get("task_id", "") or ""),
+        subject=str(record["subject"]), verification=str(record["verification_id"]),
+        level=str(record["level"]), execution=str(record.get("execution_id", "")),
+    )
+    state["updated_at"] = now()
+    write_state(run_root, state)
+    if getattr(args, "json", False):
+        print(json.dumps({"record": record, "summary": VERIFICATION.summarise(state)}, indent=2, sort_keys=True, default=str))
+        return 0
+    print(f"Recorded {VERIFICATION.describe(record)}")
+    return 0
+
+
+def decision_provider_from_spec(provider_spec: dict | None):
+    """Build a decision provider from an offline JSON spec (never a live service)."""
+    spec = dict(provider_spec or {"kind": "unavailable"})
+    kind = str(spec.get("kind", "unavailable") or "unavailable")
+    if kind == "deterministic":
+        return DECISIONS.providers.DeterministicProvider(
+            script=spec.get("script") or {},
+            provider=str(spec.get("provider", "deterministic-fixture") or "deterministic-fixture"),
+            model=str(spec.get("model", "scripted-answers") or "scripted-answers"),
+            model_version=str(spec.get("model_version", "1") or "1"),
+            fail=tuple(str(item) for item in (spec.get("fail") or [])),
+            unavailable_reason=str(spec.get("unavailable_reason", "") or ""),
+            request_id=str(spec.get("request_id", "req_fixture_00000000") or "req_fixture_00000000"),
+            usage=spec.get("usage") or {},
+        )
+    if kind == "optional":
+        return DECISIONS.providers.OptionalProviderAdapter(
+            name=str(spec.get("provider", "optional") or "optional"),
+            version=str(spec.get("model_version", "") or ""),
+        )
+    if kind == "jev-shaped-fixture":
+        class OfflineFixtureInterface:
+            def __init__(self, value):
+                self.value = dict(value)
+
+            def describe(self):
+                return {
+                    "provider": str(self.value.get("provider", "jev-fixture")),
+                    "model": str(self.value.get("model", "jev-decision")),
+                    "model_version": str(self.value.get("model_version", "0.0.0-fixture")),
+                }
+
+            def capabilities(self):
+                return {
+                    "capabilities": list(self.value.get("capabilities") or []),
+                    "max_questions": self.value.get("max_questions", 8),
+                }
+
+            def answer(self, request):
+                answers = {}
+                for question in request.get("questions") or []:
+                    scripted = dict(self.value.get("answers") or {}).get(str(question.get("question_id", "")))
+                    if scripted is not None:
+                        answers[str(question.get("question_id", ""))] = scripted
+                return {"answers": answers}
+
+        return DECISIONS.providers.JevShapedAdapter(interface=OfflineFixtureInterface(spec))
+    return DECISIONS.providers.UnavailableProvider()
+
+
+def decide_command(args: argparse.Namespace) -> int:
+    """Evaluate, compile, inspect or explain bounded decisions. Never grants authorization."""
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+    json_output = bool(getattr(args, "json", False))
+    task_id = str(getattr(args, "task_id", "") or "")
+
+    if getattr(args, "explain", False):
+        payload = DECISIONS.trace.explain(state, task_id=task_id)
+        if json_output:
+            print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+            return 0
+        print(f"Decision trace for task {task_id or '(run)'}:")
+        for line in payload["lines"]:
+            print("  " + line)
+        for reason in payload["answers"]["escalations"]:
+            print(f"  escalation: {reason['question_id']} {reason['reason']} -> {reason['next']}")
+        if not payload["lines"]:
+            print("  (no decision records for this task)")
+        return 0
+
+    if getattr(args, "providers", False):
+        catalog = {
+            "classifications": list(CONTRACTS.DECISION_CLASSIFICATIONS),
+            "escalation_reasons": list(CONTRACTS.ESCALATION_REASONS),
+            "generation_reasons": list(CONTRACTS.GENERATION_REASONS),
+            "projections": DECISIONS.projections.describe(),
+            "escalation": DECISIONS.escalation.describe(),
+            "integrations": DECISIONS.integrations.describe(),
+            "provider_contract": {
+                "requirements": DECISIONS.providers.OptionalProviderAdapter().requirements(),
+                "capability_shape": sorted(DECISIONS.providers.DEFAULT_CAPABILITIES),
+                "jev_shaped": DECISIONS.providers.JEV_SHAPED_CAPABILITIES,
+            },
+            "configured": DECISIONS.providers.describe(DECISIONS.providers.UnavailableProvider()),
+            "note": (
+                "provider status is declared capability, not observed quality; no provider is "
+                "configured by default and no paid call is ever required"
+            ),
+        }
+        if json_output:
+            print(json.dumps(catalog, indent=2, sort_keys=True, default=str))
+            return 0
+        print("Decision intelligence catalog:")
+        for name, values in sorted(catalog["provider_contract"]["jev_shaped"].items()):
+            print(f"  provider capability {name}: {values}")
+        for contract in catalog["projections"]["contracts"]:
+            print(f"  projection {contract['contract_id']} v{contract['version']}: required={contract['required']}")
+        for integration in catalog["integrations"]["integrations"]:
+            print(f"  integration {integration['name']}: {integration['entry_point']}")
+        print(f"  escalation ladder: {' -> '.join(catalog['escalation']['ladder'])}")
+        print("  " + catalog["note"])
+        return 0
+
+    if getattr(args, "inspect", False):
+        payload = {
+            "summary": DECISIONS.batch.summarise(state),
+            "trace": DECISIONS.batch.trace(state, task_id=task_id),
+        }
+        if json_output:
+            print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        else:
+            print(
+                f"Decisions: {payload['summary']['decisions']} record(s) in "
+                f"{payload['summary']['batches']} batch(es)."
+            )
+            for row in payload["trace"][-8:]:
+                verdict = (row.get("policy_verdict") or {}).get("reason", "")
+                print(f"  {row['decision_id']} {row['question_id']} {row['status']} answer={row['answer']!r} {verdict}")
+        return 0
+
+    payload = load_design_input(args.input) if getattr(args, "input", None) else {}
+    if not isinstance(payload, dict) or not payload:
+        raise RuntimeError_("decide needs --input with the work to perform, or --inspect/--explain")
+    document = payload.get("input", payload) if isinstance(payload.get("input"), dict) else payload
+    provider = decision_provider_from_spec(document.get("provider"))
+
+    if getattr(args, "compile", False):
+        plan = DECISIONS.compiler.compile_plan(
+            state,
+            requirements=document.get("requirements") or [],
+            facts=document.get("facts") or {},
+            task_id=str(document.get("task_id", "") or task_id),
+            stage=str(document.get("stage", "") or ""),
+            stakes=str(document.get("stakes", "LOW") or "LOW"),
+            protected_actions=document.get("protected_actions") or (),
+            generative_available=bool(document.get("generative_available", False)),
+            decision_provider=provider,
+        )
+        emit_event(
+            run_root, "decision_plan_compiled", state=state,
+            task_id=str(plan.get("task_id", "")), plan=str(plan.get("plan_id", "")),
+            classifications=dict(plan.get("classifications") or {}),
+            bounded_questions=len(plan.get("bounded_questions") or []),
+            generative_needs=len(plan.get("generative_needs") or []),
+        )
+        if plan.get("fast_path", {}).get("applies"):
+            emit_event(
+                run_root, "decision_fast_path", state=state,
+                task_id=str(plan.get("task_id", "")), plan=str(plan.get("plan_id", "")),
+                reason=str(plan["fast_path"].get("reason", "")),
+            )
+        graph_record = {}
+        if getattr(args, "graph", False):
+            graph_record = DECISIONS.graph.from_plan(state, plan)
+            emit_event(
+                run_root, "decision_graph_created", state=state,
+                task_id=str(plan.get("task_id", "")), graph=str(graph_record.get("graph_id", "")),
+                nodes=len(graph_record.get("nodes") or []),
+            )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        output = {"plan": plan, "graph": graph_record}
+        if json_output:
+            print(json.dumps(output, indent=2, sort_keys=True, default=str))
+            return 0
+        print(
+            f"Decision plan {plan['plan_id']}: "
+            + ", ".join(f"{key}={value}" for key, value in sorted(plan["classifications"].items()))
+        )
+        for question in plan["bounded_questions"]:
+            print(f"  bounded: {question['question_id']} ({question['projection_contract']})")
+        for need in plan["generative_needs"]:
+            print(f"  generative: {need['requirement_id']} ({need['reason']})")
+        for item in plan["protected_actions"]:
+            print(f"  human gate: {item['statement']}")
+        if graph_record:
+            print(f"Decision graph {graph_record['graph_id']}: {len(graph_record['nodes'])} node(s)")
+        return 0
+
+    if getattr(args, "advise", ""):
+        family = str(args.advise)
+        handler = {
+            "failure-classification": DECISIONS.integrations.classify_failure,
+            "review-escalation": DECISIONS.integrations.review_escalation,
+            "evidence-relevance": DECISIONS.integrations.evidence_relevance,
+            "route-family": DECISIONS.integrations.route_family,
+        }.get(family)
+        if handler is None:
+            raise RuntimeError_(f"unknown decision advice family: {family}")
+        arguments = dict(document.get("args") or {})
+        arguments.setdefault("provider", provider)
+        arguments.setdefault("task_id", task_id)
+        required = {
+            "failure-classification": ("source",),
+            "review-escalation": (),
+            "evidence-relevance": ("requirement", "claim", "provenance", "freshness"),
+            "route-family": ("task_kind",),
+        }[family]
+        missing = [name for name in required if name not in arguments]
+        if missing:
+            raise RuntimeError_(
+                f"decision advice {family!r} needs argument(s): {', '.join(missing)}; "
+                'supply them under "args" in the --input document'
+            )
+        try:
+            advice = handler(state, **arguments)
+        except TypeError as exc:
+            raise RuntimeError_(f"decision advice {family!r} rejected its arguments: {exc}") from exc
+        emit_event(
+            run_root, "decision_recorded", state=state,
+            task_id=str(arguments.get("task_id", "")),
+            advice=family, decision=str(advice.get("decision_id", "")),
+            status=str(advice.get("source", "")),
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        if json_output:
+            print(json.dumps(advice, indent=2, sort_keys=True, default=str))
+            return 0
+        summary = {
+            key: advice.get(key)
+            for key in ("class", "escalation", "answer", "family", "source", "reason")
+            if advice.get(key) not in (None, "")
+        }
+        print(f"Decision advice ({family}): " + json.dumps(summary, default=str))
+        print("Decision confidence is not authorization; no gate, scope or acceptance is granted here.")
+        return 0
+
+    if getattr(args, "justify", False):
+        record = DECISIONS.generation.justify(
+            state,
+            reason=str(document.get("reason", "")),
+            task_id=str(document.get("task_id", "") or task_id),
+            stage=str(document.get("stage", "") or ""),
+            detail=str(document.get("detail", "") or ""),
+            requirement_id=str(document.get("requirement_id", "") or ""),
+            decision_id=str(document.get("decision_id", "") or ""),
+            plan_id=str(document.get("plan_id", "") or ""),
+        )
+        emit_event(
+            run_root, "generation_justified", state=state,
+            task_id=str(record.get("task_id", "")), justification=str(record.get("justification_id", "")),
+            reason=str(record.get("reason", "")),
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        print(f"Generation justified: {record['reason']} ({record['justification_id']})")
+        return 0
+
+    if getattr(args, "outcome", False):
+        record = DECISIONS.calibration.record_outcome(
+            state,
+            decision_id=str(document.get("decision_id", "")),
+            category=str(document.get("category", "")),
+            evidence=document.get("evidence") or (),
+            downstream=document.get("downstream") or {},
+            source=str(document.get("source", "engine-observation") or "engine-observation"),
+            note=str(document.get("note", "") or ""),
+        )
+        emit_event(
+            run_root, "decision_outcome_recorded", state=state,
+            task_id=str(record.get("task_id", "")), outcome=str(record.get("outcome_id", "")),
+            decision=str(record.get("decision_id", "")), category=str(record.get("category", "")),
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        print(f"Decision outcome recorded: {record['category']} ({record['outcome_id']})")
+        return 0
+
+    if getattr(args, "invalidate_cache", False):
+        touched = DECISIONS.cache.invalidate(
+            state,
+            reason=str(document.get("reason", "")),
+            question_id=str(document.get("question_id", "") or ""),
+            cache_id=str(document.get("cache_id", "") or ""),
+            key=str(document.get("key", "") or ""),
+            model_version=str(document.get("model_version", "") or ""),
+            superseded_by=str(document.get("superseded_by", "") or ""),
+        )
+        for cache_id in touched:
+            emit_event(
+                run_root, "decision_cache_invalidated", state=state,
+                task_id=task_id, cache=cache_id, reason=str(document.get("reason", "")),
+            )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        print(f"Invalidated {len(touched)} cached decision(s).")
+        return 0
+
+    if payload.get("act"):
+        action = dict(payload["act"])
+        record = DECISIONS.batch.mark_acted_on(
+            state, str(action.get("decision_id", "")), action=str(action.get("action", "")),
+            verification_id=str(action.get("verification_id", "") or ""),
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        print(f"Recorded action {record['resulting_action']!r} for {record['decision_id']}.")
+        return 0
+    questions = [
+        DECISIONS.contracts.DecisionQuestion(
+            question_id=str(item.get("question_id", "")),
+            instructions=str(item.get("instructions", "")),
+            primitive=str(item.get("primitive", "ChoiceDecision") or "ChoiceDecision"),
+            options=tuple(str(value) for value in (item.get("options") or [])),
+            scale=tuple(str(value) for value in (item.get("scale") or [])),
+            positive=str(item.get("positive", "yes") or "yes"),
+            negative=str(item.get("negative", "no") or "no"),
+            max_selections=int(item.get("max_selections", 1) or 1),
+            consequence=str(item.get("consequence", "LOW") or "LOW"),
+            definition_version=str(item.get("definition_version", "1") or "1"),
+        )
+        for item in (payload.get("questions") or [])
+    ]
+    entries = payload.get("projection_entries")
+    if entries is None:
+        entries = payload.get("projection") or {}
+    projection = DECISIONS.batch.project(entries=entries)
+    batch = DECISIONS.batch.evaluate(
+        state,
+        questions=questions,
+        projection=projection,
+        provider=provider,
+        task_id=str(payload.get("task_id", "") or ""),
+        stage=str(payload.get("stage", "") or ""),
+        execution_id=str(payload.get("execution", "") or ""),
+    )
+    emit_event(
+        run_root, "decision_batch_created", state=state, task_id=str(payload.get("task_id", "") or ""),
+        batch=str(batch["batch_id"]), status=str(batch["status"]),
+        questions=len(batch["questions"]), provider=str(batch.get("provider", "")),
+        model_version=str(batch.get("model_version", "")), state_digest=str(batch.get("state_digest", "")),
+    )
+    for result in batch.get("results") or []:
+        emit_event(
+            run_root, "decision_recorded", state=state, task_id=str(payload.get("task_id", "") or ""),
+            batch=str(batch["batch_id"]), decision=str(result.get("decision_id", "")),
+            question=str(result.get("question_id", "")), status=str(result.get("status", "")),
+            answer=str(result.get("answer", "")), confidence_kind=str(result.get("confidence_kind", "")),
+        )
+        record = DECISIONS.batch.decision(state, str(result.get("decision_id", "")))
+        if record is not None and str(record.get("status")) == "refused":
+            emit_event(
+                run_root, "decision_low_confidence", state=state, task_id=str(payload.get("task_id", "") or ""),
+                decision=str(record.get("decision_id", "")), question=str(record.get("question_id", "")),
+                reason=str((record.get("policy_verdict") or {}).get("reason", "")),
+            )
+    if batch.get("status") in ("failed", "unavailable"):
+        emit_event(
+            run_root, "decision_failed", state=state, task_id=str(payload.get("task_id", "") or ""),
+            batch=str(batch["batch_id"]), status=str(batch["status"]),
+            reason=str(batch.get("provider_reason", "")),
+        )
+    state["updated_at"] = now()
+    write_state(run_root, state)
+    if json_output:
+        print(json.dumps(batch, indent=2, sort_keys=True, default=str))
+        return 0 if batch.get("status") in ("answered", "partial") else 2
+    print(f"Decision batch {batch['batch_id']}: {batch['status']} ({batch.get('provider')} {batch.get('model_version')})")
+    for result in batch.get("results") or []:
+        print(
+            f"  {result['question_id']}: {result['status']} answer={result['answer']!r} "
+            f"confidence={result['confidence']} ({result['confidence_kind']})"
+        )
+    if batch.get("provider_reason"):
+        print("  reason: " + str(batch["provider_reason"]))
+    print("Decision confidence is not authorization; no gate, scope or acceptance is granted here.")
+    return 0 if batch.get("status") in ("answered", "partial") else 2
+
+
+def decision_trace_command(args: argparse.Namespace) -> int:
+    """The read-only why-did-Ariadne view, derived from records. Never writes."""
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+    task_id = str(getattr(args, "task_id", "") or "")
+    payload = DECISIONS.trace.explain(state, task_id=task_id)
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+    print(f"Decision trace for task {task_id or '(run)'}:")
+    for line in payload["lines"]:
+        print("  " + line)
+    if not payload["lines"]:
+        print("  (no decision records for this task)")
+    for reason in payload["answers"]["escalations"]:
+        print(f"  escalation: {reason['question_id']} {reason['reason']} -> {reason['next']}")
+    return 0
+
+
+def provenance_command(args: argparse.Namespace) -> int:
+    """Inspect engine-bound execution provenance. Read-only unless an observation is recorded."""
+    run_root, state = resolve_and_load(args)
+    execution_id = str(getattr(args, "execution", "") or "")
+    source = str(getattr(args, "provider_source", "") or "")
+    if source:
+        if not execution_id:
+            raise RuntimeError_("recording a provider observation needs --execution")
+        observation = PROVENANCE.record_provider_observation(
+            state, execution_id,
+            provider=str(getattr(args, "provider_name", "") or ""),
+            model=str(getattr(args, "provider_model", "") or ""),
+            request_id=str(getattr(args, "provider_request_id", "") or ""),
+            run_id=str(getattr(args, "provider_run_id", "") or ""),
+            source=source,
+        )
+        emit_event(
+            run_root, "execution_identity_observed", state=state, execution=execution_id,
+            provider=str(observation.get("provider", "")), model=str(observation.get("model", "")),
+            observer=str(observation.get("source", "")), request_id=str(observation.get("request_id", "")),
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+    if execution_id:
+        payload = {
+            "provenance": PROVENANCE.execution_provenance(state, execution_id),
+            "observation_check": PROVENANCE.verify_observation_chain(state, execution_id),
+            "usage": EXECUTION.usage_view(state, execution_id),
+        }
+    else:
+        task_id = str(getattr(args, "task_id", "") or "")
+        rows = [
+            PROVENANCE.execution_provenance(state, str(record.get("execution_id", "")))
+            for record in PROVENANCE.executions(state)
+            if not task_id or str(record.get("task_id", "")) == task_id
+        ]
+        payload = {"executions": rows, "telemetry": EXECUTION.telemetry_summary(state)}
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+    if execution_id:
+        view = payload["provenance"]
+        print(f"{view['execution_id']} {view['role']} {view['state']} task={view['task_id']}")
+        for field in ("provider", "model"):
+            claim = view["claims"][field]
+            print(f"  {field}: {claim['value']} ({claim['level']})")
+        if view["provider_request_id"]:
+            print(f"  provider request: {view['provider_request_id']}")
+        print(f"  provenance digest: {view['provenance_digest'][:16]}")
+        if not payload["observation_check"]["ok"]:
+            print("  observation problems: " + "; ".join(payload["observation_check"]["problems"]))
+        return 0
+    print(f"Executions: {len(payload['executions'])}")
+    for row in payload["executions"][-10:]:
+        claims = row["claims"]
+        print(
+            f"  {row['execution_id']} {row['role']} {row['state']} "
+            f"provider={claims['provider']['value']} ({claims['provider']['level']}) "
+            f"model={claims['model']['value']} ({claims['model']['level']})"
+        )
+    return 0
+
+
+def recover_command(args: argparse.Namespace) -> int:
+    """Inspect divergences and, where a safe action exists, apply it explicitly."""
+    run_root, state = resolve_and_load(args)
+    apply_action = str(getattr(args, "apply", "") or "")
+    if not apply_action:
+        proposals = RECOVERY.propose(run_root, state, target=str(getattr(args, "target", "") or ""))
+        if args.json:
+            print(json.dumps(proposals, indent=2, sort_keys=True))
+            return 0 if proposals.get("status") == "clean" else 2
+        if proposals["status"] == "clean":
+            print("Clean. No divergence is recorded.")
+            return 0
+        print("Divergences found:")
+        for item in proposals["proposals"]:
+            safe = "safe" if item.get("safe") else "REFUSED"
+            print(f"- {item.get('finding')} [{safe}] {item.get('target')}: {item.get('reason')}")
+            if item.get("action"):
+                print(f"  apply: --apply {item['action']} --target {item['target']}")
+        return 2
+    identity = str(getattr(args, "identity", "") or "")
+    reason = str(getattr(args, "reason", "") or "")
+    if not identity or not reason:
+        raise RuntimeError_("--apply requires --identity and --reason so the recovery is attributable")
+    target = str(getattr(args, "target", "") or "")
+    proposals = RECOVERY.propose(run_root, state, target=target, action=apply_action)
+    if not proposals["proposals"]:
+        raise RuntimeError_("No current divergence matches that recovery request")
+    if len(proposals["proposals"]) > 1 and not target:
+        raise RuntimeError_("Several divergences match; name one with --target")
+    proposal = proposals["proposals"][0]
+    emit_event(
+        run_root, "recovery_proposed", state=state, task_id=proposal.get("target", ""),
+        action=apply_action, safe=bool(proposal.get("safe")), reason=str(proposal.get("reason", "")),
+    )
+    packet_entry = None
+    if apply_action == "adopt-packet":
+        packet_id = str(proposal["target"])
+        packet_dir = run_root / packet_id
+        manifest_path = packet_dir / TRANSPORT.MANIFEST_NAME
+        if not manifest_path.is_file():
+            raise RuntimeError_("The orphan packet directory has no manifest; nothing was changed")
+        orphan_manifest = json.loads(read(manifest_path))
+        stage = str(orphan_manifest.get("stage", ""))
+        packet_entry = {
+            "id": packet_id,
+            "stage": stage,
+            "path": str(packet_dir),
+            "reasoner_output_baseline": reasoner_output_baseline(Path(state["project"]), stage),
+        }
+    state, record = RECOVERY.apply(
+        run_root, state, action=apply_action, target=str(proposal["target"]),
+        identity=identity, reason=reason, project=Path(state["project"]),
+        packet_entry=packet_entry, policy=POLICY,
+    )
+    state["updated_at"] = now()
+    state["next"] = f"Recovery applied: {apply_action} on {record['target']}."
+    write_state(run_root, state)
+    emit_event(
+        run_root, "recovery_applied", state=state, task_id=str(record["target"]),
+        action=apply_action, recovery=str(record["recovery_id"]), identity=identity,
+        outcome="applied", reason=reason,
+    )
+    append_log(
+        run_root,
+        f"Recovery {apply_action} applied",
+        "An operator resolved a known interruption state through the engine's own transition boundary.",
+        f"{record['recovery_id']}: {record['reason']}",
+        [str(record.get("before", "")), str(record.get("after", ""))],
+        "; ".join(str(item) for item in record.get("evidence", [])) or "no additional evidence",
+        state["next"],
+    )
+    print(f"Done. {apply_action} was applied to {record['target']} and recorded as {record['recovery_id']}.")
+    return 0
+
+
+def runtime_version() -> str:
+    """The release version this runtime tree carries (VERSION is canonical)."""
+    path = ROOT / "VERSION"
+    return read(path).strip() if path.is_file() else "unknown"
+
+
+def migrate_command(args: argparse.Namespace) -> int:
+    """Inspect, apply or roll back the explicit v1 -> v2 run-state migration."""
+    run_root = resolve_run_root(args)
+    if getattr(args, "rollback", False):
+        action = "rollback"
+    elif getattr(args, "apply", False):
+        action = "apply"
+    else:
+        action = "plan"
+    try:
+        if action == "plan":
+            value = MIGRATION.plan(run_root)
+        elif action == "apply":
+            value = MIGRATION.apply(run_root)
+        else:
+            value = MIGRATION.rollback(run_root)
+    except CONTRACTS.ContractError as exc:
+        print(f"STOPPED: {exc}")
+        return 1
+    sys.stdout.write(MIGRATION.render(value))
+    if action != "plan":
+        evidence = value.get("evidence") or value.get("rollback") or {}
+        append_log(
+            run_root,
+            f"Migration {action}",
+            "The operator ran the explicit v1 -> v2 run-state migration.",
+            "migrated" if action == "apply" else "rolled back to the preserved pre-migration bytes",
+            [str(evidence.get("backup") or evidence.get("restored_from") or "")],
+            json.dumps(evidence, sort_keys=True),
+            "Continue with the normal Ariadne commands." if action == "apply"
+            else "The migrated state is preserved if it is needed again.",
+        )
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--self-test", action="store_true")
+    p.add_argument("--version", action="store_true", help="print the runtime version and engine contract")
     sub = p.add_subparsers(dest="command")
 
     start_p = sub.add_parser("start", help="start a new Ariadne project and prepare its brief")
@@ -5521,6 +8192,13 @@ def parser() -> argparse.ArgumentParser:
         selection = command.add_mutually_exclusive_group(required=True)
         selection.add_argument("--run-root")
         selection.add_argument("--project")
+        command.add_argument(
+            "--migrate", action="store_true",
+            help=(
+                "explicitly upgrade a run state written before the AR-201 engine contract "
+                "(the pre-migration file is preserved; no approval is ever created)"
+            ),
+        )
 
     discover_p = sub.add_parser("discover", help="find the run that records a project")
     discover_p.add_argument("--project", required=True)
@@ -5612,6 +8290,13 @@ def parser() -> argparse.ArgumentParser:
     return_p = sub.add_parser("ingest-return", help="validate and store an external implementation return handoff")
     run_selector(return_p)
     return_p.add_argument("--input", required=True)
+    return_p.add_argument(
+        "--execution",
+        help=(
+            "the engine-created implementer execution this return belongs to; omit to use the open "
+            "execution for this boundary (a caller-chosen id is refused)"
+        ),
+    )
 
     validate_worker_p = sub.add_parser(
         "validate-worker", help="independently validate the current implementation result before review"
@@ -5622,6 +8307,32 @@ def parser() -> argparse.ArgumentParser:
     review_p = sub.add_parser("ingest-review", help="preserve and apply a marked independent-review judgement")
     run_selector(review_p)
     review_p.add_argument("--input", required=True)
+    review_p.add_argument(
+        "--reviewer-identity",
+        help=(
+            "who performed the review, recorded verbatim; required, and it must not be the "
+            "implementation worker's recorded identity"
+        ),
+    )
+    review_p.add_argument(
+        "--kind", choices=list(CONTRACTS.REVIEW_KINDS),
+        help="review lens: experience (default) or technical; each requires its own evidence set",
+    )
+    review_p.add_argument(
+        "--execution",
+        help=(
+            "a reviewer execution the engine already created; it must be a reviewer execution for "
+            "this task, never the implementing execution"
+        ),
+    )
+
+    approve_p = sub.add_parser(
+        "approve-gate", help="record a human gate decision as an engine approval bound to the current revision"
+    )
+    run_selector(approve_p)
+    approve_p.add_argument("--gate", required=True, choices=["G1", "G2", "G3", "g1", "g2", "g3"])
+    approve_p.add_argument("--identity", required=True, help="who granted the gate, recorded verbatim")
+    approve_p.add_argument("--note", help="optional reason or context for the record")
 
     acceptance_p = sub.add_parser(
         "record-acceptance", help="record the human acceptance outcome after independent review"
@@ -5736,7 +8447,288 @@ def parser() -> argparse.ArgumentParser:
     next_p.add_argument("--target")
     next_p.add_argument("--lenses")
     next_p.add_argument("--synthetic-validation", action="store_true", help=argparse.SUPPRESS)
+
+    executions_p = sub.add_parser(
+        "execution-status",
+        help="show engine-created executions, the last characterisation, route and context decision, and failures",
+    )
+    run_selector(executions_p)
+    executions_p.add_argument("--json", action="store_true")
+
+    events_p = sub.add_parser(
+        "engine-events",
+        help="print the canonical append-only engine event log with its integrity check",
+    )
+    run_selector(events_p)
+    events_p.add_argument("--limit", type=int, default=50)
+    events_p.add_argument("--json", action="store_true")
+
+    recover_p = sub.add_parser(
+        "recover",
+        help="inspect a divergence and, where a safe action exists, apply it through the engine boundary",
+    )
+    run_selector(recover_p)
+    recover_p.add_argument("--apply", choices=list(CONTRACTS.RECOVERY_ACTIONS))
+    recover_p.add_argument("--target")
+    recover_p.add_argument("--identity", help="operator identity recorded on the recovery")
+    recover_p.add_argument("--reason", help="why the recovery is safe for this divergence")
+    recover_p.add_argument("--json", action="store_true")
+
+    migrate_p = sub.add_parser(
+        "migrate",
+        help="explicitly migrate a v1-era run state to the v2 engine contract (dry run by default)",
+    )
+    migrate_selection = migrate_p.add_mutually_exclusive_group(required=True)
+    migrate_selection.add_argument("--run-root")
+    migrate_selection.add_argument("--project")
+    migrate_action = migrate_p.add_mutually_exclusive_group()
+    migrate_action.add_argument("--dry-run", action="store_true", help="show the plan without writing (the default)")
+    migrate_action.add_argument("--apply", action="store_true", help="apply the migration after writing a backup")
+    migrate_action.add_argument("--rollback", action="store_true", help="restore the preserved pre-migration state")
+
+    capabilities_p = sub.add_parser(
+        "capabilities",
+        help="declare, probe and inspect capability evidence (a declaration is never a verification)",
+    )
+    run_selector(capabilities_p)
+    capabilities_p.add_argument("--input", help="JSON declaring capability declarations and deterministic probes")
+    capabilities_p.add_argument("--family", help="filter the registry view to one adapter family")
+    capabilities_p.add_argument("--adapter", help="filter the registry view to one adapter")
+    capabilities_p.add_argument("--json", action="store_true")
+
+    verify_p = sub.add_parser(
+        "verify",
+        help="record a verification claim or inspect verification status (stale evidence never satisfies)",
+    )
+    run_selector(verify_p)
+    verify_p.add_argument("--input", help="JSON with the claim, level, evidence and reproduction")
+    verify_p.add_argument("--status", action="store_true", help="inspect verification status instead of recording")
+    verify_p.add_argument("--subject", help="limit the status view to one subject")
+    verify_p.add_argument("--dependency", action="append", help="name=value current dependency fingerprint")
+    verify_p.add_argument("--json", action="store_true")
+
+    decide_p = sub.add_parser(
+        "decide",
+        help="compile, evaluate, inspect or explain bounded decisions (never an authorization)",
+    )
+    run_selector(decide_p)
+    decide_p.add_argument("--input", help="JSON with the work to perform, the projection and an offline provider")
+    decide_p.add_argument("--compile", action="store_true", help="compile a decision plan from declared requirements")
+    decide_p.add_argument("--graph", action="store_true", help="also build the decision graph for the compiled plan")
+    decide_p.add_argument(
+        "--advise",
+        choices=["failure-classification", "review-escalation", "evidence-relevance", "route-family"],
+        help="ask one real engine integration for bounded advice",
+    )
+    decide_p.add_argument("--explain", action="store_true", help="print the record-derived decision trace")
+    decide_p.add_argument("--inspect", action="store_true", help="inspect the decision record trace instead")
+    decide_p.add_argument("--providers", action="store_true", help="print the declared provider and projection contracts")
+    decide_p.add_argument("--justify", action="store_true", help="record why generative execution is justified")
+    decide_p.add_argument("--outcome", action="store_true", help="record raw outcome evidence for one decision")
+    decide_p.add_argument("--invalidate-cache", action="store_true", help="revoke or supersede cached decisions")
+    decide_p.add_argument("--task-id", help="limit the trace to one task")
+    decide_p.add_argument("--json", action="store_true")
+    trace_p = sub.add_parser(
+        "decision-trace",
+        help="print the read-only decision trace for a task (why Ariadne chose each action)",
+    )
+    run_selector(trace_p)
+    trace_p.add_argument("--task-id", help="limit the trace to one task")
+    trace_p.add_argument("--json", action="store_true")
+
+    provenance_p = sub.add_parser(
+        "provenance",
+        help="inspect engine-bound execution provenance and record provider observations",
+    )
+    run_selector(provenance_p)
+    provenance_p.add_argument("--execution", help="the engine-created execution to inspect")
+    provenance_p.add_argument("--task-id", help="limit the list view to one task")
+    provenance_p.add_argument("--provider-source", help="engine-side observer recording a provider observation")
+    provenance_p.add_argument("--provider-name")
+    provenance_p.add_argument("--provider-model")
+    provenance_p.add_argument("--provider-request-id")
+    provenance_p.add_argument("--provider-run-id")
+    provenance_p.add_argument("--json", action="store_true")
+
+    design_plan_p = sub.add_parser(
+        "design-plan",
+        help="characterise a task for design intelligence and select the pipeline and evidence it needs",
+    )
+    run_selector(design_plan_p)
+    design_plan_p.add_argument("--stage", help="the boundary to characterise (defaults to the current packet)")
+    design_plan_p.add_argument("--request", help="the task request text to characterise")
+    design_plan_p.add_argument("--input", help="optional JSON declaring characteristics and adapter fixtures")
+    design_plan_p.add_argument(
+        "--evidence-policy", choices=["declared", "observed", "strict"],
+        help="how much capability evidence this route requires (default: declared)",
+    )
+    design_plan_p.add_argument("--json", action="store_true")
+
+    design_record_p = sub.add_parser(
+        "record-design",
+        help="record reference, component, direction, requirement, rendered-evidence and critique events",
+    )
+    run_selector(design_record_p)
+    design_record_p.add_argument("--input", required=True, help="JSON file with one event or an events list")
+
+    design_check_p = sub.add_parser(
+        "design-check", help="check whether design evidence is traceable and current",
+    )
+    run_selector(design_check_p)
+    design_check_p.add_argument("--json", action="store_true")
+
+    design_report_p = sub.add_parser(
+        "design-report", help="print deterministic design-intelligence measurements",
+    )
+    run_selector(design_report_p)
+    design_report_p.add_argument("--json", action="store_true")
+
+    design_approve_p = sub.add_parser(
+        "approve-design-direction",
+        help="record the human approval of one engine design-direction record (gate G1D)",
+    )
+    run_selector(design_approve_p)
+    design_approve_p.add_argument("--direction", help="the design-direction record id (defaults to the active one)")
+    design_approve_p.add_argument("--identity", required=True, help="who approved it, recorded verbatim")
+    design_approve_p.add_argument("--note", help="optional reason or context for the record")
+
+    economics_p = sub.add_parser(
+        "economics",
+        help="show task-level harness economics and set the efficiency flags (AR-204)",
+    )
+    run_selector(economics_p)
+    economics_p.add_argument("--task-id", help="report one task's tree, cost and verified completion cost")
+    economics_p.add_argument("--price-profile", help="a registered price profile id (never invented)")
+    economics_p.add_argument("--json", action="store_true")
+    for _name, _values in EFFICIENCY.SETTING_VALUES.items():
+        economics_p.add_argument(
+            f"--{_name.replace('_', '-')}", choices=list(_values),
+            help=f"set the {_name} efficiency setting (default {EFFICIENCY.DEFAULT_FLAGS[_name]})",
+        )
+
+    request_map_p = sub.add_parser(
+        "request-map",
+        help="render the actual request structure of a prepared packet (offline, redacted)",
+    )
+    request_map_p.add_argument("--packet", required=True, help="path to a prepared packet.txt")
+    request_map_p.add_argument("--provider")
+    request_map_p.add_argument("--model")
+    request_map_p.add_argument("--prompt-profile", choices=list(PROMPTING.PROMPT_PROFILES), default="legacy")
+    request_map_p.add_argument("--json", action="store_true")
+
+    tool_packs_p = sub.add_parser(
+        "tool-packs",
+        help="show measured tool-schema economics and the deterministic capability-pack selection",
+    )
+    tool_packs_p.add_argument("--stage", choices=list(TRANSPORT.STAGES))
+    tool_packs_p.add_argument("--skill", action="append", help="a selected skill (repeatable)")
+    tool_packs_p.add_argument("--capability", action="append", help="a required capability (repeatable)")
+    tool_packs_p.add_argument("--json", action="store_true")
     return p
+
+
+def economics_command(args: argparse.Namespace) -> int:
+    """Print task-level economics, or configure the efficiency flags (AR-204)."""
+    run_root, state = resolve_and_load(args)
+    flags = {
+        name: str(getattr(args, name.replace("-", "_"), "") or "")
+        for name in EFFICIENCY.SETTING_VALUES
+    }
+    flags = {name: value for name, value in flags.items() if value}
+    if flags:
+        record = ENGINE_API.set_efficiency(state, **flags)
+        emit_event(
+            run_root, "efficiency_configured", state=state,
+            digest=str(record.get("digest", "")),
+            settings={name: record.get(name, "") for name in sorted(flags)},
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+    task_id = str(getattr(args, "task_id", "") or "")
+    profile_id = str(getattr(args, "price_profile", "") or "")
+    if task_id:
+        payload = {
+            "efficiency": ENGINE_API.efficiency_report(state),
+            "task": ENGINE_API.task_economics(state, task_id, profile_id=profile_id),
+        }
+    else:
+        payload = {
+            "efficiency": ENGINE_API.efficiency_report(state),
+            "economics": ENGINE_API.economics_report(state, profile_id=profile_id),
+        }
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+    print(EFFICIENCY.describe(state))
+    if task_id:
+        cost = payload["task"]["cost"]
+        verified = payload["task"]["verified_completion"]
+        print(f"Task {task_id}: {cost['executions']} execution(s), {cost['failed_executions']} failed, "
+              f"{cost['decision_batches']} decision batch(es)")
+        print(f"  measured totals: {json.dumps(cost['totals'], sort_keys=True)}")
+        print(f"  monetary: {cost['monetary'].get('monetary')} "
+              f"({cost['monetary'].get('reason', cost['monetary'].get('basis', ''))})")
+        print(f"  verified completion: {verified['verified']} ({verified['cost_label']})")
+        return 0
+    context = payload["economics"]["context"]
+    print(f"Context decisions {context['decisions']}: {context['sources_included']} included, "
+          f"{context['sources_omitted']} omitted, cache {context['cache']['hits']} hit(s)")
+    summary = payload["economics"]["summary"]
+    print(f"Executions {summary['executions']} "
+          f"({summary['executions_with_measured_usage']} with measured usage)")
+    return 0
+
+
+def request_map_command(args: argparse.Namespace) -> int:
+    """Render the actual request structure of a prepared packet (offline)."""
+    packet = Path(str(getattr(args, "packet", "") or "")).resolve()
+    if not packet.is_file():
+        raise RuntimeError_(f"no packet file to map: {packet}")
+    payload = ENGINE_API.inspect_request(
+        packet=packet,
+        provider=str(getattr(args, "provider", "") or ""),
+        model=str(getattr(args, "model", "") or ""),
+        profile=str(getattr(args, "prompt_profile", "") or "legacy"),
+    )
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+    mapping = payload["harness_map"]
+    print(f"Prompt profile {payload['prompt_profile']}"
+          + (f" (removed {payload['profile_removed_bytes']} bytes)" if payload["profile_removed_bytes"] else ""))
+    print(f"{'SECTION'.ljust(46)} {'BUCKET'.ljust(16)} {'BYTES'.rjust(8)}  STABILITY")
+    for section in mapping["sections"]:
+        label = str(section["label"])[:44]
+        print(f"{label.ljust(46)} {str(section['bucket']).ljust(16)} "
+              f"{int(section['bytes']):8d}  {section['stability']}"
+              + (f"  volatile={','.join(section['volatile'])}" if section["volatile"] else ""))
+    prefix = mapping["stable_prefix"]
+    print(f"stable prefix {prefix['stable_prefix_bytes']} bytes "
+          f"(digest {prefix['stable_prefix_digest'][:12]}), volatile {prefix['volatile_bytes']} bytes")
+    return 0
+
+
+def tool_packs_command(args: argparse.Namespace) -> int:
+    """Show measured tool-schema economics and the deterministic pack selection."""
+    payload = ENGINE_API.inspect_tool_packs(
+        root=ROOT,
+        stage=str(getattr(args, "stage", "") or ""),
+        selected_skills=[item for item in (getattr(args, "skill", None) or [])],
+        required_capabilities=[item for item in (getattr(args, "capability", None) or [])],
+    )
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+    sizes = payload["sizes"]
+    for pack_id, entry in sizes["packs"].items():
+        marker = "core " if entry["always_loaded"] else "     "
+        print(f"{marker}{pack_id.ljust(14)} {entry['bytes']:8d} bytes  {entry['members']} member(s)")
+    print(f"deferrable {sizes['deferrable_bytes']} bytes; core {sizes['core_bytes']} bytes")
+    selection = payload["selection"]
+    print(f"selected for {selection['stage'] or '(no stage)'}: {', '.join(selection['packs'])}")
+    for pack_id, reason in selection["reasons"].items():
+        print(f"  {pack_id}: {reason}")
+    return 0
 
 
 def main() -> int:
@@ -5744,22 +8736,27 @@ def main() -> int:
     try:
         if args.self_test:
             return self_test()
+        if args.version:
+            print(f"Ariadne {runtime_version()}")
+            print(f"runtime schema {RUNTIME_SCHEMA}; engine contract {CONTRACTS.ENGINE_CONTRACT}")
+            return 0
         commands = {
-            "start": start,
+            "start": ENGINE_API.start_run,
             "discover": discover,
-            "status": status,
+            "status": ENGINE_API.status,
             "reasoner-status": reasoner_status,
             "select-reasoner": select_reasoner,
             "record-reasoner-failure": record_reasoner_failure,
             "handoff-readiness": handoff_readiness_command,
             "preflight": provider_preflight,
             "route": route_command,
-            "record-result": structural_result,
+            "record-result": ENGINE_API.record_result,
             "record-transcript": record_transcript,
-            "ingest-return": ingest_return,
-            "validate-worker": validate_worker,
-            "ingest-review": ingest_review,
-            "record-acceptance": record_acceptance,
+            "ingest-return": ENGINE_API.ingest_return,
+            "validate-worker": ENGINE_API.validate_worker,
+            "ingest-review": ENGINE_API.ingest_review,
+            "record-acceptance": ENGINE_API.record_acceptance,
+            "approve-gate": ENGINE_API.approve_gate,
             "creative-plan": creative_plan,
             "record-creative": record_creative,
             "creative-check": creative_check,
@@ -5770,13 +8767,37 @@ def main() -> int:
             "record-note": record_note,
             "restart-direction": restart_direction,
             "advance": advance,
-            "prepare-next": prepare_next,
+            "prepare-next": ENGINE_API.prepare_next,
+            "execution-status": execution_status_command,
+            "engine-events": engine_events_command,
+            "recover": recover_command,
+            "migrate": migrate_command,
+            "capabilities": capabilities_command,
+            "verify": verify_command,
+            "decide": decide_command,
+            "decision-trace": decision_trace_command,
+            "provenance": provenance_command,
+            "design-plan": design_plan_command,
+            "record-design": record_design,
+            "design-check": design_check_command,
+            "design-report": design_report_command,
+            "approve-design-direction": approve_design_direction,
+            "economics": economics_command,
+            "request-map": request_map_command,
+            "tool-packs": tool_packs_command,
         }
         if args.command in commands:
-            return commands[args.command](args)
+            entry = commands[args.command]
+            if entry is ENGINE_API.start_run or getattr(entry, "__module__", "") == ENGINE_API.__name__:
+                result = entry(args=args)
+                text = ENGINE_API.format_result(result)
+                if text:
+                    sys.stdout.write(text)
+                return result.exit_code
+            return entry(args)
         parser().print_help()
         return 0
-    except (RuntimeError_, TRANSPORT.PacketError, CREATIVE.CreativeError, OPERATIONS.OperationsError) as exc:
+    except (RuntimeError_, *ENGINE_ERRORS, TRANSPORT.PacketError, CREATIVE.CreativeError, OPERATIONS.OperationsError) as exc:
         print(f"STOPPED: {exc}")
         return 1
 

@@ -1,53 +1,119 @@
+![Ariadne banner](assets/ariadne-banner.png)
+
 # Ariadne
 
-**The thread through creative production.**
+**Evidence-driven execution for complex creative and technical work.**
 
-Ariadne takes a creative project from an ordinary-language idea through
-research, design direction, implementation and independent review. It keeps the
-workflow moving and pauses only when your judgement or permission is needed.
+Ariadne is an execution engine that chooses the right form of intelligence for each part of a task. Deterministic code handles what can be known exactly. Bounded Decision Intelligence handles closed judgments. Generative models handle creation and open-ended reasoning. Verification establishes what actually happened, and protected decisions stay under human control.
 
-It is for designers, developers and independent makers who want AI assistance
-without surrendering creative direction, dependency choices or shipping
-authority. The name comes from the Greek figure whose thread made a difficult
-maze navigable. Ariadne is installed once for your user account; your projects
-do not contain or depend on its source repository.
+Every important action remains tied to evidence, verification and explicit authority.
 
-## Quick start
+> **Code before judgment. Judgment before generation. Evidence after action.**
 
-Install the current public version directly from GitHub:
+> **Spend only what the task earns.**
+
+## The core idea
+
+Before Ariadne spends any intelligence, it asks one question:
+
+```text
+Task
+ │
+ ▼
+Can code know it?
+ │
+ ├─ yes → deterministic execution
+ │
+ └─ no
+      ▼
+Can it be a bounded judgment?
+ │
+ ├─ yes → Decision Plane
+ │
+ └─ no
+      ▼
+Generative execution
+ │
+ ▼
+Verification
+ │
+ ▼
+Human control when required
+```
+
+A fact that a check, a digest or a recorded approval can settle is never sent to a model. A judgment with a closed answer space becomes a bounded decision with a declared option set. Only work that genuinely needs creation or open reasoning reaches a generative worker, and even then the result is verified before it counts.
+
+You do not need to know the internals to use Ariadne, and none of the vocabulary above is a prerequisite. It is simply how the engine avoids expensive answers to cheap questions.
+
+## Product principles
+
+- **Code before judgment.** If computation can establish the answer, Ariadne computes it and consults nothing else.
+- **Judgment before generation.** A closed question with a declared answer space is a bounded decision, not a prompt.
+- **Evidence after action.** Each step produces a record bound to an identity and a revision, so a claim never quietly becomes a verified outcome.
+- **Spend only what the task earns.** A task that needs no generative model is never given one.
+
+## What makes Ariadne different
+
+### Adaptive execution
+
+Ariadne routes a task by its difficulty, its stakes, the capabilities actually available and the evidence already recorded, instead of applying one workflow to every request.
+
+### Decision Intelligence
+
+Closed judgments are answered by bounded decision providers that return a value inside a declared option set. A deterministic provider ships in the box and needs no paid API, so the default path works offline.
+
+### Generative workers
+
+Open-ended creation still uses capable generative models where they earn their cost, through your own agent or an adapter you select.
+
+### Verification
+
+A worker's claim is not a verified outcome. Verification binds the executing attempt, the revision and the evidence, and stale evidence stops satisfying a gate.
+
+### Design Intelligence
+
+References, an approved design direction, rendered evidence and an independent critique are first-class records rather than prose, and they stay current as the work is revised.
+
+### Human control
+
+Confidence never grants authorization. Direction, dependencies, completion, shipping and publishing stay behind human gates that the engine cannot open for you.
+
+### Context economics
+
+Ariadne tracks what context, tools and work actually contributed to a verified result, and reports unknown when a value cannot be measured.
+
+## How it works
+
+```text
+                 ARIADNE
+                    │
+        ┌───────────┼───────────┐
+        │           │           │
+ deterministic   bounded     generative
+    logic        decisions      work
+        │           │           │
+        └───────────┼───────────┘
+                    ▼
+               verification
+                    ▼
+               human control
+```
+
+Around that core, Ariadne keeps adaptive context (only the sources a stage needs), provenance (who or what acted, on which revision), design intelligence and task-level economics. The engine enforces the transitions; a later edit can invalidate earlier evidence without deleting it.
+
+## Install
+
+Ariadne installs from immutable GitHub release artifacts. It is not published to PyPI: the `ariadne` distribution name already belongs to the unrelated Ariadne GraphQL project, so a plain `pip install ariadne` would fetch the wrong package.
+
+Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
 
 ```bash
-py -3 -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v1.6.7/ariadne-1.6.7-py3-none-any.whl"
-py -3 -m ariadne install
-py -3 -m ariadne doctor
-
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.0.0/ariadne-2.0.0-py3-none-any.whl"
+python -m ariadne install
+python -m ariadne doctor
 ```
-If `doctor` reports that Ariadne is healthy, open your project in Codex and invoke:
 
-$ariadne
-
-The Python distribution/import name is also used by Ariadne GraphQL. The two
-packages cannot share one Python environment; see the compatibility warning in
-[Installation](INSTALL.md) before installing if that package is present.
-
-Then open Codex in the project you want to make, type `$ariadne`, and describe
-it normally. Ariadne finds an unfinished project, safely adopts an existing
-one, or starts a new one without making you choose a mode or stage.
-
-[Short quickstart](QUICKSTART.md) · [Installation](INSTALL.md) ·
-[Updates and rollback](UPDATE.md) · [Troubleshooting](TROUBLESHOOTING.md)
-
-### Installed lifecycle
-
-`python -m ariadne --version` reports the active Ariadne version. `doctor`
-also checks the runtime, managed skill, provider detection and compatible
-project state.
-
-The launcher is installed in the selected Python user's package location. The
-second command above creates an immutable runtime and an installation history
-under the platform data directory, then registers the managed skill at
-`~/.agents/skills/ariadne` unless an earlier Ariadne-owned skill location is
-already active:
+`python -m ariadne --version` reports the active version. The launcher keeps an immutable runtime under the platform data directory and registers the managed skill at `~/.agents/skills/ariadne` unless an Ariadne-owned skill is already active there.
 
 | Platform | Ariadne data directory |
 |---|---|
@@ -55,176 +121,148 @@ already active:
 | macOS | `~/Library/Application Support/Ariadne` |
 | Linux | `$XDG_DATA_HOME/ariadne`, otherwise `~/.local/share/ariadne` |
 
-Update and verify without touching project files:
+If `python -m pip show ariadne` describes a GraphQL library, stop and use a separate Python environment. The two distributions cannot coexist in one environment. More detail is in [Installation](INSTALL.md).
+
+## Quick start
+
+1. Run `python -m ariadne doctor` and confirm the runtime, the managed skill and compatible project state.
+2. Open Codex in the project you want to work on and type `$ariadne`.
+3. Describe the outcome you want in ordinary language. Ariadne finds an unfinished run, safely adopts an existing repository, or begins a new project.
+4. At each gate it pauses for your decision, then continues from the recorded state.
+
+A fully deterministic, model-free introduction lives in [examples/README.md](examples/README.md). The examples call the same engine the command line uses and need no provider:
+
+```bash
+python examples/01_basic_task.py
+python examples/04_bounded_decision.py
+```
+
+## A short walkthrough
+
+Suppose you ask Ariadne to fix a failing validation in a source file. In outline, it will:
+
+1. characterise the task and record what kind of work it is;
+2. establish the facts code can know, such as which files changed and what the checks currently report;
+3. use bounded judgment only where classification is genuinely ambiguous;
+4. hand the bounded work to a worker with an explicit scope and acceptance checks;
+5. reproduce the result independently instead of trusting the worker's summary;
+6. repair once when policy allows, and stop for a human otherwise;
+7. append the evidence, so the next step reads a record rather than a recollection.
+
+No step can promote itself, and nothing is accepted on the strength of a claim alone.
+
+## Decision Intelligence
+
+Ariadne does not send every uncertain question to a large generative model. It first asks whether code can answer the question, whether the answer space can be bounded, and whether generation would add real value.
+
+When a question is genuinely bounded, the Decision Plane compiles it into a declared option set, projects only the state that question needs, batches independent questions together, and reuses an answer only when the same state and provider version produced it. If the evidence is insufficient or confidence is unusable, it escalates rather than guessing; a protected action is refused under every confidence value. Every decision records where its confidence came from.
+
+The mechanism is documented in [Decision Intelligence](docs/v2/AR-205D/01-DECISION-COMPILER.md). A Jev-shaped adapter boundary is one example of a possible bounded-decision provider; it is not required, and no live Jev evaluation was executed.
+
+## Verification and human control
+
+Ariadne keeps five things apart, and none of them substitutes for another:
+
+```text
+Decision      ≠  Authorization
+Execution     ≠  Verification
+Verification  ≠  Acceptance
+```
+
+An approval binds a gate, a target, a revision and an identity. A review binds two distinct executions, so an implementer cannot certify their own work. An acceptance spends exactly one human approval. The engine can stop and ask, and it cannot manufacture the answer.
+
+The full statement of what the engine does and does not guarantee is in [Trust boundaries](TRUST.md).
+
+## Design Intelligence
+
+For design work, Ariadne records a provenance chain: requirements, reference findings (found, inspected, analysed or used), component candidates, an approved direction, rendered evidence with its capture parameters, an independent critique, and bounded refinements that stay inside their declared scope.
+
+This is not an automatic taste oracle. Source inspection cannot close a rendered-quality requirement, and a screenshot without capture provenance is not evidence. The chain records what was actually checked.
+
+## Providers
+
+Ariadne is provider-neutral. Four kinds of component are separated by contract:
+
+```text
+deterministic providers
+decision providers
+generative providers
+verification adapters
+```
+
+No particular paid provider is required by the core engine, and the deterministic path is offline. A missing optional provider is recorded as capability state rather than crashing the run, and the capability registry is the source of truth for what is actually available. A versioned, provider-neutral consumer contract lets another application drive the engine without importing any vendor SDK; see [Integration protocol](docs/v2/AR-205/04-INTEGRATION-CONTRACT.md).
+
+## Benchmarks
+
+The deterministic suite runs offline with no model calls and no network. The v2 release was evaluated as follows:
+
+```text
+Full benchmark: 295 cases
+Fail: 0
+Error: 0
+
+Engine checks: 578/578
+Release tests: 97/97
+Wheel install: 14/14
+Release subset: 56/56
+```
+
+`OBSERVED` and `DECLARED_SKIP` are deliberate categories, separate from failure: an observation records a measurement without a judgement, and a skip means a case declared itself not executable in this environment. Neither is counted as a pass. The benchmark proves deterministic mechanics, not model output quality, cost or a success rate. See [benchmarks/README.md](benchmarks/README.md).
+
+## Migration from v1
+
+Existing v1 projects keep working without migration. A run state written before the engine contract is refused until you migrate it, and migration is explicit, dry-runnable, backed up and additive:
+
+```bash
+python -m ariadne migrate --dry-run --project <project>
+python -m ariadne migrate --apply --project <project>
+```
+
+An apply preserves the pre-migration bytes and creates no approval, review or verification record. Rollback restores the preserved bytes while that remains honest, and refuses once v2-only work exists. The full guide is [MIGRATING-v1-to-v2.md](MIGRATING-v1-to-v2.md).
+
+## Updates, rollback and removal
+
+Updates download and verify a newer release, and rollback returns to the previous installed version:
 
 ```bash
 python -m ariadne update
-python -m ariadne doctor
-```
-
-Update installs a verified immutable version and switches the active pointer
-only after validation. A failure before activation leaves the prior runtime
-current. When a previous verified version exists, recovery is:
-
-```bash
 python -m ariadne rollback
-python -m ariadne doctor
 ```
 
-Remove Ariadne in two explicit steps:
+Removal is two explicit steps:
 
 ```bash
 python -m ariadne uninstall
 python -m pip uninstall ariadne
 ```
 
-The first command asks for confirmation, removes the user-local runtime and
-managed skill, and removes only an unchanged Ariadne-managed optional baseline.
-Projects, project documents, evidence, source files, edited instructions and
-unrelated user files are preserved. The second command removes the Python
-launcher. Confirm removal with `python -m pip show ariadne`; see the package-name
-warning above if that command then identifies the unrelated GraphQL package.
+The first command removes the user-local runtime and the managed skill while preserving Projects, project documents, evidence, source files, edited instructions and unrelated user files. The second removes the Python launcher; confirm it is gone with `python -m pip show ariadne`.
 
-Normal installation does not change global Codex instructions. The optional
-recommended baseline is documented in [CODEX-ENVIRONMENT.md](CODEX-ENVIRONMENT.md).
+## Trust and limitations
 
-You still approve the design direction, dependencies, completed build, shipping
-and publishing. Ariadne never pushes, deploys or installs project packages
-without the relevant approval.
+Ariadne enforces its own state transitions, approval binding, revision freshness, evidence contracts, review independence and bounded decision contracts. It is honest about what it cannot do:
 
----
+- it does not sandbox your operating system or jail a validation command;
+- it does not cryptographically attest local run-state files;
+- it cannot prove an observation a provider never reported;
+- it keeps external text as data, but cannot make a model immune to prompt injection inside its own authority;
+- its artifacts are authenticated by digest, not signed by a maintainer key;
+- one install path was verified on one platform; other platforms use the same Python entry point but were not executed here;
+- migration rollback stops being available once v2-only work exists.
 
-## The problem it solves
+These are stated precisely in [TRUST.md](TRUST.md).
 
-| Problem | Where |
-|---|---|
-| AI-generated UI feels generic | [DESIGN-TASTE.md](DESIGN-TASTE.md) — anti-generic rules, the G1 check, reference synthesis |
-| One agent planning, designing, coding and reviewing | [WORKFLOW.md](WORKFLOW.md) — 5 roles, 5 gates, an independence rule |
-| Wasting usage limits on context | [MODEL-ROUTING.md](MODEL-ROUTING.md) |
-| No reliable design process | S3 cannot be skipped; **G1 blocks building without a thesis** |
-| Research claims can outrun evidence | Project-local creative evidence separates recommended, invoked, completed and used work; found, inspected and used references; and selected, executed and returned providers |
-| External source text can masquerade as authority | [PRIVACY-POLICY.md](PRIVACY-POLICY.md) — data, instructions and human authorisation remain separate |
-| No document or handoff structure | [templates/](templates/) — four required documents, the rest conditional |
-| Not knowing which tool does what | [MODEL-ROUTING.md](MODEL-ROUTING.md) + [adapters/](adapters/) |
-| Reinventing prompts every project | [prompts/](prompts/) |
+## Documentation
 
-## How it works
-
-```
-Your request
-  -> ariadne skill        starts or resumes the right run
-  -> ariadne.py           discovers state and prepares the next boundary
-  -> creative evidence      selects only useful methods and verifies source/use traces
-  -> ROUTER.md              detects the mode, asks up to 5 questions
-  -> WORKFLOW.md            runs S0-S6, assigns a role, enforces the gates
-  -> prepare-stage.py       transports only the current canonical inputs
-  -> templates/             produces PROJECT, DESIGN, HANDOFF, QA
-  -> QA-POLICY.md           mechanical checks (the builder)
-  -> EVALUATION-RUBRICS.md  judgement checks (a fresh session)
-  -> RETROSPECTIVE          proposes changes for human approval
-```
-
-Five gates interrupt it: **G1** direction · **G2** dependencies · **G3** build complete · **G4** ship · **G5** publish. Nothing irreversible happens without you.
-
-## Start here
-
-**Never used it:** [QUICKSTART.md](QUICKSTART.md) — install once, then describe one real project.
-**Using it today:** [DAILY-PLAYBOOK.md](DAILY-PLAYBOOK.md).
-**Moving off Claude Code:** [MIGRATION-CHECKLIST.md](MIGRATION-CHECKLIST.md).
-**Starting now:** in a clean Codex task, invoke `$ariadne` (or say “Use Ariadne”) and describe the project normally. Ariadne locates prompts, packets, evidence, and the next valid boundary.
-
-**Existing project:** say that you want Ariadne to adopt the current
-repository. The entry skill uses the opt-in `--adopt-existing` path: it inspects
-the live repository read-only during intake, preserves every existing file and
-current behaviour, and creates only the missing Ariadne entry documents. If
-`PROJECT.md` or `AGENTS.md` already exists, it stops instead of overwriting it.
-
-## The five modes
-
-| Mode | For |
-|---|---|
-| [Client or portfolio](modes/client-or-portfolio.md) | A site whose job is reputation — yours or a client's |
-| [Product app](modes/product-app.md) | Real users, real state |
-| [Game / experiment](modes/game-experiment.md) | Play, mechanics, class projects |
-| [Content system](modes/content-system.md) | X and LinkedIn, with a learning loop |
-| [Audit / review](modes/audit-review.md) | Critique something that exists |
-
-## Map
-
-```
-Ariadne/
-├─ ROUTER.md               Interpretation frame, routing rules, restarts   <- start
-├─ WORKFLOW.md             Stages, gates, 5 roles, what agents may do
-├─ DESIGN-TASTE.md         The quality bar and anti-generic rules
-├─ DESIGN-MOTION.md        Motion principles and procedure
-├─ DESIGN-ASSETS.md        Imagery, texture, licensing
-├─ QA-POLICY.md            Mechanical checks + deployment
-├─ EVALUATION-RUBRICS.md   5 review lenses, anchored scoring
-├─ LIBRARY-POLICY.md       How a package gets approved
-├─ RESEARCH-POLICY.md      What must be verified, and how
-├─ PRIVACY-POLICY.md       Secrets, client data, instruction boundary
-├─ MODEL-ROUTING.md        Which tool does what, usage conservation
-├─ BUDGET-POLICY.md        INR budget, dated cost snapshot
-├─ CONTENT-SYSTEM.md       Writing, analytics, learning loop
-├─ CHANGELOG.md            How this system changed + the 30-day check
-├─ GETTING-STARTED.md · DAILY-PLAYBOOK.md · MIGRATION-CHECKLIST.md
-├─ .agents/skills/ariadne/  managed Codex entry point
-├─ skills/       7   project-specific methods selected only when useful
-├─ templates/   13   4 required, the rest conditional or transport
-├─ modes/        5
-├─ adapters/         Codex/Cursor paths plus optional Claude reasoner transport
-├─ references/   3   visual references, UI libraries, capability candidates
-├─ prompts/      8   start, conditional research, direction, build, review,
-│                    portfolio, content, retrospective
-└─ scripts/          runtime controller, stage transport and selected methods
-```
-
-## Principles
-
-**Provider-neutral.** Product-specific *instructions* live only in [adapters/](adapters/). Swapping a tool means rewriting one adapter and one table row.
-
-**Design decisions are not library decisions.** Component libraries are research, not dependencies ([LIBRARY-POLICY.md](LIBRARY-POLICY.md)).
-
-**Reversible by default, irreversible by approval.** One task per branch. Five gates.
-
-**Verified, not remembered.** Anything that changes over time is looked up and dated, or marked unverified.
-
-**Observed, not asserted.** A recommended skill is not a completed skill, a URL
-is not an inspected reference, and a selected provider is not an executed one.
-New projects retain those distinctions in a hashed project-local evidence
-ledger; generated packets transport it only to the stages that need it.
-
-**Rendered, not inferred.** After G1, approved decisions become traceable
-implementation and visual-QA requirements. Source code may suggest a state; it
-does not prove the rendered experience. Drift, environmental gaps and creative
-judgement remain separate records, and none grants a gate.
-
-**Four documents, not eleven.** `PROJECT`, `DESIGN`, `HANDOFF`, `QA`. The rest exist when they earn it — a document nobody reads is worse than none, because it manufactures the appearance of process.
-
-**The system learns under human control.** A retrospective proposes a specific change; the human approves, defers, or rejects it before any Ariadne file changes.
-
-## What it will not do
-
-- Publish, push, or deploy without you.
-- Install packages without a justification you approve.
-- Add auth, a database, a CMS, or a dashboard to a project that does not need one.
-- **Fight a deliberate design choice.** The anti-generic rules assume genericness came from the tool. When it is your decision, declare it — no limit, but the reason has to be a reason (**R-PAT-1**).
-- Guarantee good design. It makes generic design harder to ship accidentally, and makes the failure visible when it happens.
-- Coexist in one Python environment with the unrelated Ariadne GraphQL package;
-  this release keeps the approved product name and documents the collision.
-
----
-
-## Verify your installation
-
-```bash
-python -m ariadne doctor
-```
-
-The public repository and runtime deliberately exclude validation runs, test
-fixtures, maintainer operations records and machine-specific paths. They are
-generated from the validated private maintainer source, not used as evidence
-merely because they appear in a public checkout.
+- [Quick start](QUICKSTART.md) · [Installation](INSTALL.md) · [Getting started](GETTING-STARTED.md)
+- [Updates and rollback](UPDATE.md) · [Troubleshooting](TROUBLESHOOTING.md)
+- [Python and CLI API](docs/v2/AR-205/06-RELEASE-API.md) · [Integration protocol](docs/v2/AR-205/04-INTEGRATION-CONTRACT.md)
+- [Architecture](docs/v2/AR-200/03-ARCHITECTURE.md) · [Workflow](WORKFLOW.md) · [Router](ROUTER.md)
+- [Decision Intelligence](docs/v2/AR-205D/01-DECISION-COMPILER.md) · [Decision Graph](docs/v2/AR-205D/02-DECISION-GRAPH.md)
+- [Design Intelligence](docs/v2/AR-202D/02-REFERENCE-INTELLIGENCE.md) · [Design direction](docs/v2/AR-202D/04-DESIGN-DIRECTION.md) · [Design taste](DESIGN-TASTE.md)
+- [Trust boundaries](TRUST.md) · [Privacy](PRIVACY-POLICY.md) · [Model routing](MODEL-ROUTING.md)
+- [Migration guide](MIGRATING-v1-to-v2.md) · [Examples](examples/README.md) · [Benchmarks](benchmarks/README.md)
+- [Release notes](RELEASE-NOTES.md) · [Changelog](CHANGELOG.md)
 
 ## Licence
 

@@ -36,7 +36,7 @@ RUNTIME_TOP_LEVEL = [
     "LIBRARY-POLICY.md", "RESEARCH-POLICY.md", "PRIVACY-POLICY.md",
     "MODEL-ROUTING.md", "BUDGET-POLICY.md", "CONTENT-SYSTEM.md", "WRITING-POLICY.md",
 ]
-RUNTIME_TREES = ["prompts", "templates", "modes", "skills", "adapters", "references"]
+RUNTIME_TREES = ["prompts", "templates", "modes", "skills", "adapters", "references", "src/ariadne_engine"]
 RUNTIME_SCRIPTS = [
     "scripts/ariadne.py", "scripts/prepare-stage.py",
     "scripts/creative-intelligence.py", "scripts/creative-operations.py",
@@ -108,7 +108,12 @@ def runtime_sources() -> list[tuple[str, Path]]:
         if not root.is_dir():
             raise ReleaseError(f"runtime source tree is missing: {tree}")
         for path in sorted(root.rglob("*")):
-            if path.is_file() and path.name != "installation.json":
+            if (
+                path.is_file()
+                and path.name != "installation.json"
+                and "__pycache__" not in path.parts
+                and path.suffix not in (".pyc", ".pyo")
+            ):
                 rows.append((path.relative_to(ROOT).as_posix(), path))
     names = [name for name, _ in rows]
     if len(names) != len(set(names)):
@@ -290,6 +295,10 @@ def self_test() -> int:
             any(name.endswith(".dist-info/licenses/LICENSE") for name in wheel_names),
         )
         case("runtime excludes developer validation and operations", not any(name.startswith(("validation/", "operations/", "tests/")) for name in names))
+        case(
+            "runtime excludes compiled bytecode and its embedded source paths",
+            not any("__pycache__" in name or name.endswith((".pyc", ".pyo")) for name in names),
+        )
         case("runtime excludes maintainer machine paths", all("snprasad" not in archive_name.lower() and "testbed" not in archive_name.lower() for archive_name in names))
         case(
             "runtime content excludes maintainer-specific paths and private test data",

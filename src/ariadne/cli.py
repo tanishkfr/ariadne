@@ -723,12 +723,12 @@ def _install_extracted(
         existing_problems = runtime_problems(destination)
         if existing_problems:
             quarantine = versions / f"{version}.corrupt-{uuid.uuid4().hex}"
-            destination.replace(quarantine)
-            extracted.replace(destination)
+            replace_with_retry(destination, quarantine)
+            replace_with_retry(extracted, destination)
         else:
             shutil.rmtree(extracted)
     else:
-        extracted.replace(destination)
+        replace_with_retry(extracted, destination)
     if failure_at == "after-runtime":
         raise ProductError("simulated interrupted installation")
     previous = current_install(home)
