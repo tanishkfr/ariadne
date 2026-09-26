@@ -109,8 +109,9 @@ Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Cod
 
 ```bash
 python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.0.0/ariadne-2.0.0-py3-none-any.whl"
-python -m ariadne install
+python -m ariadne install 
 python -m ariadne doctor
+(or py -m ariadne install)
 ```
 
 `python -m ariadne --version` reports the active version. The launcher keeps an immutable runtime under the platform data directory and registers the managed skill at `~/.agents/skills/ariadne` unless an Ariadne-owned skill is already active there.
@@ -227,6 +228,7 @@ Updates download and verify a newer release, and rollback returns to the previou
 ```bash
 python -m ariadne update
 python -m ariadne rollback
+(or py -m ariadne update)
 ```
 
 Removal is two explicit steps:
