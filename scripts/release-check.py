@@ -127,6 +127,7 @@ def check_engine_suites() -> dict:
         ("engine core", "test-engine-core.py"),
         ("decision runtime", "test-decision-runtime.py"),
         ("decision mutations", "test-decision-mutations.py"),
+        ("runtime mutations", "test-decision-runtime-mutations.py"),
     ):
         result = run(python_script(script), timeout=1800)
         if result.returncode != 0:
