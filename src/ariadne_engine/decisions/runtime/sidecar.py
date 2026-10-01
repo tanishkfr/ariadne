@@ -41,9 +41,11 @@ try:
     # Imported as a package module. The relative form is the only one that works when
     # Ariadne's engine package has been loaded under a different module name, which is
     # exactly what the maintainer test suites do.
+    from .manifest import check_request_bounds
     from .reference import ENGINE_NAME, ReferenceBoundedEngine, empty_book, load_weights
     from .transport import WIRE_SCHEMA
 except ImportError:  # pragma: no cover - the plain-script launch path
+    from ariadne_engine.decisions.runtime.manifest import check_request_bounds
     from ariadne_engine.decisions.runtime.reference import (
         ENGINE_NAME,
         ReferenceBoundedEngine,
@@ -81,10 +83,25 @@ def handle(request: Mapping[str, Any], engine: ReferenceBoundedEngine) -> Mappin
     if method == "warm":
         return engine.warm()
     if method == "decide":
+        _check_bounds([payload.get("state")], payload.get("questions"))
         return engine.decide(payload)
     if method == "decide_batch":
+        _check_bounds(payload.get("states"), payload.get("questions"))
         return engine.decide_batch(payload)
     raise ValueError(f"unknown method {method!r}")
+
+
+def _check_bounds(states: Any, questions: Any) -> None:
+    """Re-check the declared limits on this side of the process boundary.
+
+    The caller checks them too, and both checks are load-bearing. This process is the one
+    that has to survive a request, so a bound enforced only by the parent protects the
+    parent rather than the engine. It costs one pass over a request already in memory.
+    """
+    check_request_bounds(
+        [state for state in (states or ()) if isinstance(state, Mapping)],
+        [question for question in (questions or ()) if isinstance(question, Mapping)],
+    )
 
 
 def serve(root: Path, stream_in: Any = None, stream_out: Any = None) -> int:

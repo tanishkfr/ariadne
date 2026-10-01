@@ -155,8 +155,45 @@ def record_shadow(
     problems = shadow_record_problems(record)
     if problems:
         raise ValueError("refusing to record an invalid shadow prediction: " + "; ".join(problems))
-    state.setdefault("decision_shadow", []).append(record)
+    # One record per (task, question, projection, runtime revision, observer version).
+    # Without this, asking the same question twice about the same state appends twice,
+    # and every downstream aggregation -- compare, export, and the dataset accounting
+    # behind a calibration profile -- counts one prediction twice. A retry is not a
+    # second observation; it is the same one arriving again.
+    identity = _observation_identity(record)
+    existing = state.setdefault("decision_shadow", [])
+    for index, stored in enumerate(existing):
+        if _observation_identity(stored) == identity:
+            merged = dict(stored)
+            # Keep the original prediction and refresh only what a re-observation can
+            # legitimately change: how many times it was seen, and that it agrees.
+            merged["observation_count"] = int(stored.get("observation_count", 1)) + 1
+            merged["last_observed_at"] = record["recorded_at"]
+            if stored.get("answer") == record["answer"] and stored.get("ground_truth"):
+                merged["agreement"] = record["agreement"]
+            problems = shadow_record_problems(merged)
+            if problems:
+                raise ValueError(
+                    "refusing to replace a valid shadow prediction with an invalid one: "
+                    + "; ".join(problems)
+                )
+            existing[index] = merged
+            return merged
+    record["observation_count"] = 1
+    existing.append(record)
     return record
+
+
+def _observation_identity(record: Mapping[str, Any]) -> tuple[str, ...]:
+    """What makes two shadow records the same observation of the same thing."""
+    return (
+        str(record.get("task_id", "")),
+        str(record.get("question_id", "")),
+        str(record.get("projection_digest", "")),
+        str(record.get("model_revision", "")),
+        str(record.get("authoritative_decision_id", "")),
+        SHADOW_VERSION,
+    )
 
 
 def shadow_problems(state: Mapping[str, Any]) -> list[str]:

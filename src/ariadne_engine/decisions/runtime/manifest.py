@@ -91,6 +91,53 @@ def file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def check_request_bounds(
+    state_projections: Sequence[Mapping[str, Any]],
+    questions: Sequence[Mapping[str, Any]],
+) -> None:
+    """Refuse a request the engine has declared it will not accept.
+
+    ``DEFAULT_CONTEXT_LIMITS`` is what the manifest publishes the engine agrees to.
+    Publishing a bound nothing enforces is a claim about safety that does not hold: a
+    64 MB state or 100 000 questions was serialised onto one pipe line and answered.
+
+    It lives here rather than on the session because both sides of the process boundary
+    call it. A bound enforced only by the parent protects the parent rather than the
+    engine, which is the process that has to survive the request.
+    """
+    limits = dict(DEFAULT_CONTEXT_LIMITS)
+    if len(questions) > int(limits["max_questions_per_batch"]):
+        raise ContractError(
+            f"the decision runtime accepts at most {limits['max_questions_per_batch']} "
+            f"questions per inference; {len(questions)} were asked for"
+        )
+    if not state_projections:
+        raise ContractError("a bounded inference needs at least one projected state")
+    widest = max(len(json.dumps(dict(state), default=str)) for state in state_projections)
+    if widest > int(limits["max_state_chars"]):
+        raise ContractError(
+            f"a projected state of {widest} characters exceeds the declared bound of "
+            f"{limits['max_state_chars']}; the projection is a summary, not the state"
+        )
+    for question in questions:
+        record = dict(question)
+        text = len(json.dumps(record, default=str))
+        if text > int(limits["max_question_chars"]):
+            raise ContractError(
+                f"a question of {text} characters exceeds the declared bound of "
+                f"{limits['max_question_chars']}"
+            )
+        options = record.get("allowed")
+        if options is None:
+            options = record.get("options", record.get("scale", ()))
+        width = len(list(options or ()))
+        if width > int(limits["max_options"]):
+            raise ContractError(
+                f"a question declares {width} answers, beyond the declared bound of "
+                f"{limits['max_options']}"
+            )
+
+
 def safe_relative_path(raw: Any) -> str:
     """Normalise one manifest-relative path, refusing anything that escapes the root.
 

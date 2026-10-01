@@ -37,13 +37,22 @@ import platform
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import json
+
 from ...contracts import (
     DECISION_RUNTIME_KINDS,
     DECISION_RUNTIME_STATUSES,
     UNSUPPORTED_PRIMITIVE,
+    ContractError,
 )
 from ..providers import DEFAULT_CAPABILITIES
-from .manifest import MANIFEST_NAME, revision_matches, verify_files
+from .manifest import (
+    DEFAULT_CONTEXT_LIMITS,
+    MANIFEST_NAME,
+    check_request_bounds,
+    revision_matches,
+    verify_files,
+)
 from .transport import (
     RuntimeTransport,
     RuntimeTransportError,
@@ -306,6 +315,7 @@ class DecisionRuntime:
         timeout: float | None = None,
     ) -> Mapping[str, Any]:
         """Answer independent questions over one projected state as one inference."""
+        check_request_bounds([state_projection], questions)
         return self._transport.call(
             "decide",
             {
@@ -326,6 +336,7 @@ class DecisionRuntime:
         timeout: float | None = None,
     ) -> Mapping[str, Any]:
         """Answer many questions over many states in one bounded inference unit."""
+        check_request_bounds(state_projections, questions)
         return self._transport.call(
             "decide_batch",
             {

@@ -751,11 +751,17 @@ def decision_runtime_decide(state_projection, questions, **options) -> dict:
     """Answer bounded questions over one projected state with the local runtime."""
     from .decisions.runtime.session import DecisionRuntime
 
-    runtime = options.pop("runtime", None) or DecisionRuntime.discover(root=options.pop("root", "") or None)
+    # Whether the session is ours to close has to be decided before the options are
+    # consumed. Reading it afterwards always saw a popped "root", so a runtime the caller
+    # passed in and still owned was shut down under them -- one call, and their session
+    # was closed.
+    supplied = options.pop("runtime", None)
+    owns = supplied is None
+    runtime = supplied or DecisionRuntime.discover(root=options.pop("root", "") or None)
     try:
         return dict(runtime.decide(state_projection, questions, **options))
     finally:
-        if options.get("root") is None and runtime is not None:
+        if owns:
             runtime.shutdown()
 
 

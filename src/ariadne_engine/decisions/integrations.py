@@ -46,6 +46,14 @@ from .providers import DecisionProvider, UnavailableProvider
 
 INTEGRATION_VERSION = "ar-205d-integrations-1"
 
+MAX_FORBIDDEN_FIELD_DEPTH = 6
+"""How deep the forbidden-field walk goes before it refuses rather than descends.
+
+Six levels is far past anything a declared projection contract produces. A structure
+deeper than that is not evidence a caller meant to supply, and an unbounded walk over
+caller-supplied data is a denial of service in the middle of a trust boundary.
+"""
+
 ROUTE_FAMILY_FOR_TASK_KIND = {
     "mechanical": "mechanical",
     "edit": "implementation",
@@ -81,20 +89,53 @@ def _entries(
     the decision state by accident. A field the contract declares FORBIDDEN is
     refused outright — nesting it under ``supplied_evidence`` would smuggle
     prompt, credential or authorization material into the decision state.
+
+    The forbidden check walks the whole supplied mapping, not just its top level. A
+    one-level check is exactly the shape that reads as closed while being open: the
+    reference engine is lexical today, so ``{"failure": {"prompt": "..."}}`` only
+    adds an unseen feature token, and the hole would sit there unnoticed until the
+    engine were prompt-backed — at which point the projection *is* the prompt and a
+    key nested one level down is the whole attack.
     """
     entries: dict = {}
     if projection_entries:
         supplied = {str(key): value for key, value in dict(projection_entries).items()}
-        forbidden = sorted(set(supplied) & set(projection_module.contract(contract_id).forbidden))
-        if forbidden:
+        forbidden_names = set(projection_module.contract(contract_id).forbidden)
+        nested = _nested_forbidden_fields(supplied, forbidden_names)
+        if nested:
             raise ContractError(
-                f"projection {contract_id} forbids field(s): {', '.join(forbidden)}; "
+                f"projection {contract_id} forbids field(s): {', '.join(nested)}; "
                 "authorization and prompt material never enter a bounded decision"
             )
         entries["supplied_evidence"] = supplied
     for key, value in dict(defaults).items():
         entries.setdefault(key, value)
     return entries
+
+
+def _nested_forbidden_fields(supplied: Mapping, forbidden: set[str], *, _depth: int = 0) -> list[str]:
+    """Every forbidden field name appearing anywhere in the supplied mapping.
+
+    Bounded in depth and breadth so a deep or wide structure is a refusal rather than
+    an unbounded walk, and cycles are cut rather than followed. A path is reported in
+    full, because ``supplied_evidence.detail.prompt`` and ``supplied_evidence.prompt``
+    are different mistakes and only one of them is nested.
+    """
+    if _depth > MAX_FORBIDDEN_FIELD_DEPTH or len(forbidden) == 0:
+        return []
+    found: list[str] = []
+    for key, value in supplied.items():
+        if str(key) in forbidden:
+            found.append(str(key))
+        if isinstance(value, Mapping):
+            for nested in _nested_forbidden_fields(value, forbidden, _depth=_depth + 1):
+                found.append(f"{key}.{nested}")
+        elif isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                if isinstance(item, Mapping):
+                    for nested in _nested_forbidden_fields(item, forbidden, _depth=_depth + 1):
+                        found.append(f"{key}[{index}].{nested}")
+    return sorted(dict.fromkeys(found))
 
 
 def _bounded_answer(

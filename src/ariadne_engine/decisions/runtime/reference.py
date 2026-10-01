@@ -146,6 +146,12 @@ def _normalise_scalar(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         number = float(value)
+        if not math.isfinite(number):
+            # nan and inf are not magnitudes. Left alone, math.log10(nan) raises and
+            # math.log10(0) divides by zero, and because the engine converts features to
+            # integer bins that turns one bad value in a projection into a failure for
+            # every question asked of that state rather than for the one that had it.
+            return "~nonfinite"
         if number.is_integer() and abs(number) < 1e15:
             return str(int(number))
         # A continuous value contributes its order of magnitude, not its exact

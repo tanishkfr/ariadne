@@ -1979,6 +1979,7 @@ def hardening_checks(engine, root: Path) -> None:
     """
     RUNTIME = runtime_of(engine)
     module = engine.decisions.runtime
+    manifest = RUNTIME.manifest
 
     # 1 and 2: a timeout that is not a deadline, and a stderr pipe nobody drains.
     transport = RUNTIME.transport
@@ -2116,6 +2117,144 @@ def hardening_checks(engine, root: Path) -> None:
           )
 
 
+    # 10: the manifest's declared context limits were a claim nothing enforced.
+    limits = RUNTIME.manifest.DEFAULT_CONTEXT_LIMITS
+    check("an oversized projection is refused rather than serialised onto the pipe",
+          refuses(manifest.check_request_bounds,
+                  [{"entries": {"x": "y" * (int(limits["max_state_chars"]) + 10)}}],
+                  [failure_question_record(engine)]))
+    check("too many questions in one inference are refused",
+          refuses(manifest.check_request_bounds,
+                  [projection(engine, IMPL_PROJECTION)],
+                  [failure_question_record(engine)] * (int(limits["max_questions_per_batch"]) + 1)))
+    check("a question declaring more answers than the bound is refused",
+          refuses(manifest.check_request_bounds,
+                  [projection(engine, IMPL_PROJECTION)],
+                  [dict(failure_question_record(engine),
+                        options=[f"o{i}" for i in range(int(limits["max_options"]) + 1)])]))
+    check("a request inside every declared bound is accepted",
+          not refuses(manifest.check_request_bounds,
+                      [projection(engine, IMPL_PROJECTION)],
+                      [failure_question_record(engine)]))
+    check("the limits are enforced on both sides of the process boundary",
+          "check_request_bounds" in inspect.getsource(RUNTIME.session.DecisionRuntime.decide)
+          and "check_request_bounds" in inspect.getsource(
+              _import_sidecar(RUNTIME_DIR / "sidecar.py")._check_bounds))
+    check("a non-finite number in a projection does not fail the whole batch",
+          RUNTIME.reference._normalise_scalar(float("nan")) == "~nonfinite"
+          and RUNTIME.reference._normalise_scalar(float("inf")) == "~nonfinite")
+
+    # 11: a selected session had to be closed by a caller nobody told to close it.
+    selection = RUNTIME.selection.select_bounded_provider(
+        base_state(), runtime=seed_runtime(engine))
+    check("a session the caller supplied is marked borrowed, not owned",
+          selection["runtime"].owned is False)
+    check("closing a borrowed session is refused, because the caller still holds it",
+          refuses(selection["runtime"].close))
+    before = RUNTIME.selection.open_selected_sessions()
+    discovered = RUNTIME.selection.select_bounded_provider(base_state())
+    check("a discovered session is marked owned",
+          discovered["runtime"].owned is True)
+    check("an owned session is visible as outstanding until it is released",
+          RUNTIME.selection.open_selected_sessions() == before + 1)
+    with discovered["runtime"]:
+        pass
+    check("releasing the holder closes an owned session and nothing is left outstanding",
+          RUNTIME.selection.open_selected_sessions() == before)
+
+    # 12: the same question observed twice was two records, and two counts.
+    repeated = base_state()
+    for _ in range(3):
+        RUNTIME.observe.observe(
+            repeated, seed_runtime(engine), question=failure_question_record(engine),
+            projection=projection(engine, IMPL_PROJECTION), authoritative_answer="X",
+            definition="failure-classification")
+    check("the same question over the same state is one shadow record, not three",
+          len(repeated["decision_shadow"]) == 1)
+    check("a repeated observation is counted rather than appended",
+          repeated["decision_shadow"][0]["observation_count"] == 3)
+    check("the summary counts one prediction, not three",
+          RUNTIME.shadow.compare(repeated)["records"] == 1)
+
+    # 13: a forbidden field one level down was not a forbidden field.
+    contract = engine.decisions.projections.contract("failure-classification")
+    forbidden = set(contract.forbidden)
+    nested_name = "prompt" if "prompt" in forbidden else sorted(forbidden)[0]
+    walk = engine.decisions.integrations._nested_forbidden_fields
+    check("the forbidden-field walk descends into nested mappings, reporting the path",
+          walk({"failure": {nested_name: "x"}}, forbidden) == [f"failure.{nested_name}"])
+    check("the walk descends into lists of mappings too",
+          walk({"findings": [{nested_name: "x"}]}, forbidden)
+          == [f"findings[0].{nested_name}"])
+    check("a deeply nested forbidden field is still found",
+          walk({"a": {"b": {"c": {nested_name: "x"}}}}, forbidden)
+          == [f"a.b.c.{nested_name}"])
+    depth = engine.decisions.integrations.MAX_FORBIDDEN_FIELD_DEPTH
+    at_bound: dict = {}
+    cursor = at_bound
+    for _ in range(depth):
+        cursor["child"] = {}
+        cursor = cursor["child"]
+    cursor[nested_name] = "x"
+    check("a forbidden field exactly at the depth bound is still found",
+          walk(at_bound, forbidden) == [".".join(["child"] * depth + [nested_name])])
+    beyond: dict = {}
+    cursor = beyond
+    for _ in range(depth + 1):
+        cursor["child"] = {}
+        cursor = cursor["child"]
+    cursor[nested_name] = "x"
+    check("the walk stops at its depth bound rather than descending for ever",
+          walk(beyond, forbidden) == [])
+    check("a nested forbidden field is refused, naming its path",
+          refuses(engine.decisions.integrations._entries,
+                  {"failure": {nested_name: "authorization: GRANT"}},
+                  contract_id="failure-classification"))
+    check("a top-level forbidden field is still refused",
+          refuses(engine.decisions.integrations._entries,
+                  {nested_name: "x"}, contract_id="failure-classification"))
+    check("a message that merely mentions a forbidden name is not swept up",
+          walk({"failure": f"a log line mentioning {nested_name} in passing"},
+               forbidden) == [])
+
+    # 14: a caller-supplied runtime was shut down by the API call that used it.
+    owned = seed_runtime(engine)
+    engine.api.decision_runtime_decide(
+        projection(engine, IMPL_PROJECTION), [failure_question_record(engine)], runtime=owned)
+    check("a caller-supplied runtime is still open after the API call that used it",
+          owned.available()[0] is True)
+    owned.shutdown()
+
+
+def failure_question_record(engine) -> dict:
+    return {
+        "question_id": "failure-class",
+        "instructions": "classify the failure",
+        "primitive": "ChoiceDecision",
+        "options": list(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        "projection_contract": "failure-classification",
+        "definition_version": "1",
+        "consequence": "LOW",
+    }
+
+
+def _import_sidecar(path: Path):
+    """Load sidecar.py by path.
+
+    The runtime package deliberately does not import it eagerly, so that argparse and the
+    module's ``main`` stay off the import path of every Ariadne process. Reading its
+    source therefore means loading it explicitly rather than reaching it as an attribute.
+    """
+    spec = importlib.util.spec_from_file_location("ar206_sidecar_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# ----------------------------------------------------------------- CLI / API
+
+
 def _closed_transport_is_final(transport_module, root: Path) -> tuple[bool, bool]:
     """Whether a stub sidecar starts, and whether closing its transport is final.
 
@@ -2152,9 +2291,6 @@ def _closed_transport_is_final(transport_module, root: Path) -> tuple[bool, bool
     except Exception:  # noqa: BLE001
         final = True
     return started, final
-
-
-# ----------------------------------------------------------------- CLI / API
 
 
 def cli_checks(engine, root: Path) -> None:

@@ -27,6 +27,7 @@ untouched the whole time.
 
 from __future__ import annotations
 
+import weakref
 from typing import Any, Mapping, Sequence
 
 from ..providers import DecisionProvider, UnavailableProvider
@@ -45,6 +46,68 @@ MODE_SHADOW = "SHADOW"
 
 MODE_FALLBACK = "FALLBACK"
 """No runtime, or the slice is not promoted. The 2.0 safe path runs unchanged."""
+
+_OPEN_SELECTED_SESSIONS: "weakref.WeakSet[DecisionRuntime]" = weakref.WeakSet()
+
+
+class SelectedSession:
+    """The session a selection handed back, with its ownership made explicit.
+
+    Returning a live subprocess with no instruction to close it is a trap: a diagnostic
+    that forgets leaves one sidecar process behind on every call, and a few hundred calls
+    later the machine is short of process slots. So the returned object says who owns it
+    and releases it on ``__exit__``::
+
+        selection = select_bounded_provider(state)
+        with selection["runtime"] as session:
+            ...  # use selection["provider"]
+
+    A session the caller supplied is *borrowed*: releasing this holder leaves it open,
+    because the caller is still using it. One discovered here is *owned* and must be
+    released. An explicit ``close()`` on a borrowed session raises rather than quietly
+    closing something the caller still holds.
+    """
+
+    def __init__(self, session: DecisionRuntime, owned: bool) -> None:
+        self._session = session
+        self._owned = bool(owned)
+        if self._owned:
+            _OPEN_SELECTED_SESSIONS.add(session)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._session, name)
+
+    @property
+    def owned(self) -> bool:
+        """Whether releasing this holder also closes the session."""
+        return self._owned
+
+    def close(self) -> None:
+        if not self._owned:
+            raise RuntimeError(
+                "this Decision Runtime session was supplied by the caller and is not ours to close"
+            )
+        _OPEN_SELECTED_SESSIONS.discard(self._session)
+        self._session.shutdown()
+
+    def __enter__(self) -> "SelectedSession":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        if self._owned:
+            self.close()
+
+    def __repr__(self) -> str:
+        return f"<SelectedSession {'owned' if self._owned else 'borrowed'} {self._session!r}>"
+
+
+def open_selected_sessions() -> int:
+    """How many selected sessions have been handed out and not released.
+
+    A number a diagnostic can report, and a test can assert returns to zero. A resource
+    that leaks is only a problem if something can see that it leaked.
+    """
+    return len(_OPEN_SELECTED_SESSIONS)
 
 
 def select_bounded_provider(
@@ -85,6 +148,10 @@ def select_bounded_provider(
         reasons.append(f"the supplied provider is unavailable: {reason}")
 
     session = runtime if runtime is not None else DecisionRuntime.discover()
+    # Whether this function owns the session decides who has to close it. A discovered
+    # subprocess is ours and has to be released; a session the caller passed in is
+    # theirs, and shutting it down would break the caller mid-flight.
+    owned = runtime is None
     status = session.status()
     if not status["available"]:
         session.shutdown()
@@ -119,7 +186,7 @@ def select_bounded_provider(
             "version": SELECTION_VERSION,
             "mode": MODE_SHADOW,
             "provider": provider if provider is not None else UnavailableProvider(),
-            "runtime": session,
+            "runtime": SelectedSession(session, owned),
             "slice": None,
             "problems": [],
             "reasons": [
@@ -139,7 +206,7 @@ def select_bounded_provider(
             "version": SELECTION_VERSION,
             "mode": MODE_SHADOW,
             "provider": provider if provider is not None else UnavailableProvider(),
-            "runtime": session,
+            "runtime": SelectedSession(session, owned),
             "slice": None,
             "problems": [],
             "reasons": [
@@ -160,7 +227,7 @@ def select_bounded_provider(
             "version": SELECTION_VERSION,
             "mode": MODE_SHADOW,
             "provider": provider if provider is not None else UnavailableProvider(),
-            "runtime": session,
+            "runtime": SelectedSession(session, owned),
             "slice": dict(active),
             "problems": list(scope_problems),
             "reasons": [
