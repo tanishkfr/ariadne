@@ -124,6 +124,11 @@ CAPABILITIES = ENGINE.capabilities
 VERIFICATION = ENGINE.verification
 PROVENANCE = ENGINE.provenance
 DECISIONS = ENGINE.decisions
+# AR-206 native Decision Runtime. Aliased at module scope so the CLI never reaches
+# through DECISIONS.runtime for the session helpers: a runtime-location concern is not
+# a decision-plane concern, and keeping them apart stops a new command from growing a
+# dependency on the whole Decision package.
+RUNTIME_SESSION = DECISIONS.runtime.session
 # AR-204 harness economics. The runtime exposes the same engine functions the API
 # and the benchmark drive, so no optimisation rule is duplicated on a surface.
 ECONOMICS = ENGINE.economics
@@ -7986,6 +7991,171 @@ def decision_trace_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def decision_runtime_command(args: argparse.Namespace) -> int:
+    """Inspect, install or exercise the native Decision Runtime.
+
+    Normal users never need this: Ariadne discovers the runtime by itself. It exists
+    for the questions a diagnostic has to answer honestly — is it installed, is it the
+    one we reviewed, what has it been measured at, and does an adoption slice cover
+    this decision.
+
+    The product vocabulary comes first in every view ("Decision Runtime: available").
+    Implementation identity follows it, because provenance that cannot name its
+    implementation is not evidence — but it is not what a user has to understand.
+    """
+    action = str(getattr(args, "runtime_action", "status") or "status")
+    RUNTIME = DECISIONS.runtime
+    if action == "install":
+        root = Path(str(getattr(args, "root", "") or "")) if getattr(args, "root", "") else default_runtime_root()
+        info = RUNTIME.seeds.install_seeds(root)
+        if getattr(args, "json", False):
+            print(json.dumps(info, indent=2, sort_keys=True, default=str))
+            return 0
+        print("Decision Runtime installed.")
+        print(f"  location      : {info['root']}")
+        print(f"  implementation: ariadne-reference-bounded (pure standard library, no download)")
+        print(f"  families      : {info['families']} seeded question families, {info['samples']} rule examples")
+        print("  note          : probabilities from this engine are uncalibrated by construction")
+        return 0
+
+    if action in ("status", "install"):
+        if action == "status":
+            root = str(getattr(args, "root", "") or "")
+            session = RUNTIME.session.DecisionRuntime.discover(root=root or None)
+            try:
+                status = session.status()
+                problems = session.problems()
+            finally:
+                session.shutdown()
+            if getattr(args, "json", False):
+                print(json.dumps({"status": status, "problems": problems}, indent=2, sort_keys=True, default=str))
+                return 0 if status["available"] else 2
+            print(f"{status['detail']}")
+            print(f"  primitives    : {', '.join(status['primitives']) or '(none)'}")
+            if status["unsupported_primitives"]:
+                print(f"  unsupported   : {', '.join(status['unsupported_primitives'])} (these use the normal fallback)")
+            print(f"  runtime       : {status['runtime_version']} / {status['implementation']} @ {status['implementation_revision']}")
+            print(f"  model revision: {status['model_revision'] or '(none)'}")
+            print(f"  device        : {status['device'] or '(unknown)'}")
+            print(f"  digests pinned: {'yes' if status['digest_pinned'] else 'no (bytes are undescribed, not verified)'}")
+            for problem in problems:
+                print(f"  problem       : {problem}")
+            if not status["available"]:
+                print("  Continuing through the safe fallback path.")
+            return 0 if status["available"] else 2
+        root = Path(str(getattr(args, "root", "") or "")) if getattr(args, "root", "") else default_runtime_root()
+        info = RUNTIME.seeds.install_seeds(root)
+        if getattr(args, "json", False):
+            print(json.dumps(info, indent=2, sort_keys=True, default=str))
+            return 0
+        print("Decision Runtime installed.")
+        print(f"  location      : {info['root']}")
+        print("  implementation: ariadne-reference-bounded (pure standard library, no download)")
+        print(f"  families      : {info['families']} seeded question families, {info['samples']} rule examples")
+        print("  note          : probabilities from this engine are uncalibrated by construction")
+        return 0
+
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+
+    if action == "doctor":
+        report = api.decision_runtime_report(state, definition=str(getattr(args, "definition", "") or ""))
+        session = RUNTIME.session.DecisionRuntime.discover()
+        try:
+            report["capability"] = session.status()
+        finally:
+            session.shutdown()
+        report["integrity"] = RUNTIME.integrity.device_report()
+        if getattr(args, "json", False):
+            print(json.dumps(report, indent=2, sort_keys=True, default=str))
+            return 0
+        print("Decision Runtime doctor")
+        print(f"  capability    : {report['capability']['detail']}")
+        shadow_summary = report["shadow"]
+        print(f"  shadow records: {shadow_summary['records']} ({shadow_summary['predicted']} predicted, {shadow_summary['abstained']} abstained)")
+        for name, count in shadow_summary["by_agreement"].items():
+            if count:
+                print(f"    {name:<11}: {count}")
+        if shadow_summary["accuracy"] is not None:
+            print(f"  accuracy      : {shadow_summary['accuracy']} (where ground truth exists)")
+        else:
+            print("  accuracy      : unknown (no recorded ground truth)")
+        adoption = report["adoption"]
+        print(f"  adoption      : {adoption['slices']} slice(s); active: {', '.join(adoption['active_definitions']) or '(none)'}")
+        print(f"  calibration   : {report['calibration']['profiles']} profile(s), {report['calibration']['proven']} PROVEN")
+        for problem in report["shadow_problems"] + report["influence_problems"]:
+            print(f"  problem       : {problem}")
+        print("  note          : a prediction is not verification, and nothing here authorises anything")
+        return 0
+
+    if action == "eval":
+        payload = str(getattr(args, "input", "") or "")
+        if not payload:
+            raise RuntimeError_("an evaluation needs --input with the evaluation cases")
+        document = json.loads(Path(payload).read_text(encoding="utf-8"))
+        report = api.decision_runtime_evaluate(
+            state,
+            records=list(document.get("records", []) or []),
+            rows=list(document.get("rows", []) or []),
+            decision_definition=str(document.get("decision_definition", "")),
+            questions=list(document.get("questions", []) or []),
+            runtime_version=str(document.get("runtime_version", "")),
+            implementation_revision=str(document.get("implementation_revision", "")),
+            model_revision=str(document.get("model_revision", "")),
+        )
+        baseline_path = str(getattr(args, "baseline", "") or "")
+        if baseline_path:
+            baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
+            report["comparison"] = api.decision_runtime_compare(baseline, report)
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        emit_event(run_root, "decision_runtime_completed", state=state, evaluation_id=report["evaluation_id"],
+                   comparable=bool(report.get("comparison", {}).get("comparable", True)))
+        if getattr(args, "json", False):
+            print(json.dumps(report, indent=2, sort_keys=True, default=str))
+            return 0
+        metrics = report["metrics"]
+        print(f"Evaluation {report['evaluation_id']}")
+        for key in ("accuracy", "coverage", "abstention_rate", "failure_rate", "ece", "brier", "latency_p50_ms", "latency_p95_ms"):
+            print(f"  {key:<17}: {metrics[key] if metrics[key] is not None else 'unknown'}")
+        comparison = report.get("comparison")
+        if comparison and not comparison["comparable"]:
+            print("  comparability  : REFUSED")
+            for reason in comparison["reasons"]:
+                print(f"    - {reason}")
+            return 2
+        return 0
+
+    if action == "promote":
+        slice_id = str(getattr(args, "slice_id", "") or "")
+        target = str(getattr(args, "to", "") or "")
+        if not slice_id or not target:
+            raise RuntimeError_("promotion needs --slice-id and --to")
+        record = api.decision_runtime_promote(
+            state, slice_id=slice_id, target=target,
+            reason=str(getattr(args, "reason", "") or "an operator recorded this transition"),
+            evaluation_id=str(getattr(args, "evaluation_id", "") or ""),
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        emit_event(
+            run_root,
+            "decision_runtime_promoted" if target == "ACTIVE" else "decision_runtime_suspended",
+            state=state, slice_id=slice_id, status=target,
+        )
+        print(f"Adoption slice {slice_id} is now {target}.")
+        print("  note: this is scoped per decision definition, question version and model revision,")
+        print("        and it grants no authority of any kind.")
+        return 0
+
+    raise RuntimeError_(f"unknown decision-runtime action: {action}")
+
+
+def default_runtime_root() -> Path:
+    """Where the Decision Runtime installs by default: under the Ariadne data home."""
+    return RUNTIME_SESSION.user_data_home() / RUNTIME_SESSION.RUNTIME_DIRECTORY / "current"
+
+
 def provenance_command(args: argparse.Namespace) -> int:
     """Inspect engine-bound execution provenance. Read-only unless an observation is recorded."""
     run_root, state = resolve_and_load(args)
@@ -8536,6 +8706,32 @@ def parser() -> argparse.ArgumentParser:
     trace_p.add_argument("--task-id", help="limit the trace to one task")
     trace_p.add_argument("--json", action="store_true")
 
+    runtime_p = sub.add_parser(
+        "decision-runtime",
+        help="inspect, install or exercise Ariadne's native Decision Runtime (diagnostic)",
+    )
+    # Deliberately not run_selector(): `status` and `install` are run-level facts about
+    # the machine, not facts about one run's state, and making them name a run root
+    # would force an operator to create a run just to ask whether a runtime exists.
+    runtime_p.add_argument("--run-root")
+    runtime_p.add_argument("--project")
+    runtime_p.add_argument(
+        "--action",
+        dest="runtime_action",
+        choices=["status", "doctor", "install", "eval", "promote"],
+        default="status",
+        help="status by default; normal use never needs this command",
+    )
+    runtime_p.add_argument("--root", help="runtime installation directory (advanced)")
+    runtime_p.add_argument("--definition", help="limit the report to one decision definition")
+    runtime_p.add_argument("--input", help="evaluation cases as JSON")
+    runtime_p.add_argument("--baseline", help="a previous evaluation report to compare against")
+    runtime_p.add_argument("--slice-id", help="adoption slice to move")
+    runtime_p.add_argument("--to", help="adoption state to move the slice to")
+    runtime_p.add_argument("--reason", help="why this transition is being recorded")
+    runtime_p.add_argument("--evaluation-id", help="the evaluation that justifies a promotion")
+    runtime_p.add_argument("--json", action="store_true")
+
     provenance_p = sub.add_parser(
         "provenance",
         help="inspect engine-bound execution provenance and record provider observations",
@@ -8776,6 +8972,7 @@ def main() -> int:
             "verify": verify_command,
             "decide": decide_command,
             "decision-trace": decision_trace_command,
+            "decision-runtime": decision_runtime_command,
             "provenance": provenance_command,
             "design-plan": design_plan_command,
             "record-design": record_design,

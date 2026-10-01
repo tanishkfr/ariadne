@@ -42,9 +42,19 @@ AR-205D adds the execution mechanism around those primitives:
   future, deliberate calibration step (no self-tuning);
 * :mod:`ariadne_engine.decisions.economics` — structural decision economics.
 
+AR-206 adds the native Decision Runtime, which makes the bounded middle layer
+something a normal install actually has:
+
+* :mod:`ariadne_engine.decisions.runtime` — the local bounded engine, its sidecar
+  transport, shadow observation, calibration profiles, scoped promotion and
+  identity-bound evaluation. Ariadne finds it automatically; there is no provider
+  picker and no user configuration.
+
 Nothing here requires a paid service, a network call or a third-party
-dependency; with no provider configured, every decision path reports
-``unavailable`` and the deterministic fallback runs.
+dependency. The reference bounded engine is pure standard library, so bounded
+local inference works on a fresh install; with no runtime installed at all, every
+decision path reports ``unavailable`` and the deterministic fallback runs exactly
+as it did in 2.0.
 """
 
 from __future__ import annotations
@@ -65,6 +75,7 @@ from . import (  # noqa: F401
     policy,
     projections,
     providers,
+    runtime,
     trace,
 )
 
@@ -84,5 +95,6 @@ __all__ = [
     "policy",
     "projections",
     "providers",
+    "runtime",
     "trace",
 ]

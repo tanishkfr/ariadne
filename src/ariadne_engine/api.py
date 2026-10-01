@@ -732,6 +732,111 @@ def invalidate_decision_cache(state, **options) -> dict:
     return {"invalidated": touched, "count": len(touched)}
 
 
+# ------------------------------------------------- AR-206 native decision runtime
+
+
+def decision_runtime_status(*, root="", version="") -> dict:
+    """Capability state of the native Decision Runtime (engine-level, read only)."""
+    from .decisions.runtime.session import DecisionRuntime
+
+    runtime = DecisionRuntime.discover(root=root or None, version=version)
+    try:
+        status = runtime.status()
+        return {"status": status, "problems": runtime.problems()}
+    finally:
+        runtime.shutdown()
+
+
+def decision_runtime_decide(state_projection, questions, **options) -> dict:
+    """Answer bounded questions over one projected state with the local runtime."""
+    from .decisions.runtime.session import DecisionRuntime
+
+    runtime = options.pop("runtime", None) or DecisionRuntime.discover(root=options.pop("root", "") or None)
+    try:
+        return dict(runtime.decide(state_projection, questions, **options))
+    finally:
+        if options.get("root") is None and runtime is not None:
+            runtime.shutdown()
+
+
+def decision_runtime_select(state, **options) -> dict:
+    """Which bounded implementation Ariadne would use, and in which role."""
+    from .decisions.runtime.selection import select_bounded_provider
+
+    return select_bounded_provider(state, **options)
+
+
+def decision_runtime_shadow_report(state, *, definition: str = "") -> dict:
+    """Shadow evidence and its isolation, for one decision definition."""
+    from .decisions.runtime import shadow
+
+    return {"summary": shadow.compare(state, definition=definition), "problems": shadow.shadow_problems(state)}
+
+
+def decision_runtime_calibration(state, **options) -> dict:
+    """Build and record a CalibrationProfile, or report why one cannot be used."""
+    from .decisions.runtime import profiles
+
+    if options.pop("record", True):
+        profile = profiles.build_profile(**options)
+        return profiles.record_profile(state, profile)
+    return profiles.build_profile(**options).as_record()
+
+
+def decision_runtime_evaluate(state, *, records=(), rows=(), **options) -> dict:
+    """Score an evaluation run and bind its experiment identity."""
+    from .decisions.runtime import evaluation
+
+    return evaluation.evaluate(records, rows=rows, **options)
+
+
+def decision_runtime_compare(baseline, candidate) -> dict:
+    """Metric comparison across two evaluation reports, refused if not comparable."""
+    from .decisions.runtime import evaluation
+
+    return evaluation.compare(baseline, candidate)
+
+
+def decision_runtime_promote(state, *, slice_id: str, target: str, **options) -> dict:
+    """Move one adoption slice through its lifecycle (never an authorization)."""
+    from .decisions.runtime import promotion
+
+    return promotion.transition(state, slice_id, target, **options)
+
+
+def decision_runtime_export(state, *, definition: str = "", **options) -> dict:
+    """Export reviewed shadow observations as a bounded training dataset."""
+    from .decisions.runtime import export
+
+    return export.collect(state, definition=definition, **options)
+
+
+def decision_runtime_report(state, *, definition: str = "") -> dict:
+    """The full Decision Runtime view: capability, shadow evidence, adoption, calibration."""
+    from .decisions.runtime import observe, profiles, promotion, shadow
+
+    return {
+        "shadow": shadow.compare(state, definition=definition),
+        "shadow_problems": shadow.shadow_problems(state),
+        "influence_problems": shadow.shadow_effect_problems(state, state.get("decisions", []) or []),
+        "adoption": promotion.summarise(state),
+        "calibration": {
+            "profiles": len(state.get("calibration_profiles", []) or []),
+            "proven": sum(
+                1
+                for row in state.get("calibration_profiles", []) or []
+                if str(row.get("status", "")) == "PROVEN"
+            ),
+            "policy": profiles.describe(),
+        },
+        "observer": observe.describe() if hasattr(observe, "describe") else {},
+        "limitations": [
+            "this report describes recorded evidence; it authorises nothing",
+            "a runtime prediction is never verification",
+        ],
+    }
+
+
 # ------------------------------------------------------ AR-204 harness economics
 
 
@@ -1033,6 +1138,16 @@ __all__ = [
     "justify_generation",
     "record_decision_outcome",
     "invalidate_decision_cache",
+    "decision_runtime_status",
+    "decision_runtime_decide",
+    "decision_runtime_select",
+    "decision_runtime_shadow_report",
+    "decision_runtime_calibration",
+    "decision_runtime_evaluate",
+    "decision_runtime_compare",
+    "decision_runtime_promote",
+    "decision_runtime_export",
+    "decision_runtime_report",
     "record_execution_billing",
     "record_execution_cache",
     "task_economics",

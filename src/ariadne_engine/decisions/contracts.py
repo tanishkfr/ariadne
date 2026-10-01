@@ -97,6 +97,45 @@ class DecisionQuestion:
             return tuple(str(item) for item in self.scale)
         return tuple(str(item) for item in self.options)
 
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> DecisionQuestion:
+        """Rebuild a question from its record form, without silently repairing it.
+
+        ``as_record`` flattens the answer space into ``options`` for every primitive,
+        so the original ``scale``/``positive``/``negative`` are recovered from the
+        primitive and the declared options. Anything that does not reconstruct into a
+        valid question raises, because a question that quietly changed shape between
+        the planner and a provider is a question whose answer cannot be trusted.
+        """
+        primitive = str(record.get("primitive", "ChoiceDecision"))
+        options = tuple(str(item) for item in record.get("options", ()) or ())
+        scale = tuple(str(item) for item in record.get("scale", ()) or ())
+        positive = str(record.get("positive", "yes"))
+        negative = str(record.get("negative", "no"))
+        if primitive == "BinaryDecision":
+            scale = ()
+            positive = options[0] if len(options) >= 2 else positive
+            negative = options[1] if len(options) >= 2 else negative
+        elif primitive == "ScaleDecision":
+            options = ()
+            scale = scale or options
+        else:
+            scale = ()
+        return cls(
+            question_id=str(record.get("question_id", "")),
+            instructions=str(record.get("instructions", "")),
+            primitive=primitive,
+            options=options,
+            scale=scale,
+            positive=positive,
+            negative=negative,
+            max_selections=int(record.get("max_selections", 1) or 1),
+            consequence=str(record.get("consequence", "LOW")),
+            definition_version=str(record.get("definition_version", "1")),
+            evidence_digest=str(record.get("evidence_digest", "")),
+            projection_contract=str(record.get("projection_contract", "")),
+        )
+
     def as_record(self) -> dict:
         return {
             "question_id": str(self.question_id),
