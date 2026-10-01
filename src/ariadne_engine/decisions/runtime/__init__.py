@@ -63,6 +63,11 @@ inferred:
 None of this requires a network call, a paid service or a third-party dependency. The
 reference engine is pure standard library, so the Decision Runtime is genuinely
 baked in rather than merely installable.
+
+:mod:`~ariadne_engine.decisions.runtime.sidecar` holds the executable itself. It is
+deliberately not imported here: the transport launches it by file path, and importing
+an entry point into the package would put ``argparse`` and a ``main`` on the import
+path of every Ariadne process.
 """
 
 from __future__ import annotations
@@ -83,7 +88,6 @@ from . import (  # noqa: F401
     session,
     shadow,
     shortlist,
-    sidecar,
     transport,
 )
 
@@ -103,6 +107,5 @@ __all__ = [
     "session",
     "shadow",
     "shortlist",
-    "sidecar",
     "transport",
 ]

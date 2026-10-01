@@ -31,13 +31,15 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
-from ariadne_engine.decisions.runtime.reference import (
-    ENGINE_NAME,
-    ReferenceBoundedEngine,
-    empty_book,
-    load_weights,
-)
-from ariadne_engine.decisions.runtime.transport import WIRE_SCHEMA
+if __package__ in (None, ""):  # pragma: no cover - only when run as a plain script
+    # Launched by path (``python .../sidecar.py --root <dir>``), so the package is not
+    # on the import path yet. Prepending the source root keeps this file both an
+    # importable module of the package and a standalone executable, which is what lets
+    # the transport launch it without a PYTHONPATH dance.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from .reference import ENGINE_NAME, ReferenceBoundedEngine, empty_book, load_weights
+from .transport import WIRE_SCHEMA
 
 WEIGHTS_NAME = "weights.json"
 """The weight file a runtime installation ships with."""

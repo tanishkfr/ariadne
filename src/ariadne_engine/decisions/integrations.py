@@ -114,8 +114,18 @@ def _bounded_answer(
     execution_id: str = "",
     cache_enabled: bool = True,
     generative_available: bool = False,
+    runtime: Any = None,
+    shadow: bool = True,
 ) -> dict:
-    """The one shared path: compile, project, batch, judge, escalate."""
+    """The one shared path: compile, project, batch, judge, escalate.
+
+    ``runtime`` and ``shadow`` are AR-206 additions and both default to off, so
+    every existing caller behaves exactly as it did in 2.0 when no runtime is passed.
+    When a runtime *is* passed, the authoritative answer above is already decided and
+    recorded before the runtime is consulted, and the prediction is stored with an
+    ``execution_effect`` of ``"none"``. The returned ``shadow`` block is the only
+    thing the runtime contributed, and it carries no authority.
+    """
     active = provider if provider is not None else UnavailableProvider()
     if not isinstance(active, DecisionProvider):
         raise ContractError("a decision integration needs a DecisionProvider")
@@ -150,6 +160,11 @@ def _bounded_answer(
             "projection_digest": "",
             "record": {},
             "escalation": verdict,
+            "shadow": {
+                "observed": False,
+                "reason": "the projection was insufficient, so there was nothing safe to ask",
+                "execution_effect": "none",
+            },
         }
     question = DecisionQuestion(
         question_id=question_id,
@@ -187,6 +202,11 @@ def _bounded_answer(
                 {"status": "failed"}, classification="BOUNDED", consequence=consequence,
                 generative_available=generative_available, stronger_available=False,
             ),
+            "shadow": {
+                "observed": False,
+                "reason": "the batch planner produced no result, so there was nothing to observe",
+                "execution_effect": "none",
+            },
         }
     row = dict(rows[0])
     record = planner.decision(state, str(row.get("decision_id", "")))
@@ -198,6 +218,17 @@ def _bounded_answer(
         consequence=consequence,
         generative_available=generative_available,
         stronger_available=False,
+    )
+    observation = _observe_runtime(
+        state,
+        runtime=runtime,
+        shadow=shadow,
+        question=question,
+        projection=projection,
+        authoritative_answer=str(row.get("answer", "")) if accepted else "",
+        authoritative_decision_id=str(row.get("decision_id", "")),
+        task_id=task_id,
+        definition=contract_id,
     )
     return {
         "status": str(row.get("status", "")),
@@ -214,7 +245,52 @@ def _bounded_answer(
         "record": record or {},
         "cached": bool(row.get("cached")),
         "escalation": verdict,
+        "shadow": observation,
     }
+
+
+def _observe_runtime(
+    state: dict,
+    *,
+    runtime: Any,
+    shadow: bool,
+    question: DecisionQuestion,
+    projection: Mapping[str, Any],
+    authoritative_answer: str,
+    authoritative_decision_id: str,
+    task_id: str,
+    definition: str,
+) -> dict:
+    """Let the native Decision Runtime observe the decided question. Never influences.
+
+    Imported lazily and wrapped: the Decision Runtime is optional, so neither the
+    import nor the call may be able to break an integration that works perfectly well
+    without it. Any failure is reported as an observation failure and changes nothing.
+    """
+    if runtime is None or not shadow:
+        return {"observed": False, "reason": "shadow observation was not requested for this path"}
+    try:
+        from .runtime import observe as observe_module
+    except Exception as exc:  # noqa: BLE001 - an optional subsystem cannot break a path
+        return {"observed": False, "runtime_failed": True, "reason": f"the decision runtime is unavailable: {exc}"}
+    try:
+        return observe_module.observe(
+            state,
+            runtime,
+            question=question,
+            projection=projection,
+            authoritative_answer=authoritative_answer,
+            authoritative_decision_id=authoritative_decision_id,
+            task_id=task_id,
+            definition=definition,
+        )
+    except Exception as exc:  # noqa: BLE001 - a shadow failure is recorded, never raised into the path
+        return {
+            "observed": False,
+            "runtime_failed": True,
+            "reason": f"shadow observation failed and changed nothing: {exc}",
+            "execution_effect": "none",
+        }
 
 
 def compiler_compile(
@@ -257,6 +333,8 @@ def classify_failure(
     execution_id: str = "",
     cache_enabled: bool = True,
     generative_available: bool = False,
+    runtime: Any = None,
+    shadow: bool = True,
 ) -> dict:
     """Classify a failure: deterministic first, bounded judgement only when needed.
 
@@ -302,6 +380,8 @@ def classify_failure(
         execution_id=execution_id,
         cache_enabled=cache_enabled,
         generative_available=generative_available,
+        runtime=runtime,
+        shadow=shadow,
     )
     answer = str(outcome.get("answer", ""))
     if answer and answer != "UNKNOWN":
@@ -326,6 +406,7 @@ def classify_failure(
         "decision": outcome.get("record") or {},
         "plan_id": str(outcome.get("plan_id", "")),
         "escalation": outcome.get("escalation") or {},
+        "shadow": outcome.get("shadow") or {},
     }
 
 
@@ -348,6 +429,8 @@ def review_escalation(
     projection_entries: Mapping | None = None,
     cache_enabled: bool = True,
     generative_available: bool = False,
+    runtime: Any = None,
+    shadow: bool = True,
 ) -> dict:
     """How much review the available evidence suggests.
 
@@ -410,6 +493,8 @@ def review_escalation(
         verification_level=str(verification_level),
         cache_enabled=cache_enabled,
         generative_available=generative_available,
+        runtime=runtime,
+        shadow=shadow,
     )
     answer = str(outcome.get("answer", "")) or "human_attention"
     return {
@@ -420,6 +505,7 @@ def review_escalation(
         "plan_id": str(outcome.get("plan_id", "")),
         "policy_still_controls": True,
         "escalation_verdict": outcome.get("escalation") or {},
+        "shadow": outcome.get("shadow") or {},
     }
 
 
@@ -441,6 +527,8 @@ def evidence_relevance(
     projection_entries: Mapping | None = None,
     cache_enabled: bool = True,
     generative_available: bool = False,
+    runtime: Any = None,
+    shadow: bool = True,
 ) -> dict:
     """Whether one evidence claim materially supports a stated requirement.
 
@@ -506,6 +594,8 @@ def evidence_relevance(
         verification_level=str(verification_level),
         cache_enabled=cache_enabled,
         generative_available=generative_available,
+        runtime=runtime,
+        shadow=shadow,
     )
     answer = str(outcome.get("answer", ""))
     if answer not in EVIDENCE_RELEVANCE_ANSWERS:
@@ -520,6 +610,7 @@ def evidence_relevance(
         "provenance_checked": True,
         "may_override_freshness": False,
         "escalation_verdict": outcome.get("escalation") or {},
+        "shadow": outcome.get("shadow") or {},
     }
 
 
@@ -542,6 +633,8 @@ def route_family(
     projection_entries: Mapping | None = None,
     cache_enabled: bool = True,
     generative_available: bool = False,
+    runtime: Any = None,
+    shadow: bool = True,
 ) -> dict:
     """The route family, when task structure has not already resolved it.
 
@@ -603,6 +696,8 @@ def route_family(
         verification_level="",
         cache_enabled=cache_enabled,
         generative_available=generative_available,
+        runtime=runtime,
+        shadow=shadow,
     )
     family = str(outcome.get("answer", ""))
     if family not in ROUTE_FAMILIES:
@@ -615,6 +710,7 @@ def route_family(
         "plan_id": str(outcome.get("plan_id", "")),
         "policy_authority": "deterministic",
         "escalation_verdict": outcome.get("escalation") or {},
+        "shadow": outcome.get("shadow") or {},
     }
 
 
