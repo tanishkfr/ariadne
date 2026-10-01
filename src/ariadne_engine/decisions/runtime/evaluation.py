@@ -307,6 +307,18 @@ def comparable_to(
     reasons: list[str] = []
     here = identity_of(candidate)
     there = identity_of(baseline)
+    # A report that carries no experiment identity cannot be shown to describe the same
+    # experiment as anything, including itself. Skipping absent keys is right for a key
+    # missing on *one* side of two otherwise-identified runs; it is not right when the
+    # whole block is absent, which is the shape of "someone passed two arbitrary dicts".
+    if not here or not there:
+        absent = "the candidate" if not here else "the baseline"
+        if not here and not there:
+            absent = "neither report"
+        return False, [
+            f"{absent} carries no experiment identity, so this is not a comparison of the "
+            "same experiment; run the evaluation rather than assembling a report by hand"
+        ]
     labels = {
         "dataset_digest": "dataset bytes",
         "question_schema_digest": "question schema",
@@ -337,9 +349,24 @@ def compare(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict:
     candidate_metrics = dict(candidate.get("metrics", {}) or {})
     shared = sorted(set(base_metrics) & set(candidate_metrics))
     deltas: dict[str, dict] = {}
+    missing = sorted(key for key in base_metrics if key not in candidate_metrics)
     for key in shared:
         before = base_metrics[key]
         after = candidate_metrics[key]
+        if isinstance(before, (int, float)) and after is None:
+            # The candidate still reports the key, but with no value. That is not "no
+            # change": a run that answers everything and reports no confidence has an
+            # ECE and a Brier of None, and treating those as absent from the comparison
+            # lets a calibration regression pass the gate with nothing measured.
+            missing.append(key)
+            deltas[key] = {
+                "baseline": before,
+                "candidate": None,
+                "delta": None,
+                "improved": False,
+                "note": "the candidate stopped reporting this metric, so the change is unknown",
+            }
+            continue
         if not isinstance(before, (int, float)) or not isinstance(after, (int, float)):
             continue
         deltas[key] = {
@@ -348,12 +375,11 @@ def compare(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict:
             "delta": round(float(after) - float(before), 6),
             "improved": _improved(key, float(before), float(after)),
         }
-    missing = sorted(key for key in base_metrics if key not in candidate_metrics)
     return {
         "comparable": ok,
         "reasons": reasons,
         "deltas": deltas,
-        "missing_metrics": missing,
+        "missing_metrics": sorted(set(missing)),
         "note": (
             "a metric comparison without experiment identity is not evidence; the gate refuses "
             "rather than printing a delta across different experiments"
@@ -390,6 +416,9 @@ def assert_regression(
     tolerances = dict(tolerances or {})
     failures = []
     for metric, delta in result["deltas"].items():
+        if delta.get("delta") is None:
+            # Already counted as a missing metric below; there is no number to score.
+            continue
         limit = tolerances.get(metric)
         if limit is None:
             if delta["improved"]:

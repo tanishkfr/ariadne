@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+import math
+
 from ...contracts import UNSUPPORTED_PRIMITIVE
 from ..contracts import answer_from_provider
 from ..providers import DecisionProvider, DecisionProviderError
@@ -75,7 +77,29 @@ class LocalBoundedProvider(DecisionProvider):
 
     @property
     def model_version(self) -> str:
-        return self._model_version
+        """The revision the runtime reports *now*, not the one it reported at startup.
+
+        The transport transparently respawns a sidecar that died, and the replacement
+        may be a different build. A latched value would stamp an answer computed by the
+        new revision with the old one, and serve the old revision's cached answers to the
+        new one -- which is the moving label the cache exists to prevent.
+        """
+        return self._observed_revision() or self._model_version
+
+    def _assert_revision_agrees(self, response: Mapping[str, Any]) -> None:
+        """Refuse a response whose revision is not the one this provider just observed.
+
+        The transport restarts a dead child transparently, so an answer can arrive from a
+        build that was not the one this provider last reported. Recording it would pair
+        a decision with the wrong revision in the decision record and the cache key.
+        """
+        observed = self._observed_revision()
+        claimed = str(response.get("model_version", "") or "")
+        if observed and claimed and observed != claimed:
+            raise DecisionProviderError(
+                f"the decision runtime answered as {claimed!r} but now reports {observed!r}; "
+                "a restarted sidecar must not be trusted to answer as the previous revision"
+            )
 
     # -- capability --------------------------------------------------------
 
@@ -158,6 +182,11 @@ class LocalBoundedProvider(DecisionProvider):
         except Exception as exc:  # noqa: BLE001 - a provider failure is recorded, never answered
             self.failures += 1
             raise DecisionProviderError(str(exc)) from exc
+        try:
+            self._assert_revision_agrees(response)
+        except DecisionProviderError:
+            self.failures += 1
+            raise
         return self._translate(response, questions, projection)
 
     def _translate(
@@ -190,8 +219,10 @@ class LocalBoundedProvider(DecisionProvider):
                 continue
             payload = {
                 "answer": slot.get("answer"),
-                "confidence": slot.get("confidence"),
-                "confidence_kind": str(slot.get("confidence_kind", "PROVIDER_PROBABILITY")),
+                "confidence": _bounded_confidence(slot.get("confidence")),
+                "confidence_kind": _declared_confidence_kind(
+                    slot.get("confidence_kind"), self.confidence_kinds()
+                ),
                 "distribution": dict(slot.get("distribution", {}) or {}),
             }
             # Validate through the Plane's own contract so a runtime cannot widen the
@@ -200,6 +231,22 @@ class LocalBoundedProvider(DecisionProvider):
             if parsed.problems:
                 failed.append(question.question_id)
                 answers[question.question_id] = {**payload, "problems": list(parsed.problems)}
+                continue
+            if not _plausible(payload):
+                # The wire answer was inside the answer space, but the confidence it
+                # carried is not something this provider is willing to vouch for. Refusing
+                # is the honest response: a policy reading a confidence of 1e-9 as a weak
+                # opinion rather than a refusal is exactly the confusion to avoid.
+                failed.append(question.question_id)
+                answers[question.question_id] = {
+                    **payload,
+                    "abstained": True,
+                    "reason": "the runtime reported a confidence its provider does not offer",
+                    "problems": [
+                        "confidence_kind was not one this provider declares: "
+                        f"{sorted(self.confidence_kinds())}",
+                    ],
+                }
                 continue
             answers[question.question_id] = {
                 **payload,
@@ -211,7 +258,7 @@ class LocalBoundedProvider(DecisionProvider):
         return {
             "provider": self.provider,
             "model": self.model,
-            "model_version": self._model_version,
+            "model_version": self.model_version,
             "implementation_revision": str(response.get("implementation_revision", "")),
             "runtime_version": str(response.get("runtime_version", "")),
             "device": str(response.get("device", "")),
@@ -222,6 +269,48 @@ class LocalBoundedProvider(DecisionProvider):
             "projection_digest": str(projection.get("digest", "")),
             "authorization_effect": "none",
         }
+
+
+def _bounded_confidence(value: Any) -> float | None:
+    """A finite confidence in ``[0, 1]``, or ``None``.
+
+    A non-finite or out-of-range number from the wire is not a weak opinion, it is a
+    malformed answer, and passing it through would let a policy compare against it.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number < 0.0 or number > 1.0:
+        return None
+    return number
+
+
+def _declared_confidence_kind(value: Any, offered: tuple[str, ...]) -> str:
+    """The runtime's claimed kind, narrowed to one this provider actually offers.
+
+    ``describe()`` is the contract this provider publishes. A sidecar that answers with
+    a kind absent from it is making a claim about its own calibration that the provider
+    has not made and cannot make on its behalf.
+    """
+    claimed = str(value or "PROVIDER_PROBABILITY")
+    return claimed if claimed in offered else "SELF_REPORTED_CONFIDENCE"
+
+
+def _plausible(payload: Mapping[str, Any]) -> bool:
+    """Whether the provider is willing to stand behind this answer's confidence.
+
+    A kind the provider does not offer, or a confidence of effectively zero attached to
+    a real answer, is a refusal expressed as a number. Refusing it keeps the two apart.
+    """
+    if payload.get("confidence_kind") == "NONE":
+        return False
+    if payload.get("confidence_kind") == "SELF_REPORTED_CONFIDENCE":
+        return False
+    confidence = payload.get("confidence")
+    if confidence is not None and 0.0 < float(confidence) <= 0.01:
+        return False
+    return True
 
 
 def position_id(projection: Mapping[str, Any]) -> str:

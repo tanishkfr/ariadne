@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...contracts import ContractError
-from .manifest import file_digest, revision_matches, verify_files
+from .manifest import file_digest, revision_matches, safe_relative_path, verify_files
 
 INTEGRITY_VERSION = "ar-206-integrity-1"
 """The integrity report shape."""
@@ -51,7 +51,10 @@ def inspect(root: Path, *, manifest: Mapping[str, Any] | None = None) -> dict:
     observed: dict[str, str] = {}
     if isinstance(files, Mapping):
         for rel in files:
-            path = root / str(rel)
+            # The same guard the verification path uses. Without it, a manifest naming
+            # "../secret.txt" turns this "describe the installation" call into a
+            # sha256 oracle for files outside it.
+            path = root / safe_relative_path(rel)
             if path.is_file():
                 observed[str(rel)] = file_digest(path)
     return {

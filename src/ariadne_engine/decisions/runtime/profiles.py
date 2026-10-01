@@ -323,13 +323,36 @@ def profile_for(
         return _refuse(reasons)
     chosen = sorted(matching, key=lambda profile: (-profile.dataset_size, profile.profile_id))[0]
     threshold = chosen.thresholds_by_risk.get(str(risk))
+    if threshold is None:
+        # The profile is real and matched, but it was not measured for this risk class.
+        # Accepting it would relabel a PROTECTED decision as calibrated on the strength of
+        # evidence gathered from LOW-risk examples, and would apply no threshold at all.
+        # A narrower request than the profile declares is the only direction that widens
+        # the evidence behind the number, so only that is allowed here.
+        declared = set(chosen.thresholds_by_risk)
+        if declared and not str(risk) in declared:
+            order = list(DECISION_CONSEQUENCES)
+            if str(risk) in order and min(order.index(str(risk)) for value in declared) > order.index(str(risk)):
+                return {
+                    "accepted": True,
+                    "profile": chosen.as_record(),
+                    "profile_id": chosen.profile_id,
+                    "reasons": [f"the matched profile declares no threshold for {risk}; no gate applies"],
+                    "confidence_kind": "CALIBRATED_PROBABILITY",
+                    "min_confidence": None,
+                    "threshold_risk": str(risk),
+                }
+        return _refuse(reasons + [
+            f"profile {chosen.profile_id} declares no threshold for risk class {risk!r}; "
+            f"it was measured for {sorted(declared) or 'no risk class'}"
+        ])
     return {
         "accepted": True,
         "profile": chosen.as_record(),
         "profile_id": chosen.profile_id,
         "reasons": [],
         "confidence_kind": "CALIBRATED_PROBABILITY",
-        "min_confidence": None if threshold is None else float(threshold),
+        "min_confidence": float(threshold),
         "threshold_risk": str(risk),
     }
 
@@ -416,11 +439,15 @@ def set_profile_status(state: dict, profile_id: str, status: str) -> dict:
     """
     if status not in CALIBRATION_PROFILE_STATUSES:
         raise ValueError(f"unknown calibration profile status: {status!r}")
-    for record in state.get("calibration_profiles", []) or []:
+    for index, record in enumerate(state.get("calibration_profiles", []) or []):
         if str(record.get("profile_id", "")) == str(profile_id):
             updated = dict(record)
             updated["status"] = str(status)
             updated["superseded_at"] = utc_now()
+            # Write it back. Returning the new record without storing it would make
+            # retiring a profile look like it worked while profile_for went on granting
+            # CALIBRATED_PROBABILITY from a profile the caller had already withdrawn.
+            state["calibration_profiles"][index] = updated
             return updated
     raise ValueError(f"no calibration profile is recorded with id {profile_id!r}")
 

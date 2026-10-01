@@ -25,6 +25,7 @@ Run: python scripts/test-decision-runtime.py
 from __future__ import annotations
 
 import hashlib
+import inspect
 import importlib.util
 import json
 import os
@@ -544,8 +545,27 @@ def calibration_checks(engine) -> None:
             state, decision_definition="failure-classification", question=failure, risk="HIGH",
             **identity,
         )
-        check("a profile with no HIGH threshold grants calibration but no threshold",
-              high["accepted"] is True and high["min_confidence"] is None)
+        check("a profile measured only for LOW risk does not calibrate a HIGH-risk decision",
+              high["accepted"] is False
+              and high["confidence_kind"] != "CALIBRATED_PROBABILITY"
+              and any("HIGH" in reason for reason in high["reasons"]))
+        check("the refusal names the risk classes the profile was actually measured for",
+              any("LOW" in reason for reason in high["reasons"]))
+        both = RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[failure],
+            runtime=identity["runtime"], implementation=identity["implementation"],
+            model=RUNTIME.reference.ENGINE_NAME, revision=identity["model_revision"],
+            dataset_digest="b" * 64, dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.86, coverage=0.94, ece=0.07, brier=0.11,
+            thresholds_by_risk={"LOW": 0.55, "HIGH": 0.8},
+        )
+        RUNTIME.profiles.record_profile(state, both)
+        narrowed = RUNTIME.profiles.profile_for(
+            state, decision_definition="failure-classification", question=failure, risk="HIGH",
+            **identity,
+        )
+        check("a profile measured for HIGH risk calibrates the HIGH-risk decision it measured",
+              narrowed["accepted"] is True and narrowed["min_confidence"] == 0.8)
         check("an unknown risk class is refused outright",
               RUNTIME.profiles.profile_for(
                   state, decision_definition="failure-classification", question=failure,
@@ -1951,6 +1971,189 @@ def integration_checks(engine) -> None:
         session.shutdown()
 
 
+def hardening_checks(engine, root: Path) -> None:
+    """The nine defects an adversarial review found, each now pinned by a check.
+
+    A fix with no test is a comment. Every check here fails against the pre-fix
+    behaviour, so each one is a standing reminder of what went wrong.
+    """
+    RUNTIME = runtime_of(engine)
+    module = engine.decisions.runtime
+
+    # 1 and 2: a timeout that is not a deadline, and a stderr pipe nobody drains.
+    transport = RUNTIME.transport
+    started, closed_final = _closed_transport_is_final(transport, root)
+    check("the stub sidecar starts and answers, so the close test is testing something",
+          started)
+    check("a closed transport refuses to start again, so close() is a final state",
+          closed_final)
+    check("the sidecar's stderr is drained continuously, not only on failure",
+          hasattr(transport, "_StderrBuffer")
+          and "read()" not in inspect.getsource(transport._drain))
+
+    # 3: a profile retirement that never reached the state.
+    local = base_state()
+    profile_question = question(engine, "failure-class", "ChoiceDecision", "failure-classification")
+    profile = RUNTIME.profiles.build_profile(
+        decision_definition="failure-classification", questions=[profile_question],
+        runtime="local_bounded", implementation=RUNTIME.reference.ENGINE_NAME,
+        model=RUNTIME.reference.ENGINE_NAME, revision=RUNTIME.reference.ENGINE_REVISION,
+        dataset_digest="c" * 64, dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+        accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08, thresholds_by_risk={"LOW": 0.5})
+    identity = {"runtime": "local_bounded", "implementation": RUNTIME.reference.ENGINE_NAME,
+                "model_revision": RUNTIME.reference.ENGINE_REVISION}
+    RUNTIME.profiles.record_profile(local, profile)
+    RUNTIME.profiles.set_profile_status(local, profile.profile_id, "RETIRED")
+    check("retiring a profile writes the new status to the state",
+          local["calibration_profiles"][-1]["status"] == "RETIRED")
+    check("a retired profile stops granting CALIBRATED_PROBABILITY",
+          RUNTIME.profiles.profile_for(
+              local, decision_definition="failure-classification", question=profile_question,
+              risk="LOW", **identity)["accepted"] is False)
+
+    # 4: a sidecar's self-declared confidence kind was forwarded verbatim.
+    class Overclaiming:
+        def available(self):
+            return True, "overclaiming"
+
+        def status(self):
+            return {"runtime_version": "1", "implementation": "x", "implementation_revision": "r",
+                    "model": "x", "model_revision": "r1", "device": "cpu",
+                    "runtime_kind": "local_bounded", "primitives": ["ChoiceDecision"],
+                    "confidence_kinds": ["PROVIDER_PROBABILITY"]}
+
+        def decide(self, *_a, **_k):
+            return {"provider": "x", "model": "x", "model_version": "r1", "runtime_version": "1",
+                    "device": "cpu", "answers": {"0:failure-class": {
+                        "question_id": "failure-class", "answer": "IMPLEMENTATION_FAILURE",
+                        "valid": True, "confidence": 0.9,
+                        "confidence_kind": "CALIBRATED_PROBABILITY",
+                        "distribution": {"IMPLEMENTATION_FAILURE": 0.9}}}}
+
+    session = RUNTIME.session.DecisionRuntime.in_process(Overclaiming(), description=Overclaiming().status())
+    try:
+        result = RUNTIME.provider.LocalBoundedProvider(session).answer({
+            "projection": projection(engine, IMPL_PROJECTION), "questions": [profile_question]})
+    finally:
+        session.shutdown()
+    check("a runtime cannot self-declare CALIBRATED_PROBABILITY through the provider",
+          result["failed_questions"] == ["failure-class"]
+          and result["answers"]["failure-class"]["abstained"] is True
+          and result["answers"]["failure-class"]["confidence_kind"] != "CALIBRATED_PROBABILITY")
+
+    # 5: a confidence of effectively zero is a refusal, not a weak opinion.
+    near_zero = Overclaiming()
+    near_zero.decide = lambda *_a, **_k: {
+        "provider": "x", "model": "x", "model_version": "r1", "runtime_version": "1",
+        "device": "cpu", "answers": {"0:failure-class": {
+            "question_id": "failure-class", "answer": "IMPLEMENTATION_FAILURE", "valid": True,
+            "confidence": 1e-9, "confidence_kind": "PROVIDER_PROBABILITY",
+            "distribution": {"IMPLEMENTATION_FAILURE": 0.9}}}}
+    tiny = RUNTIME.session.DecisionRuntime.in_process(near_zero, description=Overclaiming().status())
+    try:
+        tiny_result = RUNTIME.provider.LocalBoundedProvider(tiny).answer({
+            "projection": projection(engine, IMPL_PROJECTION), "questions": [profile_question]})
+    finally:
+        tiny.shutdown()
+    check("a confidence of 1e-9 attached to a real answer is refused, not recorded as a low score",
+          tiny_result["answers"]["failure-class"]["abstained"] is True)
+    check("a non-finite confidence never reaches the decision record",
+          RUNTIME.provider._bounded_confidence(float("nan")) is None
+          and RUNTIME.provider._bounded_confidence(float("inf")) is None
+          and RUNTIME.provider._bounded_confidence(1.5) is None
+          and RUNTIME.provider._bounded_confidence(0.5) == 0.5)
+
+    # 6 and 7: the evaluation gate.
+    metrics_base = {"identity": {"dataset_digest": "d" * 64}, "metrics": {
+        "accuracy": 1.0, "ece": 0.05, "brier": 0.005, "coverage": 1.0}}
+    metrics_candidate = {"identity": {"dataset_digest": "d" * 64}, "metrics": {
+        "accuracy": 1.0, "ece": None, "brier": None, "coverage": 1.0}}
+    stopped = RUNTIME.evaluation.compare(metrics_base, metrics_candidate)
+    check("a candidate that stopped reporting a metric is reported missing, not unchanged",
+          set(stopped["missing_metrics"]) >= {"ece", "brier"})
+    try:
+        RUNTIME.evaluation.assert_regression(metrics_base, metrics_candidate)
+        check("the regression gate fails when a candidate stops reporting a metric", False)
+    except AssertionError as exc:
+        check("the regression gate fails when a candidate stops reporting a metric",
+              "ece" in str(exc) and "brier" in str(exc))
+    check("a report with no experiment identity is not comparable to anything",
+          RUNTIME.evaluation.compare({"metrics": {"accuracy": 0.99}},
+                                     {"metrics": {"accuracy": 0.01}})["comparable"] is False)
+    check("neither report carrying an identity is refused too",
+          RUNTIME.evaluation.compare({}, {})["comparable"] is False)
+
+    # 8: the manifest path guard was only applied on the verification path.
+    with tempfile.TemporaryDirectory(prefix="ar206-integrity-") as workspace:
+        root_dir = Path(workspace)
+        RUNTIME.seeds.install_seeds(root_dir)
+        hostile = {"model": "x", "model_revision": "r",
+                   "files": {"../secret.txt": "0" * 64}}
+        check("a traversing manifest path is refused on the inspection path too",
+              refuses(RUNTIME.integrity.inspect, root_dir, manifest=hostile))
+        check("a traversing manifest path is refused on the verification path too",
+              refuses(RUNTIME.integrity.verify_against, root_dir, hostile["files"]))
+        check("a well-formed manifest is still inspected, digests and all",
+              set(RUNTIME.integrity.inspect(root_dir, manifest={
+                  "model": "x", "model_revision": "r1",
+                  "files": {"weights.json": "0" * 64}})["observed_files"])
+              == {"weights.json"})
+
+    # 9: "main" was a moving alias everywhere except the decision cache.
+    cache = engine.decisions.cache
+    binary = engine.decisions.contracts.DecisionQuestion(
+        question_id="failure-class", instructions="classify",
+        primitive="ChoiceDecision",
+        options=tuple(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification")
+    refused_aliases = [
+        alias for alias in ("latest", "main", "ar206-main", "stable")
+        if refuses(cache.key_for, binary, projection_digest="e" * 64, provider="p",
+                   model_version=alias, policy_version="v")
+    ]
+    check("every moving alias the engine knows about is refused by the decision cache",
+          set(refused_aliases) == {"latest", "main", "ar206-main", "stable"},
+          )
+
+
+def _closed_transport_is_final(transport_module, root: Path) -> tuple[bool, bool]:
+    """Whether a stub sidecar starts, and whether closing its transport is final.
+
+    Two answers rather than one, so a failure says which half broke: a stub that will
+    not start and a transport that will not stay closed are different defects, and a
+    single boolean would hide the difference.
+    """
+    stub = root / "ar206-stub-sidecar.py"
+    stub.write_text(
+        "import json, sys\n"
+        "for line in sys.stdin:\n"
+        "    request = json.loads(line)\n"
+        "    payload = {'available': True, 'runtime_version': '1',\n"
+        "               'implementation': 'stub', 'implementation_revision': 'r',\n"
+        "               'model': 'stub', 'model_revision': 'r1', 'device': 'cpu',\n"
+        "               'primitives': ['ChoiceDecision'],\n"
+        "               'confidence_kinds': ['PROVIDER_PROBABILITY']}\n"
+        "    line_out = json.dumps({'schema': 'ariadne-decision-runtime-wire/1',\n"
+        "                            'result': payload})\n"
+        "    sys.stdout.write(line_out + chr(10))\n"
+        "    sys.stdout.flush()\n",
+        encoding="utf-8")
+    live = transport_module.SubprocessTransport([sys.executable, str(stub)])
+    started = False
+    try:
+        live.call("status", {}, timeout=20)
+        started = True
+    except Exception:  # noqa: BLE001
+        started = False
+    live.close()
+    final = False
+    try:
+        live.call("status", {}, timeout=5)
+    except Exception:  # noqa: BLE001
+        final = True
+    return started, final
+
+
 # ----------------------------------------------------------------- CLI / API
 
 
@@ -2054,6 +2257,7 @@ def main() -> int:
         packaging_checks(engine, root)
         bounded_schema_checks(engine)
         export_checks(engine)
+        hardening_checks(engine, root)
         product_checks(engine, root)
         integration_checks(engine)
         cli_checks(engine, root)

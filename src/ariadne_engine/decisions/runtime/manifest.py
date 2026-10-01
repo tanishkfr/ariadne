@@ -91,6 +91,23 @@ def file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def safe_relative_path(raw: Any) -> str:
+    """Normalise one manifest-relative path, refusing anything that escapes the root.
+
+    A manifest is data. A data-controlled path that can escape the installation
+    directory turns every reader of the manifest into an arbitrary-file-read oracle --
+    one that reports SHA-256 digests, which is enough to confirm a guessed file. The
+    check therefore lives here once, and every path a manifest names goes through it:
+    the verification path and the inspection path alike.
+    """
+    rel = str(raw).strip().replace("\\", "/")
+    if not rel or rel == ".." or rel.startswith("../") or "/../" in rel:
+        raise ContractError(f"decision runtime digest map names an unsafe path: {raw!r}")
+    if rel.startswith("/") or Path(rel).is_absolute() or ntpath.isabs(str(raw)):
+        raise ContractError(f"decision runtime digest map names an absolute path: {raw!r}")
+    return rel
+
+
 def verify_files(root: Path, expected: Mapping[str, str] | None) -> dict:
     """Verify files under ``root`` against a reviewed digest map.
 
@@ -114,11 +131,7 @@ def verify_files(root: Path, expected: Mapping[str, str] | None) -> dict:
     missing: list[str] = []
     checked = 0
     for raw_rel, raw_want in sorted(expected.items()):
-        rel = str(raw_rel).strip().replace("\\", "/")
-        if not rel or rel == ".." or rel.startswith("../") or "/../" in rel:
-            raise ContractError(f"decision runtime digest map names an unsafe path: {raw_rel!r}")
-        if rel.startswith("/") or Path(rel).is_absolute() or ntpath.isabs(raw_rel):
-            raise ContractError(f"decision runtime digest map names an absolute path: {raw_rel!r}")
+        rel = safe_relative_path(raw_rel)
         path = root / rel
         if not path.is_file():
             missing.append(rel)

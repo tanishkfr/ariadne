@@ -183,6 +183,8 @@ class SubprocessTransport:
         self._cwd = str(cwd) if cwd else None
         self._env = dict(env) if env else None
         self._process: subprocess.Popen[str] | None = None
+        self._stderr: _StderrBuffer | None = None
+        self._disposed = False
         self._lock = threading.Lock()
         self._status: dict[str, Any] = {}
         self._failure = ""
@@ -190,6 +192,11 @@ class SubprocessTransport:
     # -- lifecycle ---------------------------------------------------------
 
     def _ensure_started(self, timeout: float) -> subprocess.Popen[str]:
+        if self._disposed:
+            # close() is a final state, not a hint. A transport that silently respawns
+            # after being closed would turn a deliberate shutdown into a live process,
+            # which is the opposite of what every caller that closes one intends.
+            raise RuntimeTransportError("the decision runtime transport is closed")
         if self._process is not None and self._process.poll() is None:
             return self._process
         self._process = None
@@ -220,24 +227,28 @@ class SubprocessTransport:
         except OSError as exc:
             self._failure = f"the decision runtime could not be started: {exc}"
             raise RuntimeTransportError(self._failure) from exc
+        # Start draining stderr before anything else can block. A child that fills the
+        # pipe would stop reading stdin and wedge every caller of this transport.
+        stderr_buffer = _StderrBuffer(self._process.stderr).start()
         try:
             status = self._call("status", {}, timeout=timeout)
         except Exception:
             self.close()
             raise
         self._status = dict(status)
+        self._stderr = stderr_buffer
         return self._process
 
     def close(self) -> None:
+        self._disposed = True
         process, self._process = self._process, None
+        buffer, self._stderr = self._stderr, None
+        if buffer is not None:
+            buffer.close()
         if process is None:
             return
-        for stream in (process.stdin, process.stdout, process.stderr):
-            try:
-                if stream is not None:
-                    stream.close()
-            except OSError:
-                pass
+        # Kill first, then close the pipes. Closing before killing would make the child
+        # write into a closed pipe; killing after a blocking read would be too late.
         if process.poll() is None:
             try:
                 if sys.platform == "win32":
@@ -248,6 +259,14 @@ class SubprocessTransport:
                     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
             except (OSError, ProcessLookupError, AttributeError):
                 process.kill()
+        for stream in (process.stdin, process.stdout):
+            try:
+                if stream is not None:
+                    stream.close()
+            except (OSError, ValueError):
+                pass
+        # process.stderr is left to the reader thread: closing it here would block on the
+        # lock that thread is holding. Killing the child ends the pipe instead.
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:  # pragma: no cover - only a wedged child
@@ -273,7 +292,11 @@ class SubprocessTransport:
             raise RuntimeTransportError(f"the decision runtime closed its input before {method}: {exc}") from exc
         line = _read_line(process.stdout, timeout)
         if line is None:
-            detail = _drain(process.stderr)
+            # The deadline has passed. Read the buffered detail first -- that is an
+            # in-memory read and cannot block -- then close. Reading the child's stderr
+            # pipe instead would block until the child exits, which a wedged child never
+            # does, turning a bounded timeout into an unbounded hang.
+            detail = _drain(self._stderr)
             self.close()
             raise RuntimeTransportError(
                 f"the decision runtime did not answer {method} within {timeout:g}s"
@@ -360,16 +383,68 @@ def _read_line(stream: Any, timeout: float) -> str | None:
     return line
 
 
-def _drain(stream: Any) -> str:
-    """Best-effort read of whatever the child wrote to stderr, for the failure record."""
-    if stream is None:
+def _drain(buffer: "_StderrBuffer") -> str:
+    """Whatever the child wrote to stderr, for the failure record.
+
+    Reads the *buffer*, never the pipe. A blocking read of the pipe returns only at EOF
+    -- which for a child that is still alive is never -- so a wedged engine turned a
+    bounded timeout into an unbounded hang. The buffer is fed continuously by a reader
+    thread, so anything the child wrote before it stalled is already here.
+    """
+    if buffer is None:
         return ""
-    try:
-        data = stream.read()
-    except Exception:  # noqa: BLE001
-        return ""
-    text = (data or "").strip()
-    return text[-400:]
+    return buffer.text()
+
+
+class _StderrBuffer:
+    """A bounded, continuously-drained record of what the sidecar wrote to stderr.
+
+    A piped stderr that nobody reads is a deadlock waiting to happen: the child blocks
+    in write() once the OS pipe buffer fills, stops reading stdin, and the parent
+    blocks in readline. On Windows that buffer is about 4 KiB, which a chatty sidecar
+    reaches in a few progress lines. So the pipe is drained from the moment the child
+    starts, into a ring buffer that keeps only the last few kilobytes.
+    """
+
+    def __init__(self, stream: Any, *, limit: int = 8192) -> None:
+        self._stream = stream
+        self._limit = limit
+        self._chunks: list[str] = []
+        self._size = 0
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> "_StderrBuffer":
+        if self._stream is None or self._thread is not None:
+            return self
+        self._thread = threading.Thread(target=self._pump, name="ar206-stderr", daemon=True)
+        self._thread.start()
+        return self
+
+    def _pump(self) -> None:
+        try:
+            for line in iter(self._stream.readline, ""):
+                self._append(line)
+        except (ValueError, OSError):
+            # The pipe closed, which is the normal end of a child's stderr.
+            pass
+
+    def _append(self, line: str) -> None:
+        self._chunks.append(line)
+        self._size += len(line)
+        while self._size > self._limit and len(self._chunks) > 1:
+            self._size -= len(self._chunks.pop(0))
+
+    def text(self) -> str:
+        return "".join(self._chunks).strip()[-400:]
+
+    def close(self) -> None:
+        # Deliberately does not close the stream. The reader thread is blocked inside
+        # readline() holding that object's lock, so closing it from here would wait for
+        # the reader to finish -- which for a wedged child is never. Dropping the
+        # reference is enough: killing the child closes the pipe, the reader sees EOF
+        # and exits, and it is a daemon thread besides.
+        self._chunks = []
+        self._stream = None
 
 
 def sidecar_command(runtime_root: Path, *, python: str | None = None) -> list[str]:
