@@ -270,11 +270,9 @@ the check that fails when the enforcement is removed.
 
 ## Reporting a suspected problem
 
-Use the path the product already declares, in `TRUST.md`:
-
-> Open a private security advisory on the repository rather than a public issue.
-> Include the Ariadne version (`python -m ariadne --version`), the command, and the
-> smallest reproduction you can build.
+Use the path the product already declares, in `TRUST.md`, and not a public issue.
+Include the Ariadne version (`python -m ariadne --version`), the command, and the
+smallest reproduction you can build.
 
 For a Decision Runtime report specifically, add these four artefacts, because they
 are what makes the problem reproducible rather than anecdotal:

@@ -108,7 +108,7 @@ Ariadne installs from immutable GitHub release artifacts. It is not published to
 Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.0.0/ariadne-2.0.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.1.0rc1/ariadne-2.1.0rc1-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 ```
@@ -158,6 +158,53 @@ Ariadne does not send every uncertain question to a large generative model. It f
 When a question is genuinely bounded, the Decision Plane compiles it into a declared option set, projects only the state that question needs, batches independent questions together, and reuses an answer only when the same state and provider version produced it. If the evidence is insufficient or confidence is unusable, it escalates rather than guessing; a protected action is refused under every confidence value. Every decision records where its confidence came from.
 
 The mechanism is documented in [Decision Intelligence](docs/v2/AR-205D/01-DECISION-COMPILER.md). A Jev-shaped adapter boundary is one example of a possible bounded-decision provider; it is not required, and no live Jev evaluation was executed.
+
+## The Decision Runtime
+
+Ariadne 2.1 ships a bounded inference engine of its own, so a closed question has
+somewhere local to be asked. It runs in a separate process, answers one projected state
+and many independent questions in a single inference, over answer spaces the question
+already declared, and refuses rather than guesses.
+
+```bash
+ariadne decision-runtime --action install     # writes a data directory; no download
+ariadne decision-runtime --action status      # "Decision Runtime: available"
+```
+
+You do not configure it, and there is no provider to choose. Ariadne finds a Decision
+Runtime or it does not, and the four rules below hold whether it finds one or not.
+
+**It never authorises anything.** Every record it produces carries
+`authorization_effect: "none"`, and nothing it writes can reach an approval, a
+verification, or an execution edge.
+
+**It is never verification.** A prediction is not proof. A shadow observation is
+evidence that the runtime would have answered differently, and nothing more.
+
+**It observes before it influences.** The authoritative answer is decided, judged and
+recorded first. The runtime's prediction is then stored beside it, in a record that is
+structurally incapable of carrying an execution effect. This is the default posture, and
+it is not something you opt into.
+
+**It abstains instead of guessing.** No confidence threshold is applied unless you or a
+policy state one, because a default threshold is a claim about risk that Ariadne should
+not make on your behalf. When the evidence is insufficient, the answer is a structured
+refusal, never a quiet low score.
+
+A probability is only labelled *calibrated* when a measured profile matches the runtime
+kind, implementation, model revision, decision definition, question version and question
+schema exactly. The engine that ships is rule-derived rather than trained, its
+probabilities are uncalibrated, and no calibration profile is included.
+
+Promoting the runtime from shadow to an authoritative role is scoped (risk class,
+reversibility, verification availability, languages), ordered, and reversible at any
+point with one command that needs no migration. It is deliberately not a one-line
+setting.
+
+Adding a runtime to a 2.0 project changes nothing: with none configured, the same call
+returns a byte-identical result plus one extra inert key. There is no migration step.
+
+The full documentation is in [docs/v2/2.1/](docs/v2/2.1/README.md).
 
 ## Verification and human control
 

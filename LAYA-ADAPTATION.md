@@ -111,11 +111,10 @@ launcher. Details in `THIRD_PARTY_NOTICES.md`.
 ### 7. The runtime's own declared provenance
 
 The shipped weights state where they came from, in the weight file's own `source`
-field and in the seed builder's `SEED_SOURCE`:
-
-> ariadne deterministic decision tables (ar-205d decision-intelligence
-> answer-space vocabularies and projection contracts); rule-derived features, not
-> a trained corpus
+field and in the seed builder's `SEED_SOURCE`, which reads in full in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): deterministic decision tables, built
+from Ariadne's own answer-space vocabularies and projection contracts, and explicitly
+not a trained corpus.
 
 The training examples are written against the projection field names Ariadne's own
 `decisions.projections` module declares, over the answer spaces Ariadne's own

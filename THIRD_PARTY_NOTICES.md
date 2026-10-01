@@ -21,8 +21,8 @@ release tooling and the functional suite:
 
 - `pyproject.toml` declares `dependencies = []` and `requires-python = ">=3.10"`,
   with an in-tree build backend (`ariadne_backend`) and no build requirements.
-- An AST scan over every module in `src/ariadne/`, `src/ariadne_engine/`,
-  `scripts/` and `build_backend/` finds **no non-stdlib import at all**. (The one
+- A walk of the import graph across `src/ariadne/`, `src/ariadne_engine/`,
+  `scripts/` and `build_backend/` resolves to the standard library only. (The one
   first-party package name outside `src/`, `arbench`, is Ariadne's own benchmark
   package under `benchmarks/`.)
 - `scripts/test-decision-runtime.py` reads `pyproject.toml` and fails if any of

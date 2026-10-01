@@ -2226,6 +2226,16 @@ def hardening_checks(engine, root: Path) -> None:
     owned.shutdown()
 
 
+    # 15: the engine reported whatever ariadne distribution was installed anywhere.
+    check("the engine reports the version of the tree it is running from",
+          engine.package_version() == (ROOT / "VERSION").read_text(encoding="utf-8").strip())
+    check("package_version reads the tree before installed metadata, not after",
+          engine.package_version.__doc__ is not None
+          and "no tree to read" in engine.package_version.__doc__)
+    check("the engine's own __version__ agrees with the tree",
+          engine.__version__ == engine.package_version())
+
+
 def failure_question_record(engine) -> dict:
     return {
         "question_id": "failure-class",
