@@ -114,6 +114,33 @@ def check_distribution_lifecycle() -> dict:
     }
 
 
+def check_engine_suites() -> dict:
+    """The engine's own functional suites, run in full.
+
+    These were maintainer-run only through 2.0, which meant a 2.0 release could be
+    declared green on a tree whose engine core had never been executed. A gate that
+    does not run the engine cannot honestly say the engine works. Both suites restore
+    the source tree to its committed bytes afterwards, so running them leaves no trace.
+    """
+    detail = []
+    for name, script in (
+        ("engine core", "test-engine-core.py"),
+        ("decision runtime", "test-decision-runtime.py"),
+        ("decision mutations", "test-decision-mutations.py"),
+    ):
+        result = run(python_script(script), timeout=1800)
+        if result.returncode != 0:
+            return {
+                "status": "FAIL",
+                "detail": f"{name} failed: {tail(result.stdout + result.stderr, 4)}",
+            }
+        for line in reversed(result.stdout.splitlines()):
+            if line.startswith("PASS "):
+                detail.append(f"{name} {line[5:].strip()}")
+                break
+    return {"status": "PASS", "detail": "; ".join(detail)}
+
+
 def check_experiments() -> dict:
     problems = release.experimental_defaults_problems()
     return {
@@ -189,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     add("public API surface", check_public_api())
     add("experimental defaults", check_experiments())
     add("repository contract", check_repository_contract())
+    add("engine suites", check_engine_suites())
     add("release tests", check_release_suite())
     add("distribution lifecycle", check_distribution_lifecycle())
     add("runtime bundle and private material", check_private_material())
