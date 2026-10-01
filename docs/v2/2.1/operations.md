@@ -289,7 +289,7 @@ evidence.
 ## Running the suites
 
 ```bash
-python scripts/test-decision-runtime.py           # 325 checks
+python scripts/test-decision-runtime.py
 python scripts/test-decision-runtime-mutations.py
 ```
 

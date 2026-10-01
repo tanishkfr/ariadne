@@ -101,11 +101,17 @@ class DecisionQuestion:
     def from_record(cls, record: Mapping[str, Any]) -> DecisionQuestion:
         """Rebuild a question from its record form, without silently repairing it.
 
-        ``as_record`` flattens the answer space into ``options`` for every primitive,
-        so the original ``scale``/``positive``/``negative`` are recovered from the
-        primitive and the declared options. Anything that does not reconstruct into a
-        valid question raises, because a question that quietly changed shape between
-        the planner and a provider is a question whose answer cannot be trusted.
+        ``as_record`` writes the flattened answer space to *both* ``allowed`` and
+        ``options`` for every primitive, so ``options`` is the field that is always
+        present. The primitive-specific fields are not written uniformly: a
+        ``ScaleDecision`` also keeps ``scale``, a ``BinaryDecision`` has ``scale``
+        emptied and its ``positive``/``negative`` pair is not emitted at all, because
+        ``options`` already carries the pair in order. So the reconstruction reads
+        ``options`` as the authority and uses the primitive to restore the shape.
+
+        Anything that does not reconstruct into a valid question raises, because a
+        question that quietly changed shape between the planner and a provider is a
+        question whose answer cannot be trusted.
         """
         primitive = str(record.get("primitive", "ChoiceDecision"))
         options = tuple(str(item) for item in record.get("options", ()) or ())

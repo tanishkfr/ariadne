@@ -173,6 +173,40 @@ family does not inherit it; a moving alias satisfies nothing.
 An unknown risk class is refused before any profile is even considered, with
 `reasons: ["unknown risk class: CATASTROPHIC"]`.
 
+## Risk class is part of the calibration, not a lookup detail
+
+A matched profile that declares no threshold for the requested risk class is **refused**,
+not accepted with an empty threshold. This is the one place the rule is easy to get
+backwards, so it is worth stating plainly.
+
+A profile measured on fifty LOW-risk examples has measured nothing about a PROTECTED
+decision. If that profile were allowed through, two things would go wrong at once: the
+PROTECTED decision would be relabelled `CALIBRATED_PROBABILITY` on the strength of LOW-risk
+evidence, and it would be relabelled with *no gate at all*, because the threshold lookup
+returned nothing and an absent threshold meant "no gate". Both a wrong label and no
+threshold is worse than the honest `PROVIDER_PROBABILITY` the refusal leaves behind.
+
+A profile speaks only for the risk classes it declares. This is the same
+one-directional-strict shape as adoption scope in
+[promotion-and-scopes.md](promotion-and-scopes.md), for the same reason: anything a
+measurement did not declare is outside what it can speak for. A profile measured for
+`HIGH` does not speak for `PROTECTED` either, even though one might argue its evidence is
+stronger than `PROTECTED` needs - the honest answer is to measure `PROTECTED`, not to infer
+it, and the whole cost of this feature is that inference is what we are refusing.
+
+```
+risk="LOW",       profile declares {"LOW": 0.55}                 -> accepted, min_confidence 0.55
+risk="HIGH",      profile declares {"LOW": 0.55}                 -> REFUSED
+risk="HIGH",      profile declares {"LOW": 0.55, "HIGH": 0.8}    -> accepted, min_confidence 0.8
+risk="PROTECTED", profile declares {"LOW": 0.55, "HIGH": 0.8}    -> REFUSED
+```
+
+When several profiles match, the ones that declare the requested class are filtered out
+**first**, and the largest `dataset_size` among those wins. Filtering afterwards would let a
+same-sized profile that happened to sort earlier on `profile_id` shadow one that does declare
+the class - and `profile_id` is timestamp-prefixed, so that order is arbitrary rather than
+meaningful.
+
 ## Why a moving alias satisfies nothing
 
 `manifest.revision_matches(expected, observed)` is deliberately unforgiving:

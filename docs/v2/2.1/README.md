@@ -52,12 +52,23 @@ rest explains why the limits are where they are.
 
 ## Verification status
 
-The functional suite `scripts/test-decision-runtime.py` runs 325 checks and
-passes them all. It drives the reference engine both in-process and over the real
-subprocess sidecar, so the shipping transport is exercised rather than assumed.
-It is run by the release gate (`scripts/release-check.py`, check *engine suites*).
+The functional suite `scripts/test-decision-runtime.py` is the authority on what
+the Decision Runtime does. It drives the reference engine both in-process and over
+the real subprocess sidecar, so the shipping transport is exercised rather than
+assumed, and it is run by the release gate (`scripts/release-check.py`, check
+*engine suites*).
+
+Its check count is growing as the feature hardens; run it rather than trusting a
+number quoted here:
+
+```bash
+python scripts/test-decision-runtime.py
+```
+
 No check in it asserts model quality, latency on a particular machine, or
-cross-platform behaviour.
+cross-platform behaviour. A green suite means the documented invariants hold. It
+does not mean the engine is good at anything - see
+[Overview](overview.md), *What is not done*.
 
 ## Related material in 2.0
 

@@ -86,10 +86,16 @@ def question_identity(question: Mapping[str, Any]) -> str:
     """The digest a weight file must be filed under.
 
     Covers the contract, question id, primitive, the ordered answer space and the
-    definition version. Rewording the instructions changes the question and changes
-    the key, because a weight file fitted to one wording has not been evaluated
-    against another. Option *order* is part of the key too: an ordered answer space
-    is positional, and reordering it is a different question.
+    definition version. Option *order* is part of the key: an ordered answer space is
+    positional, and reordering it is a different question.
+
+    The *instructions* are deliberately not part of it. A weight file records how the
+    family performs over an answer space, not how one phrasing happened to read, so
+    rewording a question keeps its weights. Wording that changes the decision belongs to
+    a different ``definition_version`` or a different ``projection_contract``, and both
+    of those are in the key. Calibration is where wording is policed instead: a profile
+    binds a ``question_schema_digest`` *and* a ``decision_definition_digest``, the latter
+    covering the instructions.
     """
     payload = {
         "contract": str(question.get("projection_contract", "")),

@@ -321,39 +321,28 @@ def profile_for(
         matching.append(candidate)
     if not matching:
         return _refuse(reasons)
-    chosen = sorted(matching, key=lambda profile: (-profile.dataset_size, profile.profile_id))[0]
-    threshold = chosen.thresholds_by_risk.get(str(risk))
-    if threshold is None:
-        # The profile is real and matched, but it was not measured for this risk class.
-        # Accepting it would relabel a PROTECTED decision as calibrated on the strength of
-        # evidence gathered from LOW-risk examples, and would apply no threshold at all.
-        # A narrower request than the profile declares is the only direction that widens
-        # the evidence behind the number, so only that is allowed here.
-        declared = set(chosen.thresholds_by_risk)
-        if declared and not str(risk) in declared:
-            order = list(DECISION_CONSEQUENCES)
-            if str(risk) in order and min(order.index(str(risk)) for value in declared) > order.index(str(risk)):
-                return {
-                    "accepted": True,
-                    "profile": chosen.as_record(),
-                    "profile_id": chosen.profile_id,
-                    "reasons": [f"the matched profile declares no threshold for {risk}; no gate applies"],
-                    "confidence_kind": "CALIBRATED_PROBABILITY",
-                    "min_confidence": None,
-                    "threshold_risk": str(risk),
-                }
+    # A profile speaks only for the risk classes it declares. Filter before choosing, so a
+    # same-sized profile that happens to sort earlier on profile_id -- those are
+    # timestamp-prefixed, so the order is arbitrary -- cannot shadow one that does declare
+    # the requested class, and a request can never be refused for want of a measurement
+    # that was in fact on hand.
+    risk = str(risk)
+    speaking = [profile for profile in matching if risk in profile.thresholds_by_risk]
+    if not speaking:
+        declared = sorted({value for profile in matching for value in profile.thresholds_by_risk})
         return _refuse(reasons + [
-            f"profile {chosen.profile_id} declares no threshold for risk class {risk!r}; "
-            f"it was measured for {sorted(declared) or 'no risk class'}"
+            f"the matching profile(s) declare a threshold for {declared or 'no risk class'}, "
+            f"so none of them speaks for {risk!r}"
         ])
+    chosen = sorted(speaking, key=lambda profile: (-profile.dataset_size, profile.profile_id))[0]
     return {
         "accepted": True,
         "profile": chosen.as_record(),
         "profile_id": chosen.profile_id,
         "reasons": [],
         "confidence_kind": "CALIBRATED_PROBABILITY",
-        "min_confidence": float(threshold),
-        "threshold_risk": str(risk),
+        "min_confidence": float(chosen.thresholds_by_risk[risk]),
+        "threshold_risk": risk,
     }
 
 

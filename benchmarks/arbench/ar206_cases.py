@@ -1388,7 +1388,7 @@ def security_no_fail_open(ctx: Ctx) -> Outcome:
 def packaging_install(ctx: Ctx) -> Outcome:
     RUNTIME = runtime_of(ctx)
     box = ctx.sandbox()
-    root = box.work / "runtime"
+    root = box.root / "runtime"
     started = time.perf_counter()
     info = RUNTIME.seeds.install_seeds(root)
     install_ms = (time.perf_counter() - started) * 1000
@@ -1413,8 +1413,10 @@ def packaging_install(ctx: Ctx) -> Outcome:
         problems.append(f"primitives={cold['primitives']}")
     if cold["calibration_self_granted"] is not False:
         problems.append("the reference engine claims it self-grants calibration")
-    if not RUNTIME.session.find_installation(root=root)["installed"]:
-        problems.append("an installed runtime was not discovered")
+    found = RUNTIME.session.find_installation(
+        environ={"ARIADNE_DECISION_RUNTIME": str(root)})
+    if not found["installed"]:
+        problems.append("an installed runtime was not discovered by the environment override")
     slot = answered["answers"]["0:failure-class"]
     if slot["answer"] != "IMPLEMENTATION_FAILURE":
         problems.append(f"the sidecar answered {slot['answer']!r}")
@@ -1441,7 +1443,7 @@ def packaging_install(ctx: Ctx) -> Outcome:
 )
 def packaging_isolation(ctx: Ctx) -> Outcome:
     RUNTIME = runtime_of(ctx)
-    root = ctx.sandbox().work / "runtime"
+    root = ctx.sandbox().root / "runtime"
     RUNTIME.seeds.install_seeds(root)
     local = seeded(ctx)
     shipped = RUNTIME.session.DecisionRuntime.discover(root=root)
@@ -1482,7 +1484,7 @@ def packaging_isolation(ctx: Ctx) -> Outcome:
 )
 def packaging_absent(ctx: Ctx) -> Outcome:
     RUNTIME = runtime_of(ctx)
-    missing = RUNTIME.session.DecisionRuntime.discover(root=ctx.sandbox().work / "empty")
+    missing = RUNTIME.session.DecisionRuntime.discover(root=ctx.sandbox().root / "empty")
     try:
         status = missing.status()
         refused = False
@@ -1526,7 +1528,7 @@ def packaging_absent(ctx: Ctx) -> Outcome:
 )
 def packaging_integrity(ctx: Ctx) -> Outcome:
     RUNTIME = runtime_of(ctx)
-    root = ctx.sandbox().work / "runtime"
+    root = ctx.sandbox().root / "runtime"
     RUNTIME.seeds.install_seeds(root)
     session = RUNTIME.session.DecisionRuntime.discover(root=root)
     try:

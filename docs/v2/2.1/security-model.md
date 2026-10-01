@@ -85,6 +85,52 @@ is closed structurally:
 - `NONE` carrying a value is reported: "a confidence value must declare where it
   came from".
 
+### The sidecar is not trusted to describe itself
+
+`LocalBoundedProvider.describe()` publishes the confidence kinds it offers:
+`("PROVIDER_PROBABILITY", "NONE")`. That list is the contract, and the wire answer is
+narrowed to it rather than believed:
+
+- a sidecar answering `CALIBRATED_PROBABILITY` is **refused**, not honoured. The
+  claim it is making - that its own numbers are calibrated - is one only Ariadne's
+  measured profiles are allowed to make (see
+  [calibration.md](calibration.md)). `problems()` rejects a runtime that declares
+  `calibration_self_granted`, but that check reads `status()`, which the sidecar also
+  controls, so the provider does not rely on it alone.
+- an unrecognised kind is narrowed to `SELF_REPORTED_CONFIDENCE` and the answer is
+  refused, rather than passed through to a policy that might read a strong-looking
+  kind as a strong answer.
+- a confidence of effectively zero (at or below `0.01`) attached to a *real* answer is
+  a refusal expressed as a number. It is recorded `abstained: true` and listed in
+  `failed_questions`, so a policy comparing thresholds never sees a `1e-9` score and
+  mistakes it for a weak opinion rather than the refusal it is.
+- non-finite and out-of-range numbers are nulled before they reach the decision record.
+
+### A restarted sidecar must not answer as the old one
+
+The transport respawns a child that died, and a replacement may be a different build.
+`LocalBoundedProvider.model_version` re-reads the runtime on every access rather than
+latching the value from construction, and `answer()` refuses any response whose
+`model_version` disagrees with what the provider just observed.
+
+Without that, an answer computed by revision 2 was recorded in the decision and written
+into the cache key as revision 1 - and any revision 1 answer already cached was served to
+revision 2. The shadow record took its revision from a live `status()` while the paired
+decision took the latched one, so a single task could carry a decision stamped with one
+revision and evidence stamped with another, citing it.
+
+### Manifests are data, and data does not get to name paths
+
+A manifest is a JSON file, so its `files` keys are attacker-influenced input. The guard
+lives once, in `manifest.safe_relative_path`, and both paths that read a manifest use it:
+`verify_files` (the verification path) and `integrity.inspect` (the description path).
+
+`inspect` originally joined the paths unguarded, so a manifest naming `../secret.txt`
+turned "describe this installation" into a SHA-256 oracle for files outside it - enough to
+confirm a guessed file by comparing digests. `..`, absolute and drive-qualified paths are
+refused on both paths, and `inspect` raises rather than quietly omitting the entry, so a
+hostile manifest is visible instead of merely absent.
+
 ### Hostile content in the projected state
 
 The projection can contain untrusted text - an error message, a worker output, a
