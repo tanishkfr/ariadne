@@ -8059,7 +8059,7 @@ def decision_runtime_command(args: argparse.Namespace) -> int:
     state["run_root"] = str(run_root)
 
     if action == "doctor":
-        report = api.decision_runtime_report(state, definition=str(getattr(args, "definition", "") or ""))
+        report = ENGINE_API.decision_runtime_report(state, definition=str(getattr(args, "definition", "") or ""))
         session = RUNTIME.session.DecisionRuntime.discover()
         try:
             report["capability"] = session.status()
@@ -8093,20 +8093,42 @@ def decision_runtime_command(args: argparse.Namespace) -> int:
         if not payload:
             raise RuntimeError_("an evaluation needs --input with the evaluation cases")
         document = json.loads(Path(payload).read_text(encoding="utf-8"))
-        report = api.decision_runtime_evaluate(
+        if isinstance(document, list):
+            # A bare list is accepted as the records, so the common case is one file of
+            # cases rather than a hand-assembled identity block nobody should be typing.
+            document = {"records": document}
+        if not isinstance(document, dict):
+            raise RuntimeError_("the evaluation input must be an object or a list of cases")
+        records = list(document.get("records", []) or [])
+        if not records:
+            raise RuntimeError_("the evaluation input declares no cases to score")
+        # The identity is read from the runtime that actually loaded, not typed by the
+        # operator. A hand-entered revision that disagrees with what loaded is precisely
+        # the mistake the comparability gate exists to catch, and inviting it here would
+        # be asking the operator to defeat the check.
+        session = RUNTIME.session.DecisionRuntime.discover(
+            root=str(getattr(args, "root", "") or "") or None)
+        try:
+            observed = session.status()
+        finally:
+            session.shutdown()
+        questions = list(document.get("questions", []) or [])
+        report = ENGINE_API.decision_runtime_evaluate(
             state,
-            records=list(document.get("records", []) or []),
+            records=records,
             rows=list(document.get("rows", []) or []),
-            decision_definition=str(document.get("decision_definition", "")),
-            questions=list(document.get("questions", []) or []),
-            runtime_version=str(document.get("runtime_version", "")),
-            implementation_revision=str(document.get("implementation_revision", "")),
-            model_revision=str(document.get("model_revision", "")),
+            decision_definition=str(
+                document.get("decision_definition", "") or getattr(args, "definition", "") or ""),
+            questions=questions,
+            runtime_version=str(document.get("runtime_version", "") or observed.get("runtime_version", "")),
+            implementation_revision=str(
+                document.get("implementation_revision", "") or observed.get("implementation_revision", "")),
+            model_revision=str(document.get("model_revision", "") or observed.get("model_revision", "")),
         )
         baseline_path = str(getattr(args, "baseline", "") or "")
         if baseline_path:
             baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
-            report["comparison"] = api.decision_runtime_compare(baseline, report)
+            report["comparison"] = ENGINE_API.decision_runtime_compare(baseline, report)
         state["updated_at"] = now()
         write_state(run_root, state)
         emit_event(run_root, "decision_runtime_completed", state=state, evaluation_id=report["evaluation_id"],
@@ -8131,11 +8153,23 @@ def decision_runtime_command(args: argparse.Namespace) -> int:
         target = str(getattr(args, "to", "") or "")
         if not slice_id or not target:
             raise RuntimeError_("promotion needs --slice-id and --to")
-        record = api.decision_runtime_promote(
-            state, slice_id=slice_id, target=target,
-            reason=str(getattr(args, "reason", "") or "an operator recorded this transition"),
-            evaluation_id=str(getattr(args, "evaluation_id", "") or ""),
-        )
+        try:
+            record = ENGINE_API.decision_runtime_promote(
+                state, slice_id=slice_id, target=target,
+                reason=str(getattr(args, "reason", "") or "an operator recorded this transition"),
+                evaluation_id=str(getattr(args, "evaluation_id", "") or ""),
+            )
+        except (ValueError, CONTRACTS.ContractError) as exc:
+            # A refused promotion is a decision the lifecycle made, not a crash. Every
+            # other refusal in this command prints a reason and exits non-zero; this one
+            # used to escape as a traceback, which tells an operator nothing they can act
+            # on and looks like a bug in Ariadne rather than a refused transition.
+            if getattr(args, "json", False):
+                print(json.dumps({"promoted": False, "slice_id": slice_id,
+                                  "target": target, "reason": str(exc)}, indent=2))
+                return 1
+            print(f"Refused: {exc}")
+            return 1
         state["updated_at"] = now()
         write_state(run_root, state)
         emit_event(
@@ -8143,6 +8177,10 @@ def decision_runtime_command(args: argparse.Namespace) -> int:
             "decision_runtime_promoted" if target == "ACTIVE" else "decision_runtime_suspended",
             state=state, slice_id=slice_id, status=target,
         )
+        if getattr(args, "json", False):
+            print(json.dumps({"promoted": True, "slice": record}, indent=2,
+                             sort_keys=True, default=str))
+            return 0
         print(f"Adoption slice {slice_id} is now {target}.")
         print("  note: this is scoped per decision definition, question version and model revision,")
         print("        and it grants no authority of any kind.")

@@ -103,13 +103,28 @@ def question_identity(question: Mapping[str, Any]) -> str:
 
 
 def answer_space(question: Mapping[str, Any]) -> tuple[str, ...]:
-    """The declared closed answer space, derived the same way the engine derives it."""
-    primitive = str(question.get("primitive", ""))
-    if primitive == "BinaryDecision":
+    """The declared closed answer space, derived the same way the engine derives it.
+
+    A question's answer space has four encodings in circulation — ``allowed``,
+    ``options``, ``scale`` and the ``positive``/``negative`` pair — and only one of
+    them is populated for a given primitive. :meth:`DecisionQuestion.as_record`
+    flattens every primitive into ``allowed`` *and* ``options``, and empties ``scale``
+    and drops the positive/negative pair entirely, so a record-form question read
+    through the primitive-specific fields would come out empty for a scale and
+    ``("yes", "no")`` for a binary regardless of the pair it actually declared.
+
+    The order below is therefore: the canonical ``allowed`` list, then whichever
+    encoding this particular question actually carries. It reads the same space for
+    every producer of a question record, which is what keeps a fitted weight file
+    matching the question it was fitted for.
+    """
+    for field in ("allowed", "options", "scale"):
+        space = tuple(str(item) for item in question.get(field, ()) or ())
+        if space:
+            return space
+    if str(question.get("primitive", "")) == "BinaryDecision":
         return (str(question.get("positive", "yes")), str(question.get("negative", "no")))
-    if primitive == "ScaleDecision":
-        return tuple(str(item) for item in question.get("scale", ()) or ())
-    return tuple(str(item) for item in question.get("options", ()) or ())
+    return ()
 
 
 def unsupported_primitive(primitive: str) -> bool:

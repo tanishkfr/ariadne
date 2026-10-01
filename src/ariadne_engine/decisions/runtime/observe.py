@@ -97,6 +97,7 @@ def observe(
     )
     return {
         "observer": OBSERVER_VERSION,
+        "observed": True,
         "recorded": True,
         "runtime_failed": False,
         "shadow_id": stored["shadow_id"],
@@ -194,6 +195,7 @@ def observe_many(
         )
     return {
         "observer": OBSERVER_VERSION,
+        "observed": True,
         "recorded": len(results),
         "questions": len(records),
         "inference_calls": 1,
@@ -236,13 +238,18 @@ def describe() -> dict:
     }
 
 
-def shadow_report(state: Mapping[str, Any]) -> dict:
-    """A read-only summary of shadow evidence and its isolation."""
+def shadow_report(state: Mapping[str, Any], *, definition: str = "") -> dict:
+    """A read-only summary of shadow evidence and its isolation.
+
+    Delegates the isolation checks to the observer rather than re-implementing them
+    here, so there is one definition of "a shadow record that claims it acted" and
+    both callers agree on the answer.
+    """
     from ..contracts import state_digest  # noqa: F401 - keeps the digest import local to reporting
 
     return {
         "version": OBSERVER_VERSION,
-        "summary": shadow_module.compare(state),
+        "summary": shadow_module.compare(state, definition=definition),
         "isolation_problems": shadow_module.shadow_problems(state),
         "influence_problems": shadow_module.shadow_effect_problems(
             state, state.get("decisions", []) or []

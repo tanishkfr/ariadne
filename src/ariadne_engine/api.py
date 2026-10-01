@@ -768,9 +768,9 @@ def decision_runtime_select(state, **options) -> dict:
 
 def decision_runtime_shadow_report(state, *, definition: str = "") -> dict:
     """Shadow evidence and its isolation, for one decision definition."""
-    from .decisions.runtime import shadow
+    from .decisions.runtime.observe import shadow_report
 
-    return {"summary": shadow.compare(state, definition=definition), "problems": shadow.shadow_problems(state)}
+    return shadow_report(state, definition=definition)
 
 
 def decision_runtime_calibration(state, **options) -> dict:
@@ -811,11 +811,20 @@ def decision_runtime_export(state, *, definition: str = "", **options) -> dict:
     return export.collect(state, definition=definition, **options)
 
 
-def decision_runtime_report(state, *, definition: str = "") -> dict:
+def decision_runtime_report(state, *, definition: str = "", version: str = "") -> dict:
     """The full Decision Runtime view: capability, shadow evidence, adoption, calibration."""
-    from .decisions.runtime import observe, profiles, promotion, shadow
+    from .decisions.runtime import observe, profiles, promotion, session, shadow
 
+    # find_installation only looks on disk; it never starts anything, so a report stays a
+    # read-only view rather than a capability probe that launches a process.
+    found = session.find_installation(version=version)
     return {
+        "capability": {
+            "installed": bool(found["installed"]),
+            "reason": str(found["reason"]),
+            "root": str(found["root"]),
+            "searched": list(found["searched"]),
+        },
         "shadow": shadow.compare(state, definition=definition),
         "shadow_problems": shadow.shadow_problems(state),
         "influence_problems": shadow.shadow_effect_problems(state, state.get("decisions", []) or []),
@@ -834,6 +843,7 @@ def decision_runtime_report(state, *, definition: str = "") -> dict:
             "this report describes recorded evidence; it authorises nothing",
             "a runtime prediction is never verification",
         ],
+        "authorization_effect": "none",
     }
 
 

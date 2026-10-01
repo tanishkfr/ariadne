@@ -119,6 +119,11 @@ def find_installation(
             continue
         found = resolve_installation(root)
         if found["installed"]:
+            # `searched` always names every place that was considered, including the one
+            # that matched. "Found in the first place" and "found in the fourth" are
+            # different facts about a machine, and a diagnostic that cannot tell them
+            # apart is hiding a configuration problem.
+            tried.append(f"{root} (installed)")
             return {**found, "searched": tried}
         tried.append(f"{root} ({found['reason']})")
     return {
@@ -188,10 +193,12 @@ class DecisionRuntime:
         runtime = cls(transport, manifest=found["manifest"])
         try:
             transport.status(timeout=start_timeout)
-        except RuntimeTransportError:
+        except RuntimeTransportError as exc:
             # A runtime that will not start is not a crash. It becomes an unavailable
-            # runtime with its reason, and the caller falls back.
-            return cls(UnavailableTransport(str(transport.available()[1])), manifest=found["manifest"])
+            # runtime with its reason, and the caller falls back. The transport's own
+            # `available()` reason must not be used here: it reports that the sidecar is
+            # *installed*, which is true, and is the opposite of the fact the user needs.
+            return cls(UnavailableTransport(str(exc)), manifest=found["manifest"])
         return runtime
 
     @classmethod

@@ -249,6 +249,21 @@ def _bounded_answer(
     }
 
 
+def _no_shadow(reason: str) -> dict:
+    """The shadow block for a path that never asked the runtime anything.
+
+    A deterministic rule resolving the question is the system working as designed, so
+    there is genuinely nothing to observe. The key is still present, in one shared
+    vocabulary, because a caller must be able to ask "was a bounded model involved
+    here?" without having to know in advance which branch the code took.
+    """
+    return {
+        "observed": False,
+        "reason": str(reason),
+        "execution_effect": "none",
+    }
+
+
 def _observe_runtime(
     state: dict,
     *,
@@ -268,7 +283,10 @@ def _observe_runtime(
     without it. Any failure is reported as an observation failure and changes nothing.
     """
     if runtime is None or not shadow:
-        return {"observed": False, "reason": "shadow observation was not requested for this path"}
+        # A caller with no runtime attached still gets a complete block, in the same
+        # vocabulary as every other one. A shadow key that is only sometimes present, or
+        # that changes shape, is how a caller ends up reading a prediction as an answer.
+        return _no_shadow("shadow observation was not requested for this path")
     try:
         from .runtime import observe as observe_module
     except Exception as exc:  # noqa: BLE001 - an optional subsystem cannot break a path
@@ -344,14 +362,15 @@ def classify_failure(
     """
     if deterministic_class != "UNKNOWN":
         return {
-            "class": deterministic_class,
-            "source": "deterministic",
-            "decision_id": "",
-            "reason": "the declared failure vocabulary mapped this source; no model was consulted",
-            "escalation_required": False,
-            "decision": {},
-            "plan_id": "",
-        }
+              "class": deterministic_class,
+              "source": "deterministic",
+              "decision_id": "",
+              "reason": "the declared failure vocabulary mapped this source; no model was consulted",
+              "escalation_required": False,
+              "decision": {},
+              "plan_id": "",
+              "shadow": _no_shadow("a declared vocabulary resolved the class deterministically, so no bounded question was asked"),
+          }
     entries = _entries(
         {"failure": {"source": str(source), "detail": str(detail)}},
         projection_entries,
@@ -396,6 +415,7 @@ def classify_failure(
             "decision": outcome.get("record") or {},
             "plan_id": str(outcome.get("plan_id", "")),
             "escalation": outcome.get("escalation") or {},
+            "shadow": outcome.get("shadow") or {},
         }
     return {
         "class": "UNKNOWN",
@@ -452,14 +472,15 @@ def review_escalation(
         deterministic_reason = "high stakes without current verification suggest enhanced review"
     if deterministic:
         return {
-            "escalation": deterministic,
-            "source": "deterministic",
-            "reason": deterministic_reason,
-            "decision_id": "",
-            "plan_id": "",
-            "policy_still_controls": True,
-            "escalation_verdict": {},
-        }
+              "escalation": deterministic,
+              "source": "deterministic",
+              "reason": deterministic_reason,
+              "decision_id": "",
+              "plan_id": "",
+              "policy_still_controls": True,
+              "escalation_verdict": {},
+              "shadow": _no_shadow("the declared review rule resolved the escalation deterministically, so no bounded question was asked"),
+          }
     defaults = {
         "stakes": str(stakes),
         "affected_scope": [str(item) for item in affected_scope],
@@ -540,29 +561,31 @@ def evidence_relevance(
     freshness_value = str(freshness or "UNKNOWN").upper()
     if freshness_value in ("STALE", "SUPERSEDED"):
         return {
-            "answer": "IRRELEVANT",
-            "source": "deterministic",
-            "reason": "stale evidence cannot materially support a current requirement",
-            "decision_id": "",
-            "plan_id": "",
-            "freshness_checked": True,
-            "provenance_checked": False,
-            "may_override_freshness": False,
-            "escalation_verdict": {},
-        }
+              "answer": "IRRELEVANT",
+              "source": "deterministic",
+              "reason": "stale evidence cannot materially support a current requirement",
+              "decision_id": "",
+              "plan_id": "",
+              "freshness_checked": True,
+              "provenance_checked": False,
+              "may_override_freshness": False,
+              "escalation_verdict": {},
+              "shadow": _no_shadow("staleness is a fact about the evidence, not a bounded judgement"),
+          }
     provenance_present = bool(provenance) if not isinstance(provenance, str) else bool(provenance.strip())
     if not provenance_present:
         return {
-            "answer": "UNKNOWN",
-            "source": "deterministic",
-            "reason": "evidence without provenance cannot be judged relevant",
-            "decision_id": "",
-            "plan_id": "",
-            "freshness_checked": True,
-            "provenance_checked": True,
-            "may_override_freshness": False,
-            "escalation_verdict": {},
-        }
+              "answer": "UNKNOWN",
+              "source": "deterministic",
+              "reason": "evidence without provenance cannot be judged relevant",
+              "decision_id": "",
+              "plan_id": "",
+              "freshness_checked": True,
+              "provenance_checked": True,
+              "may_override_freshness": False,
+              "escalation_verdict": {},
+              "shadow": _no_shadow("missing provenance is a fact about the evidence, not a bounded judgement"),
+          }
     defaults = {
         "requirement": str(requirement),
         "evidence_claim": str(claim),
@@ -645,24 +668,26 @@ def route_family(
     known = ROUTE_FAMILY_FOR_TASK_KIND.get(str(task_kind or "").strip().lower())
     if known:
         return {
-            "family": known,
-            "source": "deterministic",
-            "reason": f"task kind {task_kind!r} maps to a declared route family",
-            "decision_id": "",
-            "plan_id": "",
-            "policy_authority": "deterministic",
-            "escalation_verdict": {},
-        }
+              "family": known,
+              "source": "deterministic",
+              "reason": f"task kind {task_kind!r} maps to a declared route family",
+              "decision_id": "",
+              "plan_id": "",
+              "policy_authority": "deterministic",
+              "escalation_verdict": {},
+              "shadow": _no_shadow("the declared task-kind map resolved the family deterministically, so no bounded question was asked"),
+          }
     if protected:
         return {
-            "family": "unknown",
-            "source": "deterministic",
-            "reason": "a protected operation routes through human policy, not a bounded judgement",
-            "decision_id": "",
-            "plan_id": "",
-            "policy_authority": "deterministic",
-            "escalation_verdict": {},
-        }
+              "family": "unknown",
+              "source": "deterministic",
+              "reason": "a protected operation routes through human policy, not a bounded judgement",
+              "decision_id": "",
+              "plan_id": "",
+              "policy_authority": "deterministic",
+              "escalation_verdict": {},
+              "shadow": _no_shadow("a protected operation is never a bounded judgement, whatever the runtime would have said"),
+          }
     defaults = {
         "task_kind": str(task_kind or "UNKNOWN"),
         "difficulty": str(difficulty or "UNKNOWN"),

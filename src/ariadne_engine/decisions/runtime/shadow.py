@@ -278,7 +278,7 @@ def record_ground_truth(state: dict, shadow_id: str, *, ground_truth: str, sourc
         raise ValueError("ground truth must name its source; an unsourced outcome is not evidence")
     if not str(ground_truth or "").strip():
         raise ValueError("ground truth must state the correct answer")
-    for record in state.get("decision_shadow", []) or []:
+    for index, record in enumerate(state.get("decision_shadow", []) or []):
         if str(record.get("shadow_id", "")) == str(shadow_id):
             updated = dict(record)
             updated["ground_truth"] = str(ground_truth)
@@ -289,6 +289,10 @@ def record_ground_truth(state: dict, shadow_id: str, *, ground_truth: str, sourc
                 ground_truth=str(ground_truth),
             )
             updated["reconciled_at"] = utc_now()
+            # Write it back. Returning the reconciled record without storing it would
+            # make the call look like it worked while the state kept the unreconciled
+            # one, and the export would never see the outcome that was just reviewed.
+            state["decision_shadow"][index] = updated
             return updated
     raise ValueError(f"no shadow record is recorded with id {shadow_id!r}")
 

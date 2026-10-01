@@ -32,14 +32,25 @@ from pathlib import Path
 from typing import Any, Mapping
 
 if __package__ in (None, ""):  # pragma: no cover - only when run as a plain script
-    # Launched by path (``python .../sidecar.py --root <dir>``), so the package is not
-    # on the import path yet. Prepending the source root keeps this file both an
-    # importable module of the package and a standalone executable, which is what lets
-    # the transport launch it without a PYTHONPATH dance.
+    # Launched by path (``python .../sidecar.py --root <dir>``), so there is no package
+    # context for a relative import. Prepending the source root makes the absolute
+    # fallback below resolvable.
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from .reference import ENGINE_NAME, ReferenceBoundedEngine, empty_book, load_weights
-from .transport import WIRE_SCHEMA
+try:
+    # Imported as a package module. The relative form is the only one that works when
+    # Ariadne's engine package has been loaded under a different module name, which is
+    # exactly what the maintainer test suites do.
+    from .reference import ENGINE_NAME, ReferenceBoundedEngine, empty_book, load_weights
+    from .transport import WIRE_SCHEMA
+except ImportError:  # pragma: no cover - the plain-script launch path
+    from ariadne_engine.decisions.runtime.reference import (
+        ENGINE_NAME,
+        ReferenceBoundedEngine,
+        empty_book,
+        load_weights,
+    )
+    from ariadne_engine.decisions.runtime.transport import WIRE_SCHEMA
 
 WEIGHTS_NAME = "weights.json"
 """The weight file a runtime installation ships with."""

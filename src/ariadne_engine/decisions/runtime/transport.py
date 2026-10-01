@@ -302,7 +302,13 @@ class SubprocessTransport:
     def call(self, method: str, payload: Mapping[str, Any], *, timeout: float | None = None) -> Mapping[str, Any]:
         limit = DEFAULT_CALL_TIMEOUT_SECONDS if timeout is None else float(timeout)
         with self._lock:
-            return self._call(method, payload, timeout=limit)
+            result = self._call(method, payload, timeout=limit)
+            if method == "warm":
+                # Refresh the cached capability facts. Without this, status keeps
+                # reporting the `cold` it saw at process start, so a user who just paid
+                # the load cost is told the runtime is still not ready.
+                self._status = dict(self._call("status", {}, timeout=limit))
+            return result
 
     def describe(self) -> dict:
         described = dict(self._description)
