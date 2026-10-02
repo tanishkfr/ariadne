@@ -167,6 +167,17 @@ def evaluate_step(
                 question = _as_question(question_record)
                 served = None
                 if cache_enabled and str(getattr(provider, "model_version", "") or "").strip():
+                    # The effective threshold for *this* question is part of the key, not
+                    # an afterthought. A decision cached before a calibration profile
+                    # existed was made under no threshold, and serving it afterwards would
+                    # make the profile silently inert for every already-decided state.
+                    policy_for_question = batch_module.effective_policy(
+                        state,
+                        [question],
+                        runtime=str(getattr(provider, "provider", "") or ""),
+                        implementation=str(getattr(provider, "model", "") or ""),
+                        model_revision=str(getattr(provider, "model_version", "") or ""),
+                    )
                     lookup = cache_module.lookup(
                         state,
                         question=question,
@@ -174,6 +185,10 @@ def evaluate_step(
                         provider=str(getattr(provider, "provider", "") or ""),
                         model_version=str(getattr(provider, "model_version", "") or ""),
                         policy_version=policy.POLICY_VERSION,
+                        effective_min_confidence=policy_for_question[
+                            "min_confidence_by_question"].get(question.question_id),
+                        calibration_profile_id=policy_for_question[
+                            "calibration_profile_by_question"].get(question.question_id, ""),
                         current_fingerprints=(fingerprints or {}).get(str(question.question_id)),
                     )
                     if lookup["hit"]:

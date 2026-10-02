@@ -43,7 +43,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from ..contracts import DECISION_PRIMITIVES, ContractError
+from ..contracts import (
+    DECISION_PRIMITIVES,
+    MOVING_ALIAS_REVISIONS,
+    ContractError,
+    _concrete_revision,
+)
 
 DEFAULT_CAPABILITIES: dict[str, Any] = {
     "primitives": (),
@@ -75,18 +80,18 @@ The mapping lives here so no Jev-specific name is special-cased anywhere else
 in the engine.
 """
 
-MOVING_ALIASES = ("latest", "stable", "default", "current", "edge", "preview")
-"""Model labels that are aliases, not concrete versions. An alias can move under
-a cached decision or a recorded model identity, so it is never accepted as one.
+MOVING_ALIASES = MOVING_ALIAS_REVISIONS
+"""Model labels that are aliases, not concrete versions.
+
+Delegates to the engine's single list rather than keeping a second one. Two lists drift:
+``main`` was in the contract's list and absent here, so a runtime reporting ``main``
+satisfied this gate, got cached as if pinned, and was refused moments later by every
+calibration and adoption check that used the other list.
 """
 
 
 def concrete_model_version(value: str) -> bool:
-    label = str(value or "").strip()
-    if not label:
-        return False
-    lowered = label.lower()
-    return not any(lowered == alias or lowered.endswith(f"-{alias}") for alias in MOVING_ALIASES)
+    return _concrete_revision(value)
 
 
 class DecisionProviderError(RuntimeError):

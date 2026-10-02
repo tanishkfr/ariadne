@@ -1,3 +1,134 @@
+# Ariadne 2.1.0rc1
+
+Ariadne 2.1.0rc1 adds the **native Decision Runtime**: an on-device bounded inference
+engine that answers Ariadne's own Decision Plane questions, isolated in a sidecar
+process. It is a feature drop on top of 2.0, and every 2.0 behaviour is preserved.
+
+The 2.0 notes follow below.
+
+Install from the GitHub release artifacts. PyPI publication stays deferred
+because the `ariadne` distribution name belongs to an unrelated GraphQL server;
+this release is delivered as an immutable wheel and runtime bundle.
+
+## The Decision Runtime, in one paragraph
+
+When a requirement needs a bounded judgement, Ariadne now has somewhere local to ask.
+The runtime answers one projected state and many independent questions in a single
+inference, over closed answer spaces the question declared, and it refuses rather than
+guesses. It observes before it influences: the authoritative answer is decided, judged
+and recorded first, and the runtime's prediction is stored beside it as evidence that
+provably could not have changed it. A probability is only labelled calibrated when a
+measured profile matches runtime kind, implementation, model revision, decision
+definition, question version and question schema exactly. Promotion to an
+authoritative role is scoped, ordered and reversible. The default posture is shadow, and
+nothing is promoted by default.
+
+## What is genuinely new in 2.1
+
+- **A native bounded engine.** A reference implementation, pure standard library, with
+  weights derived from Ariadne's own declared decision vocabularies. No model download,
+  no network, no training, no third-party runtime component and no ML dependency. It is
+  installed as a data directory, so a runtime can be replaced without replacing a
+  program.
+- **A sidecar isolation boundary.** The engine runs in a separate process speaking a
+  four-method JSON-lines protocol, so a wedged or crashing runtime cannot take an Ariadne
+  process with it. Its stderr is drained continuously, its timeouts are real deadlines,
+  and closing a session is final.
+- **A real abstention.** Four structured reasons - `NO_LOCAL_MODEL`,
+  `BELOW_MIN_CONFIDENCE`, `UNSUPPORTED_PRIMITIVE`, `ANSWER_SPACE_MISMATCH` - and **no
+  default confidence threshold anywhere**. Thresholds are supplied only where a
+  `PROVEN` calibration profile matches the decision definition, question schema and
+  wording, question version, runtime, implementation, concrete model revision and risk
+  class. With no such profile, nothing is invented and the answer stands ungated.
+- **Calibration as a measured claim.** `PROVEN` requires a dataset at or above the
+  floor; a profile speaks only for the risk classes it declares; a moving alias satisfies
+  nothing; and the runtime cannot declare its own probabilities calibrated.
+- **Abstention wired into the real path.** `decisions.batch.evaluate` resolves the
+  effective policy from the run's own calibration state and sends it with the request,
+  which is what makes `BELOW_MIN_CONFIDENCE` reachable in production rather than only in
+  a unit test. A caller may state a stricter threshold and may never state a looser one.
+  The refusal keeps the answer, probability, threshold and profile it was judged on, and
+  enters the existing escalation ladder with no new ladder.
+- **Shadow mode with a check, not a promise.** Shadow records are structurally incapable
+  of carrying an execution effect, an isolation check surfaces a record that claims
+  otherwise, and ground truth must name its source before it is stored.
+- **Scoped, ordered, reversible adoption.** `UNTESTED -> SHADOW -> EVALUATED -> ELIGIBLE
+  -> ACTIVE`, with every transition requiring a reason, an evaluation identity and a
+  calibration profile, and with scope (risk class, reversibility, verification
+  availability, languages) checked per call rather than trusted from a record.
+- **Identity-bound metrics.** Evaluation metrics are only compared across runs whose
+  experiment identity matches exactly. Otherwise the gate refuses rather than printing a
+  delta across two different experiments.
+- **One canonical runtime identity.** `ariadne-decision-runtime` names the runtime in
+  every new record and in every calibration profile. The two spellings used during 2.1
+  development - `local_bounded` and `local-bounded-runtime` - are read as aliases of it,
+  so existing project state keeps working without being rewritten. Normalisation
+  reconciles names and nothing else: a different implementation, model revision, decision
+  definition or risk class still refuses to match.
+- **`ariadne doctor` speaks about the Decision Runtime.** It reports capability,
+  installation, manifest integrity, version, the concrete model revision, device, and one
+  bounded smoke question, all in-process and in about a tenth of a millisecond. An absent
+  runtime is reported as optional and never makes the product unhealthy; a runtime that
+  is installed and genuinely not working is named precisely, without a traceback.
+  Calibration is reported separately, so a healthy runtime with no measured profile reads
+  as *healthy and ungated* rather than *calibrated*, and a readable manifest with no
+  pinned digests reads as *undescribed* rather than *verified*.
+
+## What 2.1 does not do
+
+Stated plainly, because a release note that oversells is worse than none.
+
+- The reference engine is **rule-derived, not trained**. It is strong on enumerated
+  structure and weak on prose, and it says so in its own docstrings.
+- The installed runtime's probabilities are **uncalibrated**. No profile ships with it,
+  so on a fresh installation no threshold applies and every answer is answered.
+- **Nothing is promoted to `ACTIVE` by default.** Shadow is the shipped posture.
+- `MultiSelectDecision` is **deliberately unsupported** and takes the normal fallback
+  and escalation path.
+- Abstention is a **policy threshold, not truth detection**. Ariadne does not know when
+  a bounded decision is wrong. It knows when a measured profile says the evidence is
+  too weak for this decision, this question and this exact model revision.
+
+## No calibration profile ships by default
+
+A threshold only exists when measurement has earned one, and Ariadne has not measured
+the reference engine's probabilities, so a fresh install answers every bounded question
+ungated. Confidence-gated abstention activates the moment an operator evaluates a
+question family and marks the resulting profile proven - not before, and never by
+default.
+
+## Verification
+
+    scripts/test-decision-runtime.py            475 functional checks
+    scripts/test-decision-runtime-mutations.py  32/32 protections load-bearing
+    scripts/test-engine-core.py                 578/578, unchanged from 2.0
+    scripts/test-decision-mutations.py          9/9, unchanged from 2.0
+    benchmarks --release                         79/79, 0 fail, 0 error
+
+All four suites now run from `scripts/release-check.py`. Through 2.0 the gate could be
+declared green on a tree whose engine had never been executed.
+
+An adversarial review against twelve attack classes found two critical and seven high
+defects, all of which passed the functional suite: a timeout that was not a deadline, an
+undrained stderr pipe, a profile retirement that never reached the state, a
+self-declared confidence kind forwarded verbatim, a latched model revision, an
+evaluation gate that passed when a candidate stopped reporting a metric, a comparison of
+reports that carried no identity, a calibration measured on LOW risk relabelling a
+PROTECTED decision, an unguarded manifest path, and a second moving-alias list. All are
+fixed, and each has a check that fails against the pre-fix behaviour.
+
+## Migration
+
+Additive. A 2.0 caller with no runtime configured produces a byte-identical result plus
+one extra inert key, `shadow`, which always reports `execution_effect: "none"`. There is
+no new required argument anywhere, no migration step, and no `--decision-provider` flag
+to configure, because there is no provider choice to make: Ariadne finds a Decision
+Runtime or it does not.
+
+Full documentation: [docs/v2/2.1/](docs/v2/2.1/README.md).
+
+---
+
 # Ariadne 2.0.0
 
 Ariadne 2.0.0 is the first stable release of the v2 execution engine. It turns

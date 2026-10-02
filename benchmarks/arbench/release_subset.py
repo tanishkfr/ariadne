@@ -73,4 +73,31 @@ RELEASE_SUBSET: tuple[str, ...] = (
     "decision-integrations.evidence-relevance-cannot-elevate-stale",
     "golden-workflows.d1-code-knows",
     "golden-workflows.d5-cache-invalidation-on-relevant-change",
+    # AR-206 Decision Runtime. One case per group, chosen for the property that would
+    # be most expensive to discover late: the answer-space contract, the abstention
+    # refusal, the shadow isolation check, the promotion scope, the identity-bound
+    # gate, and the authority boundary.
+    "runtime-mapping.answer-space-is-the-declared-space",
+    "runtime-batching.one-state-many-questions-one-inference",
+    "runtime-abstention.no-local-model-abstains",
+    "runtime-abstention.no-universal-threshold-exists",
+    "runtime-abstention.production-path-resolves-a-threshold",
+    "runtime-abstention.below-threshold-escalates-without-an-answer",
+    "runtime-abstention.above-threshold-avoids-escalation",
+    "runtime-abstention.thresholds-are-per-question",
+    "runtime-abstention.a-caller-can-tighten-but-not-loosen",
+    "runtime-calibration.only-a-matched-proven-profile-calibrates",
+    "runtime-shadow.observation-has-no-execution-effect",
+    "runtime-shadow.isolation-check-is-load-bearing",
+    "runtime-promotion.slice-cannot-outgrow-its-scope",
+    "runtime-evaluation.metrics-bind-the-experiment-identity",
+    "runtime-cache.invalidated-by-revision-question-and-policy",
+    "runtime-security.runtime-can-never-grant-authority",
+    "runtime-security.crashing-runtime-cannot-break-a-decision",
+    "runtime-packaging.install-and-discover-without-a-download",
+    "runtime-packaging.in-process-and-subprocess-agree-exactly",
+    "runtime-contracts.attaching-a-runtime-changes-nothing-but-the-shadow",
+    "runtime-contracts.doctor-reports-the-runtime-honestly",
+    "runtime-contracts.runtime-identity-is-canonical-and-aliases-read",
+    "runtime-contracts.no-provider-picker-and-no-vendor-vocabulary",
 )
