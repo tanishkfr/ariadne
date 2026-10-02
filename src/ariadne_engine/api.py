@@ -821,9 +821,16 @@ def decision_runtime_export(state, *, definition: str = "", **options) -> dict:
 def decision_runtime_health(*, root=None, timeout: float = 8.0, smoke: bool = True) -> dict:
     """One health record for the Decision Runtime, for ``ariadne doctor``.
 
-    An adapter, not a second health checker. Everything specific to the runtime is asked
-    of the runtime itself through :class:`DecisionRuntime` and the manifest, and this
-    function only turns that into one vocabulary the launcher can print.
+    An adapter, not a second health checker. The runtime-specific questions - is the
+    installation present, does its manifest verify, do its weights parse, does the engine
+    answer a bounded question - are asked of the runtime's own code, through the same
+    :func:`sidecar.build_engine` the sidecar itself uses.
+
+    It deliberately does **not** launch the sidecar. The check runs in-process and takes
+    microseconds, where spawning a process took about a second on every single ``doctor``
+    invocation and made an unrelated product check fail under load - a doctor that is slow
+    enough to destabilise the thing it is diagnosing is the wrong doctor. Process startup
+    is verified where it belongs: the transport suites and the wheel-install gate.
 
     Four states, and the distinction matters more than the labels:
 
@@ -831,31 +838,22 @@ def decision_runtime_health(*, root=None, timeout: float = 8.0, smoke: bool = Tr
         Nothing is installed. This is the shipped default and it is **not** a fault:
         Ariadne runs without it, so it must never make the product look broken.
     ``HEALTHY``
-        Installed, manifest valid, protocol compatible, and a bounded question answered.
+        Installed, manifest valid, weights parse, and a bounded question answered.
     ``AVAILABLE_WITH_LIMITATIONS``
-        Installed and reporting, but the smoke question could not be completed inside
-        the doctor's own deadline. A doctor that could not finish its check has learned
-        that it could not verify the runtime, not that the runtime is broken, so this
-        state never turns Ariadne's exit code non-zero. Only slowness can produce it.
+        Installed and reporting, but the smoke question did not answer.
     ``BROKEN``
-        Installed or configured and genuinely not working: it will not start, it reports
-        unavailable, or its manifest is invalid. Named precisely, never a traceback.
+        Installed or configured and genuinely not working. Named precisely, never a
+        traceback.
 
     Calibration is reported separately from health, and never inferred from it. A runtime
     that answers perfectly with uncalibrated probabilities is healthy and ungated, and
     saying otherwise would be the one lie this function exists to avoid.
-
-    ``timeout`` is a real deadline on every call, because a doctor that hangs on a wedged
-    sidecar is worse than no doctor.
     """
     from .decisions.runtime import manifest as manifest_module
-    from .decisions.runtime import profiles as profiles_module
-    from .decisions.runtime import session as session_module
-    from .decisions.runtime import transport as transport_module
+    from .decisions.runtime import sidecar as sidecar_module
 
     deadline = float(timeout)
-    found = session_module.find_installation(
-        version="", environ=({"ARIADNE_DECISION_RUNTIME": str(root)} if root else None))
+    found = session_find(version="", root=root)
     record: dict = {
         "runtime_id": CANONICAL_RUNTIME_ID,
         "schema_version": 1,
@@ -863,13 +861,14 @@ def decision_runtime_health(*, root=None, timeout: float = 8.0, smoke: bool = Tr
         "status": "OPTIONAL_RUNTIME_UNAVAILABLE",
         "summary": "not installed (optional)",
         "rows": [],
-        "installation": {"installed": False, "root": str(found["root"]), "reason": str(found["reason"])},
+        "installation": {"installed": False, "root": str(found["root"]),
+                         "reason": str(found["reason"])},
         "manifest_valid": False,
         "runtime_version": "",
         "implementation": "",
         "model_revision": "",
         "device": "",
-        "protocol": transport_module.WIRE_SCHEMA,
+        "transport": "subprocess (sidecar); startup is verified by the transport suites",
         "smoke": {"attempted": False, "passed": False, "detail": "not attempted"},
         "calibration": {"profiles": 0, "proven": 0, "active_families": 0, "active_thresholds": 0},
         "problems": [],
@@ -882,84 +881,107 @@ def decision_runtime_health(*, root=None, timeout: float = 8.0, smoke: bool = Tr
         ]
         return record
 
-    runtime = None
-    problems: list[str] = []
-    try:
-        runtime = session_module.DecisionRuntime.discover(
-            root=str(found["root"]), environ={"ARIADNE_DECISION_RUNTIME": str(found["root"])},
-            start_timeout=deadline)
-        status = runtime.status()
-        # Read the problems *before* closing. A closed session reports itself as a
-        # problem, so asking afterwards would report a healthy runtime as degraded -
-        # which is exactly the kind of lie this function exists to avoid.
-        problems = list(runtime.problems())
-    except Exception as exc:  # noqa: BLE001 - a doctor reports, it never propagates
-        problems = [str(exc)]
-        status = {"available": False, "detail": str(exc), "runtime_version": "",
-                  "implementation": "", "model_revision": "", "device": ""}
-    finally:
-        if runtime is not None:
-            try:
-                runtime.shutdown()
-            except Exception:  # noqa: BLE001 - closing a broken runtime may fail; the report stands
-                pass
-
     record["installation"] = {"installed": True, "root": str(found["root"]), "reason": ""}
-    record["manifest_valid"] = not problems
+    problems: list[str] = []
+    rows_pre: tuple[str, str, str] | None = None
+    try:
+        manifest_path = Path(str(found["root"])) / manifest_module.MANIFEST_NAME
+        declared = json.loads(manifest_path.read_text(encoding="utf-8"))
+        digests = declared.get("files")
+        if isinstance(digests, dict) and digests:
+            verified = manifest_module.verify_files(found["root"], digests)
+            mismatch = list(verified.get("mismatched") or []) + list(verified.get("missing") or [])
+            if mismatch:
+                problems.append("manifest digests do not match: " + ", ".join(sorted(mismatch)))
+            else:
+                record["manifest_valid"] = True
+        else:
+            # No pinned digests means nothing to verify, which the seed installer states
+            # outright. UNKNOWN rather than PASS: hashing the bytes you just found is a
+            # description of the installation, not a verification of it.
+            record["manifest_valid"] = None
+            rows_pre = ("ok", "Decision Runtime manifest",
+                        "readable; no digests are pinned, so its integrity is undescribed")
+    except Exception as exc:  # noqa: BLE001 - a doctor reports, it never propagates
+        problems.append(f"the manifest could not be read: {exc}")
+
+    engine = None
+    status: dict = {}
+    try:
+        engine = sidecar_module.build_engine(found["root"])
+        status = dict(engine.status())
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"the engine could not be loaded: {exc}")
+    finally:
+        if engine is not None:
+            warm = engine.warm()
+            status.update(warm if isinstance(warm, dict) else {})
+
     record["runtime_version"] = str(status.get("runtime_version", ""))
     record["implementation"] = str(status.get("implementation", ""))
     record["model_revision"] = str(status.get("model_revision", ""))
     record["device"] = str(status.get("device", ""))
 
-    if not status.get("available"):
+    if not status:
         record["status"] = "BROKEN"
-        record["summary"] = str(status.get("detail") or "installed but not available")
+        record["summary"] = "installed but not loadable"
         record["problems"] = problems or [record["summary"]]
-        record["rows"] = [("problem", "Decision Runtime", record["summary"])]
+        record["rows"] = [("problem", "Decision Runtime", "; ".join(record["problems"]))]
         return record
 
     rows: list[tuple[str, str, str]] = [
-        ("ok", "Decision Runtime", f"healthy ({record['runtime_version'] or 'version unknown'})"),
+        ("ok", "Decision Runtime",
+         f"healthy ({record['runtime_version'] or 'version unknown'})"),
         ("ok", "Decision Runtime model",
          f"{record['implementation']} {record['model_revision']}".strip() or "ready"),
         ("ok", "Device", str(status.get("device", "unknown"))),
     ]
     if smoke:
-        answered = _runtime_smoke(record, found["root"], deadline)
+        answered = _runtime_smoke(record, engine, found["root"])
         record["smoke"] = answered
         if answered["passed"]:
             rows.append(("ok", "Decision Runtime smoke",
-                         f"answered {answered['question']} in {answered['latency_ms']:.1f}ms"))
+                         f"answered {answered['question']} in {answered['latency_ms']:.2f}ms"))
         else:
             rows.append(("warning", "Decision Runtime smoke", str(answered["detail"])))
     record["status"] = "HEALTHY" if record["smoke"]["passed"] else "AVAILABLE_WITH_LIMITATIONS"
     record["summary"] = (
-        "healthy" if record["status"] == "HEALTHY" else "available; the smoke check could not be completed"
+        "healthy" if record["status"] == "HEALTHY"
+        else "available; the smoke check could not be completed"
     )
     if problems:
         rows.insert(1, ("warning", "Decision Runtime manifest", "; ".join(problems)))
+    elif rows_pre is not None:
+        rows.insert(1, rows_pre)
     record["rows"] = rows
+    record["problems"] = problems
     return record
 
 
-def _runtime_smoke(record: dict, root, deadline: float) -> dict:
-    """Ask the installed runtime one bounded question, on the established deadline.
+def session_find(*, version: str = "", root=None) -> dict:
+    """Locate an installation without starting anything."""
+    from .decisions.runtime import session as session_module
+
+    return session_module.find_installation(
+        version=version,
+        environ=({"ARIADNE_DECISION_RUNTIME": str(root)} if root else None),
+    )
+
+
+def _runtime_smoke(record: dict, engine, root) -> dict:
+    """Ask the installed engine one bounded question, in-process.
 
     A smoke test is not calibration evidence and never becomes any: it writes nothing,
     records no profile, and its answer is discarded.
     """
-    from .decisions.runtime import session as session_module
-
     started = time.perf_counter()
-    runtime = None
     try:
-        runtime = session_module.DecisionRuntime.discover(
-            root=str(root), environ={"ARIADNE_DECISION_RUNTIME": str(root)},
-            start_timeout=deadline)
-        answered = runtime.decide(
-            {"entries": {"failure": "Traceback (most recent call last): doctor smoke"},
-             "digest": hashlib.sha256(b"ariadne-decision-runtime-doctor-smoke").hexdigest()},
-            [{
+        answered = engine.decide_batch({
+            "states": [{
+                "entries": {"failure": "Traceback (most recent call last): doctor smoke"},
+                "digest": hashlib.sha256(b"ariadne-decision-runtime-doctor-smoke").hexdigest(),
+            }],
+            "questions": [{
                 "question_id": "doctor-smoke",
                 "instructions": "A bounded smoke question for the doctor.",
                 "primitive": "ChoiceDecision",
@@ -968,36 +990,29 @@ def _runtime_smoke(record: dict, root, deadline: float) -> dict:
                 "definition_version": "1",
                 "consequence": "LOW",
             }],
-            timeout=deadline,
-        )
+        })
     except Exception as exc:  # noqa: BLE001 - a smoke test failing is a report, not a crash
         return {
             "attempted": True, "passed": False, "detail": str(exc),
-            "question": "doctor-smoke", "answer": "", "latency_ms": 0.0,
+            "question": "doctor-smoke", "answer": "", "abstained": False,
+            "abstention_reason": "", "confidence_kind": "", "latency_ms": 0.0,
         }
-    finally:
-        if runtime is not None:
-            try:
-                runtime.shutdown()
-            except Exception:  # noqa: BLE001
-                pass
     latency_ms = (time.perf_counter() - started) * 1000
     slot = (answered.get("answers") or {}).get("0:doctor-smoke", {})
-    # A structured refusal proves the process is alive just as well as an answer does,
-    # and reporting which it was is the difference between a doctor that says "healthy"
-    # and one that has quietly stopped checking.
+    # A structured refusal proves the engine works just as well as an answer does, and
+    # reporting which it was is the difference between a doctor that says "healthy" and
+    # one that has quietly stopped checking.
     answered_value = bool(slot.get("valid")) and bool(slot.get("answer"))
     abstained = bool(slot.get("abstained"))
-    passed = answered_value or abstained
     if answered_value:
         detail = f"answered {slot.get('answer')}"
     elif abstained:
-        detail = f"reached the engine, which abstained ({slot.get('reason', 'no reason given')})"
+        detail = f"the engine abstained ({slot.get('reason', 'no reason given')})"
     else:
         detail = "the engine returned neither an answer nor an abstention"
     return {
         "attempted": True,
-        "passed": passed,
+        "passed": answered_value or abstained,
         "detail": detail,
         "question": "doctor-smoke",
         "answer": str(slot.get("answer") or ""),

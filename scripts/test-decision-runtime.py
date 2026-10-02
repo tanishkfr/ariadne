@@ -2783,8 +2783,12 @@ def doctor_checks(engine, root: Path) -> None:
           and bool(healthy["smoke"]["answer"] or healthy["smoke"]["abstained"]))
     check("D2 the smoke says whether it answered or abstained, rather than just 'ok'",
           bool(healthy["smoke"]["detail"]))
-    check("D2 the health record states the wire protocol it speaks",
-          healthy["protocol"] == RUNTIME.transport.WIRE_SCHEMA)
+    check("D2 the health record states how the runtime is reached, and admits what it "
+          "did not check",
+          "subprocess" in healthy["transport"] and "verified by" in healthy["transport"])
+    check("D2 doctor does not launch a sidecar to ask its own question",
+          "DecisionRuntime.discover" not in inspect.getsource(api._runtime_smoke)
+          and "sidecar_module.build_engine" in inspect.getsource(api.decision_runtime_health))
     check("D2 a healthy runtime with no profile is not reported as calibrated",
           healthy["calibration"]["proven"] == 0
           and not any("calibrated" in row[2].lower() for row in healthy["rows"]))
@@ -2808,6 +2812,30 @@ def doctor_checks(engine, root: Path) -> None:
     check("D3 the diagnostic names the actual issue",
           bool(broken["problems"]) or "unavailable" in str(broken["summary"]).lower())
 
+    # The manifest's three honest states, which are not the same thing.
+    with tempfile.TemporaryDirectory(prefix="ar206-manifest-") as workspace:
+        install = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(install)
+        unpinned = api.decision_runtime_health(root=install, timeout=10.0)
+        manifest_path = install / RUNTIME.manifest.MANIFEST_NAME
+        declared = json.loads(manifest_path.read_text(encoding="utf-8"))
+        declared["files"] = {
+            "weights.json": RUNTIME.manifest.file_digest(install / "weights.json")}
+        manifest_path.write_text(json.dumps(declared), encoding="utf-8")
+        pinned_ok = api.decision_runtime_health(root=install, timeout=10.0)
+        declared["files"] = {"weights.json": "0" * 64}
+        manifest_path.write_text(json.dumps(declared), encoding="utf-8")
+        pinned_bad = api.decision_runtime_health(root=install, timeout=10.0)
+    check("D6 an unpinned manifest is UNKNOWN, not verified",
+          unpinned["manifest_valid"] is None
+          and any("undescribed" in row[2] for row in unpinned["rows"]))
+    check("D6 a pinned manifest that matches verifies", pinned_ok["manifest_valid"] is True)
+    check("D6 a pinned manifest that does not match is reported by name",
+          pinned_bad["manifest_valid"] is False
+          and any("weights.json" in problem for problem in pinned_bad["problems"]))
+    check("D6 a digest mismatch does not make the runtime unreadable",
+          pinned_bad["status"] == "HEALTHY")
+
     # 20. Calibration status is compact and does not dump profiles.
     empty = api.decision_runtime_calibration_summary({"calibration_profiles": []})
     check("D4 a fresh state reports zero profiles and zero thresholds",
@@ -2826,13 +2854,19 @@ def doctor_checks(engine, root: Path) -> None:
           populated["active_families"] == 2 and populated["active_thresholds"] == 3
           and "thresholds_by_risk" not in populated)
 
-    # 32. A doctor must not hang on a wedged runtime.
+    # 32. A doctor must not hang on a wedged runtime, and must not be the slow part.
     check("D5 every runtime call carries a deadline",
           "timeout" in inspect.signature(api.decision_runtime_health).parameters
           and float(inspect.signature(api.decision_runtime_health).parameters["timeout"].default) > 0)
     check("D5 the adapter reports rather than raising, whatever the runtime does",
           "never propagates" in inspect.getsource(api.decision_runtime_health)
           or "noqa: BLE001" in inspect.getsource(api.decision_runtime_health))
+    check("D5 doctor does no process launch, so it cannot hang on a wedged sidecar",
+          not any(token in inspect.getsource(api.decision_runtime_health)
+                  for token in ("Popen", "DecisionRuntime.discover", "import subprocess",
+                                "SubprocessTransport"))
+          and not any(token in inspect.getsource(api._runtime_smoke)
+                      for token in ("Popen", "discover", "subprocess", "SubprocessTransport")))
 
 
 def failure_question_record(engine) -> dict:

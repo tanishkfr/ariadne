@@ -33,10 +33,12 @@ from __future__ import annotations
 import hashlib
 import os
 import importlib.util
+import inspect
 import json
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -914,6 +916,30 @@ def probe_broken_runtime_is_named(module) -> bool:
             and "Traceback" not in json.dumps(health, default=str))
 
 
+def probe_doctor_makes_no_process_launch(module) -> bool:
+    """`doctor` must answer its own question in-process, not by launching a process.
+
+    A doctor that spawns a sidecar on every invocation is slow enough to destabilise the
+    suite that calls it, and it inherits every hang the transport can have. It was
+    observed flaking the distribution suite under load before this was reasoned about.
+    """
+    api = module.api
+    source = inspect.getsource(api.decision_runtime_health)
+    smoke_source = inspect.getsource(api._runtime_smoke)
+    launches = ("Popen", "DecisionRuntime.discover", "SubprocessTransport", "import subprocess")
+    if any(token in source for token in launches) or any(
+            token in smoke_source for token in launches):
+        return False
+    with tempfile.TemporaryDirectory(prefix="ar206-mut-noproc-") as workspace:
+        root = Path(workspace) / "runtime"
+        runtime_of(module).seeds.install_seeds(root)
+        started = time.perf_counter()
+        health = api.decision_runtime_health(root=root)
+        elapsed = time.perf_counter() - started
+    # An in-process check answers in milliseconds; a process launch cannot.
+    return health["status"] == "HEALTHY" and elapsed < 2.0
+
+
 MUTATIONS: tuple[dict, ...] = (
     {
         "name": "let an abstention become an answer",
@@ -1147,8 +1173,8 @@ MUTATIONS: tuple[dict, ...] = (
 {
         "name": "let a doctor skip the Decision Runtime entirely",
         "file": "api.py",
-        "old": '    record["rows"] = rows\n    return record',
-        "new": '    record["rows"] = []\n    return record',
+        "old": '    record["rows"] = rows\n    record["problems"] = problems\n    return record',
+        "new": '    record["rows"] = []\n    record["problems"] = problems\n    return record',
         "probe": probe_doctor_checks_the_runtime,
     },
     {
@@ -1172,11 +1198,20 @@ MUTATIONS: tuple[dict, ...] = (
     {
         "name": "hide a broken runtime behind a healthy report",
         "file": "api.py",
-        "old": '        record["status"] = "BROKEN"\n'
-               '        record["summary"] = str(status.get("detail") or "installed but not available")',
-        "new": '        record["status"] = "HEALTHY"\n'
-               '        record["summary"] = "healthy"',
+        "old": '    if not status:\n        record["status"] = "BROKEN"',
+        "new": '    if not status:\n        record["status"] = "HEALTHY"',
         "probe": probe_broken_runtime_is_named,
+    },
+    {
+        "name": "make doctor launch a sidecar it can then hang on",
+        "file": "api.py",
+        "old": '        engine = sidecar_module.build_engine(found["root"])',
+        "new": '        from .decisions.runtime import session as _doctor_session\n'
+               '        _doctor_session.DecisionRuntime.discover(\n'
+               '            root=str(found["root"]),\n'
+               '        ).shutdown()\n'
+               '        engine = sidecar_module.build_engine(found["root"])',
+        "probe": probe_doctor_makes_no_process_launch,
     },
 )
 

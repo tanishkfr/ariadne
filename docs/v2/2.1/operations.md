@@ -115,9 +115,10 @@ ariadne doctor
 
 ```text
 [OK] Decision Runtime: healthy (1.0.0)
+[OK] Decision Runtime manifest: readable; no digests are pinned, so its integrity is undescribed
 [OK] Decision Runtime model: ariadne-reference-bounded ar-206-reference-1
 [OK] Device: cpu
-[OK] Decision Runtime smoke: answered doctor-smoke in 848.2ms
+[OK] Decision Runtime smoke: answered doctor-smoke in 0.07ms
 [OK] Decision Runtime calibration: 0 proven profile(s), 0 decision family(ies),
     0 active threshold(s); confidence-gated abstention is inactive
 ```
@@ -131,8 +132,14 @@ On a machine with nothing installed, which is the shipped default:
 ```
 
 This is an adapter, not a second health checker: everything runtime-specific is asked of
-the runtime itself, and the launcher's job is to print the answer in Ariadne's
-vocabulary. Three distinctions are load-bearing.
+the runtime's own code, through the same `sidecar.build_engine` the sidecar itself uses.
+It runs **in-process** and takes about a tenth of a millisecond, because spawning the
+sidecar on every `doctor` invocation cost about a second and made an unrelated product
+check fail under load. Process startup is verified where it belongs - the transport
+suites and the wheel-install gate - and the output says so rather than implying it was
+checked.
+
+Three distinctions are load-bearing.
 
 **An absent runtime is not a fault.** Ariadne answers bounded questions without it, so it
 never turns the doctor red. The optional runtime is optional.
@@ -142,14 +149,10 @@ proven profiles, decision families and active thresholds. A healthy runtime with
 profiles reads as *healthy and ungated*, which is the truth on a fresh install. The
 doctor never says "calibrated" because a runtime started.
 
-**A slow runtime is not a broken one.** If the smoke question cannot complete inside the
-doctor's own deadline, the state is *available with limitations* and the doctor stays
-green. Only a runtime that will not start, reports unavailable, or has an invalid
-manifest is reported as broken - and then by name, never as a traceback.
-
-The doctor launches the sidecar for its smoke question, on the same deadline machinery as
-every other call, so it cannot hang on a wedged runtime. It does not download a model and
-it does not run benchmarks.
+**A readable manifest is not a verified one.** The seed installer ships no pinned
+digests, and the doctor says exactly that: *readable; no digests are pinned, so its
+integrity is undescribed*. Hashing the bytes you just found describes the installation;
+it does not verify it. When digests *are* pinned, a mismatch is reported by filename.
 
 ## eval
 

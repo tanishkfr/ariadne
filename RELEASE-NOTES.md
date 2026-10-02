@@ -66,12 +66,13 @@ nothing is promoted by default.
   reconciles names and nothing else: a different implementation, model revision, decision
   definition or risk class still refuses to match.
 - **`ariadne doctor` speaks about the Decision Runtime.** It reports capability,
-  installation, manifest validity, version, the concrete model revision, device, the wire
-  protocol it speaks, and one bounded smoke question. An absent runtime is reported as
-  optional and never makes the product unhealthy; a runtime that is installed and
-  genuinely not working is named precisely, without a traceback. Calibration is a
-  separate line, so a healthy runtime with no measured profile reads as *healthy and
-  ungated* rather than *calibrated*.
+  installation, manifest integrity, version, the concrete model revision, device, and one
+  bounded smoke question, all in-process and in about a tenth of a millisecond. An absent
+  runtime is reported as optional and never makes the product unhealthy; a runtime that
+  is installed and genuinely not working is named precisely, without a traceback.
+  Calibration is reported separately, so a healthy runtime with no measured profile reads
+  as *healthy and ungated* rather than *calibrated*, and a readable manifest with no
+  pinned digests reads as *undescribed* rather than *verified*.
 
 ## What 2.1 does not do
 
@@ -98,8 +99,8 @@ default.
 
 ## Verification
 
-    scripts/test-decision-runtime.py            469 functional checks
-    scripts/test-decision-runtime-mutations.py  31/31 protections load-bearing
+    scripts/test-decision-runtime.py            475 functional checks
+    scripts/test-decision-runtime-mutations.py  32/32 protections load-bearing
     scripts/test-engine-core.py                 578/578, unchanged from 2.0
     scripts/test-decision-mutations.py          9/9, unchanged from 2.0
     benchmarks --release                         79/79, 0 fail, 0 error
