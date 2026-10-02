@@ -196,8 +196,8 @@ MUTATIONS: tuple[dict, ...] = (
     {
         "name": "remove the cache model-version binding",
         "file": "decisions/cache.py",
-        "old": "        \"provider\": str(provider),\n        \"model_version\": str(model_version),\n        \"policy_version\": str(policy_version),",
-        "new": "        \"provider\": str(provider),\n        \"policy_version\": str(policy_version),",
+        "old": '        "model_version": str(model_version),\n        "policy_version": str(policy_version),',
+        "new": '        "policy_version": str(policy_version),',
         "probe": probe_cache_model_binding,
     },
     {

@@ -14,6 +14,47 @@ wrong. Ariadne's policy decides what happens next. And abstention is a policy th
 not truth detection - Ariadne does not know when a decision is wrong, only when measured
 evidence is too weak for this decision.
 
+## The runtime identity a profile binds
+
+A calibration profile names the runtime it was measured against. One identity is
+canonical:
+
+```
+ariadne-decision-runtime
+```
+
+Three spellings existed during 2.1 development, and they were never three names for one
+thing:
+
+| Spelling | What it actually is | Status |
+|---|---|---|
+| `local_bounded` | the runtime *kind* enum, alongside `external_bounded` | unchanged; a kind is not an identity |
+| `local-bounded-runtime` | the provider *registry* id | unchanged; released 2.0 surface |
+| `ariadne-decision-runtime` | the *provenance* identity a profile binds | **canonical** |
+
+`contracts.canonical_runtime_id` maps the first two onto the third and returns anything
+else unchanged. It is applied when a profile is written and when one is matched, so new
+records carry only the canonical value and records written earlier keep working with no
+operator action.
+
+It is deliberately narrow. `external_bounded` is **not** an alias, because aliasing an
+external runtime's kind onto the local runtime's identity would let a profile measured
+against a different implementation match this one. An unrecognised name is preserved
+verbatim rather than guessed at.
+
+Normalisation is not a shortcut past the rest of the identity. These are compared exactly
+and separately, and none of them is affected:
+
+```
+decision definition      question schema digest    decision-definition digest
+question version         implementation           concrete model revision
+risk class
+```
+
+So a profile stored as `local_bounded` matches the canonical runtime, and the same
+profile refuses immediately under a different model revision, a different implementation,
+a different decision definition or a different risk class.
+
 ## How a threshold reaches the runtime
 
 There is exactly one producer, and it is the run's own recorded calibration state:

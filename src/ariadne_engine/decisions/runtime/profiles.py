@@ -46,6 +46,7 @@ from ...contracts import (
     DECISION_CONSEQUENCES,
     SCHEMA_DECISION_RUNTIME,
     calibration_profile_problems,
+    canonical_runtime_id,
     new_record_id,
     utc_now,
 )
@@ -231,7 +232,7 @@ def build_profile(
     profile = CalibrationProfile(
         decision_definition=str(decision_definition),
         question_version=",".join(sorted({str(_question(q).get("definition_version", "1")) for q in questions})) or "1",
-        runtime=str(runtime),
+        runtime=canonical_runtime_id(runtime),
         implementation=str(implementation),
         model=str(model),
         revision=str(revision),
@@ -365,8 +366,11 @@ def _mismatch(
             f"profile {candidate.profile_id} is bound to model revision {candidate.revision!r}, "
             f"but the runtime loaded {str(model_revision)!r}"
         )
-    if candidate.runtime != str(runtime):
-        return f"profile {candidate.profile_id} is bound to runtime {candidate.runtime!r}, not {str(runtime)!r}"
+    if canonical_runtime_id(candidate.runtime) != canonical_runtime_id(runtime):
+        return (
+            f"profile {candidate.profile_id} is bound to runtime {candidate.runtime!r}, "
+            f"not {str(runtime)!r}"
+        )
     if candidate.implementation != str(implementation):
         return (
             f"profile {candidate.profile_id} is bound to implementation {candidate.implementation!r}, "

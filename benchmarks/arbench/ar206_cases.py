@@ -192,6 +192,161 @@ def abstention_policy_resolution(ctx: Ctx) -> Outcome:
     )
 
 
+@case(
+    id="runtime-contracts.doctor-reports-the-runtime-honestly",
+    group="runtime-contracts",
+    title="doctor reports runtime health, and never overstates it",
+    task="Ask the health adapter for an absent runtime, an installed one, and one whose "
+         "weight file is corrupt.",
+    expectation="Absent is OPTIONAL_RUNTIME_UNAVAILABLE and contributes no problem. "
+                "Installed is HEALTHY. Corrupt is BROKEN with the reason named and no "
+                "traceback. No state is ever reported as calibrated with zero profiles.",
+    evaluation="Call decision_runtime_health for each scenario and read status and rows.",
+    evidence_required="The three statuses, the broken reason, and the calibration counts.",
+    layer="deterministic",
+)
+def doctor_honest(ctx: Ctx) -> Outcome:
+    RUNTIME = runtime_of(ctx)
+    api = ctx.repo.module("ariadne.py").ENGINE_API
+    import os as _os
+    import tempfile as _tempfile
+
+    problems: list[str] = []
+    statuses: dict[str, str] = {}
+
+    with _tempfile.TemporaryDirectory(prefix="ar206-bench-absent-") as workspace:
+        previous_home = _os.environ.get("ARIADNE_DATA_HOME")
+        previous_override = _os.environ.pop("ARIADNE_DECISION_RUNTIME", None)
+        _os.environ["ARIADNE_DATA_HOME"] = str(Path(workspace) / "data")
+        try:
+            absent = api.decision_runtime_health(timeout=8.0)
+        finally:
+            if previous_home is None:
+                _os.environ.pop("ARIADNE_DATA_HOME", None)
+            else:
+                _os.environ["ARIADNE_DATA_HOME"] = previous_home
+            if previous_override is not None:
+                _os.environ["ARIADNE_DECISION_RUNTIME"] = previous_override
+    statuses["absent"] = absent["status"]
+    if absent["status"] != "OPTIONAL_RUNTIME_UNAVAILABLE":
+        problems.append(f"an absent runtime reported {absent['status']}")
+    if any(row[0] == "problem" for row in absent["rows"]):
+        problems.append("an absent optional runtime contributed a problem row")
+
+    with _tempfile.TemporaryDirectory(prefix="ar206-bench-ok-") as workspace:
+        root = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(root)
+        healthy = api.decision_runtime_health(root=root, timeout=20.0)
+    statuses["installed"] = healthy["status"]
+    if healthy["status"] != "HEALTHY":
+        problems.append(f"an installed runtime reported {healthy['status']}")
+    if "calibrated" in json.dumps(healthy, default=str).lower():
+        problems.append("a runtime with zero profiles was reported as calibrated")
+
+    with _tempfile.TemporaryDirectory(prefix="ar206-bench-broken-") as workspace:
+        root = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(root)
+        (root / "weights.json").write_text("{ not json at all", encoding="utf-8")
+        broken = api.decision_runtime_health(root=root, timeout=10.0)
+    statuses["broken"] = broken["status"]
+    if broken["status"] != "BROKEN":
+        problems.append(f"a corrupt runtime reported {broken['status']}")
+    if "Traceback" in json.dumps(broken, default=str):
+        problems.append("a traceback leaked into the diagnostic")
+
+    return Outcome(
+        status="pass" if not problems else "fail",
+        actual=f"statuses={statuses}",
+        evidence={"statuses": statuses, "broken_summary": str(broken["summary"])[:160],
+                  "calibration": healthy["calibration"], "problems": problems},
+    )
+
+
+@case(
+    id="runtime-contracts.runtime-identity-is-canonical-and-aliases-read",
+    group="runtime-contracts",
+    title="One canonical runtime identity, with read compatibility for 2.1 records",
+    task="Normalise each known spelling, then match a profile stored under a legacy alias "
+         "against the canonical runtime, and vary every other identity field.",
+    expectation="All three historical spellings normalise to ariadne-decision-runtime and "
+                "an unknown name is preserved verbatim. A legacy profile matches the "
+                "canonical runtime, and a different revision, implementation, runtime or "
+                "risk class still refuses.",
+    evaluation="Call canonical_runtime_id, then profile_for across the matched and varied cases.",
+    evidence_required="The normalisations and the accept/refuse matrix.",
+    layer="deterministic",
+)
+def identity_canonical(ctx: Ctx) -> Outcome:
+    RUNTIME = runtime_of(ctx)
+    module = ctx.repo.module("ariadne.py")
+    contracts = module.CONTRACTS
+    Question = module.DECISIONS.contracts.DecisionQuestion
+    question = Question(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    canonical = contracts.CANONICAL_RUNTIME_ID
+    normalised = {
+        spelling: contracts.canonical_runtime_id(spelling)
+        for spelling in ("local_bounded", "local-bounded-runtime",
+                         "ariadne-decision-runtime", "unknown-runtime", "external_bounded")
+    }
+    problems = []
+    for spelling in ("local_bounded", "local-bounded-runtime"):
+        if normalised[spelling] != canonical:
+            problems.append(f"{spelling} normalised to {normalised[spelling]!r}")
+    for spelling in ("unknown-runtime", "external_bounded"):
+        if normalised[spelling] != spelling:
+            problems.append(f"{spelling} was silently aliased to {normalised[spelling]!r}")
+
+    state = {"schema_version": 1, "run_id": "bench", "project": "p", "packets": [],
+             "approvals": []}
+    built = RUNTIME.profiles.build_profile(
+        decision_definition="failure-classification", questions=[question.as_record()],
+        runtime="local_bounded", implementation=RUNTIME.reference.ENGINE_NAME,
+        model=RUNTIME.reference.ENGINE_NAME, revision=RUNTIME.reference.ENGINE_REVISION,
+        dataset_digest="7" * 64, dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+        accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08, thresholds_by_risk={"LOW": 0.9})
+    state.setdefault("calibration_profiles", []).append(
+        {**built.as_record(), "runtime": "local_bounded"})
+    base = {"runtime": canonical, "implementation": RUNTIME.reference.ENGINE_NAME,
+            "model_revision": RUNTIME.reference.ENGINE_REVISION}
+    verdicts = {
+        "matched": RUNTIME.profiles.profile_for(
+            state, decision_definition="failure-classification", question=question,
+            risk="LOW", **base),
+    }
+    for label, override in (
+        ("revision", {"model_revision": "deadbeef"}),
+        ("implementation", {"implementation": "other"}),
+        ("runtime", {"runtime": "unknown-runtime"}),
+    ):
+        verdicts[label] = RUNTIME.profiles.profile_for(
+            state, decision_definition="failure-classification", question=question,
+            risk="LOW", **{**base, **override})
+    verdicts["risk"] = RUNTIME.profiles.profile_for(
+        state, decision_definition="failure-classification", question=question,
+        risk="HIGH", **base)
+    if not verdicts["matched"]["accepted"]:
+        problems.append("a legacy alias profile did not match the canonical runtime")
+    for label in ("revision", "implementation", "runtime", "risk"):
+        if verdicts[label]["accepted"]:
+            problems.append(f"normalisation was too broad: {label} still matched")
+    if built.runtime != canonical:
+        problems.append(f"a new profile was stored as {built.runtime!r}")
+
+    return Outcome(
+        status="pass" if not problems else "fail",
+        actual=f"all_canonical={ {k: bool(v == canonical) for k, v in normalised.items()} }",
+        evidence={"normalised": normalised,
+                  "accepted": {k: v["accepted"] for k, v in verdicts.items()},
+                  "problems": problems},
+        metrics={"alias_spellings": 2},
+    )
+
+
 def _profiled_classification(ctx: Ctx, threshold: float, source: str):
     """A real failure classification with a profile measured on the question it asks.
 
@@ -1942,6 +2097,7 @@ def contracts_product_surface(ctx: Ctx) -> Outcome:
     import re
 
     repo = ctx.repo.root
+    contracts = ctx.repo.module("ariadne.py").CONTRACTS
     runtime_dir = repo / "src" / "ariadne_engine" / "decisions" / "runtime"
     runtime_source = "\n".join(path.read_text(encoding="utf-8")
                                for path in sorted(runtime_dir.glob("*.py")))
@@ -1949,7 +2105,9 @@ def contracts_product_surface(ctx: Ctx) -> Outcome:
     command = cli_source[cli_source.index('"decision-runtime",'):]
     command = command[:command.index("provenance_p = sub.add_parser")]
     public = ctx.repo.module("ariadne.py")
-    module = public.PUBLIC if hasattr(public, "PUBLIC") else None
+    # The stability table lives on ariadne_engine.public. The CLI module re-exports
+    # nothing of it, so reading it from there would test an empty dict and quietly pass.
+    engine_public = getattr(getattr(public, "ENGINE", None), "public", None)
     forbidden = ("laya", "jev", "convai")
     choice_lists = re.findall(r"choices=\[([^\]]*)\]", cli_source, re.S)
     pyproject = (repo / "pyproject.toml").read_text(encoding="utf-8").lower()
@@ -1970,17 +2128,23 @@ def contracts_product_surface(ctx: Ctx) -> Outcome:
             problems.append(f"{label} names a vendor: {found}")
     if dependencies:
         problems.append(f"the core declares an ML dependency: {dependencies}")
-    if module is not None:
-        picker = [name for name in module.PUBLIC_SURFACE
+    if engine_public is not None:
+        surface = getattr(engine_public, "PUBLIC_SURFACE", {})
+        if not surface:
+            problems.append("the public surface table could not be read")
+        picker = [name for name in surface
                   if "provider_picker" in name or "select_provider" in name]
         if picker:
             problems.append(f"the public API exposes a picker: {picker}")
-    for name in ("decision_runtime_status", "decision_runtime_decide",
-                 "decision_runtime_select", "decision_runtime_promote"):
-        if name not in getattr(public, "PUBLIC_SURFACE", {}):
-            problems.append(f"{name} is not classified in the public surface")
+        for name in ("decision_runtime_status", "decision_runtime_decide",
+                     "decision_runtime_select", "decision_runtime_promote",
+                     "decision_runtime_health", "decision_runtime_calibration_summary"):
+            if surface.get(name) != "PROVISIONAL":
+                problems.append(f"{name} is not classified PROVISIONAL in the public surface")
     if runtime_module.provider.LOCAL_PROVIDER_ID != "local-bounded-runtime":
         problems.append("the provider id does not name the kind of implementation")
+    if contracts.CANONICAL_RUNTIME_ID != "ariadne-decision-runtime":
+        problems.append("the canonical runtime identity is not ariadne-decision-runtime")
     return Outcome(
         status="pass" if not problems else "fail",
         actual=f"ml_dependencies={dependencies} picker=none",

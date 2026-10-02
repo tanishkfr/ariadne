@@ -107,6 +107,50 @@ line "a prediction is not verification, and nothing here authorises anything".
 
 It resolves a run, so it needs a location. It writes nothing.
 
+### The normal `ariadne doctor` checks it too
+
+```bash
+ariadne doctor
+```
+
+```text
+[OK] Decision Runtime: healthy (1.0.0)
+[OK] Decision Runtime model: ariadne-reference-bounded ar-206-reference-1
+[OK] Device: cpu
+[OK] Decision Runtime smoke: answered doctor-smoke in 848.2ms
+[OK] Decision Runtime calibration: 0 proven profile(s), 0 decision family(ies),
+    0 active threshold(s); confidence-gated abstention is inactive
+```
+
+On a machine with nothing installed, which is the shipped default:
+
+```text
+[OK] Decision Runtime: not installed (optional)
+[OK] Decision Runtime calibration: no proven profile; confidence-gated abstention is
+    inactive (the runtime still answers bounded questions)
+```
+
+This is an adapter, not a second health checker: everything runtime-specific is asked of
+the runtime itself, and the launcher's job is to print the answer in Ariadne's
+vocabulary. Three distinctions are load-bearing.
+
+**An absent runtime is not a fault.** Ariadne answers bounded questions without it, so it
+never turns the doctor red. The optional runtime is optional.
+
+**A working runtime is not a calibrated one.** Calibration is its own line, counting
+proven profiles, decision families and active thresholds. A healthy runtime with zero
+profiles reads as *healthy and ungated*, which is the truth on a fresh install. The
+doctor never says "calibrated" because a runtime started.
+
+**A slow runtime is not a broken one.** If the smoke question cannot complete inside the
+doctor's own deadline, the state is *available with limitations* and the doctor stays
+green. Only a runtime that will not start, reports unavailable, or has an invalid
+manifest is reported as broken - and then by name, never as a traceback.
+
+The doctor launches the sidecar for its smoke question, on the same deadline machinery as
+every other call, so it cannot hang on a wedged runtime. It does not download a model and
+it does not run benchmarks.
+
 ## eval
 
 ```bash

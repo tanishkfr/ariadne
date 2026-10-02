@@ -41,6 +41,7 @@ from ..contracts import (
     SCHEMA_DECISION,
     SCHEMA_DECISION_INTELLIGENCE,
     ContractError,
+    canonical_runtime_id,
 )
 from . import batch as batch_module
 from . import policy
@@ -110,7 +111,11 @@ def key_for(
         "question": question.as_record(),
         "definition_digest": definition_digest(question),
         "projection_digest": str(projection_digest),
-        "provider": str(provider),
+        # Canonical, so every new entry is keyed identically regardless of which
+        # historical spelling the caller used. An entry written under an alias before
+        # this existed simply misses, which is the safe direction: a conservative miss
+        # costs one bounded inference, an uncertain equivalence costs a wrong answer.
+        "provider": canonical_runtime_id(provider),
         "model_version": str(model_version),
         "policy_version": str(policy_version),
         "effective_min_confidence": (

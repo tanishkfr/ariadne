@@ -1960,6 +1960,46 @@ Neither value is user-facing vocabulary. Both are recorded because provenance th
 cannot name its implementation is not evidence.
 """
 
+CANONICAL_RUNTIME_ID = "ariadne-decision-runtime"
+"""The one identity a Decision Runtime records and a calibration profile binds.
+
+Chosen over the alternatives because it is the *name*, not a category or a registry
+key. ``local_bounded`` names a kind of implementation and ``local-bounded-runtime`` names
+a registry entry; both stay exactly where they are, because both are live 2.0 surface
+with different jobs. This is the provenance identity: the thing that appears in a
+decision record and that a calibration profile must match.
+"""
+
+RUNTIME_ID_ALIASES = {
+    "local_bounded": CANONICAL_RUNTIME_ID,
+    "local-bounded-runtime": CANONICAL_RUNTIME_ID,
+    CANONICAL_RUNTIME_ID: CANONICAL_RUNTIME_ID,
+}
+"""Historical spellings that name *this* runtime, and nothing else.
+
+Every entry is read compatibility. An unrecognised value is returned unchanged rather
+than guessed at, and ``external_bounded`` is deliberately absent: aliasing an external
+runtime's kind onto the local runtime's identity would let a profile measured against a
+different implementation match this one.
+"""
+
+
+def canonical_runtime_id(value: Any) -> str:
+    """Normalise a recorded Decision Runtime identity to its canonical form.
+
+    One function, applied at interpretation boundaries, rather than a string replacement
+    scattered across modules. New records write only the canonical value; records written
+    during 2.1 development may carry a historical spelling and stay readable without the
+    operator rewriting project state.
+
+    Normalisation is deliberately narrow. It reconciles *names for the same runtime* and
+    nothing else: a different implementation, model revision, decision definition or
+    policy still fails to match, because those are compared separately and exactly.
+    """
+    label = str(value or "").strip()
+    return RUNTIME_ID_ALIASES.get(label, label)
+
+
 RUNTIME_PRIMITIVE_MAPPINGS = {
     "BinaryDecision": "noul",
     "ChoiceDecision": "choice",

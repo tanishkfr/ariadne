@@ -97,4 +97,7 @@ RELEASE_SUBSET: tuple[str, ...] = (
     "runtime-packaging.install-and-discover-without-a-download",
     "runtime-packaging.in-process-and-subprocess-agree-exactly",
     "runtime-contracts.attaching-a-runtime-changes-nothing-but-the-shadow",
+    "runtime-contracts.doctor-reports-the-runtime-honestly",
+    "runtime-contracts.runtime-identity-is-canonical-and-aliases-read",
+    "runtime-contracts.no-provider-picker-and-no-vendor-vocabulary",
 )

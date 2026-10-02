@@ -31,7 +31,9 @@ Run: python scripts/test-decision-runtime-mutations.py
 from __future__ import annotations
 
 import hashlib
+import os
 import importlib.util
+import json
 import shutil
 import sys
 import tempfile
@@ -805,6 +807,113 @@ def _threshold_supplied(module, *, status: str = "", revision: str = "",
     return bool(state["decisions"][-1]["effective_policy"]["min_confidence_by_question"])
 
 
+def probe_legacy_alias_still_matches(module) -> bool:
+    """A profile stored with a legacy runtime alias must still match the canonical runtime."""
+    RUNTIME = runtime_of(module)
+    canonical = module.contracts.CANONICAL_RUNTIME_ID
+    Question = module.decisions.contracts.DecisionQuestion
+    legacy = Question(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    state = {"schema_version": 1, "run_id": "m", "project": "p", "packets": [], "approvals": []}
+    built = RUNTIME.profiles.build_profile(
+        decision_definition="failure-classification", questions=[legacy.as_record()],
+        runtime="local_bounded", implementation=RUNTIME.reference.ENGINE_NAME,
+        model=RUNTIME.reference.ENGINE_NAME, revision=RUNTIME.reference.ENGINE_REVISION,
+        dataset_digest="7" * 64, dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+        accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08, thresholds_by_risk={"LOW": 0.9})
+    # Exactly what 2.1 development wrote, before canonicalisation existed.
+    state.setdefault("calibration_profiles", []).append(
+        {**built.as_record(), "runtime": "local_bounded"})
+    verdict = RUNTIME.profiles.profile_for(
+        state, decision_definition="failure-classification", question=legacy, risk="LOW",
+        runtime=canonical, implementation=RUNTIME.reference.ENGINE_NAME,
+        model_revision=RUNTIME.reference.ENGINE_REVISION)
+    if not verdict["accepted"]:
+        return False
+    # And normalisation must stay narrow: a different revision still refuses, and so
+    # must an unrecognised runtime name, which must never silently become this one.
+    drifted = RUNTIME.profiles.profile_for(
+        state, decision_definition="failure-classification", question=legacy, risk="LOW",
+        runtime=canonical, implementation=RUNTIME.reference.ENGINE_NAME,
+        model_revision="deadbeef")
+    if drifted["accepted"]:
+        return False
+    unknown = RUNTIME.profiles.profile_for(
+        state, decision_definition="failure-classification", question=legacy, risk="LOW",
+        runtime="unknown-runtime", implementation=RUNTIME.reference.ENGINE_NAME,
+        model_revision=RUNTIME.reference.ENGINE_REVISION)
+    if unknown["accepted"]:
+        return False
+    external = RUNTIME.profiles.profile_for(
+        state, decision_definition="failure-classification", question=legacy, risk="LOW",
+        runtime="external_bounded", implementation=RUNTIME.reference.ENGINE_NAME,
+        model_revision=RUNTIME.reference.ENGINE_REVISION)
+    return external["accepted"] is False
+
+
+def probe_doctor_checks_the_runtime(module) -> bool:
+    """`doctor` must report on the Decision Runtime, not skip it."""
+    RUNTIME = runtime_of(module)
+    api = module.api
+    with tempfile.TemporaryDirectory(prefix="ar206-mut-doctor-") as workspace:
+        root = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(root)
+        health = api.decision_runtime_health(root=root, timeout=15.0)
+    labels = {row[1] for row in health.get("rows", [])}
+    return health["status"] == "HEALTHY" and "Decision Runtime" in labels
+
+
+def probe_absent_runtime_is_not_fatal(module) -> bool:
+    """An absent optional runtime must not be reported as a problem."""
+    api = module.api
+    with tempfile.TemporaryDirectory(prefix="ar206-mut-absent-") as workspace:
+        home = Path(workspace) / "data"
+        previous_home = os.environ.get("ARIADNE_DATA_HOME")
+        previous_override = os.environ.pop("ARIADNE_DECISION_RUNTIME", None)
+        os.environ["ARIADNE_DATA_HOME"] = str(home)
+        try:
+            health = api.decision_runtime_health(timeout=6.0)
+        finally:
+            if previous_home is None:
+                os.environ.pop("ARIADNE_DATA_HOME", None)
+            else:
+                os.environ["ARIADNE_DATA_HOME"] = previous_home
+            if previous_override is not None:
+                os.environ["ARIADNE_DECISION_RUNTIME"] = previous_override
+    return (health["status"] == "OPTIONAL_RUNTIME_UNAVAILABLE"
+            and all(row[0] != "problem" for row in health.get("rows", [])))
+
+
+def probe_doctor_never_claims_calibration(module) -> bool:
+    """A working runtime with no profile must not be reported as calibrated."""
+    api = module.api
+    RUNTIME = runtime_of(module)
+    with tempfile.TemporaryDirectory(prefix="ar206-mut-cal-") as workspace:
+        root = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(root)
+        health = api.decision_runtime_health(root=root, timeout=15.0)
+    text = json.dumps(health, default=str).lower()
+    return health["status"] == "HEALTHY" and health["calibration"]["proven"] == 0 and "calibrated" not in text
+
+
+def probe_broken_runtime_is_named(module) -> bool:
+    """A configured runtime that will not start must be named, not crash."""
+    api = module.api
+    RUNTIME = runtime_of(module)
+    with tempfile.TemporaryDirectory(prefix="ar206-mut-broken-") as workspace:
+        root = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(root)
+        (root / "weights.json").write_text("{ not json at all", encoding="utf-8")
+        health = api.decision_runtime_health(root=root, timeout=6.0)
+    return (health["status"] == "BROKEN"
+            and any(row[0] == "problem" for row in health.get("rows", []))
+            and "Traceback" not in json.dumps(health, default=str))
+
+
 MUTATIONS: tuple[dict, ...] = (
     {
         "name": "let an abstention become an answer",
@@ -1019,6 +1128,55 @@ MUTATIONS: tuple[dict, ...] = (
         "old": '            "acted_on": False,',
         "new": '            "acted_on": True,',
         "probe": probe_confidence_cannot_authorize,
+    },
+    # -- AR-206 polish: canonical identity and doctor integration --------------------
+    {
+        "name": "remove runtime canonicalization entirely",
+        "file": "contracts.py",
+        "old": '    return RUNTIME_ID_ALIASES.get(label, label)',
+        "new": "    return label",
+        "probe": probe_legacy_alias_still_matches,
+    },
+    {
+        "name": "canonicalise every string, including unknown runtimes",
+        "file": "contracts.py",
+        "old": '    return RUNTIME_ID_ALIASES.get(label, label)',
+        "new": '    return RUNTIME_ID_ALIASES.get(label, CANONICAL_RUNTIME_ID)',
+        "probe": probe_legacy_alias_still_matches,
+    },
+{
+        "name": "let a doctor skip the Decision Runtime entirely",
+        "file": "api.py",
+        "old": '    record["rows"] = rows\n    return record',
+        "new": '    record["rows"] = []\n    return record',
+        "probe": probe_doctor_checks_the_runtime,
+    },
+    {
+        "name": "make an absent optional runtime fatal",
+        "file": "api.py",
+        "old": '            ("ok", "Decision Runtime",\n'
+               '             "not installed (optional); Ariadne answers bounded questions without it"),',
+        "new": '            ("problem", "Decision Runtime",\n'
+               '             "not installed; Ariadne cannot answer bounded questions"),',
+        "probe": probe_absent_runtime_is_not_fatal,
+    },
+    {
+        "name": "let doctor call an unprofiled runtime calibrated",
+        "file": "api.py",
+        "old": '    record["status"] = "HEALTHY" if record["smoke"]["passed"] else "AVAILABLE_WITH_LIMITATIONS"',
+        "new": '    record["status"] = "CALIBRATED"\n'
+               '    record["calibration"] = {"profiles": 1, "proven": 1,\n'
+               '                            "active_families": 1, "active_thresholds": 1}',
+        "probe": probe_doctor_never_claims_calibration,
+    },
+    {
+        "name": "hide a broken runtime behind a healthy report",
+        "file": "api.py",
+        "old": '        record["status"] = "BROKEN"\n'
+               '        record["summary"] = str(status.get("detail") or "installed but not available")',
+        "new": '        record["status"] = "HEALTHY"\n'
+               '        record["summary"] = "healthy"',
+        "probe": probe_broken_runtime_is_named,
     },
 )
 

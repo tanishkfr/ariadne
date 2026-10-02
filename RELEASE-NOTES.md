@@ -59,6 +59,19 @@ nothing is promoted by default.
 - **Identity-bound metrics.** Evaluation metrics are only compared across runs whose
   experiment identity matches exactly. Otherwise the gate refuses rather than printing a
   delta across two different experiments.
+- **One canonical runtime identity.** `ariadne-decision-runtime` names the runtime in
+  every new record and in every calibration profile. The two spellings used during 2.1
+  development - `local_bounded` and `local-bounded-runtime` - are read as aliases of it,
+  so existing project state keeps working without being rewritten. Normalisation
+  reconciles names and nothing else: a different implementation, model revision, decision
+  definition or risk class still refuses to match.
+- **`ariadne doctor` speaks about the Decision Runtime.** It reports capability,
+  installation, manifest validity, version, the concrete model revision, device, the wire
+  protocol it speaks, and one bounded smoke question. An absent runtime is reported as
+  optional and never makes the product unhealthy; a runtime that is installed and
+  genuinely not working is named precisely, without a traceback. Calibration is a
+  separate line, so a healthy runtime with no measured profile reads as *healthy and
+  ungated* rather than *calibrated*.
 
 ## What 2.1 does not do
 
@@ -74,19 +87,22 @@ Stated plainly, because a release note that oversells is worse than none.
 - Abstention is a **policy threshold, not truth detection**. Ariadne does not know when
   a bounded decision is wrong. It knows when a measured profile says the evidence is
   too weak for this decision, this question and this exact model revision.
-- A calibration profile must name the runtime as the provider names itself -
-  `ariadne-decision-runtime` on the decision path, which is what lands in provenance.
-  Three spellings of the runtime identity exist in 2.1 (`local_bounded`,
-  `local-bounded-runtime`, `ariadne-decision-runtime`) and a profile built against the
-  wrong one simply never matches. This is a known usability wrinkle, not a silent
-  failure: the refusal names the mismatch.
+
+## No calibration profile ships by default
+
+A threshold only exists when measurement has earned one, and Ariadne has not measured
+the reference engine's probabilities, so a fresh install answers every bounded question
+ungated. Confidence-gated abstention activates the moment an operator evaluates a
+question family and marks the resulting profile proven - not before, and never by
+default.
 
 ## Verification
 
-    scripts/test-decision-runtime.py            445 functional checks
-    scripts/test-decision-runtime-mutations.py  25/25 protections load-bearing
+    scripts/test-decision-runtime.py            469 functional checks
+    scripts/test-decision-runtime-mutations.py  31/31 protections load-bearing
     scripts/test-engine-core.py                 578/578, unchanged from 2.0
     scripts/test-decision-mutations.py          9/9, unchanged from 2.0
+    benchmarks --release                         79/79, 0 fail, 0 error
 
 All four suites now run from `scripts/release-check.py`. Through 2.0 the gate could be
 declared green on a tree whose engine had never been executed.

@@ -2635,6 +2635,206 @@ def golden_workflow_checks(engine) -> None:
           True)
 
 
+def identity_checks(engine, root: Path) -> None:
+    """One canonical Decision Runtime identity, with read compatibility for old spellings.
+
+    The three spellings were never three names for one thing - ``local_bounded`` is a
+    *kind*, ``local-bounded-runtime`` is a provider *registry* id, and
+    ``ariadne-decision-runtime`` is the *provenance* identity a calibration profile
+    binds. Only the provenance identity is canonicalised; renaming a kind or a registry
+    key would break released surface for no gain. What must not survive is an operator
+    having to guess which of them a calibration profile wants.
+    """
+    contracts = engine.contracts
+    canonical = contracts.CANONICAL_RUNTIME_ID
+    check("the canonical identity is ariadne-decision-runtime", canonical == "ariadne-decision-runtime")
+    for spelling in ("local_bounded", "local-bounded-runtime", "ariadne-decision-runtime"):
+        check(f"{spelling} normalises to the canonical identity",
+              contracts.canonical_runtime_id(spelling) == canonical)
+    for spelling in ("local_bounded", "local-bounded-runtime"):
+        check(f"{spelling} is registered as a read alias, not a second identity",
+              contracts.RUNTIME_ID_ALIASES[spelling] == canonical)
+    for spelling in ("external_bounded", "laya", "unknown-runtime", "", "  "):
+        check(f"{spelling!r} is preserved, not silently aliased",
+              contracts.canonical_runtime_id(spelling) == str(spelling).strip())
+    check("an unknown runtime id is preserved verbatim",
+          contracts.canonical_runtime_id("unknown-runtime") == "unknown-runtime")
+    check("the kind enum is untouched, because a kind is not an identity",
+          contracts.DECISION_RUNTIME_KINDS == ("local_bounded", "external_bounded"))
+    check("the provider registry id is untouched, because it is 2.0 released surface",
+          RUNTIME_PROVIDER_ID == "local-bounded-runtime")
+
+    # New records write only the canonical value.
+    RUNTIME = runtime_of(engine)
+    identity_question = question(engine, "failure-class", "ChoiceDecision", "failure-classification")
+    for spelling in ("local_bounded", "local-bounded-runtime", "ariadne-decision-runtime"):
+        built = RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[identity_question],
+            runtime=spelling, implementation=RUNTIME.reference.ENGINE_NAME,
+            model=RUNTIME.reference.ENGINE_NAME, revision=RUNTIME.reference.ENGINE_REVISION,
+            dataset_digest="9" * 64, dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": 0.9})
+        check(f"a profile built with {spelling} is stored canonically",
+              built.runtime == canonical)
+
+    # And a legacy stored profile still matches the canonical runtime.
+    legacy_state = base_state()
+    identity = {"runtime": "local_bounded",
+                "implementation": RUNTIME.reference.ENGINE_NAME,
+                "model_revision": RUNTIME.reference.ENGINE_REVISION}
+    legacy = RUNTIME.profiles.build_profile(
+        decision_definition="failure-classification", questions=[identity_question],
+        runtime="local_bounded", implementation=RUNTIME.reference.ENGINE_NAME,
+        model=RUNTIME.reference.ENGINE_NAME, revision=RUNTIME.reference.ENGINE_REVISION,
+        dataset_digest="8" * 64, dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+        accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08, thresholds_by_risk={"LOW": 0.9})
+    # Simulate a record written during 2.1 development, before canonicalisation.
+    legacy_state.setdefault("calibration_profiles", []).append(
+        {**legacy.as_record(), "runtime": "local_bounded"})
+    canonical_query = dict(identity, runtime=canonical)
+    matched = RUNTIME.profiles.profile_for(
+        legacy_state, decision_definition="failure-classification", question=identity_question,
+        risk="LOW", **canonical_query)
+    check("a legacy alias profile matches the canonical runtime when all else matches",
+          matched["accepted"] is True and matched["min_confidence"] == 0.9)
+
+    # Normalisation must be narrow: every other identity field still decides.
+    for label, override in (
+        ("a different model revision", {"model_revision": "deadbeef"}),
+        ("a different implementation", {"implementation": "something-else"}),
+        ("a different runtime", {"runtime": "external_bounded"}),
+        ("a different runtime entirely", {"runtime": "unknown-runtime"}),
+    ):
+        verdict = RUNTIME.profiles.profile_for(
+            legacy_state, decision_definition="failure-classification", question=identity_question,
+            risk="LOW", **{**canonical_query, **override})
+        check(f"an alias profile does not match under {label}",
+              verdict["accepted"] is False)
+    wrong_definition = RUNTIME.profiles.profile_for(
+        legacy_state, decision_definition="review-escalation",
+        question=question(engine, "review-escalation", "ChoiceDecision", "review-escalation"),
+        risk="LOW", **canonical_query)
+    check("an alias profile does not match a different decision definition",
+          wrong_definition["accepted"] is False)
+    wrong_risk = RUNTIME.profiles.profile_for(
+        legacy_state, decision_definition="failure-classification", question=identity_question,
+        risk="HIGH", **canonical_query)
+    check("an alias profile does not match a different risk class",
+          wrong_risk["accepted"] is False)
+
+    # The cache keys on the canonical id, and an aliased key still lands on the same entry.
+    binary = engine.decisions.contracts.DecisionQuestion(
+        question_id="failure-class", instructions="classify",
+        primitive="ChoiceDecision",
+        options=tuple(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification")
+    cache = engine.decisions.cache
+    common = dict(projection_digest="7" * 64, model_version="rev-1", policy_version="v1")
+    aliased = cache.key_for(binary, provider="local_bounded", **common)
+    canonical_key = cache.key_for(binary, provider=canonical, **common)
+    check("an aliased provider id produces the same cache key as the canonical one",
+          aliased == canonical_key)
+    other = cache.key_for(binary, provider="external_bounded", **common)
+    check("a different runtime does not share the cache key", other != canonical_key)
+
+
+RUNTIME_PROVIDER_ID = "local-bounded-runtime"
+
+
+def doctor_checks(engine, root: Path) -> None:
+    """`ariadne doctor` must understand the Decision Runtime without overstating it."""
+    api = engine.api
+    RUNTIME = runtime_of(engine)
+
+    # 17. Fresh install: the capability is simply absent.
+    with tempfile.TemporaryDirectory(prefix="ar206-doctor-absent-") as workspace:
+        home = Path(workspace) / "data"
+        previous_home = os.environ.get("ARIADNE_DATA_HOME")
+        previous_override = os.environ.pop("ARIADNE_DECISION_RUNTIME", None)
+        os.environ["ARIADNE_DATA_HOME"] = str(home)
+        try:
+            absent = api.decision_runtime_health(timeout=6.0)
+        finally:
+            if previous_home is None:
+                os.environ.pop("ARIADNE_DATA_HOME", None)
+            else:
+                os.environ["ARIADNE_DATA_HOME"] = previous_home
+            if previous_override is not None:
+                os.environ["ARIADNE_DECISION_RUNTIME"] = previous_override
+    check("D1 an absent Decision Runtime is OPTIONAL_RUNTIME_UNAVAILABLE, not broken",
+          absent["status"] == "OPTIONAL_RUNTIME_UNAVAILABLE")
+    check("D1 an absent runtime never contributes a 'problem' row",
+          all(row[0] != "problem" for row in absent["rows"]))
+    check("D1 an absent runtime says so in plain words",
+          any(row[1] == "Decision Runtime" and "optional" in row[2] for row in absent["rows"]))
+
+    # 18. Runtime present and working.
+    with tempfile.TemporaryDirectory(prefix="ar206-doctor-ok-") as workspace:
+        install = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(install)
+        healthy = api.decision_runtime_health(root=install, timeout=15.0)
+    check("D2 an installed runtime is HEALTHY", healthy["status"] == "HEALTHY")
+    check("D2 the health record names its implementation and concrete revision",
+          healthy["implementation"] == RUNTIME.reference.ENGINE_NAME
+          and healthy["model_revision"] == RUNTIME.reference.ENGINE_REVISION)
+    check("D2 the smoke decision really reached the engine and got a real response",
+          healthy["smoke"]["passed"] is True and healthy["smoke"]["latency_ms"] > 0
+          and bool(healthy["smoke"]["answer"] or healthy["smoke"]["abstained"]))
+    check("D2 the smoke says whether it answered or abstained, rather than just 'ok'",
+          bool(healthy["smoke"]["detail"]))
+    check("D2 the health record states the wire protocol it speaks",
+          healthy["protocol"] == RUNTIME.transport.WIRE_SCHEMA)
+    check("D2 a healthy runtime with no profile is not reported as calibrated",
+          healthy["calibration"]["proven"] == 0
+          and not any("calibrated" in row[2].lower() for row in healthy["rows"]))
+    check("D2 health is reported separately from calibration",
+          "Decision Runtime" in {row[1] for row in healthy["rows"]}
+          and not any(row[1] == "Decision Runtime calibration" for row in healthy["rows"]))
+    check("D2 an installation-level health record carries no calibration of its own",
+          healthy["calibration"] == {"profiles": 0, "proven": 0, "active_families": 0,
+                                     "active_thresholds": 0})
+
+    # 19. Runtime configured and broken.
+    with tempfile.TemporaryDirectory(prefix="ar206-doctor-broken-") as workspace:
+        install = Path(workspace) / "runtime"
+        RUNTIME.seeds.install_seeds(install)
+        (install / "weights.json").write_text("{ not json at all", encoding="utf-8")
+        broken = api.decision_runtime_health(root=install, timeout=6.0)
+    check("D3 a broken runtime is BROKEN, precisely and without a traceback",
+          broken["status"] == "BROKEN"
+          and any(row[0] == "problem" for row in broken["rows"])
+          and "Traceback" not in json.dumps(broken, default=str))
+    check("D3 the diagnostic names the actual issue",
+          bool(broken["problems"]) or "unavailable" in str(broken["summary"]).lower())
+
+    # 20. Calibration status is compact and does not dump profiles.
+    empty = api.decision_runtime_calibration_summary({"calibration_profiles": []})
+    check("D4 a fresh state reports zero profiles and zero thresholds",
+          empty == {"profiles": 0, "proven": 0, "active_families": 0, "active_thresholds": 0})
+    populated = api.decision_runtime_calibration_summary({"calibration_profiles": [
+        {"status": "PROVEN", "decision_definition": "failure-classification",
+         "thresholds_by_risk": {"LOW": 0.8}},
+        {"status": "PROVEN", "decision_definition": "review-escalation",
+         "thresholds_by_risk": {"LOW": 0.7, "HIGH": 0.9}},
+        {"status": "DRAFT", "decision_definition": "route-family",
+         "thresholds_by_risk": {"LOW": 0.5}},
+    ]})
+    check("D4 only PROVEN profiles count",
+          populated["profiles"] == 3 and populated["proven"] == 2)
+    check("D4 decision families and thresholds are counted, not listed",
+          populated["active_families"] == 2 and populated["active_thresholds"] == 3
+          and "thresholds_by_risk" not in populated)
+
+    # 32. A doctor must not hang on a wedged runtime.
+    check("D5 every runtime call carries a deadline",
+          "timeout" in inspect.signature(api.decision_runtime_health).parameters
+          and float(inspect.signature(api.decision_runtime_health).parameters["timeout"].default) > 0)
+    check("D5 the adapter reports rather than raising, whatever the runtime does",
+          "never propagates" in inspect.getsource(api.decision_runtime_health)
+          or "noqa: BLE001" in inspect.getsource(api.decision_runtime_health))
+
+
 def failure_question_record(engine) -> dict:
     return {
         "question_id": "failure-class",
@@ -2804,6 +3004,8 @@ def main() -> int:
         export_checks(engine)
         abstention_wiring_checks(engine)
         golden_workflow_checks(engine)
+        identity_checks(engine, root)
+        doctor_checks(engine, root)
         hardening_checks(engine, root)
         product_checks(engine, root)
         integration_checks(engine)

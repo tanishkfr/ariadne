@@ -128,6 +128,8 @@ PROVISIONAL = (
     "decision_runtime_promote",
     "decision_runtime_export",
     "decision_runtime_report",
+    "decision_runtime_health",
+    "decision_runtime_calibration_summary",
     "inspect_request",
     "inspect_tool_packs",
     "externalize_output",

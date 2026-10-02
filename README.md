@@ -206,6 +206,20 @@ setting.
 Adding a runtime to a 2.0 project changes nothing: with none configured, the same call
 returns a byte-identical result plus one extra inert key. There is no migration step.
 
+**Ariadne's Decision Runtime is usable immediately.** Confidence-gated abstention
+activates only when a matching calibration profile has been evaluated and marked
+proven, so a fresh installation answers every bounded question ungated rather than
+guessing at a cutoff.
+
+`ariadne doctor` reports it alongside the rest of the product - capability, installation,
+manifest, concrete model revision, device, protocol, and one bounded smoke question - and
+treats an absent runtime as optional rather than as a fault:
+
+```text
+[OK] Decision Runtime: healthy (1.0.0)
+[OK] Decision Runtime calibration: 0 proven profile(s); confidence-gated abstention is inactive
+```
+
 The full documentation is in [docs/v2/2.1/](docs/v2/2.1/README.md).
 
 ## Verification and human control

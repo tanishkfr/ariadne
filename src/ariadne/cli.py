@@ -1021,7 +1021,64 @@ def doctor(
         checks.append((status_value, "Project", detail))
     elif project is None:
         checks.append(("ok", "Project", "No project requested; installed product only"))
+    checks.extend(decision_runtime_checks())
     return (2 if any(status_value == "problem" for status_value, _, _ in checks) else 0), checks
+
+
+# The Decision Runtime is optional. Its absence is the shipped default and must never
+# make Ariadne look broken, so an absent runtime contributes no "problem" row; only a
+# runtime that is installed or configured and is genuinely not working does.
+#
+# A smoke check that could not finish inside the deadline is deliberately *not* in this
+# list. A slow sidecar is not a broken one, and letting startup latency decide whether
+# `ariadne doctor` exits non-zero would make an unrelated product check fail for a
+# reason that has nothing to do with the project being examined.
+DOCTOR_RUNTIME_PROBLEM_STATES = ("BROKEN",)
+
+
+def decision_runtime_checks(timeout: float = 8.0) -> list[tuple[str, str, str]]:
+    """The Decision Runtime rows for ``ariadne doctor``.
+
+    A thin adapter over the engine's own health function. There is deliberately no second
+    health checker here: the runtime knows how it is installed, whether its sidecar starts
+    and whether it can answer a question, and duplicating any of that here would be a
+    second opinion that can disagree with the first.
+    """
+    try:
+        from ariadne_engine import api as engine_api
+    except Exception as exc:  # noqa: BLE001 - a launcher must not crash on its own health check
+        return [("warning", "Decision Runtime",
+                 f"the engine could not be inspected ({exc}); Ariadne core is unaffected")]
+
+    try:
+        health = engine_api.decision_runtime_health(timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        return [("warning", "Decision Runtime", f"could not be inspected: {exc}")]
+
+    rows: list[tuple[str, str, str]] = []
+    for status_value, label, detail in health.get("rows", []):
+        if health["status"] in DOCTOR_RUNTIME_PROBLEM_STATES:
+            status_value = "problem"
+        rows.append((status_value, label, detail))
+    if health["status"] == "OPTIONAL_RUNTIME_UNAVAILABLE":
+        rows = [("ok", "Decision Runtime", "not installed (optional)"),
+                ("ok", "Decision Runtime calibration",
+                 "no proven profile; confidence-gated abstention is inactive "
+                 "(the runtime still answers bounded questions)")]
+    calibration = health.get("calibration") or {}
+    if health["status"] != "OPTIONAL_RUNTIME_UNAVAILABLE":
+        # Never "calibrated" just because the runtime works. These are separate facts and
+        # a fresh install is healthy *and* ungated.
+        rows.append((
+            "ok" if calibration.get("proven") else "ok",
+            "Decision Runtime calibration",
+            f"{calibration.get('proven', 0)} proven profile(s), "
+            f"{calibration.get('active_families', 0)} decision family(ies), "
+            f"{calibration.get('active_thresholds', 0)} active threshold(s)"
+            + ("" if calibration.get("proven")
+               else "; confidence-gated abstention is inactive"),
+        ))
+    return rows
 
 
 def uninstall(home: Path, target: Path, codex_directory: Path | None = None) -> list[str]:
