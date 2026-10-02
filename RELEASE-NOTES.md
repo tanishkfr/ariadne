@@ -1,25 +1,25 @@
-# Ariadne 2.1.0rc1
+# Ariadne 2.1.0
 
-Ariadne 2.1.0rc1 adds the **native Decision Runtime**: an on-device bounded inference
+Ariadne 2.1.0 ships Ariadne's native bounded Decision Runtime: an on-device inference
 engine that answers Ariadne's own Decision Plane questions, isolated in a sidecar
-process. It is a feature drop on top of 2.0, and every 2.0 behaviour is preserved.
+process. It is a feature release on top of 2.0, and every 2.0 behaviour is preserved.
 
 The 2.0 notes follow below.
 
-Install from the GitHub release artifacts. PyPI publication stays deferred
-because the `ariadne` distribution name belongs to an unrelated GraphQL server;
-this release is delivered as an immutable wheel and runtime bundle.
+Install from the GitHub release artifacts. PyPI publication stays deferred because the
+`ariadne` distribution name belongs to an unrelated GraphQL server; this release is
+delivered as an immutable wheel and runtime bundle.
 
 ## The Decision Runtime, in one paragraph
 
-When a requirement needs a bounded judgement, Ariadne now has somewhere local to ask.
-The runtime answers one projected state and many independent questions in a single
-inference, over closed answer spaces the question declared, and it refuses rather than
-guesses. It observes before it influences: the authoritative answer is decided, judged
-and recorded first, and the runtime's prediction is stored beside it as evidence that
-provably could not have changed it. A probability is only labelled calibrated when a
-measured profile matches runtime kind, implementation, model revision, decision
-definition, question version and question schema exactly. Promotion to an
+When a requirement needs a bounded judgement, Ariadne now has somewhere local to ask. The
+runtime answers one projected state and many independent questions in a single inference,
+over closed answer spaces the question declared, and it refuses rather than guesses. It
+observes before it influences: the authoritative answer is decided, judged and recorded
+first, and the runtime's prediction is stored beside it as evidence that provably could
+not have changed it. A probability is only labelled calibrated when a measured profile
+matches the decision definition, question version, question schema, runtime identity,
+implementation, concrete model revision and risk class exactly. Promotion to an
 authoritative role is scoped, ordered and reversible. The default posture is shadow, and
 nothing is promoted by default.
 
@@ -104,14 +104,16 @@ default.
 
 ## Verification
 
-    scripts/test-decision-runtime.py            475 functional checks
-    scripts/test-decision-runtime-mutations.py  32/32 protections load-bearing
+    scripts/test-decision-runtime.py            510 functional checks
+    scripts/test-decision-runtime-mutations.py  38/38 protections load-bearing
     scripts/test-engine-core.py                 578/578, unchanged from 2.0
     scripts/test-decision-mutations.py          9/9, unchanged from 2.0
-    benchmarks --release                         79/79, 0 fail, 0 error
+    scripts/test-release.py                     97/97
+    scripts/test-distribution.py                55/55
+    benchmarks --release                        79/79, 0 fail, 0 error
 
-All four suites now run from `scripts/release-check.py`. Through 2.0 the gate could be
-declared green on a tree whose engine had never been executed.
+All of these run from `scripts/release-check.py`. Through 2.0 the gate could be declared
+green on a tree whose engine had never been executed.
 
 An adversarial review against twelve attack classes found two critical and seven high
 defects, all of which passed the functional suite: a timeout that was not a deadline, an
@@ -121,6 +123,28 @@ evaluation gate that passed when a candidate stopped reporting a metric, a compa
 reports that carried no identity, a calibration measured on LOW risk relabelling a
 PROTECTED decision, an unguarded manifest path, and a second moving-alias list. All are
 fixed, and each has a check that fails against the pre-fix behaviour.
+
+A later pass added the `doctor` integration and then audited it, which surfaced four
+more: the doctor could not reach the installed engine, reaching it wrote bytecode into an
+installation that is immutable by contract, it launched a sidecar on every invocation,
+and its manifest check validated nothing. The release-candidate pass then hardened the
+document resolver a release gate resolves names with, which had been first-match-wins
+with no containment check.
+
+## Real-world evaluation
+
+The Decision Runtime was run in shadow mode over a real project before this release, in
+shadow throughout, through the four real integration entry points. Nineteen real bounded
+decisions across all four decision families: no authority leaked, nothing crashed, no
+shadow record carried an execution effect, and every probability stayed a provider
+probability.
+
+Two findings from it are worth stating plainly. The failure classifier returned the same
+answer at the same confidence for ten genuinely different real failures, which is its
+documented weakness with prose meeting it in practice; and no reviewed ground truth
+exists for any of the run, so **no accuracy figure is claimed and no calibration profile
+was created**. The full record is in
+[the evaluation document](docs/v2/2.1/15-RC-REAL-WORLD-EVALUATION.md).
 
 ## Migration
 

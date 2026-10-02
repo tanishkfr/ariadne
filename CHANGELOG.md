@@ -9,6 +9,43 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.1.0 — 2026-10-02 · PUBLIC RELEASE
+
+Ariadne now has somewhere local to ask a bounded question. The native Decision Runtime
+answers Ariadne's own Decision Plane questions over closed answer spaces the question
+declared, on device, in a sidecar process.
+
+What a user can see:
+
+- **Bounded decisions run locally.** Failure classification, review escalation, evidence
+  relevance and route family are answered by an on-device engine with no network, no
+  model download and no third-party runtime component.
+- **Batched per projected state.** One state and many independent questions cost one
+  bounded inference, with the projection-derived cache deciding what is worth
+  recomputing.
+- **Structured abstention.** Four named refusal reasons instead of a quiet low score, and
+  no universal confidence threshold anywhere - Ariadne has no threshold it did not earn.
+- **Evidence-backed thresholds.** A threshold applies only where a PROVEN calibration
+  profile matches the decision definition, question version, question schema, runtime
+  identity, implementation, concrete model revision and risk class exactly.
+- **Shadow evaluation.** The runtime's prediction is recorded beside the decision and
+  provably cannot change it; `ariadne doctor` reports the runtime and treats its absence
+  as optional.
+- **Scoped and reversible promotion.** `UNTESTED -> SHADOW -> EVALUATED -> ELIGIBLE ->
+  ACTIVE`, every transition requiring a reason and an evaluation, suspension immediate.
+- **Safe fallback.** A runtime that is absent, slow or broken never changes what Ariadne
+  does; the 2.0 path runs unchanged.
+
+Honest limits, kept in the release notes rather than smoothed over: no calibration profile
+ships by default, the reference engine is rule-derived rather than trained, and abstention
+is a policy threshold rather than truth detection. A real-world shadow run found that the
+failure classifier does not discriminate real build output today; the record is in
+`docs/v2/2.1/15-RC-REAL-WORLD-EVALUATION.md`.
+
+Additive for users: a 2.0 caller with no runtime configured gets a byte-identical result
+plus one inert `shadow` key.
+
+---
 ## 2.0.0 — 2026-09-25 · PUBLIC RELEASE
 
 Ariadne v2 makes the orchestration core, the Decision Plane and the recorded
