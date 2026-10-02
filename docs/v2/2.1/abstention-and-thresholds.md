@@ -23,24 +23,29 @@ canonical:
 ariadne-decision-runtime
 ```
 
-Three spellings existed during 2.1 development, and they were never three names for one
-thing:
+Three spellings exist in 2.1, and they are not three names for one thing. They are three
+names in three namespaces, two of which are unrelated to calibration:
 
-| Spelling | What it actually is | Status |
+| Spelling | Namespace and meaning | Status |
 |---|---|---|
 | `local_bounded` | the runtime *kind* enum, alongside `external_bounded` | unchanged; a kind is not an identity |
-| `local-bounded-runtime` | the provider *registry* id | unchanged; released 2.0 surface |
-| `ariadne-decision-runtime` | the *provenance* identity a profile binds | **canonical** |
+| `local-bounded-runtime` | the provider *registry* identifier | unchanged; released 2.0 surface |
+| `ariadne-decision-runtime` | the *provenance* identity recorded in a decision and bound by a calibration profile | **canonical** |
 
-`contracts.canonical_runtime_id` maps the first two onto the third and returns anything
-else unchanged. It is applied when a profile is written and when one is matched, so new
-records carry only the canonical value and records written earlier keep working with no
-operator action.
+`contracts.canonical_runtime_id` reconciles the first two into the third **only when the
+value is read in a provenance or calibration context**. It is not a global rename and the
+other two namespaces are untouched: a runtime's kind is still `local_bounded`, and its
+provider registry entry is still `local-bounded-runtime`.
+
+The function is applied when a profile is written and when one is matched, so new records
+carry only the canonical value and records written during 2.1 development keep working
+with no operator action.
 
 It is deliberately narrow. `external_bounded` is **not** an alias, because aliasing an
 external runtime's kind onto the local runtime's identity would let a profile measured
 against a different implementation match this one. An unrecognised name is preserved
-verbatim rather than guessed at.
+verbatim rather than guessed at, and a future major (`ariadne-decision-runtime-v2`) does
+not match a v1 profile.
 
 Normalisation is not a shortcut past the rest of the identity. These are compared exactly
 and separately, and none of them is affected:

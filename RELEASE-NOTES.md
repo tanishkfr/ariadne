@@ -59,12 +59,17 @@ nothing is promoted by default.
 - **Identity-bound metrics.** Evaluation metrics are only compared across runs whose
   experiment identity matches exactly. Otherwise the gate refuses rather than printing a
   delta across two different experiments.
-- **One canonical runtime identity.** `ariadne-decision-runtime` names the runtime in
-  every new record and in every calibration profile. The two spellings used during 2.1
-  development - `local_bounded` and `local-bounded-runtime` - are read as aliases of it,
-  so existing project state keeps working without being rewritten. Normalisation
-  reconciles names and nothing else: a different implementation, model revision, decision
-  definition or risk class still refuses to match.
+- **One canonical runtime identity.** Ariadne records `ariadne-decision-runtime` as the
+  canonical Decision Runtime provenance identity: the value that appears in a decision
+  record and that a calibration profile must match. Historical values such as
+  `local_bounded` and `local-bounded-runtime` are normalised to it *only* when read in
+  that provenance or calibration context, so project state written during 2.1
+  development keeps working without being rewritten. Their original meanings are
+  unchanged and are not aliases of each other: `local_bounded` remains the runtime-kind
+  enum alongside `external_bounded`, and `local-bounded-runtime` remains the provider
+  registry identifier. Normalisation reconciles names in one context and nothing else: a
+  different implementation, model revision, decision definition or risk class still
+  refuses to match.
 - **`ariadne doctor` speaks about the Decision Runtime.** It reports capability,
   installation, manifest integrity, version, the concrete model revision, device, and one
   bounded smoke question, all in-process and in about a tenth of a millisecond. An absent
