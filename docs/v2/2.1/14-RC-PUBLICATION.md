@@ -35,7 +35,7 @@ they were three different things that happened to share a prefix:
 |---|---|---|
 | `local_bounded` | the runtime *kind* enum, beside `external_bounded` | unchanged |
 | `local-bounded-runtime` | the provider *registry* id | unchanged |
-| `ariadne-decision-runtime` | the *provenance* identity a profile binds | **canonical** |
+| `ariadne-decision-runtime` | the identity recorded in provenance, and the one a calibration profile must name | **canonical** |
 
 Renaming a kind enum or a released registry id to make one word would have broken live
 surface for no gain. So only the provenance identity is canonicalised, and the other two
