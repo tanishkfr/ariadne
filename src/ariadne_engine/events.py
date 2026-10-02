@@ -107,6 +107,19 @@ EVENT_TYPES = (
     "decision_second_opinion",
     "generation_justified",
     "decision_outcome_recorded",
+
+    # AR-206 Decision Runtime vocabulary. The same append-only log and the same
+    # digest chain carry these; bounded local inference gets no second event
+    # system, and the names are the declared contract rather than free text.
+    "decision_runtime_requested",
+    "decision_runtime_started",
+    "decision_runtime_completed",
+    "decision_runtime_abstained",
+    "decision_runtime_failed",
+    "decision_runtime_cache_hit",
+    "decision_runtime_shadow_recorded",
+    "decision_runtime_promoted",
+    "decision_runtime_suspended",
 )
 """The declared event vocabulary. A type outside this set is refused, so the log
 cannot accumulate an undocumented ad-hoc event name."""

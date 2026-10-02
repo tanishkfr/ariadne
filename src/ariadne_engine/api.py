@@ -29,11 +29,12 @@ import hashlib
 import io
 import json
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import contracts, persistence
-from .contracts import ContractError
+from .contracts import CANONICAL_RUNTIME_ID, ContractError
 
 
 @dataclass(frozen=True)
@@ -732,6 +733,346 @@ def invalidate_decision_cache(state, **options) -> dict:
     return {"invalidated": touched, "count": len(touched)}
 
 
+# ------------------------------------------------- AR-206 native decision runtime
+
+
+def decision_runtime_status(*, root="", version="") -> dict:
+    """Capability state of the native Decision Runtime (engine-level, read only)."""
+    from .decisions.runtime.session import DecisionRuntime
+
+    runtime = DecisionRuntime.discover(root=root or None, version=version)
+    try:
+        status = runtime.status()
+        return {"status": status, "problems": runtime.problems()}
+    finally:
+        runtime.shutdown()
+
+
+def decision_runtime_decide(state_projection, questions, **options) -> dict:
+    """Answer bounded questions over one projected state with the local runtime."""
+    from .decisions.runtime.session import DecisionRuntime
+
+    # Whether the session is ours to close has to be decided before the options are
+    # consumed. Reading it afterwards always saw a popped "root", so a runtime the caller
+    # passed in and still owned was shut down under them -- one call, and their session
+    # was closed.
+    supplied = options.pop("runtime", None)
+    owns = supplied is None
+    runtime = supplied or DecisionRuntime.discover(root=options.pop("root", "") or None)
+    try:
+        return dict(runtime.decide(state_projection, questions, **options))
+    finally:
+        if owns:
+            runtime.shutdown()
+
+
+def decision_runtime_select(state, **options) -> dict:
+    """Which bounded implementation Ariadne would use, and in which role."""
+    from .decisions.runtime.selection import select_bounded_provider
+
+    return select_bounded_provider(state, **options)
+
+
+def decision_runtime_shadow_report(state, *, definition: str = "") -> dict:
+    """Shadow evidence and its isolation, for one decision definition."""
+    from .decisions.runtime.observe import shadow_report
+
+    return shadow_report(state, definition=definition)
+
+
+def decision_runtime_calibration(state, **options) -> dict:
+    """Build and record a CalibrationProfile, or report why one cannot be used."""
+    from .decisions.runtime import profiles
+
+    if options.pop("record", True):
+        profile = profiles.build_profile(**options)
+        return profiles.record_profile(state, profile)
+    return profiles.build_profile(**options).as_record()
+
+
+def decision_runtime_evaluate(state, *, records=(), rows=(), **options) -> dict:
+    """Score an evaluation run and bind its experiment identity."""
+    from .decisions.runtime import evaluation
+
+    return evaluation.evaluate(records, rows=rows, **options)
+
+
+def decision_runtime_compare(baseline, candidate) -> dict:
+    """Metric comparison across two evaluation reports, refused if not comparable."""
+    from .decisions.runtime import evaluation
+
+    return evaluation.compare(baseline, candidate)
+
+
+def decision_runtime_promote(state, *, slice_id: str, target: str, **options) -> dict:
+    """Move one adoption slice through its lifecycle (never an authorization)."""
+    from .decisions.runtime import promotion
+
+    return promotion.transition(state, slice_id, target, **options)
+
+
+def decision_runtime_export(state, *, definition: str = "", **options) -> dict:
+    """Export reviewed shadow observations as a bounded training dataset."""
+    from .decisions.runtime import export
+
+    return export.collect(state, definition=definition, **options)
+
+
+def decision_runtime_health(*, root=None, timeout: float = 8.0, smoke: bool = True) -> dict:
+    """One health record for the Decision Runtime, for ``ariadne doctor``.
+
+    An adapter, not a second health checker. The runtime-specific questions - is the
+    installation present, does its manifest verify, do its weights parse, does the engine
+    answer a bounded question - are asked of the runtime's own code, through the same
+    :func:`sidecar.build_engine` the sidecar itself uses.
+
+    It deliberately does **not** launch the sidecar. The check runs in-process and takes
+    microseconds, where spawning a process took about a second on every single ``doctor``
+    invocation and made an unrelated product check fail under load - a doctor that is slow
+    enough to destabilise the thing it is diagnosing is the wrong doctor. Process startup
+    is verified where it belongs: the transport suites and the wheel-install gate.
+
+    Four states, and the distinction matters more than the labels:
+
+    ``OPTIONAL_RUNTIME_UNAVAILABLE``
+        Nothing is installed. This is the shipped default and it is **not** a fault:
+        Ariadne runs without it, so it must never make the product look broken.
+    ``HEALTHY``
+        Installed, manifest valid, weights parse, and a bounded question answered.
+    ``AVAILABLE_WITH_LIMITATIONS``
+        Installed and reporting, but the smoke question did not answer.
+    ``BROKEN``
+        Installed or configured and genuinely not working. Named precisely, never a
+        traceback.
+
+    Calibration is reported separately from health, and never inferred from it. A runtime
+    that answers perfectly with uncalibrated probabilities is healthy and ungated, and
+    saying otherwise would be the one lie this function exists to avoid.
+    """
+    from .decisions.runtime import manifest as manifest_module
+    from .decisions.runtime import sidecar as sidecar_module
+
+    deadline = float(timeout)
+    found = session_find(version="", root=root)
+    record: dict = {
+        "runtime_id": CANONICAL_RUNTIME_ID,
+        "schema_version": 1,
+        "kind": "ariadne-decision-runtime-health",
+        "status": "OPTIONAL_RUNTIME_UNAVAILABLE",
+        "summary": "not installed (optional)",
+        "rows": [],
+        "installation": {"installed": False, "root": str(found["root"]),
+                         "reason": str(found["reason"])},
+        "manifest_valid": False,
+        "runtime_version": "",
+        "implementation": "",
+        "model_revision": "",
+        "device": "",
+        "transport": "subprocess (sidecar); startup is verified by the transport suites",
+        "smoke": {"attempted": False, "passed": False, "detail": "not attempted"},
+        "calibration": {"profiles": 0, "proven": 0, "active_families": 0, "active_thresholds": 0},
+        "problems": [],
+        "authorization_effect": "none",
+    }
+    if not found["installed"]:
+        record["rows"] = [
+            ("ok", "Decision Runtime",
+             "not installed (optional); Ariadne answers bounded questions without it"),
+        ]
+        return record
+
+    record["installation"] = {"installed": True, "root": str(found["root"]), "reason": ""}
+    problems: list[str] = []
+    rows_pre: tuple[str, str, str] | None = None
+    try:
+        manifest_path = Path(str(found["root"])) / manifest_module.MANIFEST_NAME
+        declared = json.loads(manifest_path.read_text(encoding="utf-8"))
+        digests = declared.get("files")
+        if isinstance(digests, dict) and digests:
+            verified = manifest_module.verify_files(found["root"], digests)
+            mismatch = list(verified.get("mismatched") or []) + list(verified.get("missing") or [])
+            if mismatch:
+                problems.append("manifest digests do not match: " + ", ".join(sorted(mismatch)))
+            else:
+                record["manifest_valid"] = True
+        else:
+            # No pinned digests means nothing to verify, which the seed installer states
+            # outright. UNKNOWN rather than PASS: hashing the bytes you just found is a
+            # description of the installation, not a verification of it.
+            record["manifest_valid"] = None
+            rows_pre = ("ok", "Decision Runtime manifest",
+                        "readable; no digests are pinned, so its integrity is undescribed")
+    except Exception as exc:  # noqa: BLE001 - a doctor reports, it never propagates
+        problems.append(f"the manifest could not be read: {exc}")
+
+    engine = None
+    status: dict = {}
+    try:
+        engine = sidecar_module.build_engine(found["root"])
+        status = dict(engine.status())
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"the engine could not be loaded: {exc}")
+    finally:
+        if engine is not None:
+            warm = engine.warm()
+            status.update(warm if isinstance(warm, dict) else {})
+
+    record["runtime_version"] = str(status.get("runtime_version", ""))
+    record["implementation"] = str(status.get("implementation", ""))
+    record["model_revision"] = str(status.get("model_revision", ""))
+    record["device"] = str(status.get("device", ""))
+
+    if not status:
+        record["status"] = "BROKEN"
+        record["summary"] = "installed but not loadable"
+        record["problems"] = problems or [record["summary"]]
+        record["rows"] = [("problem", "Decision Runtime", "; ".join(record["problems"]))]
+        return record
+
+    rows: list[tuple[str, str, str]] = [
+        ("ok", "Decision Runtime",
+         f"healthy ({record['runtime_version'] or 'version unknown'})"),
+        ("ok", "Decision Runtime model",
+         f"{record['implementation']} {record['model_revision']}".strip() or "ready"),
+        ("ok", "Device", str(status.get("device", "unknown"))),
+    ]
+    if smoke:
+        answered = _runtime_smoke(record, engine, found["root"])
+        record["smoke"] = answered
+        if answered["passed"]:
+            rows.append(("ok", "Decision Runtime smoke",
+                         f"answered {answered['question']} in {answered['latency_ms']:.2f}ms"))
+        else:
+            rows.append(("warning", "Decision Runtime smoke", str(answered["detail"])))
+    record["status"] = "HEALTHY" if record["smoke"]["passed"] else "AVAILABLE_WITH_LIMITATIONS"
+    record["summary"] = (
+        "healthy" if record["status"] == "HEALTHY"
+        else "available; the smoke check could not be completed"
+    )
+    if problems:
+        rows.insert(1, ("warning", "Decision Runtime manifest", "; ".join(problems)))
+    elif rows_pre is not None:
+        rows.insert(1, rows_pre)
+    record["rows"] = rows
+    record["problems"] = problems
+    return record
+
+
+def session_find(*, version: str = "", root=None) -> dict:
+    """Locate an installation without starting anything."""
+    from .decisions.runtime import session as session_module
+
+    return session_module.find_installation(
+        version=version,
+        environ=({"ARIADNE_DECISION_RUNTIME": str(root)} if root else None),
+    )
+
+
+def _runtime_smoke(record: dict, engine, root) -> dict:
+    """Ask the installed engine one bounded question, in-process.
+
+    A smoke test is not calibration evidence and never becomes any: it writes nothing,
+    records no profile, and its answer is discarded.
+    """
+    started = time.perf_counter()
+    try:
+        answered = engine.decide_batch({
+            "states": [{
+                "entries": {"failure": "Traceback (most recent call last): doctor smoke"},
+                "digest": hashlib.sha256(b"ariadne-decision-runtime-doctor-smoke").hexdigest(),
+            }],
+            "questions": [{
+                "question_id": "doctor-smoke",
+                "instructions": "A bounded smoke question for the doctor.",
+                "primitive": "ChoiceDecision",
+                "options": ["REACHABLE", "UNREACHABLE"],
+                "projection_contract": "doctor-smoke",
+                "definition_version": "1",
+                "consequence": "LOW",
+            }],
+        })
+    except Exception as exc:  # noqa: BLE001 - a smoke test failing is a report, not a crash
+        return {
+            "attempted": True, "passed": False, "detail": str(exc),
+            "question": "doctor-smoke", "answer": "", "abstained": False,
+            "abstention_reason": "", "confidence_kind": "", "latency_ms": 0.0,
+        }
+    latency_ms = (time.perf_counter() - started) * 1000
+    slot = (answered.get("answers") or {}).get("0:doctor-smoke", {})
+    # A structured refusal proves the engine works just as well as an answer does, and
+    # reporting which it was is the difference between a doctor that says "healthy" and
+    # one that has quietly stopped checking.
+    answered_value = bool(slot.get("valid")) and bool(slot.get("answer"))
+    abstained = bool(slot.get("abstained"))
+    if answered_value:
+        detail = f"answered {slot.get('answer')}"
+    elif abstained:
+        detail = f"the engine abstained ({slot.get('reason', 'no reason given')})"
+    else:
+        detail = "the engine returned neither an answer nor an abstention"
+    return {
+        "attempted": True,
+        "passed": answered_value or abstained,
+        "detail": detail,
+        "question": "doctor-smoke",
+        "answer": str(slot.get("answer") or ""),
+        "abstained": abstained,
+        "abstention_reason": str(slot.get("reason", "")) if abstained else "",
+        "confidence_kind": str(slot.get("confidence_kind", "")),
+        "latency_ms": latency_ms,
+    }
+
+
+def decision_runtime_calibration_summary(state) -> dict:
+    """Calibration counts for a report, without dumping the profiles themselves."""
+    rows = state.get("calibration_profiles", []) or []
+    proven = [row for row in rows if str(row.get("status", "")) == "PROVEN"]
+    families = {str(row.get("decision_definition", "")) for row in proven}
+    return {
+        "profiles": len(rows),
+        "proven": len(proven),
+        "active_families": len(families - {""}),
+        "active_thresholds": sum(
+            len(row.get("thresholds_by_risk", {}) or {}) for row in proven),
+    }
+
+
+def decision_runtime_report(state, *, definition: str = "", version: str = "") -> dict:
+    """The full Decision Runtime view: capability, shadow evidence, adoption, calibration."""
+    from .decisions.runtime import observe, profiles, promotion, session, shadow
+
+    # find_installation only looks on disk; it never starts anything, so a report stays a
+    # read-only view rather than a capability probe that launches a process.
+    found = session.find_installation(version=version)
+    return {
+        "capability": {
+            "installed": bool(found["installed"]),
+            "reason": str(found["reason"]),
+            "root": str(found["root"]),
+            "searched": list(found["searched"]),
+        },
+        "shadow": shadow.compare(state, definition=definition),
+        "shadow_problems": shadow.shadow_problems(state),
+        "influence_problems": shadow.shadow_effect_problems(state, state.get("decisions", []) or []),
+        "adoption": promotion.summarise(state),
+        "calibration": {
+            "profiles": len(state.get("calibration_profiles", []) or []),
+            "proven": sum(
+                1
+                for row in state.get("calibration_profiles", []) or []
+                if str(row.get("status", "")) == "PROVEN"
+            ),
+            "policy": profiles.describe(),
+        },
+        "observer": observe.describe() if hasattr(observe, "describe") else {},
+        "limitations": [
+            "this report describes recorded evidence; it authorises nothing",
+            "a runtime prediction is never verification",
+        ],
+        "authorization_effect": "none",
+    }
+
+
 # ------------------------------------------------------ AR-204 harness economics
 
 
@@ -1033,6 +1374,18 @@ __all__ = [
     "justify_generation",
     "record_decision_outcome",
     "invalidate_decision_cache",
+    "decision_runtime_status",
+    "decision_runtime_decide",
+    "decision_runtime_select",
+    "decision_runtime_shadow_report",
+    "decision_runtime_calibration",
+    "decision_runtime_evaluate",
+    "decision_runtime_compare",
+    "decision_runtime_promote",
+    "decision_runtime_export",
+    "decision_runtime_report",
+    "decision_runtime_health",
+    "decision_runtime_calibration_summary",
     "record_execution_billing",
     "record_execution_cache",
     "task_economics",

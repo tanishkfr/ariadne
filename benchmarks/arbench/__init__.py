@@ -25,10 +25,15 @@ Layers:
                          context economics, compaction, decision economics,
                          orchestration economics)
     ar205d_cases.py   -> the AR-205D decision-intelligence cases (compiler
-                         classification, decision graph semantics, automatic
-                         batching, projection-bound cache, escalation ladder,
-                         real integrations, structural economics, golden
-                         decision workflows)
+                          classification, decision graph semantics, automatic
+                          batching, projection-bound cache, escalation ladder,
+                          real integrations, structural economics, golden
+                          decision workflows)
+    ar206_cases.py    -> the AR-206 Decision Runtime cases (answer-space mapping,
+                          batching, abstention and thresholds, calibration,
+                          shadow mode, promotion and scopes, evaluation identity,
+                          cache binding, the security invariants, packaging, and
+                          the additive-migration guarantees)
 """
 
 from . import cases  # noqa: F401  (registers the AR-200/AR-201 cases)
@@ -39,3 +44,4 @@ from . import ar204_cases  # noqa: F401  (registers the AR-204 cases)
 from . import ar204_measure_cases  # noqa: F401  (registers the AR-204 measurement cases)
 from . import ar205_cases  # noqa: F401  (registers the AR-205 release-engineering cases)
 from . import ar205d_cases  # noqa: F401  (registers the AR-205D decision-intelligence cases)
+from . import ar206_cases  # noqa: F401  (registers the AR-206 Decision Runtime cases)

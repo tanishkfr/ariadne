@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""Offline wheel-to-project stranger test for the public Ariadne product."""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+import uuid
+import zipfile
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent.parent
+VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+
+
+class StrangerTestError(RuntimeError):
+    pass
+
+
+def run(
+    command: list[str],
+    cwd: Path,
+    expected: int = 0,
+    environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
+    result = subprocess.run(
+        command, cwd=cwd, capture_output=True, text=True, env=environment
+    )
+    if result.returncode != expected:
+        raise StrangerTestError(
+            f"command returned {result.returncode}, expected {expected}: {' '.join(command)}\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
+    return result
+
+
+@contextlib.contextmanager
+def workspace():
+    path = ROOT / "validation" / f"wheel-self-test-{uuid.uuid4().hex}"
+    path.mkdir()
+    try:
+        yield path
+    finally:
+        if path.exists():
+            last_error = None
+            for attempt in range(8):
+                try:
+                    shutil.rmtree(path)
+                    last_error = None
+                    break
+                except OSError as exc:
+                    last_error = exc
+                    time.sleep(0.1 * (attempt + 1))
+            if last_error is not None:
+                raise last_error
+
+
+def self_test() -> int:
+    cases: list[tuple[str, bool]] = []
+
+    def case(name: str, passed: bool) -> None:
+        cases.append((name, bool(passed)))
+
+    with workspace() as root:
+        temporary = root / "temporary"
+        temporary.mkdir()
+        environment_vars = os.environ.copy()
+        environment_vars.update({"TEMP": str(temporary), "TMP": str(temporary)})
+        wheel_dir = root / "wheel"
+        wheel_dir.mkdir()
+        run(
+            [
+                sys.executable, "-m", "pip", "wheel", ".", "--no-deps",
+                "--no-build-isolation", "--wheel-dir", str(wheel_dir),
+            ],
+            ROOT,
+            environment=environment_vars,
+        )
+        wheels = list(wheel_dir.glob("ariadne-*.whl"))
+        case("source builds one platform-neutral wheel", len(wheels) == 1 and "py3-none-any" in wheels[0].name)
+        with zipfile.ZipFile(wheels[0]) as wheel:
+            wheel_names = set(wheel.namelist())
+            metadata_name = next(name for name in wheel.namelist() if name.endswith("/METADATA"))
+            wheel_metadata = wheel.read(metadata_name).decode("utf-8")
+        case(
+            "package manager receives the minimum Python contract",
+            "Requires-Python: >=3.10" in wheel_metadata,
+        )
+        case(
+            "wheel declares and carries Apache-2.0",
+            "License-Expression: Apache-2.0" in wheel_metadata
+            and any(name.endswith(".dist-info/licenses/LICENSE") for name in wheel_names),
+        )
+
+        environment = root / "clean-python"
+        run([sys.executable, "-m", "venv", str(environment)], ROOT, environment=environment_vars)
+        python = environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+        run(
+            [str(python), "-m", "pip", "install", "--no-index", "--no-deps", str(wheels[0])],
+            root,
+            environment=environment_vars,
+        )
+        version_result = run(
+            [
+                str(python), "-m", "ariadne",
+                "--data-home", str(root / "clean-machine-data"),
+                "--version",
+            ],
+            root,
+            environment=environment_vars,
+        )
+        case("fresh Python environment exposes Ariadne version", version_result.stdout.strip() == f"Ariadne {VERSION}")
+
+        data_home = root / "person-data"
+        skill = root / "person-codex-skills" / "ariadne"
+        codex_home = root / "person-codex-home"
+        install_result = run(
+            [
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
+                "--skill-home", str(skill), "--codex-home", str(codex_home),
+                "install", "--codex-baseline",
+            ],
+            root,
+            environment=environment_vars,
+        )
+        case("stranger install gives one plain next action", "type $ariadne" in install_result.stdout and "S1" not in install_result.stdout)
+        baseline = codex_home / "AGENTS.md"
+        baseline_marker = codex_home / ".ariadne-managed-agents.json"
+        case(
+            "stranger can explicitly install the owned generic Codex baseline",
+            baseline.is_file()
+            and baseline_marker.is_file()
+            and "Ariadne" not in baseline.read_text(encoding="utf-8")
+            and "G1" not in baseline.read_text(encoding="utf-8"),
+        )
+        current = json.loads((data_home / "current.json").read_text(encoding="utf-8"))
+        runtime = Path(current["runtime_root"])
+        installation = json.loads((skill / "references" / "installation.json").read_text(encoding="utf-8"))
+        expected_runtime = (data_home / "versions" / VERSION).resolve()
+        case(
+            "wheel carries a canonical runtime with no source-checkout dependency",
+            runtime.resolve() == expected_runtime
+            and Path(installation["ariadne_root"]).resolve() == expected_runtime
+            and runtime != ROOT,
+        )
+
+        doctor_result = run(
+            [
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
+                "--skill-home", str(skill), "--codex-home", str(codex_home), "doctor",
+            ],
+            root,
+            environment=environment_vars,
+        )
+        case(
+            "doctor verifies runtime, skill, providers, and baseline",
+            "[OK] Runtime" in doctor_result.stdout
+            and "[OK] Codex skill" in doctor_result.stdout
+            and "Claude:" in doctor_result.stdout
+            and "[OK] Codex baseline" in doctor_result.stdout,
+        )
+
+        (runtime / "ROUTER.md").unlink()
+        repair_result = run(
+            [
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
+                "--skill-home", str(skill), "install",
+            ],
+            root,
+            environment=environment_vars,
+        )
+        repaired_doctor = run(
+            [str(python), "-m", "ariadne", "--data-home", str(data_home), "--skill-home", str(skill), "doctor"],
+            root,
+            environment=environment_vars,
+        )
+        case(
+            "reinstall repairs a damaged runtime from the self-contained wheel",
+            (runtime / "ROUTER.md").is_file()
+            and f"Ariadne {VERSION} is installed" in repair_result.stdout
+            and "[OK] Runtime" in repaired_doctor.stdout,
+        )
+
+        project = root / "ordinary-project"
+        start_result = run(
+            [
+                str(python), str(runtime / "scripts" / "ariadne.py"), "start",
+                "--project", str(project), "--request",
+                "Make a small editorial site about neighbourhood signs.",
+            ],
+            root,
+            environment=environment_vars,
+        )
+        case("installed runtime starts an ordinary-language project", project.is_dir() and "ready for its brief" in start_result.stdout)
+        runs = list(root.glob("ordinary-project-ariadne"))
+        case("project start creates durable external run state", len(runs) == 1 and (runs[0] / "ariadne-run.json").is_file())
+
+        project_sentinel = project / "person-owned.txt"
+        project_sentinel.write_text("keep\n", encoding="utf-8")
+        uninstall_result = run(
+            [
+                str(python), "-m", "ariadne", "--data-home", str(data_home),
+                "--skill-home", str(skill), "--codex-home", str(codex_home),
+                "uninstall", "--yes",
+            ],
+            root,
+            environment=environment_vars,
+        )
+        case("uninstall preserves project and run history", project_sentinel.is_file() and (runs[0] / "ariadne-run.json").is_file())
+        case(
+            "uninstall removes only the managed global baseline",
+            not baseline.exists() and not baseline_marker.exists(),
+        )
+        case("uninstall explains the remaining launcher", "launcher remains" in uninstall_result.stdout)
+
+    print("ARIADNE WHEEL STRANGER SELF-TEST\n")
+    for name, passed in cases:
+        print(("ok    " if passed else "FAIL  ") + name)
+    failed = [name for name, passed in cases if not passed]
+    print(f"\n{'FAILED' if failed else 'PASS'}  {len(cases) - len(failed)}/{len(cases)}")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(self_test())
+    except StrangerTestError as exc:
+        print(f"FAILED: {exc}")
+        raise SystemExit(1)

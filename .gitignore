@@ -15,3 +15,7 @@ __pycache__/
 # the validation protocol remain tracked; individual run records do not.
 validation/runs/*
 !validation/runs/_README.md
+
+# Benchmark run records, for the same reason: a measured result belongs to one machine
+# on one day. The case definitions in benchmarks/arbench/ are the tracked artefact.
+benchmarks/results/

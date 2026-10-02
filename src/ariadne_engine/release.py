@@ -54,7 +54,17 @@ def version_problems(root: Path) -> list[str]:
         f"v{canonical}/ariadne-{canonical}-py3-none-any.whl"
     )
     for name in INSTALL_DOCS:
-        text = (root / name).read_text(encoding="utf-8")
+        # The public repository groups documentation under docs/guides/; the maintainer
+        # tree keeps these at the root. Both are legitimate layouts, so the check follows
+        # the file rather than insisting on one, and names the file it could not find.
+        found = [root / name, root / "docs" / "guides" / name]
+        path = next((candidate for candidate in found if candidate.is_file()), None)
+        if path is None:
+            problems.append(
+                f"{name} is missing from both the root and docs/guides/, so its install URL is unverified"
+            )
+            continue
+        text = path.read_text(encoding="utf-8")
         if wheel_url not in text:
             problems.append(f"{name} does not carry the canonical release wheel URL")
     example_path = root / ".agents" / "skills" / "ariadne" / "references" / "installation.example.json"

@@ -1911,6 +1911,201 @@ AR205D_COLLECTIONS = (
 """The AR-205D decision-intelligence collections, additive and optional like
 every earlier family."""
 
+# ------------------------------------------- AR-206 native decision runtime
+
+SCHEMA_DECISION_RUNTIME = 1
+"""The AR-206 Decision Runtime record family.
+
+Shadow predictions, calibration profiles, evaluation reports, adoption slices and
+runtime manifests share one family. It is versioned separately from
+``SCHEMA_DECISION_INTELLIGENCE`` for the same reason every other family is: a run
+state that predates the Decision Runtime stays readable and byte-compatible
+without a migration, so adopting bounded local inference never requires a user to
+migrate their project.
+"""
+
+READABLE_DECISION_RUNTIME_SCHEMAS = (1,)
+"""Decision-Runtime record versions this runtime can read."""
+
+DECISION_RUNTIME_CONTRACT = "ariadne-decision-runtime-1"
+"""Marker recorded in ``state["engine"]["decision_runtime_contract"]``."""
+
+DECISION_RUNTIME_STATUSES = (
+    "AVAILABLE",
+    "AVAILABLE_CPU",
+    "AVAILABLE_GPU",
+    "WARM",
+    "COLD",
+    "WARMING",
+    "UNAVAILABLE",
+    "UNAVAILABLE_RESOURCE",
+    "UNAVAILABLE_LICENSE",
+)
+"""Observable capability state of the native Decision Runtime.
+
+``AVAILABLE*`` and ``WARM*`` mean the runtime can answer now. ``COLD`` means it is
+installed but must load before its first answer. ``UNAVAILABLE_RESOURCE`` means the
+hardware cannot support it and the safe fallback must run — never a crash, and never
+a promise of latency that depends on hardware Ariadne does not own.
+"""
+
+DECISION_RUNTIME_KINDS = ("local_bounded", "external_bounded")
+"""What kind of implementation answered.
+
+``local_bounded``     an on-device bounded engine (the reference engine, or a
+                      checkpoint-backed one installed by the user)
+``external_bounded``  a bounded decision service reached over a transport
+
+Neither value is user-facing vocabulary. Both are recorded because provenance that
+cannot name its implementation is not evidence.
+"""
+
+CANONICAL_RUNTIME_ID = "ariadne-decision-runtime"
+"""The one identity a Decision Runtime records and a calibration profile binds.
+
+Chosen over the alternatives because it is the *name*, not a category or a registry
+key. ``local_bounded`` names a kind of implementation and ``local-bounded-runtime`` names
+a registry entry; both stay exactly where they are, because both are live 2.0 surface
+with different jobs. This is the provenance identity: the thing that appears in a
+decision record and that a calibration profile must match.
+"""
+
+RUNTIME_ID_ALIASES = {
+    "local_bounded": CANONICAL_RUNTIME_ID,
+    "local-bounded-runtime": CANONICAL_RUNTIME_ID,
+    CANONICAL_RUNTIME_ID: CANONICAL_RUNTIME_ID,
+}
+"""Historical spellings that name *this* runtime, and nothing else.
+
+Every entry is read compatibility. An unrecognised value is returned unchanged rather
+than guessed at, and ``external_bounded`` is deliberately absent: aliasing an external
+runtime's kind onto the local runtime's identity would let a profile measured against a
+different implementation match this one.
+"""
+
+
+def canonical_runtime_id(value: Any) -> str:
+    """Normalise a recorded Decision Runtime identity to its canonical form.
+
+    One function, applied at interpretation boundaries, rather than a string replacement
+    scattered across modules. New records write only the canonical value; records written
+    during 2.1 development may carry a historical spelling and stay readable without the
+    operator rewriting project state.
+
+    Normalisation is deliberately narrow. It reconciles *names for the same runtime* and
+    nothing else: a different implementation, model revision, decision definition or
+    policy still fails to match, because those are compared separately and exactly.
+    """
+    label = str(value or "").strip()
+    return RUNTIME_ID_ALIASES.get(label, label)
+
+
+RUNTIME_PRIMITIVE_MAPPINGS = {
+    "BinaryDecision": "noul",
+    "ChoiceDecision": "choice",
+    "ScaleDecision": "score",
+}
+"""Ariadne primitive to runtime task type.
+
+``MultiSelectDecision`` is deliberately absent. The bounded runtime answers exactly
+one closed label per question, and faking a set-valued answer by scoring options
+independently would report a confidence for a combination that was never evaluated.
+A ``MultiSelectDecision`` therefore returns ``UNSUPPORTED_PRIMITIVE`` and takes
+Ariadne's normal fallback and escalation path.
+"""
+
+UNSUPPORTED_PRIMITIVE = "UNSUPPORTED_PRIMITIVE"
+"""The bounded runtime cannot represent this primitive faithfully."""
+
+ADOPTION_STATES = (
+    "UNTESTED",
+    "SHADOW",
+    "EVALUATED",
+    "ELIGIBLE",
+    "ACTIVE",
+    "SUSPENDED",
+)
+"""Lifecycle of one bounded-runtime slice (a decision definition, question version
+and model revision, for one risk class).
+
+``UNTESTED``  the slice exists but has never been evaluated
+``SHADOW``    the runtime predicts; the authoritative path is unaffected
+``EVALUATED`` measured evidence exists and is identity-bound
+``ELIGIBLE``  the evidence and the risk policy permit promotion
+``ACTIVE``    the runtime is authoritative for this slice, inside its scope
+``SUSPENDED`` promotion was withdrawn; the previous authoritative path resumes
+
+A slice may skip ``EVALUATED``/``ELIGIBLE`` only by refusing to reach ``ACTIVE``.
+"""
+
+SHADOW_AGREEMENTS = ("MATCH", "DISAGREE", "UNKNOWN", "UNREVIEWED")
+"""How a shadow prediction compares to the authoritative result.
+
+``DISAGREE`` is not a verdict on the runtime. Only recorded ground truth
+(``authoritative_outcome``/``verification``) can say which side was right, and
+absence of ground truth stays ``UNREVIEWED`` rather than becoming a loss.
+"""
+
+CALIBRATION_PROFILE_STATUSES = ("DRAFT", "PROVEN", "SUSPENDED", "RETIRED")
+"""Whether a ``CalibrationProfile`` may be used to label a probability calibrated.
+
+``DRAFT``     recorded but not proven; cannot produce ``CALIBRATED_PROBABILITY``
+``PROVEN``    measured on a bound dataset for a concrete revision
+``SUSPENDED`` withdrawn pending re-evaluation; falls back to provider probability
+``RETIRED``   superseded permanently
+
+There is no path from a missing profile to ``CALIBRATED_PROBABILITY``.
+"""
+
+EVALUATION_COMPARABILITY_KEYS = (
+    "dataset_digest",
+    "question_schema_digest",
+    "decision_definition_digest",
+    "runtime_version",
+    "implementation_revision",
+    "model_revision",
+)
+"""What binds an evaluation run's identity.
+
+A metric comparison across runs that differ in any of these is not a comparison of
+the same experiment, so the gate refuses it rather than printing a delta.
+"""
+
+DECISION_RUNTIME_EVENT_TYPES = (
+    "decision_runtime_requested",
+    "decision_runtime_started",
+    "decision_runtime_completed",
+    "decision_runtime_abstained",
+    "decision_runtime_failed",
+    "decision_runtime_cache_hit",
+    "decision_runtime_shadow_recorded",
+    "decision_runtime_promoted",
+    "decision_runtime_suspended",
+)
+"""Canonical engine events for the Decision Runtime.
+
+These are ordinary :mod:`ariadne_engine.events` entries. Ariadne has one event
+system; the Decision Runtime does not get a second one.
+"""
+
+MAX_SHADOW_RECORDS = 10_000
+"""Hard safety bound for shadow prediction records."""
+
+MAX_CALIBRATION_PROFILES = 200
+"""Hard safety bound for calibration-profile records."""
+
+MAX_ADOPTION_SLICES = 200
+"""Hard safety bound for adoption-slice records."""
+
+AR206_COLLECTIONS = (
+    "decision_shadow",
+    "calibration_profiles",
+    "decision_adoption",
+)
+"""The AR-206 Decision Runtime collections, additive and optional like every earlier
+family. A run state that has none of them is a complete 2.0 run state.
+"""
+
 MAX_CAPABILITY_RECORDS = 5_000
 """Hard safety bound for the capability observation collection."""
 
@@ -1956,6 +2151,9 @@ _COLLECTION_LIMITS = {
     "decision_consensus": MAX_DECISION_CONSENSUS,
     "generation_justifications": MAX_GENERATION_JUSTIFICATIONS,
     "decision_outcomes": MAX_DECISION_OUTCOMES,
+    "decision_shadow": MAX_SHADOW_RECORDS,
+    "calibration_profiles": MAX_CALIBRATION_PROFILES,
+    "decision_adoption": MAX_ADOPTION_SLICES,
 }
 
 
@@ -2380,4 +2578,133 @@ def decision_outcome_problems(record: Mapping[str, Any]) -> list[str]:
         problems.append("decision outcome evidence is not a list")
     if str(record.get("authorization_effect", "")) != "none":
         problems.append("a decision outcome never grants authorization")
+    return list(dict.fromkeys(problems))
+
+
+def _decision_runtime_schema(record: Mapping[str, Any], problems: list[str], label: str) -> None:
+    if record.get("schema_version") not in READABLE_DECISION_RUNTIME_SCHEMAS:
+        problems.append(f"{label} schema is unsupported: {record.get('schema_version')!r}")
+
+
+def shadow_record_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one shadow prediction record (fail closed).
+
+    The load-bearing rule here is ``execution_effect``. A shadow record that claims
+    it influenced execution is not a shadow record, so the shape refuses it rather
+    than trusting the caller.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["shadow record is not an object"]
+    _decision_runtime_schema(record, problems, "shadow record")
+    if not design_id_matches("dsh", str(record.get("shadow_id", ""))):
+        problems.append("shadow record has a malformed shadow id")
+    _enum_problems(record, "agreement", SHADOW_AGREEMENTS, problems)
+    if str(record.get("execution_effect", "")) != "none":
+        problems.append("a shadow prediction cannot have an execution effect")
+    if str(record.get("authorization_effect", "")) != "none":
+        problems.append("a shadow prediction never grants authorization")
+    confidence = record.get("confidence")
+    if confidence is not None and not isinstance(confidence, (int, float)):
+        problems.append("shadow confidence is not a number")
+    elif isinstance(confidence, bool):
+        problems.append("shadow confidence is not a number")
+    elif isinstance(confidence, (int, float)) and not 0.0 <= float(confidence) <= 1.0:
+        problems.append("shadow confidence is outside [0, 1]")
+    if str(record.get("confidence_kind", "")) not in CONFIDENCE_KINDS:
+        problems.append("shadow record has an unsupported confidence kind")
+    if str(record.get("confidence_kind", "NONE")) == "NONE" and confidence is not None:
+        problems.append("a shadow confidence kind of NONE cannot carry a value")
+    _non_empty(record, "question_id", problems)
+    _non_empty(record, "projection_digest", problems)
+    _non_empty(record, "model_revision", problems)
+    return list(dict.fromkeys(problems))
+
+
+def calibration_profile_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one ``CalibrationProfile`` (fail closed).
+
+    ``PROVEN`` is only reachable with a dataset digest, a question-schema digest and
+    a concrete model revision. A profile that claims to be proven without the
+    evidence that proves it is refused, because its whole purpose is to be the
+    thing that licenses ``CALIBRATED_PROBABILITY``.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["calibration profile is not an object"]
+    _decision_runtime_schema(record, problems, "calibration profile")
+    if not design_id_matches("dcp", str(record.get("profile_id", ""))):
+        problems.append("calibration profile has a malformed profile id")
+    status = _enum_problems(record, "status", CALIBRATION_PROFILE_STATUSES, problems)
+    for name in ("decision_definition", "question_version", "runtime", "implementation"):
+        _non_empty(record, name, problems)
+    for name in ("dataset_digest", "question_schema_digest", "model_revision"):
+        _non_empty(record, name, problems)
+    if str(record.get("model_revision", "")) and not _concrete_revision(str(record["model_revision"])):
+        problems.append("calibration profile names a moving model alias, not a revision")
+    size = record.get("dataset_size")
+    if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+        problems.append("calibration profile has no positive dataset size")
+    for name in ("accuracy", "coverage"):
+        value = record.get(name)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0.0 <= float(value) <= 1.0:
+            problems.append(f"calibration profile {name} is outside [0, 1]")
+    for name in ("ece", "brier"):
+        value = record.get(name)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or float(value) < 0.0:
+            problems.append(f"calibration profile {name} is not a non-negative number")
+    thresholds = record.get("thresholds_by_risk")
+    if not isinstance(thresholds, Mapping):
+        problems.append("calibration profile thresholds are not an object")
+    else:
+        for risk, threshold in thresholds.items():
+            if str(risk) not in DECISION_CONSEQUENCES:
+                problems.append(f"calibration profile threshold names an unknown risk class: {risk}")
+            elif not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not 0.0 < float(threshold) <= 1.0:
+                problems.append(f"calibration profile threshold for {risk} is outside (0, 1]")
+    if status == "PROVEN" and problems:
+        problems.append("a calibration profile cannot be PROVEN while it has structural problems")
+    return list(dict.fromkeys(problems))
+
+
+def _concrete_revision(value: str) -> bool:
+    """A revision names one artifact state, not a moving alias."""
+    label = str(value or "").strip()
+    if not label:
+        return False
+    lowered = label.lower()
+    return not any(lowered == alias or lowered.endswith(f"-{alias}") for alias in MOVING_ALIAS_REVISIONS)
+
+
+MOVING_ALIAS_REVISIONS = ("latest", "stable", "default", "current", "edge", "preview", "main")
+"""Labels that name a moving pointer. A calibration profile bound to one of these
+is bound to nothing, so it is refused rather than silently re-used.
+"""
+
+
+def adoption_slice_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one adoption slice (fail closed).
+
+    An ``ACTIVE`` slice must carry its eligibility scope and the evaluation identity
+    that justified promotion. Without both, "promoted" is an assertion rather than a
+    record, and an assertion cannot be rolled back safely.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["adoption slice is not an object"]
+    _decision_runtime_schema(record, problems, "adoption slice")
+    if not design_id_matches("dad", str(record.get("slice_id", ""))):
+        problems.append("adoption slice has a malformed slice id")
+    status = _enum_problems(record, "status", ADOPTION_STATES, problems)
+    for name in ("decision_definition", "question_version", "model_revision"):
+        _non_empty(record, name, problems)
+    scope = record.get("scope")
+    if not isinstance(scope, Mapping) or not scope:
+        problems.append("adoption slice has no eligibility scope")
+    if status in ("ELIGIBLE", "ACTIVE"):
+        evaluation = record.get("evaluation_id")
+        if not str(evaluation or "").strip():
+            problems.append(f"an {status} slice must name the evaluation that justified it")
+    if str(record.get("authorization_effect", "")) != "none":
+        problems.append("an adoption slice never grants authorization")
     return list(dict.fromkeys(problems))

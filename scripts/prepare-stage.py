@@ -99,7 +99,7 @@ STAGES = {
         "block": 0,
         "project_inputs": [],
         "optional_project_inputs": [".ariadne/creative-evidence.json"],
-        "canonical_inputs": ["RESEARCH-POLICY.md", "PRIVACY-POLICY.md", "templates/RESEARCH.md"],
+        "canonical_inputs": ["docs/policies/RESEARCH-POLICY.md", "docs/policies/PRIVACY-POLICY.md", "templates/RESEARCH.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S1", "S2"],
         "forbidden_inputs": ["unrelated PROJECT.md content", "design context", "source code"],
@@ -112,8 +112,8 @@ STAGES = {
         "project_inputs": ["PROJECT.md"],
         "optional_project_inputs": [".ariadne/creative-evidence.json"],
         "canonical_inputs": [
-            "DESIGN-TASTE.md", "PRIVACY-POLICY.md", "templates/DESIGN.md",
-            "skills/design-direction.md",
+    "docs/policies/DESIGN-TASTE.md", "docs/policies/PRIVACY-POLICY.md", "templates/DESIGN.md",
+    "skills/design-direction.md",
         ],
         "conditional_inputs": [
             "project:RESEARCH.md",
@@ -147,7 +147,7 @@ STAGES = {
         ],
         "optional_project_inputs": [],
         "canonical_inputs": [
-            "QA-POLICY.md",
+            "docs/policies/QA-POLICY.md",
             "templates/QA.md",
             "templates/RETURN-HANDOFF.md",
             "skills/visual-qa.md",
@@ -162,7 +162,7 @@ STAGES = {
         "block": 0,
         "project_inputs": [],
         "optional_project_inputs": [],
-        "canonical_inputs": ["EVALUATION-RUBRICS.md"],
+        "canonical_inputs": ["docs/policies/EVALUATION-RUBRICS.md"],
         "conditional_inputs": [],
         "allowed_parents": ["S4B", "S5"],
         "forbidden_inputs": [
@@ -1914,7 +1914,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
             problems.append("S5 packet delivers forbidden project/build context")
         if [entry["label"] for entry in delivered] != [
             "current S5 prompt block",
-            "EVALUATION-RUBRICS.md",
+            "docs/policies/EVALUATION-RUBRICS.md",
         ]:
             problems.append("S5 packet source set is not the canonical isolated pair")
 
@@ -2022,12 +2022,14 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         if token not in return_template:
             problems.append(f"return handoff template is missing worker evidence element: {token}")
     if specs.get("S2", {}).get("canonical_inputs") != [
-        "RESEARCH-POLICY.md", "PRIVACY-POLICY.md", "templates/RESEARCH.md"
+        "docs/policies/RESEARCH-POLICY.md", "docs/policies/PRIVACY-POLICY.md",
+        "templates/RESEARCH.md",
     ]:
         problems.append("S2 packet must deliver research, privacy, and output contracts")
     s3 = specs.get("S3", {})
     for source in (
-        "DESIGN-TASTE.md", "PRIVACY-POLICY.md", "templates/DESIGN.md",
+        "docs/policies/DESIGN-TASTE.md", "docs/policies/PRIVACY-POLICY.md",
+        "templates/DESIGN.md",
         "skills/design-direction.md",
     ):
         if source not in s3.get("canonical_inputs", []):

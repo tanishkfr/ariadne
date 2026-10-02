@@ -113,6 +113,111 @@ def _unique_questions(questions: Sequence[DecisionQuestion]) -> list[DecisionQue
     return ordered
 
 
+def effective_policy(
+    state: Mapping[str, Any],
+    questions: Sequence[DecisionQuestion],
+    *,
+    runtime: str,
+    implementation: str,
+    model_revision: str,
+) -> dict:
+    """The thresholds Ariadne's own calibration state justifies, per question.
+
+    This is the wiring that makes abstention reachable. Before it existed a bounded
+    batch was sent with no policy at all, ``session._threshold`` resolved to ``None``,
+    and ``BELOW_MIN_CONFIDENCE`` could never fire in production - the machinery was
+    tested and unreachable.
+
+    The resolver is :func:`profiles.profile_for`, the one already in the tree, and it is
+    asked the same question it has always answered: does a PROVEN profile match this
+    decision definition, this question schema and wording, this question version, this
+    runtime kind, this implementation, this concrete model revision, and this risk
+    class. Nothing here re-decides any of that. If the answer is no, the question gets
+    no threshold, and no threshold is a valid outcome rather than a failure.
+
+    A caller may tighten the result and never loosen it. Ariadne's evidence sets the
+    floor on what is acceptable; a caller can only ask for more.
+    """
+    thresholds: dict[str, float] = {}
+    profile_ids: dict[str, str] = {}
+    reasons: dict[str, list[str]] = {}
+    try:
+        from .runtime import profiles as calibration
+    except ImportError:  # pragma: no cover - the runtime ships with the engine
+        return {"min_confidence_by_question": {}, "calibration_profile_by_question": {},
+                "reasons": {}, "note": "no calibration resolver is available"}
+    for question in questions:
+        verdict = calibration.profile_for(
+            dict(state),
+            decision_definition=str(question.projection_contract),
+            question=question.as_record(),
+            risk=str(question.consequence),
+            runtime=str(runtime),
+            implementation=str(implementation),
+            model_revision=str(model_revision),
+        )
+        reasons[question.question_id] = list(verdict.get("reasons") or [])
+        if not verdict.get("accepted"):
+            continue
+        threshold = verdict.get("min_confidence")
+        if threshold is None:
+            continue
+        thresholds[question.question_id] = float(threshold)
+        profile_ids[question.question_id] = str(verdict.get("profile_id", ""))
+    return {
+        "min_confidence_by_question": thresholds,
+        "calibration_profile_by_question": profile_ids,
+        "reasons": reasons,
+        "note": (
+            "thresholds are supplied only where a PROVEN calibration profile matched this "
+            "decision definition, question schema, question version, runtime, implementation, "
+            "concrete model revision and risk class; there is no default"
+        ),
+    }
+
+
+def tighten_with_caller_policy(
+    resolved: Mapping[str, Any],
+    caller: Mapping[str, Any] | None,
+) -> dict:
+    """Merge a caller-stated policy into the engine-resolved one, tightening only.
+
+    A caller may state a threshold and so make a decision stricter. It may not state one
+    that is *lower* than Ariadne's own evidence-backed floor, because that would let a
+    caller buy its way past a calibration profile. The floor is the maximum, and the
+    profile that set it is recorded.
+    """
+    thresholds = dict(resolved.get("min_confidence_by_question") or {})
+    profile_ids = dict(resolved.get("calibration_profile_by_question") or {})
+    if not isinstance(caller, Mapping):
+        return {
+            "min_confidence_by_question": thresholds,
+            "calibration_profile_by_question": profile_ids,
+            "reasons": dict(resolved.get("reasons") or {}),
+            "caller_tightened": [],
+        }
+    stated = caller.get("min_confidence_by_question")
+    tightened: list[str] = []
+    if isinstance(stated, Mapping):
+        for key, value in stated.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            number = float(value)
+            if not 0.0 <= number <= 1.0:
+                continue
+            name = str(key)
+            if name not in thresholds or number > thresholds[name]:
+                thresholds[name] = number
+                profile_ids.setdefault(name, "caller-stated (stricter)")
+                tightened.append(name)
+    return {
+        "min_confidence_by_question": thresholds,
+        "calibration_profile_by_question": profile_ids,
+        "reasons": dict(resolved.get("reasons") or {}),
+        "caller_tightened": tightened,
+    }
+
+
 def evaluate(
     state: dict,
     *,
@@ -123,12 +228,17 @@ def evaluate(
     stage: str = "",
     execution_id: str = "",
     require_evidence: bool = True,
+    requested_policy: Mapping | None = None,
 ) -> dict:
     """Ask one batch of independent questions and record every outcome.
 
     The provider is asked exactly once. Its failure is recorded as a failure, its
     unavailability as unavailability, and an answer outside the declared space as
     invalid — never coerced, never replaced by a plausible default.
+
+    The effective policy is resolved here, from the run's own calibration state, and sent
+    with the request. ``requested_policy`` is a caller *request* to be stricter, not a way to state
+    a threshold Ariadne's evidence does not support.
     """
     if not isinstance(provider, DecisionProvider):
         raise ContractError("a decision batch needs a DecisionProvider")
@@ -147,12 +257,27 @@ def evaluate(
     available, unavailable_reason = provider.available()
     response: dict = {}
     provider_error = ""
+    # Resolved from the run's own calibration state, before the provider is asked, so the
+    # request carries the thresholds the evidence supports and nothing else.
+    resolved_policy = effective_policy(
+        state,
+        ordered,
+        runtime=str(provider.provider or ""),
+        implementation=str(provider.model or ""),
+        model_revision=str(provider.model_version or ""),
+    )
+    effective = tighten_with_caller_policy(resolved_policy, requested_policy)
     if available:
         request = {
             "batch_id": batch_id,
             "state_digest": projection_digest,
             "projection": dict(projection.get("entries") or {}),
             "questions": [question.as_record() for question in ordered],
+            "policy": {
+                "min_confidence_by_question": dict(effective["min_confidence_by_question"]),
+                "calibration_profile_by_question": dict(
+                    effective["calibration_profile_by_question"]),
+            },
             "instructions": (
                 "Answer each question independently from the projected state only. Do not use an answer "
                 "to another question in this batch. Answer inside the declared option set."
@@ -173,6 +298,9 @@ def evaluate(
     }
     answers_payload = response.get("answers") if isinstance(response.get("answers"), Mapping) else {}
     failed_questions = {str(item) for item in (response.get("failed_questions") or [])}
+    abstained_questions = {str(item) for item in (response.get("abstained_questions") or [])}
+    threshold_by_question = dict(effective["min_confidence_by_question"])
+    profile_by_question = dict(effective["calibration_profile_by_question"])
     results: list[dict] = []
     for question in ordered:
         decision_id = contracts.new_record_id("dec")
@@ -211,6 +339,12 @@ def evaluate(
             "resulting_action": "",
             "authorization_effect": "none",
             "usage": dict(provider_identity["usage"]),
+            "effective_policy": {
+                "min_confidence_by_question": dict(threshold_by_question),
+                "calibration_profile_by_question": dict(profile_by_question),
+                "reasons": dict(effective.get("reasons") or {}),
+                "caller_tightened": list(effective.get("caller_tightened") or []),
+            },
             "recorded_at": contracts.utc_now(),
         }
         if not available:
@@ -219,6 +353,32 @@ def evaluate(
         elif provider_error:
             record["status"] = "failed"
             record["problems"] = [provider_error]
+        elif question.question_id in abstained_questions:
+            # A deliberate refusal by the bounded engine, not a broken call. `refused` is
+            # the existing vocabulary's word for "policy would not accept this answer",
+            # which is exactly what happened, and it is what routes into escalation.
+            refusal = dict(answers_payload.get(question.question_id) or {})
+            record["status"] = "refused"
+            record["abstention_reason"] = str(refusal.get("reason", ""))
+            record["problems"] = [
+                f"the bounded engine abstained: {record['abstention_reason']}"
+            ]
+            record["distribution"] = dict(refusal.get("distribution", {}) or {})
+            record["threshold_applied"] = refusal.get(
+                "threshold", threshold_by_question.get(question.question_id))
+            record["calibration_profile_id"] = str(
+                refusal.get("calibration_profile_id")
+                or profile_by_question.get(question.question_id, "")
+            )
+            # The evidence the engine actually reasoned with, kept beside the refusal. It
+            # is what lets the escalation that follows be judged rather than merely
+            # obeyed, and it is never promoted to the answer.
+            if refusal.get("candidate_answer") is not None:
+                record["candidate_answer"] = str(refusal["candidate_answer"])
+                record["candidate_confidence"] = refusal.get("candidate_confidence")
+                record["candidate_confidence_kind"] = str(
+                    refusal.get("candidate_confidence_kind", "PROVIDER_PROBABILITY")
+                )
         elif question.question_id in failed_questions or question.question_id not in answers_payload:
             record["status"] = "failed"
             record["problems"] = ["the provider returned no answer for this question"]
@@ -266,7 +426,11 @@ def evaluate(
         status = "answered"
     elif answered:
         status = "partial"
-    elif invalid:
+    elif invalid or refused:
+        # A refused question is a policy outcome, not a failure: the engine answered and
+        # Ariadne declined to stand behind the answer. Calling a batch "failed" when
+        # every question was deliberately refused would tell an escalation that
+        # something broke, when in fact everything worked and policy said no.
         status = "partial"
     else:
         status = "failed"
