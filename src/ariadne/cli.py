@@ -1021,7 +1021,7 @@ def doctor(
         checks.append((status_value, "Project", detail))
     elif project is None:
         checks.append(("ok", "Project", "No project requested; installed product only"))
-    checks.extend(decision_runtime_checks())
+    checks.extend(decision_runtime_checks(current))
     return (2 if any(status_value == "problem" for status_value, _, _ in checks) else 0), checks
 
 
@@ -1036,19 +1036,56 @@ def doctor(
 DOCTOR_RUNTIME_PROBLEM_STATES = ("BROKEN",)
 
 
-def decision_runtime_checks(timeout: float = 8.0) -> list[tuple[str, str, str]]:
-    """The Decision Runtime rows for ``ariadne doctor``.
+def _load_installed_engine(current):
+    """Import the installed engine's API, or explain why it could not be reached.
 
-    A thin adapter over the engine's own health function. There is deliberately no second
-    health checker here: the runtime knows how it is installed, whether its sidecar starts
-    and whether it can answer a question, and duplicating any of that here would be a
-    second opinion that can disagree with the first.
+    The launcher is a single dependency-free module and deliberately does not import the
+    engine: an installed product ships the engine under its own runtime root, which is not
+    on ``sys.path``. So the doctor puts that root there first. Without this the doctor
+    reports "could not be inspected" on every correctly installed product, which is worse
+    than saying nothing.
     """
+    if current is None:
+        return None, "Ariadne is not installed"
+    source = Path(str(current.get("runtime_root", ""))) / "src"
+    if not source.is_dir():
+        return None, f"the installed runtime has no source root at {source}"
+    if str(source) not in sys.path:
+        sys.path.insert(0, str(source))
     try:
         from ariadne_engine import api as engine_api
     except Exception as exc:  # noqa: BLE001 - a launcher must not crash on its own health check
-        return [("warning", "Decision Runtime",
-                 f"the engine could not be inspected ({exc}); Ariadne core is unaffected")]
+        return None, f"the installed engine could not be imported ({exc})"
+    return engine_api, ""
+
+
+def decision_runtime_checks(current, timeout: float = 8.0) -> list[tuple[str, str, str]]:
+    """The Decision Runtime rows for ``ariadne doctor``.
+
+    A thin adapter over the engine's own health function. There is deliberately no second
+    health checker here: the runtime knows how it is installed, whether its manifest is
+    intact and whether it can answer a question, and duplicating any of that here would
+    be a second opinion that can disagree with the first.
+
+    Bytecode writing is off for the whole borrowed window, not just the import. The
+    engine loads submodules lazily - the Decision Runtime health check pulls in the
+    sidecar module on first use - so guarding only the import left the installation
+    picking up ``__pycache__`` directories partway through the check. An installed
+    runtime is verified against its manifest and immutable by contract, and a diagnostic
+    must not be able to make the next install reject it as damaged.
+    """
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        return _decision_runtime_rows(current, timeout)
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def _decision_runtime_rows(current, timeout: float) -> list[tuple[str, str, str]]:
+    engine_api, why = _load_installed_engine(current)
+    if engine_api is None:
+        return [("warning", "Decision Runtime", f"{why}; Ariadne core is unaffected")]
 
     try:
         health = engine_api.decision_runtime_health(timeout=timeout)
