@@ -34,6 +34,11 @@ VERBOSE = "--verbose" in sys.argv
 SELF_TEST = "--self-test" in sys.argv
 
 REQUIRED = [
+    # Documents are listed by name, not by path. The public repository groups them under
+    # docs/guides and docs/policies while the maintainer tree keeps some at the root, and
+    # both are legitimate layouts; `resolve_document` follows the file rather than
+    # insisting on one. Everything below that needs a document's *content* goes through
+    # it, so a future reorganisation is a layout change and not a gate failure.
     "README.md", "ROUTER.md", "WORKFLOW.md", "DESIGN-TASTE.md",
     "QA-POLICY.md", "EVALUATION-RUBRICS.md", "LIBRARY-POLICY.md",
     "PRIVACY-POLICY.md", "references/capabilities.json",
@@ -72,6 +77,39 @@ REQUIRED = [
     ".agents/skills/ariadne/references/creative-operations.md",
     "skills/visual-qa.md", "skills/creative-review.md", "skills/social-strategy.md",
 ]
+
+#: Directories a document may live in, most specific first. Only these are searched, so
+#: the resolver cannot wander into a scratch or generated tree.
+DOCUMENT_DIRECTORIES = (".", "docs/guides", "docs/policies", "docs")
+
+
+def resolve_document(name: str) -> str:
+    """The repository-relative path of a document, wherever it is kept.
+
+    Returns ``name`` itself when nothing matches, so a caller that reports "missing" is
+    reporting the name the operator searched for rather than a path they never wrote.
+    """
+    for directory in DOCUMENT_DIRECTORIES:
+        candidate = os.path.normpath(os.path.join(directory, name))
+        if os.path.exists(os.path.join(ROOT, candidate)):
+            return candidate
+    return name
+
+
+def read_documents(paths):
+    """Read a set of repository documents by name, keyed by the name given.
+
+    Every document-reading site in this file goes through here, so a repository that
+    reorganises its documentation changes a layout rather than breaking every check that
+    happens to open a root path.
+    """
+    resolved = {name: resolve_document(name) for name in paths}
+    return {
+        name: open(os.path.join(ROOT, actual), encoding="utf-8").read()
+        for name, actual in resolved.items()
+        if os.path.exists(os.path.join(ROOT, actual))
+    }
+
 
 # Sentences allowed to repeat: gate names and block headers that must stay
 # verbatim across files to remain greppable.
@@ -154,7 +192,7 @@ def check_skill_contract_texts(texts=None):
     for relative in SKILL_FILES:
         text = values.get(relative)
         if text is None:
-            text = open(os.path.join(ROOT, relative), encoding="utf-8").read()
+            text = open(os.path.join(ROOT, resolve_document(relative)), encoding="utf-8").read()
         expected_name = os.path.splitext(os.path.basename(relative))[0]
         if not re.search(rf"(?m)^# SKILL:\s*{re.escape(expected_name)}\s*$", text):
             problems.append(f"skill name/path mismatch: {relative}")
@@ -171,9 +209,7 @@ def check_dependency_authority_texts(texts=None):
     values = dict(texts or {})
     for relative in DEPENDENCY_AUTHORITY_FILES:
         if relative not in values:
-            values[relative] = open(
-                os.path.join(ROOT, relative), encoding="utf-8"
-            ).read()
+            values[relative] = read_documents([relative]).get(relative, "")
     library = values["LIBRARY-POLICY.md"]
     problems = []
     required = (
@@ -212,9 +248,7 @@ def check_evidence_ladder_texts(texts=None):
     values = dict(texts or {})
     for relative in EVIDENCE_LADDER_FILES:
         if relative not in values:
-            values[relative] = open(
-                os.path.join(ROOT, relative), encoding="utf-8"
-            ).read()
+            values[relative] = read_documents([relative]).get(relative, "")
     statuses = ("OBSERVED", "SUPPORTED", "INFERRED", "HYPOTHESIS", "ASSUMPTION")
     problems = []
     for relative in ("RESEARCH-POLICY.md", "templates/RESEARCH.md", "prompts/research.md"):
@@ -236,9 +270,7 @@ def check_agent_security_texts(texts=None):
     values = dict(texts or {})
     for relative in AGENT_SECURITY_FILES:
         if relative not in values:
-            values[relative] = open(
-                os.path.join(ROOT, relative), encoding="utf-8"
-            ).read()
+            values[relative] = read_documents([relative]).get(relative, "")
     privacy = values["PRIVACY-POLICY.md"]
     problems = []
     for category in ("**DATA**", "**INSTRUCTIONS**", "**AUTHORISATION**"):
@@ -257,8 +289,16 @@ def check_agent_security_texts(texts=None):
     if "PRIVACY-POLICY.md" not in values["prompts/design-direction.md"]:
         problems.append("S3 no longer transports the canonical instruction boundary")
     for relative in ("skills/component-research.md", "skills/reference-analysis.md"):
-        if "[PRIVACY-POLICY.md](../PRIVACY-POLICY.md)" not in values[relative]:
+        # The link text names the policy; where the policy is filed is a layout detail,
+        # so this asserts the instruction boundary is declared and the target resolves,
+        # rather than pinning one directory.
+        if "[PRIVACY-POLICY.md]" not in values[relative]:
             problems.append(f"external-source skill omits the instruction boundary: {relative}")
+            continue
+        target = re.search(r"\[PRIVACY-POLICY\.md\]\(([^)]+)\)", values[relative])
+        if target is None or not os.path.exists(
+                os.path.join(ROOT, os.path.dirname(relative), target.group(1))):
+            problems.append(f"external-source skill points at a missing policy: {relative}")
     return problems
 
 
@@ -317,7 +357,7 @@ def check_duplicates(min_words=9):
 
 
 def check_required():
-    return [f for f in REQUIRED if not os.path.exists(os.path.join(ROOT, f))]
+    return [f for f in REQUIRED if not os.path.exists(os.path.join(ROOT, resolve_document(f)))]
 
 
 DISTRIBUTION_FILES = (
@@ -453,11 +493,7 @@ def check_distribution_texts(texts):
 
 
 def check_distribution():
-    texts = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in DISTRIBUTION_FILES
-        if os.path.isfile(os.path.join(ROOT, path))
-    }
+    texts = read_documents(DISTRIBUTION_FILES)
     missing = sorted(set(DISTRIBUTION_FILES) - set(texts))
     return [f"distribution source is missing: {path}" for path in missing] + (
         check_distribution_texts(texts) if not missing else []
@@ -481,7 +517,7 @@ def check_rule_ids():
     This deliberately does NOT check that the rule still says what the
     referencing file assumes. No semantic engine -- only a human read catches that.
     """
-    src = os.path.join(ROOT, RULE_SOURCE)
+    src = os.path.join(ROOT, resolve_document(RULE_SOURCE))
     defined = set()
     if os.path.exists(src):
         text = open(src, encoding="utf-8").read()
@@ -993,11 +1029,7 @@ def check_delivery_contracts():
         | set(ADAPTER_DELIVERY)
         | {"EVALUATION-RUBRICS.md", "templates/HANDOFF.md"}
     )
-    texts = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in paths
-        if os.path.exists(os.path.join(ROOT, path))
-    }
+    texts = read_documents(paths)
     return check_delivery_contract_texts(texts)
 
 
@@ -1236,10 +1268,7 @@ def self_test_delivery_contracts():
         | set(ADAPTER_DELIVERY)
         | {"EVALUATION-RUBRICS.md", "templates/HANDOFF.md"}
     )
-    actual = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in paths
-    }
+    actual = read_documents(paths)
 
     def mutate(path, old, new):
         texts = dict(actual)
@@ -1394,10 +1423,7 @@ def self_test_packet_tool():
 
 def self_test_skill_contracts():
     """Positive control plus mutations for executable skill boundaries."""
-    actual = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in SKILL_FILES
-    }
+    actual = read_documents(SKILL_FILES)
 
     def mutate(path, old, new):
         texts = dict(actual)
@@ -1431,10 +1457,7 @@ def self_test_skill_contracts():
 
 def self_test_dependency_authority():
     """Positive controls and mutations for the human-owned G2 boundary."""
-    actual = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in DEPENDENCY_AUTHORITY_FILES
-    }
+    actual = read_documents(DEPENDENCY_AUTHORITY_FILES)
     missing_gate = dict(actual)
     missing_gate["LIBRARY-POLICY.md"] = missing_gate["LIBRARY-POLICY.md"].replace(
         "requires human G2 approval before the first install command",
@@ -1482,10 +1505,7 @@ def self_test_dependency_authority():
 
 def self_test_evidence_ladder():
     """Positive controls and mutations for claim-status transport."""
-    actual = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in EVIDENCE_LADDER_FILES
-    }
+    actual = read_documents(EVIDENCE_LADDER_FILES)
 
     def mutate(path, old, new):
         texts = dict(actual)
@@ -1524,10 +1544,7 @@ def self_test_evidence_ladder():
 
 def self_test_agent_security():
     """Positive controls and mutations for untrusted external instructions."""
-    actual = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in AGENT_SECURITY_FILES
-    }
+    actual = read_documents(AGENT_SECURITY_FILES)
 
     def mutate(path, old, new):
         texts = dict(actual)
@@ -1576,10 +1593,7 @@ def self_test_agent_security():
 
 def self_test_distribution_contract():
     """Positive controls and mutations for the installed-product boundary."""
-    actual = {
-        path: open(os.path.join(ROOT, path), encoding="utf-8").read()
-        for path in DISTRIBUTION_FILES
-    }
+    actual = read_documents(DISTRIBUTION_FILES)
 
     def mutate(path, old, new):
         texts = dict(actual)

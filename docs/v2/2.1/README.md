@@ -84,5 +84,5 @@ The Decision Runtime completes a shape that already existed. Read alongside:
 - [Providers](../AR-205D/07-PROVIDERS.md) - the interface the runtime arrives as.
 - [Security of Decision Intelligence](../AR-205D/09-SECURITY.md) - the adversarial
   model the runtime inherits.
-- [Trust boundaries](../../../TRUST.md) - what Ariadne does and does not
+- [Trust boundaries](../../../docs/guides/TRUST.md) - what Ariadne does and does not
   guarantee.
