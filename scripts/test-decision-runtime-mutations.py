@@ -940,6 +940,135 @@ def probe_doctor_makes_no_process_launch(module) -> bool:
     return health["status"] == "HEALTHY" and elapsed < 2.0
 
 
+def probe_resolver_requires_exactly_one(module) -> bool:
+    """A document name must resolve to exactly one file, or be refused.
+
+    First-match-wins is the mutation that matters. A stale copy left at the root after a
+    document moves into docs/guides would shadow the current one, and every check reading
+    by name would validate stale text while reporting success - the failure mode this
+    probe exists to prevent.
+    """
+    checker = _checker_for(module)
+    try:
+        resolved = checker.resolve_document("INSTALL.md")
+    except checker.DocumentResolutionError:
+        return False
+    if resolved != "docs/guides/INSTALL.md":
+        return False
+    duplicate = Path(checker.ROOT) / "INSTALL.md"
+    created = False
+    try:
+        if not duplicate.exists():
+            duplicate.write_text("# stale root copy\n", encoding="utf-8")
+            created = True
+        try:
+            checker.resolve_document("INSTALL.md")
+            return False  # a duplicate must be a refusal, not a choice
+        except checker.DocumentResolutionError as exc:
+            if exc.reason != "AMBIGUOUS_DOCUMENT":
+                return False
+    finally:
+        if created and duplicate.exists():
+            duplicate.unlink()
+    try:
+        checker.resolve_document("NO-SUCH-DOCUMENT-AR206.md")
+        return False
+    except checker.DocumentResolutionError as exc:
+        return exc.reason == "DOCUMENT_NOT_FOUND"
+
+
+def probe_resolver_rejects_traversal(module) -> bool:
+    """A name that can reach outside the repository must never resolve."""
+    checker = _checker_for(module)
+    for probe in ("../INSTALL.md", "..\\INSTALL.md", "docs/../INSTALL.md",
+                  "/etc/passwd", "/INSTALL.md", "C:\\Windows\\win.ini", ""):
+        try:
+            resolved = checker.resolve_document(probe)
+        except checker.DocumentResolutionError as exc:
+            if exc.reason != "UNSAFE_DOCUMENT_NAME":
+                return False
+            continue
+        # Resolving is acceptable only if it stayed inside the repository, and only for a
+        # name that is legitimately a document identity.
+        if resolved.startswith("..") or os.path.isabs(resolved) or "/" in resolved:
+            return False
+    # A document name must never be satisfied from outside the checkout. The marker sits
+    # one level above the copied repository, so only a traversing root can reach it.
+    outside = Path(checker.ROOT).parent / "AR206-OUTSIDE.md"
+    outside.write_text("# outside the repository\n", encoding="utf-8")
+    try:
+        try:
+            escaped = checker.resolve_document("AR206-OUTSIDE.md")
+        except checker.DocumentResolutionError as exc:
+            if exc.reason != "DOCUMENT_NOT_FOUND":
+                return False
+        else:
+            if escaped.startswith("..") or os.path.isabs(escaped):
+                return False
+            return False
+    finally:
+        outside.unlink(missing_ok=True)
+    return True
+
+
+def probe_resolver_stays_in_approved_roots(module) -> bool:
+    """The resolver must search its approved roots and nothing else.
+
+    A root list that grows to include `dist`, `src` or a benchmark output directory
+    turns the resolver into a way of reaching generated and source files by document
+    name, and a document lookup can then quietly be satisfied by an artefact that is not
+    tracked and was never reviewed.
+    """
+    checker = _checker_for(module)
+    roots = set(checker.DOCUMENT_DIRECTORIES)
+    if roots != {".", "docs", "docs/guides", "docs/policies"}:
+        return False
+    # A file that exists only under a directory the resolver must never search. An
+    # approved root list will not find it by bare name even though it is in the tree.
+    stray = Path(checker.ROOT) / "benchmarks" / "results" / "AR206-STRAY.md"
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        stray.write_text("# a benchmark artefact that is not a document\n", encoding="utf-8")
+        try:
+            if checker.resolve_document("AR206-STRAY.md") != "docs/guides/INSTALL.md":
+                return False
+        except checker.DocumentResolutionError as exc:
+            if exc.reason != "DOCUMENT_NOT_FOUND":
+                return False
+    finally:
+        stray.unlink(missing_ok=True)
+    return True
+
+
+#: Which repository copy the current iteration is mutating and which is the control. Set
+#: by :func:`run`; a probe that exercises a file outside the engine package reads through
+#: these so it inspects the same copy the mutation was applied to.
+MUTANT_TREE: Path | None = None
+CONTROL_TREE: Path | None = None
+
+
+def _load_checker(which: str = "mutant"):
+    """Import the shipped ``scripts/check.py`` from the tree under test."""
+    tree = MUTANT_TREE if which == "mutant" else CONTROL_TREE
+    root = Path(tree) if tree else Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location(
+        f"ar206_checker_under_test_{which}", root / "scripts" / "check.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _checker_for(engine_module):
+    """The checker belonging to the engine copy this probe was handed.
+
+    A resolver probe that always loaded the mutant's checker would compare the mutant
+    against itself and always report "caught", which is the one outcome a mutation test
+    must never produce.
+    """
+    return _load_checker("control" if "control" in engine_module.__name__ else "mutant")
+
+
 MUTATIONS: tuple[dict, ...] = (
     {
         "name": "let an abstention become an answer",
@@ -1213,10 +1342,75 @@ MUTATIONS: tuple[dict, ...] = (
                '        engine = sidecar_module.build_engine(found["root"])',
         "probe": probe_doctor_makes_no_process_launch,
     },
+    # -- 2.1.0 stable: the document resolver a release gate resolves names with --------
+    {
+        "name": "let the document resolver take the first match",
+        "file": "scripts/check.py",
+        "old": "    if len(matches) > 1:\n        raise DocumentResolutionError(\n"
+               '            "AMBIGUOUS_DOCUMENT", wanted, "found " + ", ".join(sorted(matches)))',
+        "new": "    if False:\n        pass",
+        "probe": probe_resolver_requires_exactly_one,
+        "out_of_tree": True,
+    },
+    {
+        "name": "let the document resolver ignore a missing document",
+        "file": "scripts/check.py",
+        "old": "    if not matches:\n        raise DocumentResolutionError(\n"
+               '            "DOCUMENT_NOT_FOUND", wanted,\n'
+               '            "searched " + ", ".join(DOCUMENT_DIRECTORIES))',
+        "new": "    if not matches:\n        return wanted",
+        "probe": probe_resolver_requires_exactly_one,
+        "out_of_tree": True,
+    },
+    {
+        "name": "let the document resolver accept path traversal",
+        "file": "scripts/check.py",
+        "old": '    if any(part == ".." for part in parts):\n'
+               '        return "path traversal is not a document identity"',
+        "new": '    if False:\n        return ""',
+        "probe": probe_resolver_rejects_traversal,
+        "out_of_tree": True,
+    },
+    {
+        "name": "let the document resolver accept absolute paths",
+        "file": "scripts/check.py",
+        "old": '    if os.path.isabs(text) or os.path.splitdrive(text)[0] or text[:1] in ("/", "\\\\"):\n'
+               '        return "an absolute path is not a document identity"',
+        "new": "    if False:\n        return \"\"",
+        "probe": probe_resolver_rejects_traversal,
+        "out_of_tree": True,
+    },
+    {
+        "name": "let the document resolver skip its containment check",
+        "file": "scripts/check.py",
+        "edits": (
+            # A traversing *root* is the only input the name check cannot catch, because
+            # the name itself is clean. It makes the containment check load-bearing
+            # rather than redundant, and observable.
+            ('DOCUMENT_DIRECTORIES = (".", "docs/guides", "docs/policies", "docs")',
+             'DOCUMENT_DIRECTORIES = (".", "docs/guides", "docs/policies", "docs", "..")'),
+            ('        if candidate == ".." or candidate.startswith("../"):\n'
+             '            raise DocumentResolutionError(\n'
+             '                "UNSAFE_DOCUMENT_NAME", str(name), f"resolved to {candidate}, outside the repository")',
+             "        if False:\n            pass"),
+        ),
+        "probe": probe_resolver_rejects_traversal,
+        "out_of_tree": True,
+    },
+    {
+        "name": "let the document resolver search the whole repository",
+        "file": "scripts/check.py",
+        "old": 'DOCUMENT_DIRECTORIES = (".", "docs/guides", "docs/policies", "docs")',
+        "new": 'DOCUMENT_DIRECTORIES = (".", "docs", "docs/guides", "docs/policies",\n'
+               '                          "benchmarks/results", "dist", "src", "scripts")',
+        "probe": probe_resolver_stays_in_approved_roots,
+        "out_of_tree": True,
+    },
 )
 
 
 def run() -> int:
+    global MUTANT_TREE, CONTROL_TREE
     before = source_hashes()
     results: list[tuple[str, bool, bool, bool, str]] = []
     with tempfile.TemporaryDirectory(prefix="ar206-runtime-mutations-") as workspace:
@@ -1224,12 +1418,27 @@ def run() -> int:
         pristine = root / "pristine" / "ariadne_engine"
         live = root / "live" / "ariadne_engine"
         shutil.copytree(ENGINE, pristine)
+        # The document resolver a release gate resolves names with lives in scripts/,
+        # outside the engine package, so the harness copies the repository layout it
+        # needs alongside the engine. Without this a resolver mutation would have
+        # nowhere to land and would be reported as "target not found".
+        shutil.copytree(ROOT, root / "pristine" / "repo", ignore=shutil.ignore_patterns(
+            ".git", "dist", "validation", "benchmarks/results", "__pycache__"))
+        shutil.copytree(ROOT, root / "live" / "repo", ignore=shutil.ignore_patterns(
+            ".git", "dist", "validation", "benchmarks/results", "__pycache__"))
+        CONTROL_TREE = root / "pristine" / "repo"
+        MUTANT_TREE = root / "live" / "repo"
         control_module = load_mutant(pristine, "ariadne_engine_ar206_control")
         for index, mutation in enumerate(MUTATIONS):
             shutil.rmtree(live.parent, ignore_errors=True)
             live.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(pristine, live)
-            target = live / mutation["file"]
+            shutil.rmtree(root / "live" / "repo", ignore_errors=True)
+            shutil.copytree(root / "pristine" / "repo", root / "live" / "repo")
+            if mutation.get("out_of_tree"):
+                target = MUTANT_TREE / mutation["file"]
+            else:
+                target = live / mutation["file"]
             text = target.read_text(encoding="utf-8")
             edits = mutation.get("edits") or ((mutation.get("old", ""), mutation.get("new", "")),)
             missing = [old for old, _ in edits if old not in text]

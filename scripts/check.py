@@ -78,22 +78,95 @@ REQUIRED = [
     "skills/visual-qa.md", "skills/creative-review.md", "skills/social-strategy.md",
 ]
 
-#: Directories a document may live in, most specific first. Only these are searched, so
-#: the resolver cannot wander into a scratch or generated tree.
+#: The only directories a document may live in. An explicit list, searched without
+#: recursion, so the resolver cannot wander into ``.git``, ``dist``, a build directory, a
+#: benchmark result tree or anything mounted beside the repository.
 DOCUMENT_DIRECTORIES = (".", "docs/guides", "docs/policies", "docs")
 
 
-def resolve_document(name: str) -> str:
-    """The repository-relative path of a document, wherever it is kept.
+class DocumentResolutionError(Exception):
+    """A document could not be resolved to exactly one safe location.
 
-    Returns ``name`` itself when nothing matches, so a caller that reports "missing" is
-    reporting the name the operator searched for rather than a path they never wrote.
+    The reason code is the message, because every caller reports this as a named problem
+    rather than letting a raw ``FileNotFoundError`` escape from an unrelated ``open``.
     """
+
+    def __init__(self, reason: str, name: str, detail: str = "") -> None:
+        self.reason = reason
+        self.name = name
+        self.detail = detail
+        super().__init__(f"{reason}: {name}" + (f" ({detail})" if detail else ""))
+
+
+#: Resolution refusals from the last :func:`read_documents` call, so a caller that silently
+#: skips an unresolvable document can still report why.
+DOCUMENT_PROBLEMS: list[str] = []
+
+
+def _unsafe_reason(name: str) -> str:
+    """Why ``name`` is not a document identity, or ``""`` when it is one.
+
+    A resolver used by release and security checks has to refuse a name that could reach
+    outside the repository before it looks for anything, because the first thing it does
+    with a name is join it to a root and test existence.
+    """
+    text = str(name or "")
+    if not text.strip():
+        return "a document name cannot be empty"
+    # os.path.isabs needs a drive on Windows, so a POSIX-style /etc/passwd would slip
+    # through as a relative name. A leading separator is absolute in both worlds.
+    if os.path.isabs(text) or os.path.splitdrive(text)[0] or text[:1] in ("/", "\\"):
+        return "an absolute path is not a document identity"
+    parts = text.replace("\\", "/").split("/")
+    if any(part == ".." for part in parts):
+        return "path traversal is not a document identity"
+    return ""
+
+
+def resolve_document(name: str) -> str:
+    """The repository-relative path of a document named ``name``, or a refusal.
+
+    Exactly one match is required. First-match-wins is wrong here in a way that is easy to
+    miss: a stale copy left at the root after a document moved into ``docs/guides`` would
+    silently shadow the current one, and every check reading it would validate the wrong
+    file while reporting success. Two matches is a contradiction to resolve, not a choice
+    to make silently.
+
+    Raises :class:`DocumentResolutionError` with one of:
+
+    ``UNSAFE_DOCUMENT_NAME``   absolute, empty, or containing ``..``
+    ``DOCUMENT_NOT_FOUND``     no approved directory holds it
+    ``AMBIGUOUS_DOCUMENT``     more than one approved directory holds it
+    """
+    unsafe = _unsafe_reason(name)
+    if unsafe:
+        raise DocumentResolutionError("UNSAFE_DOCUMENT_NAME", str(name), unsafe)
+    wanted = os.path.normpath(str(name)).replace("\\", "/")
+    matches = []
     for directory in DOCUMENT_DIRECTORIES:
-        candidate = os.path.normpath(os.path.join(directory, name))
-        if os.path.exists(os.path.join(ROOT, candidate)):
-            return candidate
-    return name
+        candidate = os.path.normpath(os.path.join(directory, wanted)).replace("\\", "/")
+        # Containment is asserted, not assumed. Joining a name to a root is exactly where
+        # a resolver stops being safe if a component was unexpected, and the repository
+        # root is the boundary.
+        #
+        # Note what this is and is not: it keeps a lookup *inside* the repository. It is
+        # not a sandbox -- the checks already read ordinary repository files such as
+        # references/capabilities.json, and any code running in a checkout can read those.
+        # What it refuses is a name that reaches outside, because a release gate that can
+        # be pointed at an arbitrary path by a document name is not a gate.
+        if candidate == ".." or candidate.startswith("../"):
+            raise DocumentResolutionError(
+                "UNSAFE_DOCUMENT_NAME", str(name), f"resolved to {candidate}, outside the repository")
+        if os.path.isfile(os.path.join(ROOT, candidate)):
+            matches.append(candidate)
+    if not matches:
+        raise DocumentResolutionError(
+            "DOCUMENT_NOT_FOUND", wanted,
+            "searched " + ", ".join(DOCUMENT_DIRECTORIES))
+    if len(matches) > 1:
+        raise DocumentResolutionError(
+            "AMBIGUOUS_DOCUMENT", wanted, "found " + ", ".join(sorted(matches)))
+    return matches[0]
 
 
 def read_documents(paths):
@@ -101,9 +174,17 @@ def read_documents(paths):
 
     Every document-reading site in this file goes through here, so a repository that
     reorganises its documentation changes a layout rather than breaking every check that
-    happens to open a root path.
+    happens to open a root path. A name that will not resolve is simply absent from the
+    result, which is what every caller already handles, and the reason is recorded in
+    :data:`DOCUMENT_PROBLEMS` for the caller to report.
     """
-    resolved = {name: resolve_document(name) for name in paths}
+    DOCUMENT_PROBLEMS.clear()
+    resolved = {}
+    for name in paths:
+        try:
+            resolved[name] = resolve_document(name)
+        except DocumentResolutionError as exc:
+            DOCUMENT_PROBLEMS.append(str(exc))
     return {
         name: open(os.path.join(ROOT, actual), encoding="utf-8").read()
         for name, actual in resolved.items()
@@ -192,7 +273,10 @@ def check_skill_contract_texts(texts=None):
     for relative in SKILL_FILES:
         text = values.get(relative)
         if text is None:
-            text = open(os.path.join(ROOT, resolve_document(relative)), encoding="utf-8").read()
+            text = read_documents([relative]).get(relative, "")
+        if not text:
+            problems.append(f"skill file could not be resolved or read: {relative}")
+            continue
         expected_name = os.path.splitext(os.path.basename(relative))[0]
         if not re.search(rf"(?m)^# SKILL:\s*{re.escape(expected_name)}\s*$", text):
             problems.append(f"skill name/path mismatch: {relative}")
@@ -357,7 +441,26 @@ def check_duplicates(min_words=9):
 
 
 def check_required():
-    return [f for f in REQUIRED if not os.path.exists(os.path.join(ROOT, resolve_document(f)))]
+    """Every required document must resolve to exactly one file.
+
+    An ambiguous name is a failure in its own right. A document left at the root after
+    moving into ``docs/guides`` is not a harmless duplicate: it would shadow the current
+    copy for every check that reads by name, and every one of them would report success
+    while validating stale text.
+    """
+    problems = []
+    for name in REQUIRED:
+        try:
+            path = resolve_document(name)
+        except DocumentResolutionError as exc:
+            problems.append(
+                f"required file is {exc.reason}: {name}"
+                + (f" ({exc.detail})" if exc.detail else "")
+            )
+            continue
+        if not os.path.isfile(os.path.join(ROOT, path)):
+            problems.append(f"required file is not readable: {path}")
+    return problems
 
 
 DISTRIBUTION_FILES = (
@@ -517,8 +620,14 @@ def check_rule_ids():
     This deliberately does NOT check that the rule still says what the
     referencing file assumes. No semantic engine -- only a human read catches that.
     """
-    src = os.path.join(ROOT, resolve_document(RULE_SOURCE))
     defined = set()
+    try:
+        src = os.path.join(ROOT, resolve_document(RULE_SOURCE))
+    except DocumentResolutionError as exc:
+        return [
+            f"the canonical rule index is {exc.reason}: {RULE_SOURCE}"
+            + (f" ({exc.detail})" if exc.detail else "")
+        ]
     if os.path.exists(src):
         text = open(src, encoding="utf-8").read()
         for rid in RULE_IDS:

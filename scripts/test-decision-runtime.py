@@ -2869,6 +2869,112 @@ def doctor_checks(engine, root: Path) -> None:
                       for token in ("Popen", "discover", "subprocess", "SubprocessTransport")))
 
 
+def resolver_checks(engine, root: Path) -> None:
+    """The document resolver a release gate resolves names with.
+
+    Added in the 2.1.0 stable pass. The RC version was first-match-wins with no
+    containment check, which had two consequences worth naming: a stale copy left at the
+    root after a document moved would silently shadow the current one, and a name
+    containing ``..`` would join its way out of the repository - ``resolve_document
+    ("../INSTALL.md")`` returned ``../INSTALL.md`` and pointed at a real file one level
+    above the checkout.
+
+    A resolver used by release and security checks has to be boring and strict: an
+    approved set of roots, no recursion, exactly one match or a refusal, and no name that
+    can reach outside.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("ar206_repo_check", ROOT / "scripts" / "check.py")
+    checker = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = checker
+    spec.loader.exec_module(checker)
+
+    # 1. a unique match resolves, and returns a repository-relative path
+    moved = checker.resolve_document("INSTALL.md")
+    check("R1 a document that has moved resolves to its new location",
+          moved == "docs/guides/INSTALL.md" and not os.path.isabs(moved))
+    check("R1 a document still at the root resolves there",
+          checker.resolve_document("README.md") == "README.md")
+    check("R1 every approved root is inside the repository",
+          all(not os.path.normpath(entry).startswith("..") for entry in checker.DOCUMENT_DIRECTORIES))
+
+    # 2. zero matches is a named refusal, not a silent pass
+    try:
+        checker.resolve_document("NO-SUCH-DOCUMENT-AR206.md")
+        check("R2 a missing document is refused", False)
+    except checker.DocumentResolutionError as exc:
+        check("R2 a missing document is refused", exc.reason == "DOCUMENT_NOT_FOUND")
+        check("R2 and the refusal names the document and where it looked",
+              "NO-SUCH-DOCUMENT-AR206.md" in str(exc) and "docs/guides" in exc.detail)
+
+    # 3 and 4. two matches is a refusal, not a silent pick
+    duplicate = ROOT / "INSTALL.md"
+    created = False
+    try:
+        if not duplicate.exists():
+            duplicate.write_text("# a stale root copy\n", encoding="utf-8")
+            created = True
+        try:
+            resolved = checker.resolve_document("INSTALL.md")
+            check("R3 a root copy shadowing a moved document is refused, not silently chosen",
+                  False)
+        except checker.DocumentResolutionError as exc:
+            check("R3 a root copy shadowing a moved document is refused, not silently chosen",
+                  exc.reason == "AMBIGUOUS_DOCUMENT")
+            check("R3 and the refusal names both locations",
+                  "INSTALL.md" in exc.detail and "docs/guides/INSTALL.md" in exc.detail)
+        texts = checker.read_documents(["INSTALL.md"])
+        check("R3 an ambiguous document is omitted from a bulk read rather than guessed at",
+              "INSTALL.md" not in texts)
+        check("R3 and the bulk read recorded the reason",
+              any("AMBIGUOUS_DOCUMENT" in problem for problem in checker.DOCUMENT_PROBLEMS))
+    finally:
+        if created and duplicate.exists():
+            duplicate.unlink()
+    check("R4 removing the duplicate restores a single resolution",
+          checker.resolve_document("INSTALL.md") == "docs/guides/INSTALL.md")
+
+    # 5 and 6. traversal and absolute paths
+    for probe in ("../INSTALL.md", "..\\INSTALL.md", "docs/../INSTALL.md",
+                  "/etc/passwd", "/INSTALL.md", "C:\\Windows\\win.ini",
+                  "\\\\server\\share\\INSTALL.md", ""):
+        try:
+            checker.resolve_document(probe)
+            check(f"R5 {probe!r} is refused as a document identity", False)
+        except checker.DocumentResolutionError as exc:
+            check(f"R5 {probe!r} is refused as a document identity",
+                  exc.reason == "UNSAFE_DOCUMENT_NAME")
+
+    # 7. an unexpected search root cannot be reached by naming a directory
+    for probe in ("dist/INSTALL.md", "benchmarks/results/INSTALL.md", ".git/INSTALL.md"):
+        try:
+            checker.resolve_document(probe)
+            check(f"R7 {probe} is not resolvable from an unapproved root", False)
+        except checker.DocumentResolutionError as exc:
+            check(f"R7 {probe} is not resolvable from an unapproved root",
+                  exc.reason in ("DOCUMENT_NOT_FOUND", "AMBIGUOUS_DOCUMENT"))
+
+    # 8. the known public reorganisation still resolves
+    for name in ("QUICKSTART.md", "INSTALL.md", "UPDATE.md", "TROUBLESHOOTING.md",
+                 "CODEX-ENVIRONMENT.md", "TRUST.md"):
+        resolved = checker.resolve_document(name)
+        check(f"R8 the public docs reorganisation still resolves {name}",
+              resolved.startswith("docs/") and os.path.isfile(ROOT / resolved))
+    for name in ("ROUTER.md", "WORKFLOW.md", "EVALUATION-RUBRICS.md", "PRIVACY-POLICY.md",
+                 "DESIGN-TASTE.md", "QA-POLICY.md"):
+        resolved = checker.resolve_document(name)
+        check(f"R8 the policy reorganisation still resolves {name}",
+              resolved.startswith("docs/") and os.path.isfile(ROOT / resolved))
+
+    # 9. stage packets keep exact paths, because a canonical input is a transport contract
+    source = (ROOT / "scripts" / "prepare-stage.py").read_text(encoding="utf-8")
+    check("R9 stage packets name canonical inputs by explicit path",
+          '"canonical_inputs": ["docs/policies/EVALUATION-RUBRICS.md"]' in source)
+    check("R9 and no packet canonical input relies on the flexible resolver",
+          '"canonical_inputs": ["EVALUATION-RUBRICS.md"]' not in source)
+
+
 def failure_question_record(engine) -> dict:
     return {
         "question_id": "failure-class",
@@ -3040,6 +3146,7 @@ def main() -> int:
         golden_workflow_checks(engine)
         identity_checks(engine, root)
         doctor_checks(engine, root)
+        resolver_checks(engine, root)
         hardening_checks(engine, root)
         product_checks(engine, root)
         integration_checks(engine)
