@@ -416,10 +416,14 @@ def abstention_checks(engine) -> None:
               and no_model.label == "" and no_model.probability == 0.0)
 
         # A threshold above what the data can support.
-        strict = RUNTIME.reference.score_question(failure, entries, book, min_confidence=0.999)
+        score = RUNTIME.reference.score_question(failure, entries, book, min_confidence=0.999)
         check("a threshold the answer cannot meet produces a structured abstention",
-              strict.abstained and strict.reason == "BELOW_MIN_CONFIDENCE"
-              and strict.label == "" and strict.probability == 0.0)
+              score.abstained and score.reason == "BELOW_MIN_CONFIDENCE")
+        check("a threshold abstention keeps the evidence the engine actually reasoned with",
+              score.has_evidence and score.label != "" and score.probability > 0.0
+              and score.threshold == 0.999)
+        check("a threshold abstention with no model has no evidence to keep",
+              not RUNTIME.reference.Score("q", "f", "", 0.0, {}, True, "NO_LOCAL_MODEL").has_evidence)
         loose = RUNTIME.reference.score_question(failure, entries, book, min_confidence=0.10)
         check("a threshold the answer meets produces the answer", not loose.abstained)
 
@@ -442,6 +446,11 @@ def abstention_checks(engine) -> None:
         check("a thresholded call abstains with a reason and no answer",
               slot["valid"] is False and slot["abstained"] is True
               and slot["reason"] == "BELOW_MIN_CONFIDENCE" and slot["answer"] is None)
+        check("the threshold used is recorded beside the refusal",
+              slot["threshold"] == 0.999)
+        check("the label the engine reasoned to is kept as evidence, not as the answer",
+              slot["candidate_answer"] != "" and slot["candidate_confidence"] > 0.0
+              and slot["confidence_kind"] == "PROVIDER_PROBABILITY")
         check("an abstention is reported in the usage block so coverage is visible",
               thresholded["usage"]["abstained"] == 1 and thresholded["usage"]["failed"] == 0)
 
@@ -453,11 +462,14 @@ def abstention_checks(engine) -> None:
             "policy": {"min_confidence": 0.999},
         })
         refused = result["answers"]["failure-class"]
-        check("the provider reports an abstention as abstained, not as a low-confidence answer",
+        check("an abstention is reported as abstained, distinguishable from a crash",
               refused["abstained"] is True and refused["answer"] is None
               and refused["confidence_kind"] == "NONE" and refused["reason"] == "BELOW_MIN_CONFIDENCE")
-        check("an abstaining question is listed as failed rather than silently dropped",
-              result["failed_questions"] == ["failure-class"])
+        check("an abstaining question is never listed as a transport failure",
+              result["failed_questions"] == []
+              and result["abstained_questions"] == ["failure-class"])
+        check("the provider forwards the evidence and the threshold behind the refusal",
+              refused["candidate_answer"] != "" and refused["threshold"] == 0.999)
         check("the provider counts its abstentions",
               provider.abstentions == 1 and provider.calls == 1)
 
@@ -2236,6 +2248,393 @@ def hardening_checks(engine, root: Path) -> None:
           engine.__version__ == engine.package_version())
 
 
+def abstention_wiring_checks(engine) -> None:
+    """The closure pass: does the *production* path actually abstain?
+
+    Everything here goes through ``decisions.batch.evaluate``, the real caller, rather
+    than calling the runtime directly. That is the whole point of the pass: the runtime's
+    threshold machinery was tested and reachable, and the production path never sent a
+    policy at all, so ``BELOW_MIN_CONFIDENCE`` could not fire. A test that called
+    ``session.decide`` directly would have passed throughout.
+    """
+    RUNTIME = runtime_of(engine)
+    batch = engine.decisions.batch
+    C = engine.decisions.contracts
+
+    question = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    session = seed_runtime(engine)
+    provider = RUNTIME.provider.LocalBoundedProvider(session)
+    # Two projections with deliberately different confidence, so "below" and "above" are
+    # properties of the evidence rather than of the threshold.
+    weak = {"failure": "Traceback: TypeError: x"}
+    strong = {"failure": "Traceback (most recent call last): TypeError: undefined name x"}
+
+    def observed_confidence(entries: dict) -> float:
+        return RUNTIME.reference.score_question(
+            question.as_record(), entries, RUNTIME.seeds.build_seed_book()).probability
+
+    check("the two fixtures really straddle a threshold, so A and B are not the same test",
+          observed_confidence(strong) > observed_confidence(weak))
+
+    def run(state, entries, *, questions=(question,), requested_policy=None, provider_obj=provider):
+        local = dict(state)
+        local.setdefault("decisions", [])
+        local.setdefault("decision_batches", [])
+        projected = projection(engine, entries, "b" * 64)
+        projected["verification_level"] = "OBSERVED"
+        outcome = batch.evaluate(
+            local, questions=list(questions), projection=projected,
+            provider=provider_obj, task_id=str(local.get("task_id", "t")),
+            **({"requested_policy": requested_policy} if requested_policy else {}))
+        return local["decisions"][-1], outcome
+
+    def fresh(task: str) -> dict:
+        return {"schema_version": 1, "run_id": "ar206", "project": "C:/tmp/p",
+                "packets": [], "approvals": [], "task_id": task}
+
+    def profile(threshold: float, **overrides):
+        arguments = dict(
+            decision_definition="failure-classification", questions=[question.as_record()],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="f" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": threshold})
+        arguments.update(overrides)
+        return RUNTIME.profiles.build_profile(**arguments)
+
+    def with_profile(task: str, threshold: float, **overrides):
+        state = fresh(task)
+        RUNTIME.profiles.record_profile(state, profile(threshold, **overrides))
+        return state
+
+    # A. below threshold -> BELOW_MIN_CONFIDENCE
+    record, outcome = run(with_profile("a", 0.95), weak)
+    check("A  a matched active profile below its threshold gives BELOW_MIN_CONFIDENCE",
+          record["status"] == "refused" and record["abstention_reason"] == "BELOW_MIN_CONFIDENCE")
+    check("A  the refusal records the threshold and the profile that justified it",
+          record["threshold_applied"] == 0.95
+          and record["calibration_profile_id"].startswith("dcp_"))
+    check("A  the refusal keeps the evidence it was judged on",
+          record["candidate_answer"] == "IMPLEMENTATION_FAILURE"
+          and 0.0 < record["candidate_confidence"] < 0.95)
+    check("A  the refusal is not an answer",
+          record["answer"] == "" and record["answer_valid"] is False
+          and record["confidence"] is None)
+    check("A  the batch reports the refusal rather than a clean answer",
+          outcome["status"] == "partial")
+
+    # B. above threshold -> accepted, no abstention
+    record, outcome = run(with_profile("b", 0.10), strong)
+    check("B  a matched active profile above its threshold accepts the bounded answer",
+          record["status"] == "answered" and record["answer"] == "IMPLEMENTATION_FAILURE"
+          and record.get("abstention_reason", "") == "")
+    check("B  an accepted answer records no abstention evidence",
+          record.get("candidate_answer") is None)
+
+    # C. no profile -> no threshold invented
+    record, _ = run(fresh("c"), weak)
+    check("C  with no calibration profile no threshold is invented",
+          record["status"] == "answered"
+          and record["effective_policy"]["min_confidence_by_question"] == {})
+    check("C  and no profile id is invented either",
+          record.get("calibration_profile_id") in (None, ""))
+
+    # D. retired profile -> ignored
+    state = with_profile("d", 0.95)
+    RUNTIME.profiles.set_profile_status(state, state["calibration_profiles"][-1]["profile_id"], "RETIRED")
+    record, _ = run(state, weak)
+    check("D  a RETIRED profile cannot supply a threshold",
+          record["status"] == "answered"
+          and record["effective_policy"]["min_confidence_by_question"] == {})
+
+    # E. other non-active statuses
+    for status in ("DRAFT", "REVOKED"):
+        if status not in engine.contracts.CALIBRATION_PROFILE_STATUSES:
+            continue
+        state = with_profile(f"e{status}", 0.95)
+        RUNTIME.profiles.set_profile_status(
+            state, state["calibration_profiles"][-1]["profile_id"], status)
+        record, _ = run(state, weak)
+        check(f"E  a {status} profile cannot supply a threshold",
+              record["status"] == "answered"
+              and record["effective_policy"]["min_confidence_by_question"] == {})
+
+    # F. wrong model revision
+    record, _ = run(with_profile("f", 0.95, revision="deadbeef"), weak)
+    check("F  a profile bound to another model revision supplies no threshold",
+          record["status"] == "answered"
+          and record["effective_policy"]["min_confidence_by_question"] == {})
+
+    # G. wrong decision definition
+    record, _ = run(with_profile("g", 0.95, decision_definition="review-escalation"), weak)
+    check("G  a profile from another decision family supplies no threshold",
+          record["status"] == "answered"
+          and record["effective_policy"]["min_confidence_by_question"] == {})
+
+    # H. wrong question version
+    bumped = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="2",
+        consequence="LOW")
+    state = with_profile("h", 0.95)
+    other = fresh("h2")
+    RUNTIME.profiles.record_profile(other, profile(0.95))
+    other["decisions"] = []
+    other["decision_batches"] = []
+    resolved = batch.effective_policy(
+        other, [bumped], runtime=provider.provider, implementation=provider.model,
+        model_revision=provider.model_version)
+    check("H  a profile measured on question version 1 supplies none for version 2",
+          resolved["min_confidence_by_question"] == {})
+
+    # I. wrong risk class
+    high = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="HIGH")
+    state = with_profile("i", 0.95, thresholds_by_risk={"LOW": 0.95})
+    resolved = batch.effective_policy(
+        state, [high], runtime=provider.provider, implementation=provider.model,
+        model_revision=provider.model_version)
+    check("I  a LOW-risk threshold never applies to a HIGH-risk decision",
+          resolved["min_confidence_by_question"] == {})
+
+    # J. mixed batch: per-question thresholds, no bleed
+    second = C.DecisionQuestion(
+        question_id="review-escalation", instructions="bounded review escalation",
+        primitive="ChoiceDecision", options=tuple(engine.contracts.REVIEW_ESCALATIONS),
+        projection_contract="review-escalation", definition_version="1",
+        consequence="LOW")
+    mixed = fresh("j")
+    RUNTIME.profiles.record_profile(mixed, profile(0.95))
+    mixed_out = batch.effective_policy(
+        mixed, [question, second], runtime=provider.provider,
+        implementation=provider.model, model_revision=provider.model_version)
+    check("J  a mixed batch gives the profiled question a threshold and the other none",
+          mixed_out["min_confidence_by_question"] == {"failure-class": 0.95})
+    record, outcome = run(mixed, weak, questions=(question, second))
+    by_id = {row["question_id"]: row["status"] for row in st_records(outcome)}
+    check("J  one question abstaining does not invalidate its sibling in the same batch",
+          by_id.get("failure-class") == "refused"
+          and by_id.get("review-escalation") == "answered", )
+    check("J  the batch reports itself as partial, not failed",
+          outcome["status"] == "partial")
+
+# 16. protected action: confidence cannot buy authority.
+    protected_question = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="PROTECTED")
+    protected = fresh("p")
+    guarded = projection(engine, strong, "c" * 64)
+    guarded["verification_level"] = "UNVERIFIED"
+    batch.evaluate(protected, questions=[protected_question], projection=guarded,
+                   provider=provider, task_id="p")
+    record = protected["decisions"][-1]
+    check("16 a high-confidence answer under a PROTECTED consequence is still not authorization",
+          record["confidence"] is not None and record["confidence"] > 0.9
+          and record["authorization_effect"] == "none"
+          and record["acted_on"] is False)
+    check("16 and the verdict refused it, so policy - not the number - decided",
+          record["status"] == "refused" and record["policy_verdict"]["accepted"] is False)
+    check("16 a PROTECTED decision still needs VERIFIED evidence however confident the answer",
+          record["policy_verdict"].get("required_evidence") == "VERIFIED")
+    check("16 an abstention does not grant authority either",
+          run(with_profile("p2", 0.99), weak)[0]["authorization_effect"] == "none")
+
+    # 19. a caller may tighten, and may never loosen.
+    record, _ = run(fresh("t1"), weak,
+                    requested_policy={"min_confidence_by_question": {"failure-class": 0.99}})
+    check("19 a caller may supply a threshold for a question Ariadne left ungated",
+          record["effective_policy"]["min_confidence_by_question"] == {"failure-class": 0.99})
+    check("19 and that threshold is recorded as caller-stated, not as calibration",
+          record["effective_policy"]["calibration_profile_by_question"]["failure-class"]
+          == "caller-stated (stricter)")
+    record, _ = run(with_profile("t2", 0.95), weak,
+                    requested_policy={"min_confidence_by_question": {"failure-class": 0.01}})
+    check("19 a caller cannot lower a threshold Ariadne's evidence set",
+          record["effective_policy"]["min_confidence_by_question"] == {"failure-class": 0.95})
+    check("19 a caller cannot lower it to zero to guarantee an answer",
+          batch.tighten_with_caller_policy(
+              {"min_confidence_by_question": {"q": 0.9}},
+              {"min_confidence_by_question": {"q": 0.0}}
+          )["min_confidence_by_question"] == {"q": 0.9})
+    for bogus in ({"min_confidence_by_question": {"q": "high"}},
+                  {"min_confidence_by_question": {"q": True}},
+                  {"min_confidence_by_question": {"q": 1.5}},
+                  {"min_confidence_by_question": {"q": -0.2}}):
+        check(f"19 a malformed caller threshold is ignored rather than coerced: {bogus}",
+              batch.tighten_with_caller_policy(
+                  {"min_confidence_by_question": {}}, bogus
+              )["min_confidence_by_question"] == {})
+    check("19 no caller policy at all still resolves the engine-owned threshold",
+          batch.tighten_with_caller_policy(
+              {"min_confidence_by_question": {"q": 0.7}}, None
+          )["min_confidence_by_question"] == {"q": 0.7})
+
+    # 19. a forged calibration claim cannot relabel a probability.
+    check("19 a provider cannot be told its probability is calibrated",
+          RUNTIME.provider._declared_confidence_kind(
+              "CALIBRATED_PROBABILITY", RUNTIME.provider.LOCAL_PROVIDER_ID and provider.confidence_kinds()
+          ) == "SELF_REPORTED_CONFIDENCE")
+
+    # 10. the lookup is deterministic and inspectable.
+    state = with_profile("det", 0.95)
+    first = batch.effective_policy(state, [question], runtime=provider.provider,
+                                   implementation=provider.model,
+                                   model_revision=provider.model_version)
+    second_call = batch.effective_policy(state, [question], runtime=provider.provider,
+                                         implementation=provider.model,
+                                         model_revision=provider.model_version)
+    check("10 policy resolution is deterministic for the same state and runtime",
+          first == second_call)
+    check("10 the resolution says why each question did or did not get a threshold",
+          isinstance(first["reasons"].get("failure-class"), list))
+    check("10 and it states plainly that there is no default",
+          "no default" in first["note"])
+
+    session.shutdown()
+
+
+def st_records(outcome) -> list:
+    return list(outcome.get("results") or [])
+
+
+def golden_workflow_checks(engine) -> None:
+    """Two end-to-end abstention workflows through the real production path.
+
+    Both go task -> compiler -> bounded runtime -> calibration profile -> abstention or
+    acceptance -> escalation -> action. Nothing about the policy wiring under test is
+    mocked: the runtime is the real reference engine, the profile is a real recorded
+    PROVEN profile, and the caller is ``classify_failure``, which is what a run uses.
+
+    A deterministic fake answer would be acceptable for the provider; what is *not*
+    acceptable is bypassing ``decisions.batch.evaluate``, because bypassing it is the
+    bug.
+    """
+    RUNTIME = runtime_of(engine)
+    C = engine.decisions.contracts
+    integrations = engine.decisions.integrations
+    planner = engine.decisions.planner
+
+    question = C.DecisionQuestion(
+        question_id="failure-class", instructions="Classify this failure.",
+        primitive="ChoiceDecision",
+        options=tuple(engine.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    weak_source = "TypeError: undefined name 'render_page'"
+    strong_source = "Traceback (most recent call last): TypeError: undefined name 'render_page'"
+
+    def golden(threshold: float, source: str, task: str):
+        state = base_state(run_id="ar206-golden", project="C:/tmp/golden")
+        session = seed_runtime(engine)
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        # Ask once with no profile, and measure the profile on the question the
+        # integration *actually* asks. The instructions are written by the compiler and
+        # are part of the question-schema digest, so a profile measured against a
+        # hand-written stand-in would never match - which is the point of the digest,
+        # and also why this has to be derived rather than guessed.
+        warmup = integrations.classify_failure(
+            state, source=source, consequence="LOW", runtime=session,
+            provider=provider, generative_available=True)
+        asked = state["decisions"][0]
+        asked_question = {
+            "question_id": asked["question_id"],
+            "instructions": asked["instructions"],
+            "primitive": asked["primitive"],
+            "options": list(asked["options"]),
+            "projection_contract": "failure-classification",
+            "definition_version": asked["definition_version"],
+            "consequence": asked["consequence"],
+        }
+        RUNTIME.profiles.record_profile(state, RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[asked_question],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="e" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": threshold}))
+        # A fresh state so the golden assertion reads one decision, not two.
+        fresh_state = base_state(run_id="ar206-golden", project="C:/tmp/golden")
+        RUNTIME.profiles.record_profile(fresh_state, RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[asked_question],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="e" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": threshold}))
+        outcome = integrations.classify_failure(
+            fresh_state, source=source, consequence="LOW", runtime=session,
+            provider=provider, generative_available=True,
+        )
+        return fresh_state, outcome, session, fresh_state["decisions"][0]
+
+    # 17. below threshold -> abstain -> escalate -> no action.
+    # A threshold no probability can clear, so the test is about the wiring rather than
+    # about how well the rule-derived classifier happens to score this particular string.
+    state, outcome, session, record = golden(0.999, weak_source, "abstain")
+    try:
+        check("GOLD-1 the bounded engine abstained on the real path",
+              outcome["decision"]["status"] == "refused"
+              and outcome["decision"]["abstention_reason"] == "BELOW_MIN_CONFIDENCE")
+        check("GOLD-1 no class was invented; the fallback said UNKNOWN rather than guessing",
+              outcome["class"] == "UNKNOWN" and outcome["source"] == "fallback-unknown")
+        check("GOLD-1 the reason names the abstention rather than a generic failure",
+              "BELOW_MIN_CONFIDENCE" in outcome["reason"])
+        check("GOLD-1 Ariadne escalated rather than proceeding",
+              bool(outcome["escalation"])
+              and outcome["escalation"]["classification"] == "BOUNDED")
+        check("GOLD-1 the decision was not acted on",
+              record["acted_on"] is False and record["authorization_effect"] == "none")
+        check("GOLD-1 the evidence behind the abstention was kept for review",
+              record["candidate_answer"] != "" and record["candidate_confidence"] > 0.0)
+        check("GOLD-1 and the threshold that fired is on the record",
+              record["threshold_applied"] == 0.999)
+        check("GOLD-1 nothing marked the work verified",
+              not any("verification" in key for key in state))
+    finally:
+        session.shutdown()
+
+    # 18. above threshold -> accepted, and no generative escalation spent.
+    state, outcome, session, record = golden(0.01, strong_source, "accept")
+    try:
+        check("GOLD-2 the same path accepts a well-evidenced answer",
+              outcome["class"] == "IMPLEMENTATION_FAILURE"
+              and outcome["decision"]["status"] == "answered")
+        check("GOLD-2 it came from the bounded decision, not the fallback",
+              outcome["source"] == "bounded-decision")
+        check("GOLD-2 no abstention was recorded",
+              record.get("abstention_reason", "") == "")
+        check("GOLD-2 policy accepted it, so no escalation was needed",
+              record["policy_verdict"]["accepted"] is True
+              and outcome["escalation_required"] is False)
+        check("GOLD-2 the probability stays a provider probability, uncalibrated",
+              record["confidence_kind"] == "PROVIDER_PROBABILITY"
+              and "CALIBRATED" not in record["confidence_kind"])
+        check("GOLD-2 the probability is recorded, cleared the threshold, and is still not an authorization",
+              record["confidence"] is not None
+              and record["confidence"] >= 0.01
+              and record["authorization_effect"] == "none")
+    finally:
+        session.shutdown()
+
+    check("GOLD  the runtime can both abstain and succeed on the same question and state",
+          True)
+
+
 def failure_question_record(engine) -> dict:
     return {
         "question_id": "failure-class",
@@ -2403,6 +2802,8 @@ def main() -> int:
         packaging_checks(engine, root)
         bounded_schema_checks(engine)
         export_checks(engine)
+        abstention_wiring_checks(engine)
+        golden_workflow_checks(engine)
         hardening_checks(engine, root)
         product_checks(engine, root)
         integration_checks(engine)

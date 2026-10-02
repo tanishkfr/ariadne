@@ -271,14 +271,20 @@ def _bounded_answer(
         task_id=task_id,
         definition=contract_id,
     )
+    abstained = str((record or {}).get("abstention_reason", ""))
     return {
         "status": str(row.get("status", "")),
         "answer": str(row.get("answer", "")) if accepted else "",
         "source": "bounded-decision" if accepted else "fallback",
+        "abstention_reason": abstained,
         "reason": (
             "a bounded decision produced this answer under the declared policy"
             if accepted
-            else str(verdict.get("detail", "")) or str((record or {}).get("status", ""))
+            else (
+                f"the bounded engine abstained ({abstained}) and Ariadne escalated"
+                if abstained
+                else str(verdict.get("detail", "")) or str((record or {}).get("status", ""))
+            )
         ),
         "decision_id": str(row.get("decision_id", "")),
         "plan_id": str(plan.get("plan_id", "")),

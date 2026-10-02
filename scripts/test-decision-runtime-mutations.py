@@ -485,6 +485,326 @@ def probe_fresh_digest_is_not_verification(module) -> bool:
     return True
 
 
+def probe_production_path_abstains(module) -> bool:
+    """The production path must abstain below an evidence-backed threshold.
+
+    Deliberately routed through ``decisions.batch.evaluate`` rather than
+    ``session.decide``. That distinction is the whole closure pass: calling the runtime
+    directly proves the machinery works, while calling the real caller proves it is
+    reachable. Every mutation below targets the wiring, and a probe that called the
+    engine directly would report all of them as caught while the product still could not
+    abstain.
+    """
+    RUNTIME = runtime_of(module)
+    batch = module.decisions.batch
+    C = module.decisions.contracts
+    question = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    entries = {"failure": "Traceback: TypeError: x"}
+    projection = {"entries": entries, "digest": "a" * 64, "verification_level": "OBSERVED"}
+    session = seeded(module)
+    try:
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        state = {
+            "schema_version": 1, "run_id": "mutation", "project": "C:/tmp/m",
+            "packets": [], "approvals": [], "decisions": [], "decision_batches": [],
+        }
+        RUNTIME.profiles.record_profile(state, RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[question.as_record()],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="f" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": 0.999}))
+        batch.evaluate(state, questions=[question], projection=projection,
+                       provider=provider, task_id="m")
+    finally:
+        session.shutdown()
+    record = state["decisions"][-1]
+    return (record["status"] == "refused"
+            and record.get("abstention_reason") == "BELOW_MIN_CONFIDENCE"
+            and record["answer"] == "")
+
+
+def probe_retired_profile_ignored(module) -> bool:
+    """A RETIRED profile must supply no threshold through the production path."""
+    return not _threshold_supplied(module, status="RETIRED")
+
+
+def probe_revision_mismatch_ignored(module) -> bool:
+    """A profile bound to another model revision must supply no threshold."""
+    return not _threshold_supplied(module, revision="deadbeef")
+
+
+def probe_question_schema_mismatch_ignored(module) -> bool:
+    """A profile measured on a different question version must supply no threshold.
+
+    The explicit ``question_version`` check and the ``question_schema_digest`` check cover
+    this independently, so the mutation targets the schema digest: removing only the
+    version check leaves the other guard standing, which is defence in depth rather than
+    a load-bearing property, and a mutation that survives proves nothing.
+    """
+    return not _threshold_supplied(module, profile_version="1", query_version="2")
+
+
+def probe_risk_class_mismatch_ignored(module) -> bool:
+    """A LOW-risk threshold must not apply to a HIGH-risk decision.
+
+    ``build_profile`` does not require a threshold for every risk class a question could
+    carry, so a PROVEN profile may legitimately declare only LOW. The lookup is where the
+    risk class is enforced, and this is the guard doing the work.
+    """
+    return not _threshold_supplied(module, consequence="HIGH", declared_risks=("LOW",))
+
+
+def probe_no_universal_fallback_threshold(module) -> bool:
+    """With no profile at all, nothing may be invented."""
+    RUNTIME = runtime_of(module)
+    batch = module.decisions.batch
+    C = module.decisions.contracts
+    question = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    session = seeded(module)
+    try:
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        resolved = batch.effective_policy(
+            {"schema_version": 1, "run_id": "m", "project": "p", "packets": [], "approvals": []},
+            [question], runtime=provider.provider, implementation=provider.model,
+            model_revision=provider.model_version)
+    finally:
+        session.shutdown()
+    return resolved["min_confidence_by_question"] == {}
+
+
+def probe_evidence_preserved(module) -> bool:
+    """A threshold abstention must keep the evidence it was judged on.
+
+    Section 11 of the closure requires the original answer, probability and threshold to
+    survive the refusal. An abstention that forgets them is indistinguishable from never
+    having looked, and the escalation that follows cannot be judged on the evidence.
+    """
+    RUNTIME = runtime_of(module)
+    batch = module.decisions.batch
+    C = module.decisions.contracts
+    question = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    session = seeded(module)
+    try:
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        state = {"schema_version": 1, "run_id": "m", "project": "p", "packets": [],
+                 "approvals": [], "decisions": [], "decision_batches": []}
+        RUNTIME.profiles.record_profile(state, RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[question.as_record()],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="f" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": 0.999}))
+        batch.evaluate(
+            state, questions=[question],
+            projection={"entries": {"failure": "Traceback: TypeError: x"},
+                        "digest": "a" * 64, "verification_level": "OBSERVED"},
+            provider=provider, task_id="m")
+    finally:
+        session.shutdown()
+    record = state["decisions"][-1]
+    return (record["status"] == "refused"
+            and record.get("candidate_answer") == "IMPLEMENTATION_FAILURE"
+            and float(record.get("candidate_confidence") or 0.0) > 0.0
+            and record["answer"] == ""
+            and record.get("threshold_applied") == 0.999)
+
+
+def probe_never_reports_calibrated(module) -> bool:
+    """No answer may reach the record claiming to be a calibrated probability.
+
+    The threat is a sidecar that lies about itself, not the reference engine, which
+    never claims calibration. So the probe uses a rogue runtime whose declared
+    ``confidence_kinds`` is the honest list and whose answer nonetheless says
+    ``CALIBRATED_PROBABILITY`` - the engine declaring it does not calibrate its own
+    numbers while the answer says otherwise.
+    """
+    RUNTIME = runtime_of(module)
+    C = module.decisions.contracts
+
+    class SelfCertifying:
+        def available(self):
+            return True, "self-certifying"
+
+        def status(self):
+            return {"runtime_version": "1", "implementation": "x",
+                    "implementation_revision": "r", "model": "x", "model_revision": "r1",
+                    "device": "cpu", "runtime_kind": "local_bounded",
+                    "primitives": ["ChoiceDecision"],
+                    "confidence_kinds": ["PROVIDER_PROBABILITY", "NONE"],
+                    "calibration_self_granted": False}
+
+        def decide(self, *_args, **_kwargs):
+            return {"provider": "x", "model": "x", "model_version": "r1",
+                    "runtime_version": "1", "device": "cpu",
+                    "answers": {"0:failure-class": {
+                        "question_id": "failure-class", "answer": "IMPLEMENTATION_FAILURE",
+                        "valid": True, "confidence": 0.9,
+                        "confidence_kind": "CALIBRATED_PROBABILITY",
+                        "distribution": {"IMPLEMENTATION_FAILURE": 0.9}}}}
+
+    session = RUNTIME.session.DecisionRuntime.in_process(
+        SelfCertifying(), description=SelfCertifying().status())
+    try:
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        result = provider.answer({
+            "projection": {"entries": {"failure": "Traceback: TypeError: x"}, "digest": "a" * 64},
+            "questions": [C.DecisionQuestion(
+                question_id="failure-class", instructions="bounded failure class",
+                primitive="ChoiceDecision",
+                options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+                projection_contract="failure-classification", definition_version="1",
+                consequence="LOW").as_record()],
+        })
+    finally:
+        session.shutdown()
+    slot = result["answers"]["failure-class"]
+    return (slot.get("confidence_kind") != "CALIBRATED_PROBABILITY"
+            and result["failed_questions"] == ["failure-class"])
+
+
+def probe_confidence_cannot_authorize(module) -> bool:
+    """Confidence must not buy authority, on the production path."""
+    RUNTIME = runtime_of(module)
+    batch = module.decisions.batch
+    C = module.decisions.contracts
+    question = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="PROTECTED")
+    session = seeded(module)
+    try:
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        state = {"schema_version": 1, "run_id": "m", "project": "p", "packets": [],
+                 "approvals": [], "decisions": [], "decision_batches": []}
+        batch.evaluate(
+            state, questions=[question],
+            projection={"entries": {"failure": "Traceback: TypeError: undefined name x"},
+                        "digest": "b" * 64, "verification_level": "UNVERIFIED"},
+            provider=provider, task_id="m")
+    finally:
+        session.shutdown()
+    record = state["decisions"][-1]
+    return (record["authorization_effect"] == "none"
+            and record["acted_on"] is False
+            and record["policy_verdict"]["accepted"] is False)
+
+
+def probe_batch_threshold_does_not_leak(module) -> bool:
+    """One question's threshold must not be applied to its siblings."""
+    RUNTIME = runtime_of(module)
+    batch = module.decisions.batch
+    C = module.decisions.contracts
+    first = C.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    second = C.DecisionQuestion(
+        question_id="review-escalation", instructions="bounded review escalation",
+        primitive="ChoiceDecision", options=tuple(module.contracts.REVIEW_ESCALATIONS),
+        projection_contract="review-escalation", definition_version="1",
+        consequence="LOW")
+    session = seeded(module)
+    try:
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        state = {"schema_version": 1, "run_id": "m", "project": "p", "packets": [],
+                 "approvals": [], "decisions": [], "decision_batches": []}
+        RUNTIME.profiles.record_profile(state, RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[first.as_record()],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="f" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": 0.999}))
+        batch.evaluate(
+            state, questions=[first, second],
+            projection={"entries": {"failure": "Traceback: TypeError: x", "stakes": "high",
+                                    "affected_scope": "release", "protected": True},
+                        "digest": "c" * 64, "verification_level": "OBSERVED"},
+            provider=provider, task_id="m")
+    finally:
+        session.shutdown()
+    statuses = {row["question_id"]: row["status"] for row in state["decisions"]}
+    return (statuses.get("failure-class") == "refused"
+            and statuses.get("review-escalation") == "answered")
+
+
+def _threshold_supplied(module, *, status: str = "", revision: str = "",
+                        profile_version: str = "1", query_version: str = "1",
+                        consequence: str = "LOW", declared_risks: tuple = ()) -> bool:
+    """Whether a threshold is supplied through the production path under these conditions.
+
+    ``profile_version`` and ``query_version`` are separate on purpose: a mismatch is only
+    meaningful if the profile was measured on one version and the decision asks another.
+
+    An evaluation that raises counts as "no threshold applied". A mutant that borrows
+    another class's threshold and then cannot look it up has not let the wrong threshold
+    through either, and calling that a pass would be scoring the mutant on a crash rather
+    than on the property under test.
+    """
+    RUNTIME = runtime_of(module)
+    batch = module.decisions.batch
+    C = module.decisions.contracts
+
+    def asked(version: str) -> C.DecisionQuestion:
+        return C.DecisionQuestion(
+            question_id="failure-class", instructions="bounded failure class",
+            primitive="ChoiceDecision",
+            options=tuple(module.contracts.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+            projection_contract="failure-classification", definition_version=version,
+            consequence=consequence)
+
+    measured = asked(profile_version)
+    querying = asked(query_version)
+    session = seeded(module)
+    try:
+        provider = RUNTIME.provider.LocalBoundedProvider(session)
+        state = {"schema_version": 1, "run_id": "m", "project": "p", "packets": [],
+                 "approvals": [], "decisions": [], "decision_batches": []}
+        record = RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[measured.as_record()],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=revision or provider.model_version, dataset_digest="f" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={risk: 0.999 for risk in (declared_risks or (consequence,))})
+        RUNTIME.profiles.record_profile(state, record)
+        if status:
+            RUNTIME.profiles.set_profile_status(state, record.profile_id, status)
+        try:
+            batch.evaluate(
+                state, questions=[querying],
+                projection={"entries": {"failure": "Traceback: TypeError: x"},
+                            "digest": "d" * 64, "verification_level": "OBSERVED"},
+                provider=provider, task_id="m")
+        except Exception:
+            return False
+    finally:
+        session.shutdown()
+    return bool(state["decisions"][-1]["effective_policy"]["min_confidence_by_question"])
+
+
 MUTATIONS: tuple[dict, ...] = (
     {
         "name": "let an abstention become an answer",
@@ -601,6 +921,104 @@ MUTATIONS: tuple[dict, ...] = (
         "new": '            "status": "PASS",\n'
                '            "detail": "verified",',
         "probe": probe_fresh_digest_is_not_verification,
+    },
+    # -- AR-206 closure: the abstention policy wiring -------------------------------
+    {
+        "name": "remove the resolved policy from the batch request",
+        "file": "decisions/batch.py",
+        "old": '            "policy": {\n'
+               '                "min_confidence_by_question": dict(effective["min_confidence_by_question"]),\n'
+               '                "calibration_profile_by_question": dict(\n'
+               '                    effective["calibration_profile_by_question"]),\n'
+               '            },',
+        "new": '            "policy": {},',
+        "probe": probe_production_path_abstains,
+    },
+    {
+        "name": "invent a universal fallback threshold",
+        "file": "decisions/batch.py",
+        "old": '        if not verdict.get("accepted"):\n            continue',
+        "new": '        if not verdict.get("accepted"):\n'
+               '            thresholds[question.question_id] = 0.8\n'
+               '            continue',
+        "probe": probe_no_universal_fallback_threshold,
+    },
+    {
+        "name": "let a RETIRED profile act",
+        "file": f"{RUNTIME}/profiles.py",
+        "old": '        if candidate.status != "PROVEN":\n'
+               '            reasons.append(f"the matching profile is {candidate.status}, not PROVEN")\n'
+               '            continue',
+        "new": '        if candidate.status not in ("PROVEN", "RETIRED", "REVOKED", "DRAFT"):\n'
+               '            reasons.append(f"the matching profile is {candidate.status}, not PROVEN")\n'
+               '            continue',
+        "probe": probe_retired_profile_ignored,
+    },
+    {
+        "name": "ignore the model revision when matching a profile",
+        "file": f"{RUNTIME}/profiles.py",
+        "old": '    if not revision_matches(candidate.revision, str(model_revision)):',
+        "new": "    if False:",
+        "probe": probe_revision_mismatch_ignored,
+    },
+    {
+        "name": "ignore the question version when matching a profile",
+        "file": f"{RUNTIME}/profiles.py",
+        "edits": (
+            ('    if expected_version not in {part.strip() for part in candidate.question_version.split(",")}:',
+             "    if False:"),
+            ('    if candidate.question_schema_digest != expected_schema:',
+             "    if False:"),
+            ('    if candidate.decision_definition_digest != expected_definition:',
+             "    if False:"),
+        ),
+        "probe": probe_question_schema_mismatch_ignored,
+    },
+    {
+        "name": "borrow another risk class's threshold when none was measured",
+        "file": f"{RUNTIME}/profiles.py",
+        "edits": (
+            ('    speaking = [profile for profile in matching if risk in profile.thresholds_by_risk]',
+             '    speaking = list(matching)'),
+            ('        "min_confidence": float(chosen.thresholds_by_risk[risk]),',
+             '        "min_confidence": float(\n'
+             '            chosen.thresholds_by_risk.get(\n'
+             '                risk, min(chosen.thresholds_by_risk.values(), default=0.0))),'),
+        ),
+        "probe": probe_risk_class_mismatch_ignored,
+    },
+    {
+        "name": "apply the first question's threshold to the whole batch",
+        "file": f"{RUNTIME}/reference.py",
+        "old": '                threshold = by_question.get(question_id, min_confidence)',
+        "new": '                threshold = next(iter(by_question.values()), min_confidence)',
+        "probe": probe_batch_threshold_does_not_leak,
+    },
+    {
+        "name": "discard the evidence behind a threshold abstention",
+        "file": f"{RUNTIME}/reference.py",
+        "old": '                    if score.has_evidence:\n'
+               '                        slot["candidate_answer"] = score.label\n'
+               '                        slot["candidate_confidence"] = score.probability',
+        "new": '                    if False:\n'
+               '                        slot["candidate_answer"] = score.label\n'
+               '                        slot["candidate_confidence"] = score.probability',
+        "probe": probe_evidence_preserved,
+    },
+    {
+        "name": "relabel a provider probability as calibrated",
+        "file": f"{RUNTIME}/provider.py",
+        "old": '    claimed = str(value or "PROVIDER_PROBABILITY")\n'
+               '    return claimed if claimed in offered else "SELF_REPORTED_CONFIDENCE"',
+        "new": '    return str(value or "PROVIDER_PROBABILITY")',
+        "probe": probe_never_reports_calibrated,
+    },
+    {
+        "name": "let confidence grant authorization",
+        "file": "decisions/batch.py",
+        "old": '            "acted_on": False,',
+        "new": '            "acted_on": True,',
+        "probe": probe_confidence_cannot_authorize,
     },
 )
 

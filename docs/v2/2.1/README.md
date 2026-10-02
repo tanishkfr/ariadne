@@ -32,6 +32,7 @@ it is the posture the shipped defaults leave you in.
 | [Evaluation and comparability](evaluation-and-comparability.md) | The identity keys that bind a measurement, the metrics, and the rules under which a comparison is refused. |
 | [Security model](security-model.md) | The authority boundary, the attack surface, the invariants, and how to report a suspected problem. |
 | [Operations](operations.md) | Install, status, doctor, evaluation and promotion from the command line; environment variables; integrity; troubleshooting. |
+| [Release closure](13-RELEASE-CLOSURE.md) | The one remaining correctness gap in 2.1, how it was wired, and what the closure pass verified. |
 
 ## Orientation
 

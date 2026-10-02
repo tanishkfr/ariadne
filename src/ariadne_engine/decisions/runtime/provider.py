@@ -197,6 +197,7 @@ class LocalBoundedProvider(DecisionProvider):
     ) -> Mapping:
         raw_answers = dict(response.get("answers") or {})
         failed: list[str] = []
+        abstained: list[str] = []
         answers: dict[str, Any] = {}
         for position, question in enumerate(questions):
             slot = raw_answers.get(f"0:{question.question_id}")
@@ -207,15 +208,30 @@ class LocalBoundedProvider(DecisionProvider):
             if not slot.get("valid", False):
                 if slot.get("abstained"):
                     self.abstentions += 1
-                failed.append(question.question_id)
-                answers[question.question_id] = {
+                    abstained.append(question.question_id)
+                else:
+                    failed.append(question.question_id)
+                # The computed label and probability travel with the refusal. `answer`
+                # stays None: an abstention has no answer, and the whole design rests on
+                # a caller never finding one. What the engine actually reasoned is kept
+                # so the escalation that follows can be judged on the evidence.
+                refusal = {
                     "answer": None,
                     "confidence": None,
                     "confidence_kind": "NONE",
                     "distribution": dict(slot.get("distribution", {}) or {}),
                     "abstained": True,
                     "reason": reason,
+                    "threshold": slot.get("threshold"),
+                    "calibration_profile_id": str(slot.get("calibration_profile_id", "")),
                 }
+                if slot.get("candidate_answer") is not None:
+                    refusal["candidate_answer"] = str(slot.get("candidate_answer"))
+                    refusal["candidate_confidence"] = slot.get("candidate_confidence")
+                    refusal["candidate_confidence_kind"] = str(
+                        slot.get("confidence_kind", "PROVIDER_PROBABILITY")
+                    )
+                answers[question.question_id] = refusal
                 continue
             payload = {
                 "answer": slot.get("answer"),
@@ -265,6 +281,11 @@ class LocalBoundedProvider(DecisionProvider):
             "request_id": f"{LOCAL_PROVIDER_ID}-{position_id(projection)}",
             "answers": answers,
             "failed_questions": failed,
+            # Additive and precise. `failed_questions` stays "no answer was produced",
+            # which is true of an abstention too; this says *why* there was none. A
+            # caller escalating on a deliberate refusal and a caller escalating on a
+            # crash need different reactions, and both were previously indistinguishable.
+            "abstained_questions": abstained,
             "usage": dict(response.get("usage", {}) or {}),
             "projection_digest": str(projection.get("digest", "")),
             "authorization_effect": "none",

@@ -435,6 +435,59 @@ class Score:
     distribution: dict[str, float]
     abstained: bool
     reason: str
+    threshold: float | None = None
+    """The threshold that was applied, when one applied."""
+    profile_id: str = ""
+    """The calibration profile the threshold came from, when it came from one."""
+
+    @property
+    def has_evidence(self) -> bool:
+        """Whether this abstention still has a computed answer behind it.
+
+        ``BELOW_MIN_CONFIDENCE`` does: the engine reasoned to a label and a probability
+        and then declined to stand behind it. ``NO_LOCAL_MODEL`` and
+        ``ANSWER_SPACE_MISMATCH`` do not: there was nothing to reason from. Collapsing
+        the two would throw away the evidence that justifies an escalation.
+        """
+        return bool(self.label) and self.probability > 0.0
+
+
+def _threshold_map(value: Any) -> dict[str, float]:
+    """Per-question thresholds from a request, validated rather than coerced.
+
+    A threshold that is not a finite number in [0, 1] is a malformed request, and
+    silently dropping it would turn a caller's mistake into a missing safety gate: the
+    question would be answered with no threshold at all, which reads as "no profile
+    justifies one" and is the opposite of what a malformed value means. A caller that
+    states a malformed threshold is refused.
+    """
+    if value in (None, "", {}):
+        return {}
+    if not isinstance(value, Mapping):
+        raise EngineError("min_confidence_by_question must be an object keyed by question id")
+    thresholds: dict[str, float] = {}
+    for key, raw in value.items():
+        try:
+            number = float(raw)
+        except (TypeError, ValueError) as exc:
+            raise EngineError(
+                f"the threshold for question {key!r} is not a number: {raw!r}"
+            ) from exc
+        if not math.isfinite(number) or number < 0.0 or number > 1.0:
+            raise EngineError(
+                f"the threshold for question {key!r} is outside [0, 1]: {raw!r}"
+            )
+        thresholds[str(key)] = number
+    return thresholds
+
+
+def _profile_map(value: Any) -> dict[str, str]:
+    """The calibration profile each per-question threshold came from, for the record."""
+    if value in (None, "", {}):
+        return {}
+    if not isinstance(value, Mapping):
+        raise EngineError("calibration_profile_by_question must be an object")
+    return {str(key): str(item) for key, item in value.items()}
 
 
 def score_question(
@@ -443,6 +496,7 @@ def score_question(
     weights: WeightBook,
     *,
     min_confidence: float | None = None,
+    profile_id: str = "",
 ) -> Score:
     """Score one question against one projected state.
 
@@ -450,6 +504,11 @@ def score_question(
     unknown, or the answer space does not match the fitted one. A refusal is
     ``abstained`` with a reason, which Ariadne turns into an escalation — never into
     an answer with a low confidence attached.
+
+    A threshold abstention keeps the label and the probability it computed. Discarding
+    them would make an abstention indistinguishable from never having looked, and
+    ``label``/``probability`` are what an escalation needs in order to be judged on the
+    evidence rather than on the excuse.
     """
     question_id = str(question.get("question_id", ""))
     primitive = str(question.get("primitive", ""))
@@ -484,11 +543,13 @@ def score_question(
         return Score(
             question_id,
             family,
-            "",
-            0.0,
+            label,
+            probability,
             distribution,
             True,
             "BELOW_MIN_CONFIDENCE",
+            float(min_confidence),
+            str(profile_id),
         )
     return Score(question_id, family, label, probability, distribution, False, "")
 
@@ -538,7 +599,13 @@ class ReferenceBoundedEngine:
     # -- calls -------------------------------------------------------------
 
     def decide(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
-        return self.decide_batch({"states": [dict(request.get("state") or {})], "questions": list(request.get("questions") or []), "min_confidence": request.get("min_confidence")})
+        return self.decide_batch({
+            "states": [dict(request.get("state") or {})],
+            "questions": list(request.get("questions") or []),
+            "min_confidence": request.get("min_confidence"),
+            "min_confidence_by_question": request.get("min_confidence_by_question"),
+            "calibration_profile_by_question": request.get("calibration_profile_by_question"),
+        })
 
     def decide_batch(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
         """Answer every question over every state as one bounded inference unit.
@@ -547,10 +614,19 @@ class ReferenceBoundedEngine:
         transport exists: one call, one set of features per state, one bounded
         inference, and results mapped back by ``(state index, question id)``. Nothing
         is issued per question, and a missing answer is reported rather than filled.
+
+        Thresholds are resolved per question. ``min_confidence_by_question`` takes
+        precedence for the question it names, and the batch-wide ``min_confidence`` is
+        only the fallback for questions nobody stated a threshold for. A batch-wide
+        threshold applied to every question would abstain a question whose profile
+        justifies no threshold at all, and would apply one risk class's evidence to
+        another's decision.
         """
         states = [dict(item) for item in request.get("states") or []]
         questions = [dict(item) for item in request.get("questions") or []]
         min_confidence = request.get("min_confidence")
+        by_question = _threshold_map(request.get("min_confidence_by_question"))
+        profiles = _profile_map(request.get("calibration_profile_by_question"))
         if not states:
             raise EngineError("a decide call needs at least one state")
         if not questions:
@@ -564,8 +640,13 @@ class ReferenceBoundedEngine:
             for question in questions:
                 question_id = str(question.get("question_id", ""))
                 key = f"{state_position}:{question_id}"
+                threshold = by_question.get(question_id, min_confidence)
+                profile_id = profiles.get(question_id, "")
                 try:
-                    score = score_question(question, entries, self._weights, min_confidence=min_confidence)
+                    score = score_question(
+                        question, entries, self._weights,
+                        min_confidence=threshold, profile_id=profile_id,
+                    )
                 except EngineError as exc:
                     failed.append(key)
                     answers[key] = {
@@ -579,7 +660,12 @@ class ReferenceBoundedEngine:
                     continue
                 if score.abstained:
                     abstained[key] = {"question_id": question_id, "reason": score.reason}
-                    answers[key] = {
+                    # `answer` stays None: there is no answer, and a caller that finds
+                    # one here has been told to escalate rather than to use it. The
+                    # computed label and probability travel beside it as evidence, so a
+                    # refusal can be judged on what the engine actually reasoned rather
+                    # than on the fact that it declined.
+                    slot = {
                         "question_id": question_id,
                         "state_index": state_position,
                         "state_digest": digest,
@@ -588,7 +674,14 @@ class ReferenceBoundedEngine:
                         "abstained": True,
                         "reason": score.reason,
                         "distribution": score.distribution,
+                        "threshold": score.threshold,
+                        "calibration_profile_id": score.profile_id,
                     }
+                    if score.has_evidence:
+                        slot["candidate_answer"] = score.label
+                        slot["candidate_confidence"] = score.probability
+                        slot["confidence_kind"] = "PROVIDER_PROBABILITY"
+                    answers[key] = slot
                     continue
                 answers[key] = {
                     "question_id": question_id,

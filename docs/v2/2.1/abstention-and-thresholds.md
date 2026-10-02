@@ -3,10 +3,89 @@
 An abstention is a named refusal, not a null answer and not a low number. This
 document is about the difference.
 
+The Decision Runtime can abstain when a decision falls below an evidence-backed
+threshold. Thresholds are tied to matching calibration profiles and concrete model
+revisions; Ariadne does not invent a universal confidence cutoff.
+
+What abstention means, precisely: **the bounded decision is insufficiently trustworthy
+for this policy.** It does not mean the task failed, that permission is revoked or
+granted, that verification failed, that human review is required, or that the provider is
+wrong. Ariadne's policy decides what happens next. And abstention is a policy threshold,
+not truth detection - Ariadne does not know when a decision is wrong, only when measured
+evidence is too weak for this decision.
+
+## How a threshold reaches the runtime
+
+There is exactly one producer, and it is the run's own recorded calibration state:
+
+```
+decisions.batch.evaluate(state, questions=..., provider=...)
+    |
+    +-- effective_policy(state, questions, runtime, implementation, model_revision)
+    |       |
+    |       +-- profiles.profile_for(...)  per question
+    |             PROVEN + every binding matches -> threshold for that risk class
+    |             anything else                 -> no threshold
+    |
+    +-- tighten_with_caller_policy(resolved, requested_policy)
+    |       a caller may raise a threshold; never lower one
+    |
+    +-- request["policy"] = { min_confidence_by_question, calibration_profile_by_question }
+              |
+              +-- LocalBoundedProvider.answer -> session.decide(policy=...)
+                    |
+                    +-- engine: per question, by_question.get(qid, batch_level)
+```
+
+`effective_policy` is a caller, not a second policy engine. It calls the existing
+`profiles.profile_for` and honours whatever it says, including "no".
+
+A profile must name the runtime the way the provider names itself. On the decision path
+that is `ariadne-decision-runtime`, which is the identity recorded in provenance. A
+profile built against another spelling simply never matches, and the refusal says so.
+
+## Per question, not per batch
+
+Thresholds travel as `min_confidence_by_question`, and the engine resolves
+`by_question.get(question_id, min_confidence)` for each question separately. A batch-wide
+threshold would abstain a question whose profile justifies none, and would apply one risk
+class's evidence to another question's decision.
+
+```
+Q1 threshold 0.72   Q2 no threshold   Q3 threshold 0.88
+```
+
+## What the refusal keeps
+
+A `BELOW_MIN_CONFIDENCE` abstention is a `refused` decision record carrying
+`abstention_reason`, `threshold_applied`, `calibration_profile_id`, and the
+`candidate_answer` / `candidate_confidence` the engine actually reasoned with. The
+`answer` stays empty: **there is no answer.**
+
+Keeping the evidence is not a concession to usefulness. An abstention that discarded what
+it had seen would be indistinguishable from never having looked, and the escalation that
+follows could not be judged on the evidence - only obeyed.
+
+## What a caller may do
+
+`batch.evaluate(..., requested_policy=...)` lets a caller ask for a *stricter* gate. It
+cannot lower a threshold Ariadne's evidence set, relabel a provider probability as
+calibrated, or mark a decision authorised, acted on or verified. A caller threshold that
+is adopted is recorded as `caller-stated (stricter)`, so it is never mistaken for a
+calibration measurement.
+
+## The cache is bound to the policy too
+
+A decision cached with no threshold is a different decision from one made under a
+threshold, so both the effective threshold and the profile that produced it are part of
+the decision cache key. Without that, a profile appearing would silently have no effect
+on any state that had already been decided.
+
 ## The structured reasons
 
 `reference.score_question` refuses in three ways, each returning an `abstained`
-score with an empty label, a probability of `0.0`, and a reason string.
+score with a reason string. Only `BELOW_MIN_CONFIDENCE` keeps a label and a probability:
+the other two had nothing to reason from.
 
 ### `NO_LOCAL_MODEL`
 

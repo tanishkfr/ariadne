@@ -36,11 +36,19 @@ nothing is promoted by default.
   and closing a session is final.
 - **A real abstention.** Four structured reasons - `NO_LOCAL_MODEL`,
   `BELOW_MIN_CONFIDENCE`, `UNSUPPORTED_PRIMITIVE`, `ANSWER_SPACE_MISMATCH` - and **no
-  default confidence threshold anywhere**. Thresholds are the caller's or the policy's
-  decision to state, and the engine has no opinion unless asked.
+  default confidence threshold anywhere**. Thresholds are supplied only where a
+  `PROVEN` calibration profile matches the decision definition, question schema and
+  wording, question version, runtime, implementation, concrete model revision and risk
+  class. With no such profile, nothing is invented and the answer stands ungated.
 - **Calibration as a measured claim.** `PROVEN` requires a dataset at or above the
   floor; a profile speaks only for the risk classes it declares; a moving alias satisfies
   nothing; and the runtime cannot declare its own probabilities calibrated.
+- **Abstention wired into the real path.** `decisions.batch.evaluate` resolves the
+  effective policy from the run's own calibration state and sends it with the request,
+  which is what makes `BELOW_MIN_CONFIDENCE` reachable in production rather than only in
+  a unit test. A caller may state a stricter threshold and may never state a looser one.
+  The refusal keeps the answer, probability, threshold and profile it was judged on, and
+  enters the existing escalation ladder with no new ladder.
 - **Shadow mode with a check, not a promise.** Shadow records are structurally incapable
   of carrying an execution effect, an isolation check surfaces a record that claims
   otherwise, and ground truth must name its source before it is stored.
@@ -58,20 +66,25 @@ Stated plainly, because a release note that oversells is worse than none.
 
 - The reference engine is **rule-derived, not trained**. It is strong on enumerated
   structure and weak on prose, and it says so in its own docstrings.
-- The installed runtime's probabilities are **uncalibrated**. No profile ships with it.
+- The installed runtime's probabilities are **uncalibrated**. No profile ships with it,
+  so on a fresh installation no threshold applies and every answer is answered.
 - **Nothing is promoted to `ACTIVE` by default.** Shadow is the shipped posture.
 - `MultiSelectDecision` is **deliberately unsupported** and takes the normal fallback
   and escalation path.
-- The threshold abstention machinery exists and is tested, but `batch.evaluate` builds a
-  request with no policy, so `BELOW_MIN_CONFIDENCE` does not fire on the default path
-  yet. That is a deliberate open item, not a working feature.
-- `python -m ariadne doctor` does **not** check the Decision Runtime. The engine
-  controller's `ariadne decision-runtime --action doctor` does.
+- Abstention is a **policy threshold, not truth detection**. Ariadne does not know when
+  a bounded decision is wrong. It knows when a measured profile says the evidence is
+  too weak for this decision, this question and this exact model revision.
+- A calibration profile must name the runtime as the provider names itself -
+  `ariadne-decision-runtime` on the decision path, which is what lands in provenance.
+  Three spellings of the runtime identity exist in 2.1 (`local_bounded`,
+  `local-bounded-runtime`, `ariadne-decision-runtime`) and a profile built against the
+  wrong one simply never matches. This is a known usability wrinkle, not a silent
+  failure: the refusal names the mismatch.
 
 ## Verification
 
-    scripts/test-decision-runtime.py            366 functional checks
-    scripts/test-decision-runtime-mutations.py  15/15 protections load-bearing
+    scripts/test-decision-runtime.py            445 functional checks
+    scripts/test-decision-runtime-mutations.py  25/25 protections load-bearing
     scripts/test-engine-core.py                 578/578, unchanged from 2.0
     scripts/test-decision-mutations.py          9/9, unchanged from 2.0
 

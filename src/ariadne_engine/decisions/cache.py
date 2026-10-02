@@ -78,8 +78,18 @@ def key_for(
     provider: str,
     model_version: str,
     policy_version: str,
+    effective_min_confidence: float | None = None,
+    calibration_profile_id: str = "",
 ) -> str:
-    """The full cache key. Every binding is mandatory."""
+    """The full cache key. Every binding is mandatory.
+
+    ``effective_min_confidence`` and ``calibration_profile_id`` are what make the
+    key honest once abstention is wired. A decision made with no threshold and one made
+    under a threshold are different decisions, and a profile that appears, changes or is
+    retired must not be silently ignored for a state that has already been decided -
+    which is what happened before these were bound: the profile resolved correctly, the
+    runtime abstained correctly, and a cached pre-profile answer was served anyway.
+    """
     if not isinstance(question, DecisionQuestion):
         raise ContractError("a decision cache key needs a DecisionQuestion")
     if not str(projection_digest or "").strip():
@@ -103,6 +113,10 @@ def key_for(
         "provider": str(provider),
         "model_version": str(model_version),
         "policy_version": str(policy_version),
+        "effective_min_confidence": (
+            None if effective_min_confidence is None else round(float(effective_min_confidence), 6)
+        ),
+        "calibration_profile_id": str(calibration_profile_id),
     }
     return hashlib.sha256(_canonical(payload).encode("utf-8")).hexdigest()
 
@@ -160,16 +174,24 @@ def lookup(
     provider: str,
     model_version: str,
     policy_version: str = policy.POLICY_VERSION,
+    effective_min_confidence: float | None = None,
+    calibration_profile_id: str = "",
     current_fingerprints: Mapping | None = None,
     now: datetime | None = None,
 ) -> dict:
-    """Look one decision up. Returns ``{"hit", "entry", "reason", "detail"}``."""
+    """Look one decision up. Returns ``{"hit", "entry", "reason", "detail"}``.
+
+    A miss named ``POLICY_CHANGED`` is the expected result when the effective threshold
+    or the calibration profile behind this question has moved since the entry was stored.
+    """
     key = key_for(
         question,
         projection_digest=projection_digest,
         provider=provider,
         model_version=model_version,
         policy_version=policy_version,
+        effective_min_confidence=effective_min_confidence,
+        calibration_profile_id=calibration_profile_id,
     )
     moment = now or datetime.now(timezone.utc)
     for item in entries(state):
@@ -273,6 +295,8 @@ def store(
         provider=provider,
         model_version=model_version,
         policy_version=str(record.get("policy_version", "") or policy.POLICY_VERSION),
+        effective_min_confidence=record.get("threshold_applied"),
+        calibration_profile_id=str(record.get("calibration_profile_id", "") or ""),
     )
     expires_at = ""
     if ttl_seconds is not None:

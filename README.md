@@ -186,10 +186,12 @@ recorded first. The runtime's prediction is then stored beside it, in a record t
 structurally incapable of carrying an execution effect. This is the default posture, and
 it is not something you opt into.
 
-**It abstains instead of guessing.** No confidence threshold is applied unless you or a
-policy state one, because a default threshold is a claim about risk that Ariadne should
-not make on your behalf. When the evidence is insufficient, the answer is a structured
-refusal, never a quiet low score.
+**It abstains instead of guessing.** No confidence threshold is applied unless a
+measured calibration profile justifies one for this exact decision, this question and
+this exact model revision. With no such profile, no threshold is invented and the answer
+stands ungated - Ariadne does not know when a decision is wrong, only when the evidence
+is too weak for this decision. When a valid threshold does apply and the answer falls
+below it, the decision is refused, the reason is recorded, and Ariadne escalates.
 
 A probability is only labelled *calibrated* when a measured profile matches the runtime
 kind, implementation, model revision, decision definition, question version and question

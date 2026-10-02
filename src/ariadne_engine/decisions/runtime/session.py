@@ -316,12 +316,15 @@ class DecisionRuntime:
     ) -> Mapping[str, Any]:
         """Answer independent questions over one projected state as one inference."""
         check_request_bounds([state_projection], questions)
+        per_question, profiles = self._per_question_thresholds(policy)
         return self._transport.call(
             "decide",
             {
                 "state": dict(state_projection),
                 "questions": [dict(question) for question in questions],
                 "min_confidence": self._threshold(policy, min_confidence),
+                "min_confidence_by_question": per_question,
+                "calibration_profile_by_question": profiles,
             },
             timeout=timeout,
         )
@@ -337,12 +340,15 @@ class DecisionRuntime:
     ) -> Mapping[str, Any]:
         """Answer many questions over many states in one bounded inference unit."""
         check_request_bounds(state_projections, questions)
+        per_question, profiles = self._per_question_thresholds(policy)
         return self._transport.call(
             "decide_batch",
             {
                 "states": [dict(projection) for projection in state_projections],
                 "questions": [dict(question) for question in questions],
                 "min_confidence": self._threshold(policy, min_confidence),
+                "min_confidence_by_question": per_question,
+                "calibration_profile_by_question": profiles,
             },
             timeout=timeout,
         )
@@ -358,12 +364,17 @@ class DecisionRuntime:
 
     @staticmethod
     def _threshold(policy: Mapping[str, Any] | None, min_confidence: float | None) -> float | None:
-        """Which threshold applies.
+        """Which batch-wide threshold applies.
 
         An explicit caller value wins; otherwise the contextual policy value is used.
         There is no default. A runtime with no threshold answers everything it can and
         Ariadne's own abstention machinery decides what to do with weak answers — a
         universal constant like ``0.8`` would be a claim about every question at once.
+
+        This is the fallback only. It is never applied to a question for which
+        ``_per_question_thresholds`` has an answer, because the whole point of per
+        question thresholds is that one question's calibration profile says nothing
+        about another question in the same batch.
         """
         if min_confidence is not None:
             return float(min_confidence)
@@ -372,6 +383,34 @@ class DecisionRuntime:
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 return float(value)
         return None
+
+    @staticmethod
+    def _per_question_thresholds(
+        policy: Mapping[str, Any] | None,
+    ) -> tuple[dict[str, float], dict[str, str]]:
+        """The thresholds this policy justifies, per question, with their provenance.
+
+        Read from ``min_confidence_by_question`` and nothing else. A policy that does
+        not name a threshold for a question yields none for it, which is the correct
+        answer in both directions: absence of evidence is not a reason to invent a gate,
+        and it is equally not a reason to invent a pass.
+        """
+        if not isinstance(policy, Mapping):
+            return {}, {}
+        thresholds = policy.get("min_confidence_by_question")
+        profiles = policy.get("calibration_profile_by_question")
+        resolved: dict[str, float] = {}
+        if isinstance(thresholds, Mapping):
+            for key, value in thresholds.items():
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    continue
+                number = float(value)
+                if 0.0 <= number <= 1.0:
+                    resolved[str(key)] = number
+        provenance: dict[str, str] = {}
+        if isinstance(profiles, Mapping):
+            provenance = {str(key): str(value) for key, value in profiles.items()}
+        return resolved, provenance
 
     def warm(self, *, timeout: float | None = None) -> dict:
         """Load ahead of the first question. Failure is reported, not raised."""

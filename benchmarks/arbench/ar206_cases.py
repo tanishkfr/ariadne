@@ -112,6 +112,310 @@ def install(ctx: Ctx, name: str) -> Path:
     return box.root / name
 
 
+# ================================================== runtime abstention (2.1 closure)
+
+
+@case(
+    id="runtime-abstention.production-path-resolves-a-threshold",
+    group="runtime-abstention",
+    title="The production path supplies a threshold only where a profile proves one",
+    task="Resolve the effective policy for a bounded batch with a matching PROVEN profile, "
+         "then with none, a retired one, and one bound to another model revision.",
+    expectation="Only the matched active profile supplies a threshold. No profile, a retired "
+                "profile and a revision mismatch each supply none, and none is invented.",
+    evaluation="Call batch.effective_policy for each case and read the per-question thresholds.",
+    evidence_required="The four resolved threshold maps and the refusal reasons.",
+    layer="deterministic",
+)
+def abstention_policy_resolution(ctx: Ctx) -> Outcome:
+    RUNTIME = runtime_of(ctx)
+    module = ctx.repo.module("ariadne.py")
+    batch = module.DECISIONS.batch
+    question = module.DECISIONS.contracts.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.CONTRACTS.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    session = seeded(ctx)
+    provider = RUNTIME.provider.LocalBoundedProvider(session)
+    try:
+        identity = {"runtime": provider.provider, "implementation": provider.model,
+                    "revision": provider.model_version}
+        lookup_identity = {"runtime": provider.provider, "implementation": provider.model,
+                           "model_revision": provider.model_version}
+
+        def profile(**overrides):
+            arguments = dict(
+                decision_definition="failure-classification",
+                questions=[question.as_record()], model=provider.model,
+                dataset_digest="a" * 64,
+                dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+                accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+                thresholds_by_risk={"LOW": 0.9}, **identity)
+            arguments.update(overrides)
+            return RUNTIME.profiles.build_profile(**arguments)
+
+        def state_with(record, *, retire: bool = False):
+            local = bench_state(ctx.sandbox())
+            RUNTIME.profiles.record_profile(local, record)
+            if retire:
+                RUNTIME.profiles.set_profile_status(local, record.profile_id, "RETIRED")
+            return local
+
+        verdicts = {
+            "no profile": batch.effective_policy(
+                bench_state(ctx.sandbox()), [question], **lookup_identity),
+            "matched": batch.effective_policy(state_with(profile()), [question], **lookup_identity),
+            "retired": batch.effective_policy(
+                state_with(profile(), retire=True), [question], **lookup_identity),
+            "revision drift": batch.effective_policy(
+                state_with(profile(dataset_digest="a" * 64, revision="deadbeef")),
+                [question], **lookup_identity),
+        }
+    finally:
+        session.shutdown()
+    supplied = {label: value["min_confidence_by_question"] for label, value in verdicts.items()}
+    problems = []
+    if supplied["matched"] != {"failure-class": 0.9}:
+        problems.append(f"a matched profile supplied {supplied['matched']}")
+    for label in ("no profile", "retired", "revision drift"):
+        if supplied[label]:
+            problems.append(f"{label} supplied a threshold: {supplied[label]}")
+    return Outcome(
+        status="pass" if not problems else "fail",
+        actual=f"supplied={ {k: bool(v) for k, v in supplied.items()} }",
+        evidence={"supplied": supplied,
+                  "reasons": {label: value["reasons"] for label, value in verdicts.items()},
+                  "problems": problems},
+        metrics={"thresholds_supplied": sum(1 for v in supplied.values() if v)},
+    )
+
+
+def _profiled_classification(ctx: Ctx, threshold: float, source: str):
+    """A real failure classification with a profile measured on the question it asks.
+
+    The profile has to be built on the question the integration actually asks, because the
+    compiler writes the instructions and the question-schema digest covers them. A profile
+    measured against a hand-written stand-in would never match - which is the digest doing
+    its job, and why this is derived from a real run rather than written by hand.
+    """
+    RUNTIME = runtime_of(ctx)
+    module = ctx.repo.module("ariadne.py")
+    integrations = module.DECISIONS.integrations
+    box = ctx.sandbox()
+    state = bench_state(box)
+    session = seeded(ctx)
+    provider = RUNTIME.provider.LocalBoundedProvider(session)
+    try:
+        integrations.classify_failure(
+            state, source=source, consequence="LOW", runtime=session, provider=provider)
+        asked = state["decisions"][0]
+        measured = {
+            "question_id": asked["question_id"], "instructions": asked["instructions"],
+            "primitive": asked["primitive"], "options": list(asked["options"]),
+            "projection_contract": "failure-classification",
+            "definition_version": asked["definition_version"],
+            "consequence": asked["consequence"],
+        }
+        RUNTIME.profiles.record_profile(state, RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[measured],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="e" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": threshold}))
+        outcome = integrations.classify_failure(
+            state, source=source, consequence="LOW", runtime=session,
+            provider=provider, generative_available=True)
+    finally:
+        session.shutdown()
+    return state, outcome, state["decisions"][-1]
+
+
+@case(
+    id="runtime-abstention.below-threshold-escalates-without-an-answer",
+    group="runtime-abstention",
+    title="A bounded decision below its threshold abstains, escalates, and decides nothing",
+    task="Run a real failure classification with a threshold the answer cannot clear.",
+    expectation="The decision is refused with BELOW_MIN_CONFIDENCE, no class is produced, the "
+                "fallback says UNKNOWN, Ariadne escalates, and the record grants no authority "
+                "while keeping the evidence the refusal was judged on.",
+    evaluation="Call classify_failure with a runtime and a profile, and read the record.",
+    evidence_required="The record status, abstention reason, escalation classification and "
+                      "preserved candidate.",
+    layer="deterministic",
+)
+def abstention_escalates(ctx: Ctx) -> Outcome:
+    state, outcome, record = _profiled_classification(
+        ctx, 0.999, "TypeError: undefined name 'render_page'")
+    problems = []
+    if record["status"] != "refused" or record.get("abstention_reason") != "BELOW_MIN_CONFIDENCE":
+        problems.append(f"status={record['status']} reason={record.get('abstention_reason')}")
+    if outcome["class"] != "UNKNOWN" or outcome["source"] != "fallback-unknown":
+        problems.append(f"the fallback invented a class: {outcome['class']!r}")
+    if outcome["escalation"].get("classification") != "BOUNDED":
+        problems.append("Ariadne did not escalate")
+    if record["authorization_effect"] != "none" or record["acted_on"] is not False:
+        problems.append("an abstention granted authority")
+    if not record.get("candidate_answer"):
+        problems.append("the evidence behind the abstention was discarded")
+    if record["answer"]:
+        problems.append("an abstention produced an answer")
+    return Outcome(
+        status="pass" if not problems else "fail",
+        actual=f"{record['status']} / {record.get('abstention_reason')}",
+        evidence={"record_status": record["status"],
+                  "abstention_reason": record.get("abstention_reason"),
+                  "threshold": record.get("threshold_applied"),
+                  "class": outcome["class"], "problems": problems},
+        metrics={"abstentions": 1},
+    )
+
+
+@case(
+    id="runtime-abstention.above-threshold-avoids-escalation",
+    group="runtime-abstention",
+    title="A bounded decision above its threshold is used without spending escalation",
+    task="Run the same classification with a threshold the answer clears.",
+    expectation="The answer is accepted from the bounded decision, no escalation is required, "
+                "the confidence stays a provider probability, and authority is still none.",
+    evaluation="Call classify_failure with a low threshold and read the record.",
+    evidence_required="The record status, policy verdict and confidence kind.",
+    layer="deterministic",
+)
+def abstention_accepted(ctx: Ctx) -> Outcome:
+    state, outcome, record = _profiled_classification(
+        ctx, 0.01, "Traceback (most recent call last): TypeError: undefined name 'render_page'")
+    problems = []
+    if record["status"] != "answered":
+        problems.append(f"status={record['status']} reason={record.get('abstention_reason')}")
+    if outcome["source"] != "bounded-decision":
+        problems.append(f"source={outcome['source']}")
+    if record["policy_verdict"].get("accepted") is not True:
+        problems.append("policy refused an answer that cleared its threshold")
+    if "CALIBRATED" in str(record["confidence_kind"]):
+        problems.append("a provider probability was relabelled calibrated")
+    if record["authorization_effect"] != "none":
+        problems.append("an accepted decision claimed authority")
+    return Outcome(
+        status="pass" if not problems else "fail",
+        actual=f"{record['status']} / {outcome['source']} / {record['confidence']}",
+        evidence={"record_status": record["status"], "source": outcome["source"],
+                  "confidence": record["confidence"],
+                  "confidence_kind": record["confidence_kind"], "problems": problems},
+    )
+
+
+@case(
+    id="runtime-abstention.thresholds-are-per-question",
+    group="runtime-abstention",
+    title="One question's threshold never reaches its sibling in the same batch",
+    task="Batch a profiled failure-classification question with an unprofiled review-escalation "
+         "question, at a threshold the first cannot clear.",
+    expectation="Only the profiled question abstains; the sibling is answered from the same "
+                "inference, and the batch reports itself as partial rather than failed.",
+    evaluation="Call batch.evaluate with both questions and read both decision statuses.",
+    evidence_required="The two statuses and the batch status.",
+    layer="deterministic",
+)
+def abstention_per_question(ctx: Ctx) -> Outcome:
+    RUNTIME = runtime_of(ctx)
+    module = ctx.repo.module("ariadne.py")
+    batch = module.DECISIONS.batch
+    contracts = module.DECISIONS.contracts
+    first = contracts.DecisionQuestion(
+        question_id="failure-class", instructions="bounded failure class",
+        primitive="ChoiceDecision",
+        options=tuple(module.CONTRACTS.DECISION_CLASSIFIABLE_FAILURE_CLASSES),
+        projection_contract="failure-classification", definition_version="1",
+        consequence="LOW")
+    second = contracts.DecisionQuestion(
+        question_id="review-escalation", instructions="bounded review escalation",
+        primitive="ChoiceDecision", options=tuple(module.CONTRACTS.REVIEW_ESCALATIONS),
+        projection_contract="review-escalation", definition_version="1",
+        consequence="LOW")
+    state = bench_state(ctx.sandbox())
+    session = seeded(ctx)
+    provider = RUNTIME.provider.LocalBoundedProvider(session)
+    try:
+        RUNTIME.profiles.record_profile(state, RUNTIME.profiles.build_profile(
+            decision_definition="failure-classification", questions=[first.as_record()],
+            runtime=provider.provider, implementation=provider.model, model=provider.model,
+            revision=provider.model_version, dataset_digest="f" * 64,
+            dataset_size=RUNTIME.profiles.MIN_PROFILE_DATASET,
+            accuracy=0.9, coverage=0.95, ece=0.05, brier=0.08,
+            thresholds_by_risk={"LOW": 0.999}))
+        outcome = batch.evaluate(
+            state, questions=[first, second],
+            projection={"entries": {"failure": "Traceback: TypeError: x",
+                                    "stakes": "high", "affected_scope": "release",
+                                    "protected": True},
+                        "digest": "c" * 64, "verification_level": "OBSERVED"},
+            provider=provider, task_id="batch")
+    finally:
+        session.shutdown()
+    statuses = {row["question_id"]: row["status"] for row in state["decisions"]}
+    problems = []
+    if statuses.get("failure-class") != "refused":
+        problems.append(f"the profiled question did not abstain: {statuses}")
+    if statuses.get("review-escalation") != "answered":
+        problems.append(f"the threshold leaked to its sibling: {statuses}")
+    if outcome["status"] != "partial":
+        problems.append(f"batch status={outcome['status']}")
+    return Outcome(
+        status="pass" if not problems else "fail",
+        actual=f"{statuses}",
+        evidence={"statuses": statuses, "batch_status": outcome["status"], "problems": problems},
+        metrics={"abstentions": 1, "answer_slots": 2},
+    )
+
+
+@case(
+    id="runtime-abstention.a-caller-can-tighten-but-not-loosen",
+    group="runtime-abstention",
+    title="A caller may ask for more than Ariadne's evidence does, and never less",
+    task="Merge caller-stated thresholds into the engine-resolved ones, higher and lower.",
+    expectation="A higher caller threshold is adopted and labelled caller-stated. A lower one "
+                "is ignored, so a caller cannot buy its way past a calibration profile, and "
+                "a malformed value is discarded rather than coerced.",
+    evaluation="Call tighten_with_caller_policy for each case and read the merged thresholds.",
+    evidence_required="The merged maps and the list of tightened questions.",
+    layer="deterministic",
+)
+def abstention_caller_policy(ctx: Ctx) -> Outcome:
+    module = ctx.repo.module("ariadne.py")
+    batch = module.DECISIONS.batch
+    resolved = {"min_confidence_by_question": {"q": 0.9}, "reasons": {}}
+    cases = {
+        "higher": {"min_confidence_by_question": {"q": 0.99}},
+        "lower": {"min_confidence_by_question": {"q": 0.01}},
+        "zero": {"min_confidence_by_question": {"q": 0.0}},
+        "ungated question": {"min_confidence_by_question": {"other": 0.5}},
+        "text": {"min_confidence_by_question": {"q": "high"}},
+        "boolean": {"min_confidence_by_question": {"q": True}},
+        "out of range": {"min_confidence_by_question": {"q": 4.0}},
+    }
+    merged = {label: batch.tighten_with_caller_policy(resolved, value)
+              for label, value in cases.items()}
+    problems = []
+    if merged["higher"]["min_confidence_by_question"] != {"q": 0.99}:
+        problems.append(f"a stricter caller threshold was not adopted: {merged['higher']}")
+    if merged["higher"]["calibration_profile_by_question"].get("q") != "caller-stated (stricter)":
+        problems.append("a caller-stated threshold was recorded as if it were calibration")
+    for label in ("lower", "zero", "text", "boolean", "out of range"):
+        if merged[label]["min_confidence_by_question"] != {"q": 0.9}:
+            problems.append(f"{label}: a caller loosened or corrupted the floor: {merged[label]}")
+    if merged["ungated question"]["min_confidence_by_question"] != {"q": 0.9, "other": 0.5}:
+        problems.append("a caller could not add a threshold for an ungated question")
+    return Outcome(
+        status="pass" if not problems else "fail",
+        actual=f"tightened={ {k: v['caller_tightened'] for k, v in merged.items()} }",
+        evidence={label: value["min_confidence_by_question"] for label, value in merged.items()},
+        metrics={"tightened": len(merged["higher"]["caller_tightened"])},
+    )
+
+
 # ========================================================== runtime mapping
 
 
@@ -440,11 +744,17 @@ def abstention_threshold(ctx: Ctx) -> Outcome:
         problems.append(f"the thresholded call answered anyway: {refused}")
     if refused["reason"] != "BELOW_MIN_CONFIDENCE":
         problems.append(f"reason={refused['reason']}")
+    if refused.get("threshold") != 0.999:
+        problems.append(f"the threshold used was not recorded: {refused.get('threshold')}")
+    if not refused.get("candidate_answer") or not refused.get("candidate_confidence"):
+        problems.append("the evidence behind the refusal was discarded")
     provider_slot = through_provider["answers"]["failure-class"]
-    if provider_slot["confidence_kind"] != "NONE":
+    if provider_slot.get("confidence_kind") != "NONE":
         problems.append(f"an abstention kept a confidence kind: {provider_slot}")
-    if through_provider["failed_questions"] != ["failure-class"]:
-        problems.append("an abstention was not reported as a failed question")
+    if through_provider["abstained_questions"] != ["failure-class"]:
+        problems.append("an abstention was not reported as abstained")
+    if through_provider["failed_questions"]:
+        problems.append("an abstention was misreported as a transport failure")
     if loose["answers"]["0:failure-class"]["valid"] is not True:
         problems.append("the unthresholded call refused a question it can answer")
     return Outcome(
