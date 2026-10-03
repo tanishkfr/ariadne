@@ -942,6 +942,186 @@ and the retrieval mode is what keeps those two facts from collapsing.
 REFERENCE_DECISIONS = ("adopted", "rejected", "deferred")
 """How a reference finding was treated by the design."""
 
+# ---------------------------------------------------------------------------
+# AR-220 grounded-design vocabulary.
+#
+# These extend the AR-202D reference family rather than replacing it. A
+# ``DesignReference`` is an AR-202D reference record plus the classification a
+# design workflow needs in order to reason about *which kind of evidence* it is
+# holding, and the AR-202D lifecycle still governs how that evidence was
+# reached. Nothing here is a trust score.
+# ---------------------------------------------------------------------------
+
+REFERENCE_SOURCE_KINDS = (
+    "FIRST_PARTY_DESIGN_MD",
+    "CURATED_DESIGN_ANALYSIS",
+    "LIVE_SITE_INSPECTION",
+    "FIGMA_DOCUMENT",
+    "SOURCE_REPOSITORY",
+    "COMPONENT_REGISTRY",
+    "LOCAL_DESIGN_FILE",
+    "MCP_RESULT",
+    "CLI_RESULT",
+    "SECONDARY_DESCRIPTION",
+)
+"""What kind of source produced a design reference.
+
+The kinds are not equal trust and are never collapsed into one ranking. A
+curated analysis of a real design system is useful evidence about that system's
+public appearance, and it is *not* the vendor's own design documentation. The
+kind is recorded so a reader can tell the two apart without re-deriving it.
+
+``FIRST_PARTY_DESIGN_MD``    published by the brand itself
+``CURATED_DESIGN_ANALYSIS``  a third party's analysis of publicly visible design
+``LIVE_SITE_INSPECTION``     a rendering or a live page that was looked at
+``FIGMA_DOCUMENT``           a design-tool document
+``SOURCE_REPOSITORY``        tokens/components read out of a code repository
+``COMPONENT_REGISTRY``       a published component registry entry
+``LOCAL_DESIGN_FILE``        a design document already inside this project
+``MCP_RESULT``               returned by an MCP transport
+``CLI_RESULT``               returned by a CLI transport
+``SECONDARY_DESCRIPTION``    prose describing a design, with nothing inspected
+"""
+
+REFERENCE_EVIDENCE_LEVELS = (
+    "DIRECTLY_INSPECTED",
+    "SOURCE_INSPECTED",
+    "CAPTURED",
+    "CURATED_ANALYSIS",
+    "SECONDARY_DESCRIPTION",
+    "UNVERIFIED",
+)
+"""How the evidence behind a reference was actually obtained.
+
+These deliberately echo :data:`RENDERED_EVIDENCE_STATES`: a claim is never
+recorded at a strength above what was performed, and ``UNVERIFIED`` is a valid,
+recorded answer rather than an absence.
+
+``DIRECTLY_INSPECTED``     the source itself was read or looked at
+``SOURCE_INSPECTED``       the primary source code/design was inspected
+``CAPTURED``               a rendered artifact was captured and hashed
+``CURATED_ANALYSIS``       a third party's published analysis was read
+``SECONDARY_DESCRIPTION``  prose only; nothing was inspected
+``UNVERIFIED``             a claim exists with no supporting retrieval
+"""
+
+REFERENCE_ROLES = (
+    "PRIMARY_DIRECTION",
+    "INTERACTION_REFERENCE",
+    "LAYOUT_REFERENCE",
+    "TYPOGRAPHY_REFERENCE",
+    "COMPONENT_REFERENCE",
+    "IMPLEMENTATION_REFERENCE",
+    "COUNTER_REFERENCE",
+)
+"""What job one reference is being asked to do.
+
+A reference may hold several roles at once, and ``COUNTER_REFERENCE`` is a role
+rather than a rejection: it records the anti-pattern the design must avoid
+becoming, with the same evidence requirement as any other role.
+
+``IMPLEMENTATION_REFERENCE`` is deliberately distinct from the aesthetic roles.
+``Linear`` is hierarchy evidence; a resizable-panel implementation is
+implementation evidence. Conflating them is how a reference turns into a
+clone instruction.
+"""
+
+REFERENCE_TREATMENTS = ("BORROW", "ADAPT", "AVOID")
+"""How one reference's characteristics may be used.
+
+``BORROW``  use the principle as observed
+``ADAPT``   use the principle, changed for this project
+``AVOID``   the observed characteristic is the anti-pattern here
+
+This is the executable form of "a reference is evidence, not an instruction to
+copy": every extracted characteristic must land in exactly one of the three.
+"""
+
+REFERENCE_ACCESS_MODES = (
+    "PUBLIC",
+    "ACCESS_RESTRICTED",
+    "DECLARED_LOCAL",
+    "UNREACHABLE",
+)
+"""How a source was reached.
+
+``ACCESS_RESTRICTED`` is a real, valid, terminal answer. Ariadne never bypasses
+a login, a paywall or an entitlement, and a source it may not read is recorded
+as restricted rather than approximated.
+"""
+
+REFERENCE_FRESHNESS = ("CURRENT", "STALE", "CHANGED", "HISTORICAL", "UNKNOWN")
+"""Freshness of a reference's evidence.
+
+``STALE``/``CHANGED`` reuse :func:`ariadne_engine.references.reference_currentness`
+so the AR-202D vocabulary is not forked. ``HISTORICAL`` is a deliberate choice -
+a 1996 design is not stale if it was selected to be a 1996 design.
+"""
+
+REFERENCE_DIVERSITY_VERDICTS = ("DIVERSE_ENOUGH", "TOO_HOMOGENEOUS", "UNKNOWN")
+"""The deterministic verdict over a reference set's spread.
+
+``UNKNOWN`` is returned whenever the set carries too little classified
+information to judge. Reporting ``UNKNOWN`` is honest; reporting
+``DIVERSE_ENOUGH`` from three unclassified records would not be.
+"""
+
+REFERENCE_PATTERN_DIMENSIONS = (
+    "information-hierarchy", "navigation", "density", "layout-grid", "spacing",
+    "typography", "color-roles", "surface-treatment", "borders", "radii",
+    "depth", "component-geometry", "interaction", "motion",
+    "responsive-behavior", "imagery-media",
+)
+"""The controlled vocabulary a normalised observation is filed under.
+
+This is deliberately *not* the same list as ``REFERENCE_ANALYSIS_DIMENSIONS``.
+That list is what an analysis may be recorded against; this one is what a
+normalised reference may have observed about it, so extraction and judgement
+stay separate steps. Some useful references are qualitative, and a qualitative
+observation belongs here too.
+"""
+
+REFERENCE_BUDGET_DEFAULTS = {
+    "candidate_retrieval": 12,
+    "deep_inspection": 5,
+    "primary_references": 3,
+    "counter_references": 2,
+}
+"""Bounded research budget defaults. Defaults, not universal truths.
+
+A task may expand a budget, and the expansion is recorded with a reason rather
+than applied silently. There is no unbounded "keep researching until satisfied"
+loop, because that loop is how a reference budget stops existing.
+"""
+
+MAX_DESIGN_REFERENCE_BYTES = 262_144
+"""Hard cap on one retrieved design document (256 KiB).
+
+One giant design document must not be able to consume the run's whole context.
+Oversized input is refused with a named reason, not truncated into a summary
+that looks like the whole thing.
+"""
+
+MAX_DESIGN_REFERENCE_CANDIDATES = 64
+"""Hard cap on the candidates one search may return into the run."""
+
+MAX_DESIGN_REFERENCE_INDEX = 1024
+"""Hard cap on a *supplied* catalog index.
+
+Deliberately separate from :data:`MAX_DESIGN_REFERENCE_CANDIDATES`. The real
+getdesign.md catalog publishes 550+ entries and the maintainers' own collection
+index lists 73, so bounding the index at the candidate cap would refuse the real
+corpus in order to protect a much smaller thing. What has to stay bounded is how
+many candidates enter a run and how many are deeply inspected; a supplied index
+is operator-supplied input to a local search, not a fan-out.
+"""
+
+MAX_DESIGN_REFERENCE_SECTIONS = 200
+"""Hard cap on parsed sections in one design document."""
+
+MAX_DESIGN_REFERENCE_PATTERNS = 64
+"""Hard cap on normalised observations kept per reference."""
+
 COMPONENT_LADDER = (
     "existing-project-component",
     "existing-design-system",
@@ -1143,6 +1323,10 @@ def reference_problems(record: Mapping[str, Any]) -> list[str]:
         if not item.get("observations"):
             problems.append("reference inspection entry has no observations")
         problems.extend(artifact_problems(item, "evidence"))
+    # AR-220: when a record carries an AR-220 classification block it is held to
+    # the grounded-design vocabulary here, so the check runs on every lifecycle
+    # transition rather than only at normalisation time.
+    problems.extend(design_reference_classification_problems(record))
     return list(dict.fromkeys(problems))
 
 
@@ -1213,6 +1397,7 @@ truncated.
 DESIGN_COLLECTION_KEYS = (
     "design_references", "rendered_evidence", "design_requirements", "design_directions",
     "component_candidates", "design_reviews", "design_refinements",
+    "design_reference_sets",
 )
 """The append-only authoritative collections this bound applies to."""
 
@@ -1452,6 +1637,180 @@ def design_review_problems(record: Mapping[str, Any]) -> list[str]:
     return list(dict.fromkeys(problems))
 
 
+def reference_set_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation for an AR-220 ``ReferenceSet`` record.
+
+    A reference set exists to assemble enough evidence to support a design
+    direction, so the refusals here are about evidential sufficiency rather than
+    taste: a set with no primary reference has no direction to ground, and a
+    set that records a counter-reference must record what it is countering.
+    """
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("reference set carries the wrong schema version")
+    for name in ("reference_set_id", "run_id", "requirement_scope", "created_at"):
+        if not str(record.get(name, "")).strip():
+            problems.append(f"reference set is missing {name}")
+    members = record.get("members")
+    if not isinstance(members, list):
+        problems.append("reference set members must be a list")
+        members = []
+    if not members:
+        problems.append("a reference set must contain at least one reference")
+    seen: set[str] = set()
+    role_counts: dict[str, int] = {}
+    for member in members:
+        if not isinstance(member, Mapping):
+            problems.append("reference set member must be a mapping")
+            continue
+        reference_id = str(member.get("reference_id", "")).strip()
+        if not reference_id:
+            problems.append("reference set member names no reference")
+            continue
+        if reference_id in seen:
+            problems.append(f"reference set lists {reference_id} more than once")
+        seen.add(reference_id)
+        if member.get("counter_pattern") is not None and "COUNTER_REFERENCE" in (member.get("roles") or []):
+            if not str(member.get("counter_pattern", "")).strip():
+                problems.append(
+                    f"reference set member {reference_id} is a counter-reference and must record the "
+                    "anti-pattern it rules out; disliking something is not a counter-reference"
+                )
+        for role in member.get("roles") or []:
+            if str(role) not in REFERENCE_ROLES:
+                problems.append(f"reference set member {reference_id} has an unknown role: {role}")
+            else:
+                role_counts[str(role)] = role_counts.get(str(role), 0) + 1
+    if members and not role_counts.get("PRIMARY_DIRECTION"):
+        problems.append(
+            "a reference set with no PRIMARY_DIRECTION reference cannot ground a design direction"
+        )
+    coverage = record.get("coverage")
+    if not isinstance(coverage, Mapping) or not str(coverage.get("verdict", "")):
+        problems.append("a reference set must record a deterministic coverage verdict")
+    diversity = record.get("diversity")
+    if not isinstance(diversity, Mapping) or not str(diversity.get("verdict", "")):
+        problems.append("a reference set must record a deterministic diversity verdict")
+    budget = record.get("budget")
+    if not isinstance(budget, Mapping) or not str(budget.get("verdict", "")):
+        problems.append("a reference set must record its research budget verdict")
+    return list(dict.fromkeys(problems))
+
+
+def reference_set_member_problems(
+    member: Mapping[str, Any], *, references_by_id: Mapping[str, Mapping[str, Any]]
+) -> list[str]:
+    """Cross-record checks a ``ReferenceSet`` cannot make on its own.
+
+    A set may only name references that exist, and may only give a member a role
+    that its own evidence supports. The second check is the one that matters:
+    a curated analysis cannot be recorded as if it were a first-party design
+    system just by naming it in a set.
+    """
+    problems: list[str] = []
+    reference_id = str(member.get("reference_id", "")).strip()
+    record = references_by_id.get(reference_id)
+    if record is None:
+        return [f"reference set names {reference_id or 'an unnamed reference'}, which does not exist"]
+    classification = record.get("classification")
+    if not isinstance(classification, Mapping):
+        problems.append(f"{reference_id} carries no source classification, so it cannot hold a set role")
+        return problems
+    declared = str(classification.get("source_kind", ""))
+    if declared not in REFERENCE_SOURCE_KINDS:
+        problems.append(f"{reference_id} has an unsupported source kind: {declared or 'missing'}")
+    if str(classification.get("evidence_level", "")) not in REFERENCE_EVIDENCE_LEVELS:
+        problems.append(f"{reference_id} has an unsupported evidence level")
+    roles = [str(role) for role in (member.get("roles") or [])]
+    if "COUNTER_REFERENCE" in roles and str(declared) == "FIRST_PARTY_DESIGN_MD":
+        # Not impossible, but it must be said out loud: a vendor's own design
+        # system used as an anti-pattern is a claim a reviewer should see.
+        if not str(member.get("note", "")).strip():
+            problems.append(
+                f"{reference_id} is a first-party source used as a counter-reference and must say why"
+            )
+    treatments = member.get("treatments")
+    if treatments is not None:
+        if not isinstance(treatments, list) or not treatments:
+            problems.append(f"{reference_id} declares treatments and must list at least one")
+        else:
+            for treatment in treatments:
+                if not isinstance(treatment, Mapping):
+                    problems.append(f"{reference_id} declares a malformed treatment")
+                    continue
+                if str(treatment.get("treatment", "")) not in REFERENCE_TREATMENTS:
+                    problems.append(f"{reference_id} declares an unknown treatment: {treatment.get('treatment')}")
+                if not str(treatment.get("pattern", "")).strip():
+                    problems.append(f"{reference_id} declares a treatment with no observed pattern")
+    return problems
+
+
+def design_reference_classification_problems(record: Mapping[str, Any]) -> list[str]:
+    """Validate the AR-220 classification block of a reference record."""
+    problems: list[str] = []
+    classification = record.get("classification")
+    if classification is None:
+        return problems
+    if not isinstance(classification, Mapping):
+        return ["a reference classification must be a mapping"]
+    source_kind = str(classification.get("source_kind", ""))
+    if source_kind not in REFERENCE_SOURCE_KINDS:
+        problems.append(f"unsupported reference source kind: {source_kind or 'missing'}")
+    if str(classification.get("evidence_level", "")) not in REFERENCE_EVIDENCE_LEVELS:
+        problems.append(f"unsupported reference evidence level: {classification.get('evidence_level') or 'missing'}")
+    if str(classification.get("access_mode", "")) not in REFERENCE_ACCESS_MODES:
+        problems.append(f"unsupported reference access mode: {classification.get('access_mode') or 'missing'}")
+    if str(classification.get("freshness", "")) not in REFERENCE_FRESHNESS:
+        problems.append(f"unsupported reference freshness: {classification.get('freshness') or 'missing'}")
+    if not str(classification.get("source_provider", "")).strip():
+        problems.append("a classified reference must name the provider it came from")
+    if not str(classification.get("source_identity", "")).strip():
+        problems.append("a classified reference must name a stable source identity")
+    if not str(classification.get("retrieved_at", "")).strip():
+        problems.append("a classified reference must record when it was retrieved")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(classification.get("content_digest", ""))):
+        problems.append("a classified reference must bind its normalised record to a content digest")
+    observed = record.get("observed_patterns")
+    if observed is not None:
+        if not isinstance(observed, list):
+            problems.append("observed_patterns must be a list")
+        else:
+            if len(observed) > MAX_DESIGN_REFERENCE_PATTERNS:
+                problems.append(
+                    f"observed_patterns exceeds the bound of {MAX_DESIGN_REFERENCE_PATTERNS} entries"
+                )
+            for pattern in observed:
+                if not isinstance(pattern, Mapping):
+                    problems.append("observed pattern must be a mapping")
+                    continue
+                dimension = str(pattern.get("dimension", ""))
+                if dimension not in REFERENCE_PATTERN_DIMENSIONS:
+                    problems.append(f"unknown observed-pattern dimension: {dimension or 'missing'}")
+                if not str(pattern.get("observation", "")).strip():
+                    problems.append(f"an observed pattern on {dimension or 'an unnamed dimension'} says nothing")
+                if dimension in ("behavior", "behaviour", "motion", "interaction") and not str(
+                    pattern.get("basis", "")
+                ).strip():
+                    problems.append(
+                        f"an observed {dimension} pattern must name the basis it was read from; "
+                        "motion and behaviour cannot be observed in static text"
+                    )
+    treatments = record.get("treatments")
+    if treatments is not None:
+        if not isinstance(treatments, list) or not treatments:
+            problems.append("treatments must be a non-empty list when present")
+        else:
+            for treatment in treatments:
+                if not isinstance(treatment, Mapping):
+                    problems.append("treatment must be a mapping")
+                    continue
+                if str(treatment.get("treatment", "")) not in REFERENCE_TREATMENTS:
+                    problems.append(f"unknown reference treatment: {treatment.get('treatment')}")
+                if not str(treatment.get("pattern", "")).strip():
+                    problems.append("a treatment must name the observed pattern it applies to")
+    return list(dict.fromkeys(problems))
+
+
 def refinement_problems(record: Mapping[str, Any]) -> list[str]:
     """Structural validation of one bounded refinement cycle."""
     problems = design_schema_problems(record)
@@ -1476,6 +1835,7 @@ def refinement_problems(record: Mapping[str, Any]) -> list[str]:
 DESIGN_RECORD_VALIDATORS = {
     "reference": reference_problems,
     "reference-analysis": reference_analysis_problems,
+    "reference-set": reference_set_problems,
     "component-candidate": component_candidate_problems,
     "design-direction": design_direction_problems,
     "design-requirement": design_requirement_problems,

@@ -123,6 +123,8 @@ CRITIQUE = ENGINE.critique
 CAPABILITIES = ENGINE.capabilities
 VERIFICATION = ENGINE.verification
 PROVENANCE = ENGINE.provenance
+DESIGN_REFERENCE = ENGINE.design_reference
+REFERENCE_SETS = DESIGN_REFERENCE.sets
 DECISIONS = ENGINE.decisions
 # AR-206 native Decision Runtime. Aliased at module scope so the CLI never reaches
 # through DECISIONS.runtime for the session helpers: a runtime-location concern is not
@@ -4472,6 +4474,109 @@ def design_check_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def design_references_command(args: argparse.Namespace) -> int:
+    """Show the design evidence behind a run (AR-220 inspection surface).
+
+    Deliberately narrow and read-only: it prints what was inspected, how it was
+    classified, and what it was used for. It starts nothing, fetches nothing and
+    writes nothing, so inspecting the evidence can never change the evidence.
+
+    The wording is the public product language - Design References, Reference Set,
+    Design Evidence, Design Direction - with source providers named only in the
+    provenance detail, because "getdesign mode" would describe the tool rather
+    than the evidence.
+    """
+    run_root, state = resolve_and_load(args)
+    records = [record for record in REFERENCES.references(state) if record.get("classification")]
+    if getattr(args, "json", False):
+        print(json.dumps(
+            {
+                "references": [_reference_view(record) for record in records],
+                "reference_sets": [
+                    REFERENCE_SETS.summarise(record)
+                    for record in REFERENCE_SETS.reference_sets(state)
+                ],
+                "capabilities": design_reference_capability_view(),
+            },
+            indent=2, sort_keys=True, default=str,
+        ))
+        return 0
+    if not records:
+        print("No classified design references recorded in this run.")
+        return 0
+    print("Design Evidence")
+    for record in records:
+        classification = record.get("classification", {})
+        print(
+            f"  {record.get('title', record['reference_id'])}\n"
+            f"    Source: {classification.get('source_provider', 'unknown')}"
+            f" ({classification.get('source_kind', 'unclassified')})\n"
+            f"    Evidence: {classification.get('evidence_level', 'unknown')}"
+            f" · retrieved {classification.get('retrieved_at', 'unknown')}\n"
+            f"    Observations: {len(record.get('observed_patterns') or [])}"
+            f" · state {record.get('state', 'unknown')}"
+        )
+        for limitation in list(record.get("limitations") or [])[:2]:
+            print(f"    Limitation: {limitation}")
+        attempts = (record.get("injection_scan") or {}).get("instruction_attempts") or []
+        if attempts:
+            print(
+                f"    Note: source text attempted {len(attempts)} instruction(s); recorded as data, "
+                "granting nothing"
+            )
+    for summary_line in REFERENCE_SETS.reference_sets(state):
+        print()
+        print(REFERENCE_SETS.summarise(summary_line))
+    return 0
+
+
+def design_reference_capability_command(args: argparse.Namespace) -> int:
+    """Report which design-reference transports exist and which are available."""
+    view = design_reference_capability_view()
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    print("Design Reference capability")
+    for row in view["transports"]:
+        state_text = "available" if row.get("enabled") else "unavailable"
+        print(f"  {row.get('id')}: {state_text}")
+        if row.get("unavailable_reason"):
+            print(f"    {row['unavailable_reason']}")
+    print(f"  external reference capability: {view['external']['external_reference_capability']}")
+    print("  no transport is required for Ariadne to design")
+    return 0
+
+
+def design_reference_capability_view() -> dict:
+    """The honest availability of every declared design-reference transport."""
+    matrix = DESIGN_REFERENCE.capability_matrix()
+    return {
+        "transports": matrix["transports"],
+        "external": DESIGN_REFERENCE.external_capability_state(),
+        "required_for_core": False,
+    }
+
+
+def _reference_view(record: dict) -> dict:
+    classification = record.get("classification") if isinstance(record.get("classification"), dict) else {}
+    return {
+        "reference_id": record.get("reference_id"),
+        "title": record.get("title"),
+        "state": record.get("state"),
+        "source_provider": classification.get("source_provider"),
+        "source_kind": classification.get("source_kind"),
+        "evidence_level": classification.get("evidence_level"),
+        "access_mode": classification.get("access_mode"),
+        "freshness": classification.get("freshness"),
+        "retrieved_at": classification.get("retrieved_at"),
+        "content_digest": classification.get("content_digest"),
+        "normalized_digest": record.get("normalized_digest"),
+        "observed_patterns": len(record.get("observed_patterns") or []),
+        "limitations": list(record.get("limitations") or []),
+        "instruction_attempts": len((record.get("injection_scan") or {}).get("instruction_attempts") or []),
+    }
+
+
 def design_report_command(args: argparse.Namespace) -> int:
     run_root, state = resolve_and_load(args)
     report = DESIGN.report(state)
@@ -8817,6 +8922,18 @@ def parser() -> argparse.ArgumentParser:
     run_selector(design_report_p)
     design_report_p.add_argument("--json", action="store_true")
 
+    design_references_p = sub.add_parser(
+        "design-references", help="show the design evidence recorded in a run",
+    )
+    run_selector(design_references_p)
+    design_references_p.add_argument("--json", action="store_true")
+
+    design_reference_capability_p = sub.add_parser(
+        "design-reference-capability",
+        help="report which design-reference sources are available",
+    )
+    design_reference_capability_p.add_argument("--json", action="store_true")
+
     design_approve_p = sub.add_parser(
         "approve-design-direction",
         help="record the human approval of one engine design-direction record (gate G1D)",
@@ -9016,6 +9133,8 @@ def main() -> int:
             "record-design": record_design,
             "design-check": design_check_command,
             "design-report": design_report_command,
+            "design-references": design_references_command,
+            "design-reference-capability": design_reference_capability_command,
             "approve-design-direction": approve_design_direction,
             "economics": economics_command,
             "request-map": request_map_command,

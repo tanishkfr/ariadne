@@ -9,6 +9,80 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.2 development (AR-220) — NOT RELEASED
+
+`VERSION` remains **2.1.0**. The release gate ties `VERSION` to the release-notes
+heading and to install URLs for a published artifact, so bumping it would require
+writing install instructions for a release that must not exist. AR-220 is
+development work on the `v2/2.2-grounded-design-intelligence` branch and no release
+is claimed. The alpha becomes `2.2.0a1` when a release candidate is actually cut.
+
+### Grounded Design Intelligence: design from inspected evidence
+
+**The lesson.** Ariadne could already record that it *looked* at something — the
+AR-202D reference lifecycle, adapters under declared capabilities, digests on every
+retrieval. What it could not do was say *which kind of evidence* it was holding, or
+answer "why did you choose this design?". Every reference looked equally trustworthy,
+so "we consulted three references" carried no information about whether any of them
+were worth citing.
+
+What AR-220 adds is the classification that gives a reference record meaning:
+source kind, evidence level, access mode, freshness. A curated analysis of a real
+design system and that vendor's own design system are now different records, not the
+same record with a different title.
+
+**The reference/evidence substrate:**
+
+- `DesignReference` extends the existing AR-202D reference record rather than
+  introducing a second store for "things a design looked at". The lifecycle still
+  governs how evidence was reached; AR-220 adds what it *is*.
+- `ReferenceSet` is a first-class collection with roles, counter-references, a
+  deterministic diversity verdict and an enforced research budget.
+- `getdesign.md` has a real adapter — search, fetch, normalize — behind one module,
+  with every site-specific assumption recorded in
+  `docs/v2/2.2/03-GETDESIGN-MD-AUDIT.md`.
+- A live public `getdesign.md` reference was retrieved and normalized once, then
+  frozen as a fixture. No regression test touches the network.
+- Local `DESIGN.md` parsing, project-first discovery, MCP and CLI adapter
+  boundaries, and a grounded design-direction compiler that cites its evidence.
+
+**What the audit changed.** The site's Terms of Service prohibit automated scraping,
+so the adapter performs *targeted single-file retrieval only* and refuses to run
+without an operator-supplied fetch capability. The raw `DESIGN.md` files are read from
+the maintainers' public MIT-licensed repository — the path the maintainers publish
+for agents — rather than from the catalog, whose own download is sign-in gated. getdesign.md's
+entry pages say outright that they are independent analysis and not official design
+systems, which is why `source_kind` is a constant in that adapter and not a parameter.
+
+**Defects found by the adversarial review, all fixed:**
+
+- The retrieval allowlist was inverted and refused the provider's own host.
+- `sh -c` / `python -c` were missing from the refused interpreter flags.
+- Inverse-palette tokens (`inverse-canvas: #ffffff`) were counted toward a dark
+  system's base surface, reporting near-black tools as `light-dominant`.
+- `surface=website` and `source-kind` are uniform for *any* single-provider set, so
+  letting them decide diversity reported every such set as too homogeneous.
+- The counter-reference was chosen by a dimension heuristic and picked a *positive*
+  exemplar, turning the direction's "do not become" clause into a description of what
+  it emulated. It is now the reference the counter-search actually retrieved.
+- Offline prioritisation ran after truncation, so the counter search retrieved
+  nothing and the slice built a direction with no counter-reference.
+- A transport error propagated out of acquisition instead of degrading.
+- `contracts.digest_fields` is approval-subject-only and rejected design-reference
+  payloads; normalised records use a canonical-JSON digest instead.
+
+**The rules, enforced rather than asserted:**
+
+> References are evidence, not authority.
+> Observed is not recommended. Recommended is not approved.
+> MCP and CLI are transports, not trust.
+> getdesign.md is a useful curated source, and never the last word.
+> Project identity comes before external inspiration.
+
+AR-220 stops at approved-ready direction evidence. It performs no UI implementation,
+no rendered capture and no reference-aware critique; that is AR-221.
+
+---
 ## 2.1.0 — 2026-10-02 · PUBLIC RELEASE
 
 Ariadne now has somewhere local to ask a bounded question. The native Decision Runtime

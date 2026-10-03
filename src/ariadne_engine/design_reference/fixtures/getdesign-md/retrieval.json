@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "provider": "getdesign.md",
+  "retrieved_at": "2026-10-03T19:33:51Z",
+  "retrievals": [
+    {
+      "slug": "linear.app",
+      "url": "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/linear.app/DESIGN.md",
+      "entry_url": "https://getdesign.md/linear.app/design-md",
+      "retrieved_at": "2026-10-03T19:33:51Z",
+      "content_digest": "30bd30e72c48a16e4bdbd010f2d1c85fab657c6fae3cc85389399aab10f9cb5f",
+      "normalized_digest": "0872eb8b0af5920b35781de99549750e3c48f329fb77520b19ef4e0bf4dd2f43",
+      "title": "Linear design system analysis",
+      "brand": "Linear",
+      "source_kind": "CURATED_DESIGN_ANALYSIS",
+      "evidence_level": "CURATED_ANALYSIS",
+      "access_mode": "PUBLIC",
+      "license_status": "MIT",
+      "catalog_raw_download_gated": true,
+      "catalog_first_party_disclaimer": true,
+      "patterns_extracted": 19,
+      "pattern_dimensions": [
+        "color-roles",
+        "component-geometry",
+        "density",
+        "depth",
+        "imagery-media",
+        "information-hierarchy",
+        "layout-grid",
+        "navigation",
+        "radii",
+        "responsive-behavior",
+        "spacing",
+        "surface-treatment",
+        "typography"
+      ],
+      "limitations": [
+        "the catalog's own DESIGN.md download is sign-in gated; the document read here comes from the maintainers' public MIT-licensed repository instead"
+      ],
+      "instruction_attempts": 0
+    },
+    {
+      "slug": "cursor",
+      "url": "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/cursor/DESIGN.md",
+      "entry_url": "https://getdesign.md/cursor/design-md",
+      "retrieved_at": "2026-10-03T19:33:51Z",
+      "content_digest": "a3db9b3019dc2f514fdee7cd0ca0a5232c0bd0119e23178e8eebaf6916258d9d",
+      "normalized_digest": "cd308cc3d77f22c714c8dcdd67b80fcdc0031f7a619797586f2d3c15e37b10c8",
+      "title": "Cursor design system analysis",
+      "brand": "Cursor",
+      "source_kind": "CURATED_DESIGN_ANALYSIS",
+      "evidence_level": "CURATED_ANALYSIS",
+      "access_mode": "PUBLIC",
+      "license_status": "MIT",
+      "catalog_raw_download_gated": true,
+      "catalog_first_party_disclaimer": true,
+      "patterns_extracted": 17,
+      "pattern_dimensions": [
+        "color-roles",
+        "component-geometry",
+        "density",
+        "depth",
+        "information-hierarchy",
+        "layout-grid",
+        "radii",
+        "responsive-behavior",
+        "spacing",
+        "surface-treatment",
+        "typography"
+      ],
+      "limitations": [
+        "the catalog's own DESIGN.md download is sign-in gated; the document read here comes from the maintainers' public MIT-licensed repository instead"
+      ],
+      "instruction_attempts": 0
+    },
+    {
+      "slug": "warp",
+      "url": "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/warp/DESIGN.md",
+      "entry_url": "https://getdesign.md/warp/design-md",
+      "retrieved_at": "2026-10-03T19:33:51Z",
+      "content_digest": "5b1201f7b1b4e72570d148d1f980fd1cb35e6e4122d48dd271787aa3538a25ad",
+      "normalized_digest": "e2123f17411155cf64f121e849e359b91810a49ee6716e947265598d63bbe7f2",
+      "title": "Warp design system analysis",
+      "brand": "Warp",
+      "source_kind": "CURATED_DESIGN_ANALYSIS",
+      "evidence_level": "CURATED_ANALYSIS",
+      "access_mode": "PUBLIC",
+      "license_status": "MIT",
+      "catalog_raw_download_gated": true,
+      "catalog_first_party_disclaimer": true,
+      "patterns_extracted": 16,
+      "pattern_dimensions": [
+        "color-roles",
+        "component-geometry",
+        "density",
+        "depth",
+        "information-hierarchy",
+        "layout-grid",
+        "navigation",
+        "radii",
+        "responsive-behavior",
+        "spacing",
+        "surface-treatment",
+        "typography"
+      ],
+      "limitations": [
+        "the catalog's own DESIGN.md download is sign-in gated; the document read here comes from the maintainers' public MIT-licensed repository instead"
+      ],
+      "instruction_attempts": 0
+    },
+    {
+      "slug": "vercel",
+      "url": "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/vercel/DESIGN.md",
+      "entry_url": "https://getdesign.md/vercel/design-md",
+      "retrieved_at": "2026-10-03T19:33:51Z",
+      "content_digest": "d0951b93c2b4ce9840c715c9f9b3e58a386c6c58ae5cc0f804dec3b116b95bd8",
+      "normalized_digest": "d176e50b29144aeaf8f668495747a8496e881de75b2dd8632238b8b04aef661f",
+      "title": "Vercel design system analysis",
+      "brand": "Vercel",
+      "source_kind": "CURATED_DESIGN_ANALYSIS",
+      "evidence_level": "CURATED_ANALYSIS",
+      "access_mode": "PUBLIC",
+      "license_status": "MIT",
+      "catalog_raw_download_gated": true,
+      "catalog_first_party_disclaimer": true,
+      "patterns_extracted": 18,
+      "pattern_dimensions": [
+        "color-roles",
+        "component-geometry",
+        "density",
+        "depth",
+        "information-hierarchy",
+        "layout-grid",
+        "navigation",
+        "radii",
+        "responsive-behavior",
+        "spacing",
+        "surface-treatment",
+        "typography"
+      ],
+      "limitations": [
+        "the catalog's own DESIGN.md download is sign-in gated; the document read here comes from the maintainers' public MIT-licensed repository instead"
+      ],
+      "instruction_attempts": 0
+    },
+    {
+      "slug": "cohere",
+      "url": "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/cohere/DESIGN.md",
+      "entry_url": "https://getdesign.md/cohere/design-md",
+      "retrieved_at": "2026-10-03T19:33:51Z",
+      "content_digest": "1c49a5a5f88d43841d4f4afa33831328d47a5715048700a3b75086a822575883",
+      "normalized_digest": "3b803aac73559b8a22e07fe87e8490c7ab77c55dbea42ddc88178171de956f20",
+      "title": "Cohere design system analysis",
+      "brand": "Cohere",
+      "source_kind": "CURATED_DESIGN_ANALYSIS",
+      "evidence_level": "CURATED_ANALYSIS",
+      "access_mode": "PUBLIC",
+      "license_status": "MIT",
+      "catalog_raw_download_gated": true,
+      "catalog_first_party_disclaimer": true,
+      "patterns_extracted": 16,
+      "pattern_dimensions": [
+        "color-roles",
+        "component-geometry",
+        "density",
+        "depth",
+        "information-hierarchy",
+        "layout-grid",
+        "radii",
+        "responsive-behavior",
+        "spacing",
+        "surface-treatment",
+        "typography"
+      ],
+      "limitations": [
+        "the catalog's own DESIGN.md download is sign-in gated; the document read here comes from the maintainers' public MIT-licensed repository instead"
+      ],
+      "instruction_attempts": 0
+    }
+  ],
+  "note": "these bytes were retrieved once from the maintainers' public MIT-licensed repository and recorded verbatim. Normal unit and regression tests never touch the network; they read this directory."
+}
