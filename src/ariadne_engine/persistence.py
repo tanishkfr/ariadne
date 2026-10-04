@@ -47,6 +47,15 @@ DESIGN_COLLECTIONS = (
     "rendered_evidence",
     "design_reviews",
     "design_refinements",
+    # AR-220 and AR-221 additions. `design_reference_sets` was missing here while
+    # `contracts.DESIGN_COLLECTION_KEYS` already bound it, which meant a persisted
+    # run state was never defaulted or type-checked for that collection. The bound
+    # and the declaration have to agree or the collection is only half-integrated.
+    "design_reference_sets",
+    "design_implementation_plans",
+    "design_component_inventories",
+    "design_implementation_changes",
+    "design_implementation_runs",
 )
 """AR-202D record collections kept in the run state.
 

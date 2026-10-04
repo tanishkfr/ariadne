@@ -125,6 +125,11 @@ VERIFICATION = ENGINE.verification
 PROVENANCE = ENGINE.provenance
 DESIGN_REFERENCE = ENGINE.design_reference
 REFERENCE_SETS = DESIGN_REFERENCE.sets
+# AR-221 grounded design execution. The plan, the inventory and the trace are
+# aliased separately rather than through a package attribute, so a verb that only
+# inspects the trace does not pull the compiler into the process.
+IMPLEMENTATION_PLAN = ENGINE.design_execution.plan
+IMPLEMENTATION_CHANGES = ENGINE.design_execution.changes
 DECISIONS = ENGINE.decisions
 # AR-206 native Decision Runtime. Aliased at module scope so the CLI never reaches
 # through DECISIONS.runtime for the session helpers: a runtime-location concern is not
@@ -4471,6 +4476,107 @@ def design_check_command(args: argparse.Namespace) -> int:
         "critique remain traceable."
     )
     print("From you: nothing right now.")
+    return 0
+
+
+def design_implementation_plan_command(args: argparse.Namespace) -> int:
+    """Show the implementation plans a run compiled, and what each obliges (AR-221).
+
+    Read-only, like every other inspection verb. It reports each constraint with the
+    basis it came from, the treatments that were bound, the prohibitions, and the
+    mechanical checks that would certify the result. It does not claim the result
+    looks right and does not offer to run anything.
+    """
+    run_root, state = resolve_and_load(args)
+    view = API.implementation_plans(state, task_id=getattr(args, "task", "") or "")
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    latest = view.get("latest") or {}
+    if not latest:
+        print("No implementation plan recorded in this run.")
+        for problem in view.get("problems") or []:
+            print(f"  problem: {problem}")
+        return 0
+    print(IMPLEMENTATION_PLAN.summarise(latest))
+    if latest.get("component_reuse_decisions"):
+        print("\nComponent reuse")
+        for row in latest["component_reuse_decisions"]:
+            print(f"  {row.get('need')}: {row.get('decision')}")
+            print(f"    {row.get('reason')}")
+    if latest.get("implementation_references"):
+        print("\nImplementation references")
+        for row in latest["implementation_references"]:
+            print(
+                f"  {row.get('source')} [{row.get('reuse_status')}, {row.get('license') or 'licence unknown'}]"
+            )
+            print(f"    files: {', '.join(row.get('files_inspected') or []) or 'none recorded'}")
+            if row.get("aesthetic_inherited"):
+                print("    note: this reference's aesthetic was adopted, which needs justification")
+    if view.get("problems"):
+        print("\nPlan problems")
+        for problem in view["problems"]:
+            print(f"  - {problem}")
+    return 0
+
+
+def design_component_inventory_command(args: argparse.Namespace) -> int:
+    """Show what the project already provides, and how each primitive will be obtained.
+
+    The reuse ladder runs before anything is generated, so this surface is the place
+    to check that decision rather than after the fact. External registries appear
+    last in the order and never as a default.
+    """
+    run_root, state = resolve_and_load(args)
+    view = API.inspect_component_inventory(state, task_id=getattr(args, "task", "") or "")
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    record = view.get("inventory") or {}
+    if not record:
+        print("No component inventory recorded in this run.")
+        return 0
+    primitives = record.get("primitives") or {}
+    search = record.get("search") or {}
+    print("Project Component Inventory")
+    print(f"  files scanned:    {record.get('component_files_scanned', 0)}")
+    print(f"  search:           {'fallback scan' if search.get('fallback_scan_used') else 'declared directories'}")
+    print(f"  families present: {', '.join(primitives.get('present') or []) or 'none'}")
+    print(f"  families absent:  {', '.join(primitives.get('absent') or []) or 'none'}")
+    variables = (record.get("tokens") or {}).get("css_variables") or {}
+    print(f"  design tokens:    {len(variables)} CSS variables in "
+          f"{', '.join((record.get('tokens') or {}).get('files') or []) or 'no named file'}")
+    print("\nComponent reuse decisions")
+    for row in view.get("reuse_decisions") or []:
+        target = f" ({row['existing_component']})" if row.get("existing_component") else ""
+        print(f"  {row.get('need')}: {row.get('decision')}{target}")
+        print(f"    {row.get('reason')}")
+    return 0
+
+
+def design_implementation_trace_command(args: argparse.Namespace) -> int:
+    """Print the chain from requirement to changed file, gaps included.
+
+    Every break is printed. A trace that quietly repaired itself would be worse than
+    no trace, because it would manufacture the confidence this command exists to let
+    a reader check.
+    """
+    run_root, state = resolve_and_load(args)
+    report = API.inspect_implementation_trace(state, plan_id=getattr(args, "plan", "") or "")
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2, sort_keys=True, default=str))
+        return 0
+    if not report.get("found"):
+        for gap in report.get("gaps") or []:
+            print(gap)
+        return 0
+    print(IMPLEMENTATION_CHANGES.render_trace(report))
+    summary = report.get("summary") or {}
+    print(
+        f"\n{summary.get('changes', 0)} change(s); material {summary.get('material', 0)}, "
+        f"grounded {summary.get('grounded_material', 0)}, "
+        f"ungrounded {summary.get('ungrounded_material', 0)}"
+    )
     return 0
 
 
@@ -8934,6 +9040,30 @@ def parser() -> argparse.ArgumentParser:
     )
     design_reference_capability_p.add_argument("--json", action="store_true")
 
+    design_implementation_plan_p = sub.add_parser(
+        "design-implementation-plan",
+        help="show the implementation plans a run compiled from an approved direction",
+    )
+    run_selector(design_implementation_plan_p)
+    design_implementation_plan_p.add_argument("--json", action="store_true")
+    design_implementation_plan_p.add_argument("--task", help="restrict to one task id")
+
+    design_component_inventory_p = sub.add_parser(
+        "design-component-inventory",
+        help="show what the project already provides and how each primitive will be obtained",
+    )
+    run_selector(design_component_inventory_p)
+    design_component_inventory_p.add_argument("--json", action="store_true")
+    design_component_inventory_p.add_argument("--task", help="restrict to one task id")
+
+    design_implementation_trace_p = sub.add_parser(
+        "design-implementation-trace",
+        help="print the chain from requirement to changed file, gaps included",
+    )
+    run_selector(design_implementation_trace_p)
+    design_implementation_trace_p.add_argument("--json", action="store_true")
+    design_implementation_trace_p.add_argument("--plan", help="the implementation plan id")
+
     design_approve_p = sub.add_parser(
         "approve-design-direction",
         help="record the human approval of one engine design-direction record (gate G1D)",
@@ -9135,6 +9265,9 @@ def main() -> int:
             "design-report": design_report_command,
             "design-references": design_references_command,
             "design-reference-capability": design_reference_capability_command,
+            "design-implementation-plan": design_implementation_plan_command,
+            "design-component-inventory": design_component_inventory_command,
+            "design-implementation-trace": design_implementation_trace_command,
             "approve-design-direction": approve_design_direction,
             "economics": economics_command,
             "request-map": request_map_command,

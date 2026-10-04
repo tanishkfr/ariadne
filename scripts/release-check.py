@@ -123,22 +123,39 @@ def check_engine_suites() -> dict:
     the source tree to its committed bytes afterwards, so running them leaves no trace.
     """
     detail = []
-    for name, script in (
-        ("engine core", "test-engine-core.py"),
-        ("decision runtime", "test-decision-runtime.py"),
-        ("decision mutations", "test-decision-mutations.py"),
-        ("runtime mutations", "test-decision-runtime-mutations.py"),
+    for name, script, timeout in (
+        ("engine core", "test-engine-core.py", 1800),
+        ("decision runtime", "test-decision-runtime.py", 1800),
+        ("decision mutations", "test-decision-mutations.py", 1800),
+        ("runtime mutations", "test-decision-runtime-mutations.py", 1800),
+        # AR-221 grounded design execution. The suite runs the real vertical slice -
+        # a real tsc, a real build, a real test suite on a real fixture - so it is
+        # slower than the others and gets a longer allowance rather than being
+        # excluded from the gate. The mutation suite re-runs it 25 times.
+        ("design reference", "test-design-reference.py", 1800),
+        ("design reference mutations", "test-design-reference-mutations.py", 1800),
+        ("grounded design execution", "test-design-execution.py", 3600),
+        ("grounded design execution mutations", "test-design-execution-mutations.py", 7200),
+        ("grounded design execution adversarial", "test-design-execution-adversarial.py", 3600),
     ):
-        result = run(python_script(script), timeout=1800)
+        result = run(python_script(script), timeout=timeout)
         if result.returncode != 0:
             return {
                 "status": "FAIL",
                 "detail": f"{name} failed: {tail(result.stdout + result.stderr, 4)}",
             }
+        # Prefer a suite's own `PASS ` line. Fall back to its last non-empty line,
+        # because several suites end with a sentence rather than that prefix - and a
+        # gate that reports "engine suites PASS" without naming the suites it ran is
+        # not much of a record. Four of nine were silently unnamed before this.
+        summary = ""
         for line in reversed(result.stdout.splitlines()):
-            if line.startswith("PASS "):
-                detail.append(f"{name} {line[5:].strip()}")
-                break
+            stripped = line.strip()
+            if not stripped:
+                continue
+            summary = stripped[5:].strip() if stripped.startswith("PASS ") else stripped
+            break
+        detail.append(f"{name} {summary}" if summary else name)
     return {"status": "PASS", "detail": "; ".join(detail)}
 
 

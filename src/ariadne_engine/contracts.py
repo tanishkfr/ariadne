@@ -1122,6 +1122,181 @@ MAX_DESIGN_REFERENCE_SECTIONS = 200
 MAX_DESIGN_REFERENCE_PATTERNS = 64
 """Hard cap on normalised observations kept per reference."""
 
+# ---------------------------------------------------------------------------
+# AR-221 grounded design execution vocabulary
+#
+# Everything below exists to answer one question about a *code change*:
+#
+#     > Why was this component changed, and what says it should look like that?
+#
+# AR-220 classified the evidence a direction rests on. AR-221 classifies the
+# obligations a direction imposes on the code, and requires every material one
+# to name where it came from.
+# ---------------------------------------------------------------------------
+
+IMPLEMENTATION_CONSTRAINT_CATEGORIES = (
+    "layout", "typography", "color", "spacing", "component", "interaction",
+    "motion", "surface", "responsive", "accessibility", "navigation", "asset",
+)
+"""The kinds of obligation an approved direction can impose on an implementation.
+
+A category is not a permission: it says which part of the interface a constraint
+governs, so a colour constraint cannot be used to justify a navigation change and
+a reviewer can see at a glance which parts of the design were actually specified.
+"""
+
+IMPLEMENTATION_CONSTRAINT_BASES = (
+    "PROJECT_IDENTITY",
+    "REQUIREMENT",
+    "APPROVED_DIRECTION",
+    "REFERENCE_PRINCIPLE",
+    "IMPLEMENTATION_REFERENCE",
+    "ENGINEERING_CONSTRAINT",
+)
+"""Where an implementation constraint comes from. Every material one must name one.
+
+The order in this tuple is *not* the precedence order; :data:`CONSTRAINT_PRECEDENCE`
+is. The tuple is the vocabulary, and it deliberately separates two things that are
+usually conflated: a ``REFERENCE_PRINCIPLE`` says what an inspected source
+demonstrates, while an ``APPROVED_DIRECTION`` says a human accepted it for *this*
+project. A reference principle that was never adopted into an approved direction has
+no standing to constrain code.
+"""
+
+CONSTRAINT_PRECEDENCE = {
+    "REQUIREMENT": 100,
+    "PROJECT_IDENTITY": 80,
+    "APPROVED_DIRECTION": 60,
+    "ENGINEERING_CONSTRAINT": 55,
+    "IMPLEMENTATION_REFERENCE": 30,
+    "REFERENCE_PRINCIPLE": 20,
+}
+"""Permanent precedence: the highest number wins.
+
+    explicit user requirement
+            >
+    approved project identity / local design system
+            >
+    approved design direction
+            >
+    external references
+
+``ENGINEERING_CONSTRAINT`` sits between the direction and an implementation
+reference because a correct engineering constraint (a build that must typecheck, a
+route that must exist) outranks a borrowed pattern while still losing to a human
+decision. Accessibility is not in this table at all: it is a floor under every row,
+enforced by :data:`ACCESSIBILITY_FLOOR_BASES` rather than by out-ranking anything.
+"""
+
+ACCESSIBILITY_FLOOR_BASES = ("REQUIREMENT", "PROJECT_IDENTITY", "ENGINEERING_CONSTRAINT")
+"""Bases an accessibility constraint may legitimately hold.
+
+An accessibility obligation may never be introduced *by* a reference principle, and
+no other basis may cancel one. That asymmetry is the point: inspiration cannot
+justify removing keyboard access, focus visibility, semantics, labels, contrast,
+reduced-motion support or touch targets.
+"""
+
+PLAN_STATUSES = ("READY", "IMPLEMENTING", "IMPLEMENTED", "MECHANICALLY_VALIDATED", "ESCALATED", "REFUSED")
+"""Lifecycle of one ``DesignImplementationPlan``.
+
+``MECHANICALLY_VALIDATED`` is the ceiling AR-221 can reach. There is deliberately no
+``ACCEPTED`` and no ``APPROVED``: source inspection can prove that code exists and
+passes its checks, and cannot prove that it looks right. Judging appearance is
+AR-222's job and it needs rendered evidence AR-221 does not produce.
+"""
+
+COMPONENT_REUSE_DECISIONS = (
+    "REUSE_PROJECT_COMPONENT",
+    "ADAPT_PROJECT_COMPONENT",
+    "USE_APPROVED_REGISTRY_COMPONENT",
+    "BUILD_CUSTOM_COMPONENT",
+)
+"""How one required primitive will be obtained, in preference order.
+
+The order is the decision procedure, not a ranking of desirability. External
+registries are *last*, and only ever after the project's own components have been
+inspected and found wanting. Generating a replacement for a component the repository
+already ships is a defect, not a neutral choice, so it has to be recorded as one.
+"""
+
+REUSE_STATUSES = (
+    "INSPECT_ONLY",
+    "REUSE_ALLOWED",
+    "REUSE_WITH_ATTRIBUTION",
+    "REUSE_RESTRICTED",
+    "UNKNOWN",
+)
+"""What may be done with a reusable implementation reference.
+
+``UNKNOWN`` is not a permissive default. An unrecorded licence is an unrecorded
+licence, and code copied under it is a liability the run cannot characterise. The
+distinction matters most for the state a reader is most likely to misread as
+permission.
+"""
+
+MATERIAL_DESIGN_CATEGORIES = (
+    "brand_color",
+    "type_family",
+    "type_scale",
+    "navigation_structure",
+    "primary_layout",
+    "component_geometry",
+    "interaction_model",
+    "motion_system",
+    "surface_language",
+    "responsive_structure",
+    "asset_identity",
+)
+"""The design decisions that need grounding before they enter the code.
+
+Everything outside this list is *incidental*: a 1px alignment correction, a padding
+nudge, vendor-prefix normalisation, a browser quirk. Refusing incidental detail
+would train the workflow to attach a rationale to every line, which is its own kind
+of dishonesty - the traceability record stops meaning anything.
+"""
+
+CATEGORY_GROUNDS_MATERIAL = {
+    "color": ("brand_color",),
+    "typography": ("type_family", "type_scale"),
+    "spacing": ("component_geometry",),
+    "layout": ("primary_layout", "responsive_structure"),
+    "navigation": ("navigation_structure",),
+    "component": ("component_geometry",),
+    "interaction": ("interaction_model",),
+    "accessibility": ("interaction_model",),
+    "motion": ("motion_system",),
+    "surface": ("surface_language",),
+    "responsive": ("responsive_structure",),
+    "asset": ("asset_identity",),
+}
+"""Which material categories a plan constraint of each kind accounts for.
+
+A declared correspondence rather than a name comparison, because the two vocabularies
+answer different questions: a plan states *what it governs* (colour, navigation) while
+the material detector reports *what changed in the source* (a radius, a landmark).
+Matching the strings directly would ground a layout constraint for a font-size change
+or refuse a navigation constraint for a `<nav>`, both of which are wrong in the same
+direction - the trace would look complete and mean nothing.
+
+``spacing`` maps to ``component_geometry`` deliberately. A padding nudge matches none
+of the geometry signals and so stays incidental, while a row height, a min-width or a
+radius does - which is the distinction between tuning and committing to a geometry.
+Giving spacing its own material category would make every padding tweak look
+deliberate.
+"""
+
+MAX_IMPLEMENTATION_CONSTRAINTS = 200
+MAX_IMPLEMENTATION_CHANGES = 2_000
+MAX_PLAN_FORBIDDEN_PATTERNS = 64
+MAX_PLAN_REUSE_DECISIONS = 200
+"""Bounds on one plan's tables.
+
+A plan is an interface contract, not a document. Past these sizes it stops being
+readable by the worker it is written for, and a rule nobody can read is not a rule.
+"""
+
+
 COMPONENT_LADDER = (
     "existing-project-component",
     "existing-design-system",
@@ -1398,6 +1573,8 @@ DESIGN_COLLECTION_KEYS = (
     "design_references", "rendered_evidence", "design_requirements", "design_directions",
     "component_candidates", "design_reviews", "design_refinements",
     "design_reference_sets",
+    "design_implementation_plans", "design_component_inventories",
+    "design_implementation_changes", "design_implementation_runs",
 )
 """The append-only authoritative collections this bound applies to."""
 
@@ -1811,6 +1988,317 @@ def design_reference_classification_problems(record: Mapping[str, Any]) -> list[
     return list(dict.fromkeys(problems))
 
 
+def implementation_plan_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one ``DesignImplementationPlan``.
+
+    A plan converts an *approved* direction into obligations on code, so the
+    refusals are about authority and traceability rather than taste:
+
+    * it must be bound to a direction, a reference set and a recorded approval;
+    * every material constraint must name a basis, and a basis has a precedence;
+    * a constraint asserted by a reference principle may not claim the precedence of
+      a human decision, because that is how a borrowed pattern becomes a rule;
+    * an accessibility constraint may not be sourced from an external reference;
+    * every AVOID treatment must arrive as a *detector*, not as prose a worker is
+      asked to remember.
+    """
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("implementation plan carries the wrong schema version")
+    if not design_id_matches("dip", str(record.get("plan_id", ""))):
+        problems.append("implementation plan has a malformed plan id")
+    for name in ("run_id", "task_id", "direction_id", "reference_set_id", "created_at", "project_scope"):
+        _non_empty(record, name, problems)
+    binding = record.get("approval_binding")
+    if not isinstance(binding, Mapping):
+        problems.append("an implementation plan must bind an approval; a plan with no approval is a wish")
+    else:
+        if str(binding.get("gate", "")) != "G1D":
+            problems.append(f"an implementation plan must bind gate G1D, not {binding.get('gate') or 'none'}")
+        for name in ("approval_id", "direction_revision_hash", "approved_at", "identity", "channel"):
+            if not str(binding.get(name, "")).strip():
+                problems.append(f"implementation plan approval binding is missing {name}")
+        if not _is_sha256(binding.get("direction_revision_hash")):
+            problems.append("implementation plan approval binding is not bound to a direction revision digest")
+        if str(binding.get("channel", "")) not in APPROVAL_CHANNELS:
+            problems.append(f"implementation plan records an unknown approval channel: {binding.get('channel')}")
+
+    if str(record.get("status", "")) not in PLAN_STATUSES:
+        problems.append(f"implementation plan has an unsupported status: {record.get('status') or 'missing'}")
+
+    surfaces = record.get("target_surfaces")
+    if not isinstance(surfaces, list) or not [str(item).strip() for item in surfaces]:
+        problems.append("an implementation plan must name the target surfaces it governs")
+
+    constraints = record.get("constraints")
+    if not isinstance(constraints, list):
+        problems.append("implementation plan constraints must be a list")
+        constraints = []
+    elif not constraints:
+        problems.append("an implementation plan states no implementation constraint")
+    if len(constraints) > MAX_IMPLEMENTATION_CONSTRAINTS:
+        problems.append(f"implementation plan exceeds the bound of {MAX_IMPLEMENTATION_CONSTRAINTS} constraints")
+    seen_constraints: set[str] = set()
+    for constraint in constraints:
+        if not isinstance(constraint, Mapping):
+            problems.append("implementation constraint must be a mapping")
+            continue
+        constraint_id = str(constraint.get("constraint_id", ""))
+        if not design_id_matches("dic", constraint_id):
+            problems.append(f"implementation constraint has a malformed id: {constraint_id or 'missing'}")
+        elif constraint_id in seen_constraints:
+            problems.append(f"implementation plan repeats constraint {constraint_id}")
+        seen_constraints.add(constraint_id)
+        if str(constraint.get("category", "")) not in IMPLEMENTATION_CONSTRAINT_CATEGORIES:
+            problems.append(f"implementation constraint has an unsupported category: {constraint.get('category') or 'missing'}")
+        basis = str(constraint.get("basis", ""))
+        if basis not in IMPLEMENTATION_CONSTRAINT_BASES:
+            problems.append(f"implementation constraint has an unsupported basis: {basis or 'missing'}")
+        if not str(constraint.get("statement", "")).strip():
+            problems.append(f"implementation constraint {constraint_id} states nothing")
+        if not str(constraint.get("evidence", "")).strip():
+            problems.append(
+                f"implementation constraint {constraint_id} names a basis but no evidence; a basis "
+                "without a source is a label"
+            )
+        if str(constraint.get("category", "")) == "accessibility" and basis not in ACCESSIBILITY_FLOOR_BASES:
+            problems.append(
+                f"accessibility constraint {constraint_id} is sourced from {basis or 'nothing'}; an external "
+                "reference cannot be the origin of an accessibility obligation, and no reference may cancel one"
+            )
+        if str(constraint.get("accessibility_floor", "")) == "TRUE" and basis not in ACCESSIBILITY_FLOOR_BASES:
+            problems.append(f"constraint {constraint_id} claims the accessibility floor from {basis or 'nothing'}")
+
+    # Every AVOID treatment has to become a checkable prohibition. A rejection a
+    # worker is merely *told* about is a rejection that survives review.
+    treatments = record.get("borrow_adapt_avoid_bindings")
+    if not isinstance(treatments, list) or not treatments:
+        problems.append("an implementation plan binds no BORROW/ADAPT/AVOID treatment to any constraint")
+    else:
+        for binding_row in treatments:
+            if not isinstance(binding_row, Mapping):
+                problems.append("treatment binding must be a mapping")
+                continue
+            if str(binding_row.get("treatment", "")) not in REFERENCE_TREATMENTS:
+                problems.append(f"unknown treatment in plan: {binding_row.get('treatment')}")
+            if not str(binding_row.get("pattern", "")).strip():
+                problems.append("a treatment binding must name the observed pattern it applies to")
+            if str(binding_row.get("treatment", "")) == "ADAPT" and not str(binding_row.get("project_anchor", "")).strip():
+                problems.append(
+                    "an ADAPT treatment must name the project anchor it was transformed onto; an "
+                    "adaptation with nothing to adapt to is a borrow recorded under another name"
+                )
+
+    forbidden = record.get("forbidden_copy_patterns")
+    if not isinstance(forbidden, list):
+        problems.append("forbidden_copy_patterns must be a list")
+    else:
+        if len(forbidden) > MAX_PLAN_FORBIDDEN_PATTERNS:
+            problems.append(f"forbidden_copy_patterns exceeds the bound of {MAX_PLAN_FORBIDDEN_PATTERNS}")
+        for row in forbidden:
+            if not isinstance(row, Mapping):
+                problems.append("forbidden copy pattern must be a mapping")
+                continue
+            if not str(row.get("pattern_id", "")).strip():
+                problems.append("a forbidden copy pattern must have an id")
+            if not str(row.get("reason", "")).strip():
+                problems.append(f"forbidden copy pattern {row.get('pattern_id')} records no reason")
+            if not isinstance(row.get("detectors"), list) or not row.get("detectors"):
+                problems.append(
+                    f"forbidden copy pattern {row.get('pattern_id')} has no detector; a prohibition "
+                    "nobody can evaluate is an intention"
+                )
+
+    reuse = record.get("component_reuse_decisions")
+    if not isinstance(reuse, list) or not reuse:
+        problems.append("an implementation plan records no component reuse decision")
+    else:
+        if len(reuse) > MAX_PLAN_REUSE_DECISIONS:
+            problems.append(f"component_reuse_decisions exceeds the bound of {MAX_PLAN_REUSE_DECISIONS}")
+        for row in reuse:
+            if not isinstance(row, Mapping):
+                problems.append("component reuse decision must be a mapping")
+                continue
+            if str(row.get("decision", "")) not in COMPONENT_REUSE_DECISIONS:
+                problems.append(f"unsupported component reuse decision: {row.get('decision') or 'missing'}")
+            if not str(row.get("need", "")).strip():
+                problems.append("a component reuse decision must name the need it answers")
+            if not str(row.get("reason", "")).strip():
+                problems.append(f"component reuse decision for {row.get('need')} records no reason")
+            if str(row.get("decision", "")) == "USE_APPROVED_REGISTRY_COMPONENT" and not str(
+                row.get("approval_id", "")
+            ).strip():
+                problems.append(
+                    f"component reuse decision for {row.get('need')} selects an approved registry component "
+                    "with no recorded approval; an authorization id is a claim like any other"
+                )
+
+    if not isinstance(record.get("validation_requirements"), list) or not record.get("validation_requirements"):
+        problems.append("an implementation plan declares no mechanical validation requirement")
+
+    for name in ("requirement_bindings", "reference_bindings", "target_surfaces"):
+        value = record.get(name)
+        if value is not None and not isinstance(value, list):
+            problems.append(f"implementation plan {name} must be a list")
+
+    provenance = record.get("provenance")
+    if not isinstance(provenance, Mapping) or not str(provenance.get("created_by", "")).strip():
+        problems.append("implementation plan carries no provenance")
+    return list(dict.fromkeys(problems))
+
+
+def component_inventory_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one project component inventory."""
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("component inventory carries the wrong schema version")
+    if not design_id_matches("dci", str(record.get("inventory_id", ""))):
+        problems.append("component inventory has a malformed inventory id")
+    for name in ("run_id", "task_id", "project_root", "recorded_at"):
+        _non_empty(record, name, problems)
+    if not isinstance(record.get("probes"), list) or not record.get("probes"):
+        problems.append("a component inventory records no probe")
+    components = record.get("components")
+    if not isinstance(components, list):
+        problems.append("component inventory components must be a list")
+    else:
+        for row in components:
+            if not isinstance(row, Mapping):
+                problems.append("inventory component must be a mapping")
+                continue
+            if not str(row.get("path", "")).strip():
+                problems.append("an inventory component must name the path it was found at")
+            if _path_escapes_project(str(row.get("path", ""))):
+                problems.append(f"inventory component path is not project-relative: {row.get('path')}")
+    if not isinstance(record.get("reuse_decisions"), list) or not record.get("reuse_decisions"):
+        problems.append("a component inventory records no reuse decision")
+    return list(dict.fromkeys(problems))
+
+
+def _path_escapes_project(value: str) -> bool:
+    """Whether a recorded change path reaches outside the project.
+
+    A drive-letter path is absolute without a leading slash or a ``..``, so a check
+    that only looks for those two treats ``C:/Windows/System32/config`` as
+    project-relative - on the one platform where that matters most.
+    """
+    normalised = str(value).replace("\\", "/")
+    if normalised.startswith(("/", "\\")):
+        return True
+    if ".." in normalised.split("/"):
+        return True
+    return bool(re.match(r"^[A-Za-z]:[\\/]", normalised))
+
+
+def implementation_change_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one implementation change record."""
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("implementation change carries the wrong schema version")
+    if not design_id_matches("dic", str(record.get("change_id", ""))):
+        problems.append(f"implementation change has a malformed id: {record.get('change_id') or 'missing'}")
+    for name in ("plan_id", "task_id", "path", "change_kind", "recorded_at"):
+        _non_empty(record, name, problems)
+    if _path_escapes_project(str(record.get("path", ""))):
+        problems.append(f"implementation change path escapes the project: {record.get('path')}")
+    verdict = str(record.get("verdict", ""))
+    if verdict not in IMPLEMENTATION_CHANGE_VERDICTS:
+        problems.append(f"implementation change has an unsupported verdict: {verdict or 'missing'}")
+    if not str(record.get("implementation_source", "")).strip():
+        problems.append(f"implementation change {record.get('change_id')} names no implementation source")
+    if verdict == "UNGROUNDED_DESIGN_CHANGE" and not str(record.get("problem", "")).strip():
+        problems.append("an ungrounded design change must say what is ungrounded about it")
+    if verdict == "GROUNDED" and not record.get("constraint_ids"):
+        problems.append(
+            f"implementation change {record.get('change_id')} claims to be grounded but cites no "
+            "implementation constraint"
+        )
+    if verdict == "GROUNDED" and not record.get("grounding_constraint_ids"):
+        problems.append(
+            f"implementation change {record.get('change_id')} is GROUNDED but records no grounding "
+            "constraint; citing a constraint that does not account for the change is the same as "
+            "citing nothing"
+        )
+    for name in ("requirement_ids", "principle_ids", "reference_ids"):
+        value = record.get(name)
+        if value is not None and not isinstance(value, list):
+            problems.append(f"implementation change {name} must be a list")
+    return list(dict.fromkeys(problems))
+
+
+def implementation_run_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one grounded implementation run."""
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("implementation run carries the wrong schema version")
+    if not design_id_matches("dir", str(record.get("run_record_id", ""))):
+        problems.append("implementation run has a malformed run record id")
+    for name in ("plan_id", "task_id", "started_at"):
+        _non_empty(record, name, problems)
+    if str(record.get("outcome", "")) not in IMPLEMENTATION_RUN_OUTCOMES:
+        problems.append(f"implementation run has an unsupported outcome: {record.get('outcome') or 'missing'}")
+    if str(record.get("outcome", "")) == "ESCALATED" and not str(record.get("escalation_reason", "")).strip():
+        problems.append("an escalated implementation run must record why it escalated")
+    if not isinstance(record.get("validation_attempts"), list) or not record.get("validation_attempts"):
+        problems.append("an implementation run records no mechanical validation attempt")
+    if not isinstance(record.get("telemetry"), Mapping):
+        problems.append("an implementation run records no telemetry")
+    acceptance = record.get("acceptance")
+    if not isinstance(acceptance, Mapping):
+        problems.append("an implementation run records no acceptance boundary")
+    else:
+        if str(acceptance.get("visual_acceptance", "")) not in ("NOT_CLAIMED", "VERIFIED_BY_RENDERED_CHECK"):
+            problems.append(
+                f"implementation run records an unknown visual-acceptance claim: "
+                f"{acceptance.get('visual_acceptance') or 'missing'}"
+            )
+        reason = str(acceptance.get("reason", "")).strip()
+        if str(acceptance.get("visual_acceptance", "")) != "VERIFIED_BY_RENDERED_CHECK" and not reason:
+            problems.append(
+                "a run that does not claim visual acceptance must say why; silence reads as a claim that "
+                "none was needed, which is the assumption this field exists to remove"
+            )
+        if str(acceptance.get("visual_acceptance", "")) == "VERIFIED_BY_RENDERED_CHECK" and not str(
+            acceptance.get("rendered_check_id", "")
+        ).strip():
+            problems.append(
+                "a run that claims visual acceptance must name the independent rendered check that "
+                "established it; source inspection cannot stand in for one"
+            )
+    return list(dict.fromkeys(problems))
+
+
+IMPLEMENTATION_CHANGE_VERDICTS = (
+    "GROUNDED",
+    "GROUNDED_INCIDENTAL",
+    "UNGROUNDED_DESIGN_CHANGE",
+    "ACCESSIBILITY_REGRESSION",
+    "REFERENCE_CLONING",
+    "OUT_OF_SCOPE",
+)
+"""How one file-level change stands relative to the approved plan.
+
+``GROUNDED`` requires a cited constraint. ``GROUNDED_INCIDENTAL`` is the honest
+answer for a 1px correction, and refusing it would make the grounded tier
+meaningless. The three failure verdicts are separate values rather than a single
+``failed`` because a reference-cloning violation and an accessibility regression
+call for different responses from the same reader.
+"""
+
+IMPLEMENTATION_RUN_OUTCOMES = (
+    "IMPLEMENTED",
+    "MECHANICALLY_VALIDATED",
+    "ESCALATED",
+    "REFUSED",
+)
+"""What one grounded implementation run actually achieved.
+
+No outcome in this tuple asserts that the result looks right. ``MECHANICALLY_VALIDATED``
+means the build, typecheck and tests passed; appearance is AR-222's judgement, made
+from rendered evidence this phase does not capture.
+"""
+
+
 def refinement_problems(record: Mapping[str, Any]) -> list[str]:
     """Structural validation of one bounded refinement cycle."""
     problems = design_schema_problems(record)
@@ -1839,6 +2327,10 @@ DESIGN_RECORD_VALIDATORS = {
     "component-candidate": component_candidate_problems,
     "design-direction": design_direction_problems,
     "design-requirement": design_requirement_problems,
+    "implementation-plan": implementation_plan_problems,
+    "component-inventory": component_inventory_problems,
+    "implementation-change": implementation_change_problems,
+    "implementation-run": implementation_run_problems,
     "rendered-evidence": rendered_evidence_problems,
     "design-review": design_review_problems,
     "refinement": refinement_problems,

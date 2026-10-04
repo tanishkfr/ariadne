@@ -480,6 +480,69 @@ def route_design_evidence(state, **options) -> dict:
     return routing.route_evidence(state, **options)
 
 
+# ------------------------------------- AR-221 grounded design execution plane
+
+def create_implementation_plan(state, **options) -> dict:
+    """Compile an approved design direction into a ``DesignImplementationPlan``.
+
+    Refuses an unapproved direction, a direction whose reference set does not match
+    the one it was built from, and a validation requirement the transport boundary
+    will not run. Nothing here approves anything.
+    """
+    from .design_execution import plan
+
+    return plan.compile_plan(state, **options)
+
+
+def implementation_plans(state, task_id: "") -> dict:
+    """Read the implementation plans recorded for a run, newest last."""
+    from .design_execution import plan
+
+    return {
+        "task_id": str(task_id),
+        "plans": plan.plans(state),
+        "latest": plan.latest_plan(state, task_id=str(task_id)),
+        "problems": plan.plan_problems(state, task_id=str(task_id)),
+    }
+
+
+def inspect_component_inventory(state, task_id: "") -> dict:
+    """Read the component inventory and its reuse decisions for a run."""
+    from .design_execution import inventory
+
+    record = inventory.latest_inventory(state, task_id=str(task_id))
+    return {
+        "task_id": str(task_id),
+        "found": bool(record),
+        "inventory": record,
+        "components_discovered": len(record.get("components") or []),
+        "reuse_decisions": list(record.get("reuse_decisions") or []),
+    }
+
+
+def inspect_implementation_trace(state, plan_id="") -> dict:
+    """Read the requirement-to-file design trace, including its gaps.
+
+    A gap is reported, never repaired. A trace that fills itself in is worse than no
+    trace, because it manufactures exactly the confidence a reader was checking for.
+    """
+    from .design_execution import changes
+
+    return changes.trace(state, plan_id=str(plan_id))
+
+
+def run_grounded_implementation(state, **options) -> dict:
+    """Run a grounded implementation through the existing execution path.
+
+    Takes the same ``changes`` rows a worker reports. Mechanical validation reuses the
+    S4B repair budget, and the highest outcome it can return is
+    ``MECHANICALLY_VALIDATED`` - never a claim that the result looks right.
+    """
+    from .design_execution import execution
+
+    return execution.run_grounded_implementation(state, **options)
+
+
 # ------------------------------------------------ AR-203 verification plane
 
 def inspect_capabilities(
@@ -1346,6 +1409,11 @@ __all__ = [
     "record_refinement",
     "design_report",
     "route_design_evidence",
+    "create_implementation_plan",
+    "implementation_plans",
+    "inspect_component_inventory",
+    "inspect_implementation_trace",
+    "run_grounded_implementation",
     "inspect_capabilities",
     "record_capability_observation",
     "verify_claim",

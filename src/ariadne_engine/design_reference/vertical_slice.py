@@ -50,6 +50,14 @@ SLICE_QUERY = "developer tooling"
 SLICE_COUNTER_QUERY = "vibrant gradient data dashboard"
 SLICE_SCOPE = "desktop developer tool"
 
+SLICE_TASK_ID = "ar220-vertical-slice"
+"""The task id every AR-220 slice record carries.
+
+Named rather than repeated inline, because AR-221 runs this same chain against a real
+project and then looks the direction up by task id. A literal typed twice is a
+coupling that fails silently the first time one copy changes.
+"""
+
 COUNTER_ANTI_PATTERN = (
     "a generic AI dashboard: a glassmorphic card grid with gradient glows, a centred hero and no "
     "information hierarchy"
@@ -226,7 +234,7 @@ def run(
         query=SLICE_QUERY,
         counter_query=SLICE_COUNTER_QUERY,
         requirement_scope=SLICE_SCOPE,
-        task_id="ar220-vertical-slice",
+        task_id=SLICE_TASK_ID,
         retrieved_at=stamp,
         allow_external=justified["verdict"] == "YES",
         project_sufficient=True,
@@ -324,7 +332,7 @@ def run(
     try:
         compiled = direction.compile_candidate_direction(
             state,
-            task_id="ar220-vertical-slice",
+            task_id=SLICE_TASK_ID,
             goal=str(request),
             scope=SLICE_SCOPE,
             requirement_scope=SLICE_SCOPE,
@@ -616,7 +624,7 @@ def summarise(report: Mapping) -> str:
     for row in report.get("references") or []:
         lines.append(
             f"    - {row['title']} [{row['source_kind']}/{row['evidence_level']}] "
-            f"{row['patterns']} patterns, {row['content_digest']}Ã¢â‚¬Â¦"
+            f"{row['patterns']} patterns, {row['content_digest']}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
         )
     grounding = report.get("grounding") if isinstance(report.get("grounding"), Mapping) else {}
     lines.append(

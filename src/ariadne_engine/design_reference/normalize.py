@@ -82,6 +82,7 @@ def build_classification(
     source_revision: str = "",
     source_date: str = "",
     historical: bool = False,
+    size_bytes: int = 0,
 ) -> dict:
     """Assemble the AR-220 classification block, refusing unknown vocabulary."""
     if source_kind not in contracts.REFERENCE_SOURCE_KINDS:
@@ -119,6 +120,11 @@ def build_classification(
         "reference_type": safety.reference_text_is_data(reference_type, field="reference_type"),
         "source_revision": str(source_revision),
         "source_date": str(source_date),
+        # The size of the bytes this classification describes. AR-220 shipped without
+        # it, which made "how much reference context was transported" unmeasurable -
+        # the Context Economics question of the next phase had no input to compute
+        # from, so a reduction could only be asserted, never counted.
+        "size_bytes": max(0, int(size_bytes)),
     }
 
 
@@ -649,6 +655,7 @@ def normalize_reference(
         source_revision=source_revision,
         source_date=source_date,
         historical=historical,
+        size_bytes=len(content),
     )
 
     recorded_limitations = list(limitations)

@@ -83,6 +83,84 @@ AR-220 stops at approved-ready direction evidence. It performs no UI implementat
 no rendered capture and no reference-aware critique; that is AR-221.
 
 ---
+## 2.2 development (AR-221) — NOT RELEASED
+
+`VERSION` remains **2.1.0**. AR-221 is development work on the
+`v2/2.2-grounded-design-execution` branch, branched from the frozen AR-220 commit
+`daec30c`, and no release is claimed.
+
+### Grounded Design Execution: implement from an approved direction
+
+**The lesson.** AR-220 could say *why a direction says what it says*. It could not say
+*why a file changed*, and the gap between those two is where a design system quietly
+becomes somebody else's brand. Nothing in the engine forced an implementation to
+consult a reference — a worker could read one and simply produce the thing it had read.
+So this phase adds the link that was missing, and makes every material decision name
+its basis:
+
+```text
+Accent colour     → PROJECT_IDENTITY   → src/styles/tokens.css
+Dense navigation  → APPROVED_DIRECTION → supported by 4 inspected references
+Rounded glass     → FORBIDDEN          → the counter-reference's own anti-pattern
+```
+
+Four refusals do the load-bearing work:
+
+- **No approval, no plan.** A candidate direction has nothing to consume, and
+  "implementation needs something to consume" is not an approval. The binding is to the
+  direction's *current* fingerprint, so an edit after approval invalidates the plan
+  rather than silently surviving it. There is no fixture bypass: the vertical slice
+  calls the same `design.approve_direction` an operator calls.
+- **The evidence set must be the one the direction was built from.** Implementing
+  against a different set is a different design, not a variant of the same one.
+- **A reference principle cannot outrank a human decision.** Precedence is explicit
+  (requirement 100 > project identity 80 > approved direction 60 > engineering 55 >
+  implementation reference 30 > reference principle 20), contradictions are *suppressed
+  and recorded*, and a final pass removes anything still outranked, so precedence
+  cannot be decided by the sequence constraints were typed in.
+- **Accessibility is a floor, not a competitor.** It has no precedence number because
+  it is not competing. Every reference-sourced constraint sharing a surface with a floor
+  is suppressed, in any category — keyed on the constraint's *origin* rather than on
+  category matching, because a reference-sourced layout claim and an accessibility
+  floor share no category and would otherwise never meet.
+
+**Reuse before generation.** A model asked to "build a panel" will write a new panel,
+and the result is a repository with two panels, one of them missing the fix for last
+month's bug. So the component inventory runs first and reads the repository rather than
+asking: CSS variables, every component file and its exports, primitive families,
+layout and motion utilities, any declared registry. External registries are last and
+never a default, and there is no code path in this layer that installs, downloads or
+resolves anything.
+
+**Three findings worth naming, because each was a rule that looked implemented and was
+not:**
+
+- Materiality read *removed* lines as well as added ones, so the edit the counter-
+  reference *asked for* — deleting the glass card — was reported as an unauthorised
+  `brand_color` decision. Categories now come from what a change introduced, and what
+  it removed is recorded separately as the evidence an AVOID treatment produced.
+- The accessibility-regression check computed its set difference over diff lines *and*
+  included the removed lines in the "after" set, so nothing could ever be lost. It
+  silently passed everything until a real change exercised it.
+- The clone detector scanned the plan's own detectors over the whole file while
+  scanning structural patterns line by line, so a regression test asserting
+  `backdrop-filter` is absent — the test that *defends* the prohibition — was flagged as
+  the violation. Two strategies inside one function is how a detector starts flagging
+  its own test on one input shape and not another.
+
+**Context economics, measured.** 22 308 of 111 885 reference bytes reached the worker,
+with the other four sources named and the reason for each omission recorded. The
+packet's own interpretation field states that a reduction in transported bytes is a
+reduction — not a measured quality improvement, and not costed, because neither was
+measured.
+
+**Where it stops.** `MECHANICALLY_VALIDATED` is the ceiling, and every run stores
+`visual_acceptance: NOT_CLAIMED` with its reason. There is no `ACCEPTED` status, and
+the validator refuses a rendered-acceptance claim that names no independent rendered
+check. Source code can prove that code exists; only a render can prove what it looks
+like, and building that is AR-222.
+
+---
 ## 2.1.0 — 2026-10-02 · PUBLIC RELEASE
 
 Ariadne now has somewhere local to ask a bounded question. The native Decision Runtime

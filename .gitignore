@@ -19,3 +19,8 @@ validation/runs/*
 # Benchmark run records, for the same reason: a measured result belongs to one machine
 # on one day. The case definitions in benchmarks/arbench/ are the tracked artefact.
 benchmarks/results/
+
+# The AR-221 mutation harness records the bytes a mutation replaced, so an interrupted
+# run can restore the tree. The marker is machine-local recovery state, never an
+# artefact: if one is present the tree is mid-mutation and the next run will restore it.
+.ariadne-mutation-restore.json

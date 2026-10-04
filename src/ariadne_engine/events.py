@@ -120,6 +120,19 @@ EVENT_TYPES = (
     "decision_runtime_shadow_recorded",
     "decision_runtime_promoted",
     "decision_runtime_suspended",
+
+    # AR-221 Grounded Design Execution. The dotted names in the phase brief map onto
+    # this log's existing convention rather than starting a second one:
+    # `design.implementation.plan_created` is recorded as
+    # `design_implementation_plan_created`, next to `design_direction_approved`.
+    "design_implementation_plan_created",
+    "design_component_inventory_created",
+    "design_component_reuse_selected",
+    "design_implementation_started",
+    "design_implementation_change_recorded",
+    "design_implementation_ungrounded_change",
+    "design_implementation_validated",
+    "design_implementation_escalated",
 )
 """The declared event vocabulary. A type outside this set is refused, so the log
 cannot accumulate an undocumented ad-hoc event name."""

@@ -1,0 +1,16 @@
+{
+  "name": "beacon-desktop-tool",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Beacon: a desktop developer tool for API request work and log inspection.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "test": "node --test \"tests/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3"
+  }
+}

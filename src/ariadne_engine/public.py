@@ -97,6 +97,18 @@ PROVISIONAL = (
     "record_refinement",
     "design_report",
     "route_design_evidence",
+    # AR-221 Grounded Design Execution. Five operations, no more: create and read a
+    # DesignImplementationPlan, inspect the component inventory a plan rests on,
+    # read the implementation trace, and run grounded implementation through the
+    # existing orchestration. Deliberately provisional - the shape is proven, the
+    # vocabulary around grounded execution is still settling, and a consumer binding
+    # to it now should expect to move. What is deliberately absent is every internal
+    # of the compiler, the packet and the classifier.
+    "create_implementation_plan",
+    "implementation_plans",
+    "inspect_component_inventory",
+    "inspect_implementation_trace",
+    "run_grounded_implementation",
     "record_capability_observation",
     "execution_provenance",
     "record_provider_observation",
