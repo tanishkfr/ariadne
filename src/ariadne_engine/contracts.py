@@ -1345,11 +1345,17 @@ RENDERED_EVIDENCE_KINDS = (
 )
 """Artifact kinds a capture adapter may produce."""
 
-RENDER_CAPTURE_METHODS = ("offline-fixture", "declared-observer")
+RENDER_CAPTURE_METHODS = ("offline-fixture", "declared-observer", "browser-render")
 """How a capture artifact was produced. ``offline-fixture`` is the deterministic
 adapter AR-202D ships; ``declared-observer`` is an operator-declared external
 observer that recorded the artifact itself and is trusted only as far as it
-declares its method, environment and revision."""
+declares its method, environment and revision; ``browser-render`` (AR-222) is an
+artifact a real rendering engine produced in this run, bound to the exact source
+digest and environment that produced it.
+
+The method names how the bytes were made. It never says whose judgement they
+carry: a browser capture is evidence of what rendered, never evidence that the
+render satisfies the direction."""
 
 DESIGN_REVIEW_DIMENSIONS = (
     "hierarchy", "clarity", "composition", "density", "spacing", "typography",
@@ -1396,6 +1402,17 @@ DESIGN_FAILURE_KINDS = (
     "DESIGN_REVIEW_FAILURE",
     "REQUIREMENT_EVIDENCE_INSUFFICIENT",
     "REFINEMENT_LIMIT_REACHED",
+    # AR-222: the rendered-critique phase. Each is a distinct refusal, not a
+    # synonym for RENDER_CAPTURE_FAILED, because they call for different
+    # responses: an unavailable browser is an environment answer, a stale
+    # capture is a re-capture, an exhausted budget is a human decision.
+    "RENDER_CAPABILITY_UNAVAILABLE",
+    "RENDER_STALE_EVIDENCE",
+    "RENDER_CAPTURE_INVALID",
+    "RENDER_CAPTURE_BUDGET_EXCEEDED",
+    "RENDER_REVIEW_NOT_INDEPENDENT",
+    "RENDER_REPAIR_LIMIT_EXHAUSTED",
+    "DIRECTION_REVISION_REQUIRED",
 )
 """Design-specific failure kinds. Each maps onto an existing AR-202 failure class
 in :mod:`ariadne_engine.execution`; the taxonomy itself is not duplicated."""
@@ -1408,6 +1425,112 @@ DESIGN_EVIDENCE_STRENGTH = {
     "VERIFIED": 4,
 }
 """Ordinal evidence strength used for comparisons. Never presented as a quality score."""
+
+# ------------------------------------------------------------------ AR-222
+
+CAPTURE_PLAN_STATUSES = ("PLANNED", "CAPTURED", "PARTIAL", "ABANDONED")
+"""Lifecycle of one bounded capture plan.
+
+``PLANNED``   targets chosen and justified, nothing captured yet
+``CAPTURED``   every planned target was captured and validated
+``PARTIAL``    some targets were not captured, each with a recorded reason
+``ABANDONED``  the plan was not executed; the reason is recorded
+"""
+
+CAPTURE_TARGET_BASES = ("REQUIREMENT", "DIRECTION_PRINCIPLE", "MATERIALITY", "REGRESSION")
+"""Why a capture target exists. A target with no basis is a screenshot nobody asked for."""
+
+CAPTURE_TARGET_KINDS = ("viewport-state", "interaction-state", "responsive-state", "theme-variant")
+"""The four kinds of capture a plan may justify. Deliberately not a matrix."""
+
+DEFAULT_CAPTURE_BUDGET = {
+    "primary_viewport_states": 3,
+    "interaction_states": 6,
+    "responsive_captures": 3,
+    "theme_variants": 2,
+    "repair_capture_cycles": 2,
+}
+"""Bounded capture economics (AR-222).
+
+These are *defaults*, not universal limits: a plan may exceed any of them by
+recording a reason in ``budget_expansions``. What is not permitted is exceeding
+one silently, or producing captures nobody can name a basis for. The
+``repair_capture_cycles`` default is deliberately the same number as
+``design_execution``'s repair budget, so one stage cannot claim a fresh
+allowance for every phase.
+"""
+
+RENDER_OUTCOMES = (
+    "RENDERED_DIRECTION_CONFORMANT",
+    "RENDERED_WITH_KNOWN_FINDINGS",
+    "DIRECTION_REVISION_REQUIRED",
+    "RENDER_VALIDATION_BLOCKED",
+)
+"""The precise result of a rendered review. There is no ``looks good``.
+
+``RENDERED_DIRECTION_CONFORMANT``    the render satisfies the approved direction
+``RENDERED_WITH_KNOWN_FINDINGS``     it does not fully, and the gaps are named
+``DIRECTION_REVISION_REQUIRED``      satisfying it would need a new direction
+``RENDER_VALIDATION_BLOCKED``        the render could not be established here
+"""
+
+CRITIQUE_COVERAGE_STATES = ("REVIEWED", "PARTIAL", "NOT_APPLICABLE", "NOT_REVIEWED")
+"""Per-dimension coverage. Reported instead of one scalar score.
+
+``NOT_APPLICABLE`` is a real answer and is preferred over inventing criticism
+about a dimension the surface does not have.
+"""
+
+FINDING_BASES = ("DETERMINISTIC", "BOUNDED_JUDGEMENT")
+"""Whether a finding is a reproducible fact or a bounded qualitative judgement.
+
+A qualitative judgement is never presented as a measurement. Both are findings;
+collapsing them would let taste acquire the authority of arithmetic.
+"""
+
+ARTIFACT_VALIDATION_STATES = ("VALID", "BLANK", "LOADING", "ERROR_DOCUMENT", "UNREADABLE", "NO_CONTENT")
+"""Why a captured artifact cannot stand as evidence of the intended interface.
+
+These are refusals, not grades: an error page is not a badly designed page, and
+critiquing one is a category error rather than a finding.
+"""
+
+REPAIR_ATTEMPT_OUTCOMES = ("VALIDATED", "FAILED_VALIDATION", "ABANDONED")
+"""What one bounded repair attempt achieved before the next capture cycle."""
+
+REPAIR_FINDING_STATES = (
+    "OPEN",
+    "ACCEPTED_FOR_REPAIR",
+    "REPAIRED_CANDIDATE",
+    "VERIFIED_RESOLVED",
+    "STILL_PRESENT",
+    "ESCALATED",
+    "WAIVED_BY_HUMAN",
+)
+"""Finding lifecycle across a rendered repair cycle.
+
+``REPAIRED_CANDIDATE`` means the worker changed something. Only an independent
+re-review of fresh rendered evidence can produce ``VERIFIED_RESOLVED``; the
+worker that made the change cannot be the party that closes its own finding.
+"""
+
+DIRECTION_BOUNDED_REPAIRS = (
+    "increase hierarchy contrast",
+    "reduce excessive spacing",
+    "restore project accent",
+    "fix panel proportions",
+    "remove forbidden surface treatment",
+    "correct typography scale",
+    "improve focus visibility",
+    "fix responsive overflow",
+)
+"""Named repairs that move a render *toward* an already-approved direction.
+
+A repair outside this vocabulary is not automatically forbidden -- a blocking
+accessibility failure is not cosmetic -- but it must be justified by a cited
+principle, and one that would introduce a new visual language is refused with
+``DIRECTION_REVISION_REQUIRED`` rather than quietly taken.
+"""
 
 
 def design_id_matches(prefix: str, value: str) -> bool:
@@ -1575,6 +1698,11 @@ DESIGN_COLLECTION_KEYS = (
     "design_reference_sets",
     "design_implementation_plans", "design_component_inventories",
     "design_implementation_changes", "design_implementation_runs",
+    # AR-222: the rendered-critique collections. `persistence.DESIGN_COLLECTIONS` must
+    # name the same three, or a persisted run state would be neither defaulted nor
+    # type-checked for them -- which is exactly the half-integration that
+    # `design_reference_sets` suffered from.
+    "rendered_evidence_sets", "rendered_critiques", "refinement_plans",
 )
 """The append-only authoritative collections this bound applies to."""
 
@@ -2320,6 +2448,315 @@ def refinement_problems(record: Mapping[str, Any]) -> list[str]:
     return list(dict.fromkeys(problems))
 
 
+def render_capture_plan_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one bounded render-capture plan (AR-222).
+
+    The load-bearing check here is that every target names a *basis*. A plan whose
+    targets exist because nobody objected to them is not a bounded plan, it is a
+    screenshot matrix, and refusing it here is cheaper than triaging fifty images
+    nobody asked for.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("rcp", str(record.get("capture_plan_id", ""))):
+        problems.append("capture plan has a malformed capture_plan_id")
+    for name in ("implementation_plan_id", "direction_id", "render_source_digest", "recorded_at"):
+        _non_empty(record, name, problems)
+    if not _is_sha256(record.get("render_source_digest")):
+        problems.append("capture plan is not bound to a render source digest")
+    if str(record.get("status", "")) not in CAPTURE_PLAN_STATUSES:
+        problems.append(f"capture plan has an unsupported status: {record.get('status') or 'missing'}")
+    targets = record.get("targets")
+    if not isinstance(targets, list) or not targets:
+        problems.append("capture plan declares no targets")
+        return list(dict.fromkeys(problems))
+    seen_ids: set[str] = set()
+    for target in targets:
+        if not isinstance(target, Mapping):
+            problems.append("a capture target must be an object")
+            continue
+        target_id = str(target.get("target_id", ""))
+        if not design_id_matches("rct", target_id):
+            problems.append(f"capture target has a malformed target id: {target_id or 'missing'}")
+        elif target_id in seen_ids:
+            problems.append(f"capture plan repeats a target id: {target_id}")
+        else:
+            seen_ids.add(target_id)
+        if str(target.get("kind", "")) not in CAPTURE_TARGET_KINDS:
+            problems.append(f"capture target has an unsupported kind: {target.get('kind') or 'missing'}")
+        basis = target.get("materiality_basis")
+        if not isinstance(basis, list) or not [item for item in basis if str(item).strip()]:
+            problems.append(f"capture target {target_id or '?'} names no materiality basis")
+        for entry in (basis or []):
+            if not isinstance(entry, Mapping) or str(entry.get("basis", "")) not in CAPTURE_TARGET_BASES:
+                problems.append(f"capture target {target_id or '?'} has an unsupported materiality basis")
+        viewport = target.get("viewport")
+        if not isinstance(viewport, Mapping) or not str(viewport.get("width", "")).strip():
+            problems.append(f"capture target {target_id or '?'} declares no viewport width")
+    problems.extend(capture_budget_problems(record))
+    return list(dict.fromkeys(problems))
+
+
+def capture_budget_problems(record: Mapping[str, Any]) -> list[str]:
+    """Bounded capture economics: exceeding a default needs a recorded reason.
+
+    The defaults are advisory; silence about exceeding them is not. This is the
+    difference between "these defaults did not fit this task" -- which is a normal
+    answer -- and a run that quietly captured everything.
+    """
+    problems: list[str] = []
+    budget = record.get("capture_budget")
+    if not isinstance(budget, Mapping):
+        problems.append("capture plan records no capture budget")
+        return problems
+    limits: dict[str, int] = {}
+    for name, default in DEFAULT_CAPTURE_BUDGET.items():
+        limit = budget.get(name, default)
+        try:
+            limit_value = int(limit)
+        except (TypeError, ValueError):
+            problems.append(f"capture budget entry {name} is not a count")
+            continue
+        if limit_value < 0:
+            problems.append(f"capture budget entry {name} cannot be negative")
+        limits[name] = limit_value
+    expansions = budget.get("expansions")
+    if not isinstance(expansions, list):
+        problems.append("capture budget records no expansion list")
+        return problems
+    stated = {str(item.get("name", "")) for item in expansions if isinstance(item, Mapping)}
+    for expansion in expansions:
+        if not isinstance(expansion, Mapping):
+            problems.append("a capture budget expansion must be an object")
+            continue
+        if not str(expansion.get("reason", "")).strip():
+            problems.append(
+                f"expanding {expansion.get('name', '?')} requires a recorded reason"
+            )
+    counts = capture_counts_over_budget(record)
+    for name, count in sorted(counts.items()):
+        limit = limits.get(name)
+        if limit is None:
+            continue
+        if count > limit and name not in stated:
+            problems.append(
+                f"the plan captures {count} {name} against a budget of {limit} without recording "
+                "why the default did not fit this task"
+            )
+    return problems
+
+
+def capture_counts_over_budget(record: Mapping[str, Any]) -> dict[str, int]:
+    """Measured capture counts per budget axis, so the budget is arithmetic not opinion."""
+    counts = {"primary_viewport_states": 0, "interaction_states": 0, "responsive_captures": 0, "theme_variants": 0}
+    for target in record.get("targets") or []:
+        if not isinstance(target, Mapping):
+            continue
+        kind = str(target.get("kind", ""))
+        if kind == "viewport-state":
+            counts["primary_viewport_states"] += 1
+        elif kind == "interaction-state":
+            counts["interaction_states"] += 1
+        elif kind == "responsive-state":
+            counts["responsive_captures"] += 1
+        elif kind == "theme-variant":
+            counts["theme_variants"] += 1
+    return counts
+
+
+def rendered_evidence_set_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one capture run's manifest (AR-222).
+
+    A manifest is the unit that makes captures checkable in aggregate: it names the
+    source digest every capture in the run was bound to, and it names the browser
+    that produced them. A capture list without a source digest is a gallery.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("res", str(record.get("evidence_set_id", ""))):
+        problems.append("rendered evidence set has a malformed evidence_set_id")
+    for name in ("capture_plan_id", "render_source_digest", "started_at", "browser"):
+        _non_empty(record, name, problems)
+    if not _is_sha256(record.get("render_source_digest")):
+        problems.append("rendered evidence set is not bound to a render source digest")
+    if str(record.get("status", "")) not in ("COMPLETE", "PARTIAL", "FAILED"):
+        problems.append(f"rendered evidence set has an unsupported status: {record.get('status') or 'missing'}")
+    captures = record.get("captures")
+    if not isinstance(captures, list) or not captures:
+        problems.append("rendered evidence set records no captures")
+        return list(dict.fromkeys(problems))
+    seen: set[str] = set()
+    for capture in captures:
+        if not isinstance(capture, Mapping):
+            problems.append("a capture entry must be an object")
+            continue
+        capture_id = str(capture.get("capture_id", ""))
+        if not capture_id:
+            problems.append("a capture entry has no capture_id")
+        elif capture_id in seen:
+            problems.append(f"rendered evidence set repeats a capture id: {capture_id}")
+        else:
+            seen.add(capture_id)
+        for name in ("route", "state", "viewport", "artifact_path", "digest", "captured_at"):
+            _non_empty(capture, name, problems)
+        viewport = capture.get("viewport")
+        if not isinstance(viewport, Mapping) or not str(viewport.get("width", "")).strip():
+            problems.append(f"capture {capture_id or '?'} declares no viewport width")
+        if not _is_sha256(capture.get("digest")):
+            problems.append(f"capture {capture_id or '?'} has no artifact digest")
+        if capture.get("render_source_digest") is not None and not _is_sha256(capture.get("render_source_digest")):
+            problems.append(f"capture {capture_id or '?'} has a malformed source digest")
+        elif str(capture.get("render_source_digest", "")) != str(record.get("render_source_digest", "")):
+            problems.append(
+                f"capture {capture_id or '?'} is bound to a different source digest than its evidence set; "
+                "a set that mixes revisions cannot be reviewed as one result"
+            )
+    return list(dict.fromkeys(problems))
+
+
+def rendered_critique_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one independent rendered critique (AR-222).
+
+    Two things are checked that a structural review cannot check on its own, because
+    they are the two ways this record could otherwise be forged:
+
+    1. the reviewer must be a different execution from the implementer, and
+    2. the review must not have been handed the implementation's rationale.
+
+    The second is a *record* of what was withheld, not a claim about the reviewer's
+    reading. It is checkable; the reviewer's state of mind is not, and pretending
+    otherwise would be the exact impersonation this phase exists to prevent.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("drc", str(record.get("critique_id", ""))):
+        problems.append("rendered critique has a malformed critique_id")
+    for name in ("evidence_set_id", "direction_id", "reviewer_identity", "recorded_at"):
+        _non_empty(record, name, problems)
+    if not _is_sha256(record.get("render_source_digest")):
+        problems.append("rendered critique is not bound to the source digest it reviewed")
+    if str(record.get("overall_status", "")) not in RENDER_OUTCOMES:
+        problems.append(f"rendered critique has an unsupported overall status: {record.get('overall_status') or 'missing'}")
+    reviewer = str(record.get("reviewer_execution", ""))
+    implementer = str(record.get("implementing_execution", ""))
+    if not reviewer:
+        problems.append("rendered critique names no reviewer execution")
+    if not implementer:
+        problems.append("rendered critique names no implementing execution")
+    if reviewer and implementer and reviewer == implementer:
+        problems.append(
+            "the reviewing execution is the implementing execution; the worker that produced a render "
+            "does not get to decide whether its own render looks right"
+        )
+    isolation = record.get("isolation")
+    if not isinstance(isolation, Mapping):
+        problems.append("rendered critique records no review isolation boundary")
+    else:
+        if not str(isolation.get("withheld", "") or "").strip():
+            problems.append("rendered critique records nothing it withheld from the reviewer")
+        if isolation.get("implementation_rationale_transported"):
+            problems.append(
+                "the reviewer was handed implementation rationale; a visual review of a render cannot "
+                "start from the worker's account of what it intended to build"
+            )
+    coverage = record.get("coverage")
+    if not isinstance(coverage, Mapping) or not coverage:
+        problems.append("rendered critique reports no coverage")
+    else:
+        for dimension, verdict in coverage.items():
+            if not isinstance(verdict, Mapping):
+                problems.append(f"coverage entry for {dimension} is not an object")
+                continue
+            if str(verdict.get("state", "")) not in CRITIQUE_COVERAGE_STATES:
+                problems.append(f"coverage for {dimension} has an unsupported state")
+            if str(verdict.get("state", "")) == "REVIEWED" and not verdict.get("capture_ids"):
+                problems.append(f"coverage for {dimension} is REVIEWED but cites no capture")
+    findings = record.get("findings")
+    if not isinstance(findings, list):
+        problems.append("rendered critique records no findings list")
+        return list(dict.fromkeys(problems))
+    for finding in findings:
+        if not isinstance(finding, Mapping):
+            problems.append("a rendered critique finding must be an object")
+            continue
+        for name in ("finding_id", "dimension", "severity", "basis", "observation", "expected_basis"):
+            _non_empty(finding, name, problems)
+        if str(finding.get("dimension", "")) not in DESIGN_REVIEW_DIMENSIONS:
+            problems.append(f"rendered critique finding has an unsupported dimension: {finding.get('dimension')}")
+        if str(finding.get("severity", "")) not in DESIGN_SEVERITIES:
+            problems.append(f"rendered critique finding has an unsupported severity: {finding.get('severity')}")
+        if str(finding.get("basis", "")) not in FINDING_BASES:
+            problems.append(f"rendered critique finding has an unsupported basis: {finding.get('basis')}")
+        citations = finding.get("capture_ids")
+        if not isinstance(citations, list) or not citations:
+            problems.append(
+                f"rendered critique finding {finding.get('finding_id', '?')} cites no rendered capture; "
+                "a judgement about a render must point at the render"
+            )
+        if str(finding.get("state", "OPEN")) not in REPAIR_FINDING_STATES:
+            problems.append(f"rendered critique finding has an unsupported state: {finding.get('state')}")
+    return list(dict.fromkeys(problems))
+
+
+def refinement_plan_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one bounded rendered-refinement plan (AR-222).
+
+    The plan is bounded in three directions at once, and all three are checked here:
+    what it may change, what it may not change, and which approved principle authorises
+    it. A plan that cannot name the principle it serves is a redesign in a plan's
+    clothing.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("rfp", str(record.get("refinement_plan_id", ""))):
+        problems.append("refinement plan has a malformed refinement_plan_id")
+    for name in ("critique_id", "direction_id", "recorded_at"):
+        _non_empty(record, name, problems)
+    if str(record.get("status", "")) not in ("PROPOSED", "IN_PROGRESS", "VALIDATED", "RE_RENDERED", "REJECTED", "ESCALATED"):
+        problems.append(f"refinement plan has an unsupported status: {record.get('status') or 'missing'}")
+    finding_ids = record.get("finding_ids")
+    if not isinstance(finding_ids, list) or not finding_ids:
+        problems.append("refinement plan names no findings")
+    if not isinstance(record.get("allowed_scope"), list) or not record.get("allowed_scope"):
+        problems.append("refinement plan has no allowed scope")
+    if not isinstance(record.get("forbidden_scope"), list):
+        problems.append("refinement plan records no forbidden scope")
+    outcomes = record.get("required_outcomes")
+    if not isinstance(outcomes, list) or not [item for item in outcomes if str(item).strip()]:
+        problems.append("refinement plan declares no required outcomes")
+    if not isinstance(record.get("validation"), list) or not record.get("validation"):
+        problems.append("refinement plan declares no validation commands")
+    justification = record.get("authorising_principles")
+    if not isinstance(justification, list) or not justification:
+        problems.append(
+            "refinement plan names no authorising approved principle; a repair must move the result "
+            "toward a direction that was already approved, not invent one"
+        )
+    for entry in (justification or []):
+        if not isinstance(entry, Mapping) or not str(entry.get("principle_id", "")).strip():
+            problems.append("an authorising principle entry names no principle")
+        elif not str(entry.get("direction_id", "")).strip():
+            problems.append("an authorising principle entry is not bound to a direction")
+    new_direction = record.get("introduces_new_direction")
+    if new_direction:
+        problems.append(
+            "refinement plan declares that it introduces a new design direction; that is "
+            "DIRECTION_REVISION_REQUIRED, not a repair"
+        )
+    try:
+        attempt = int(record.get("attempt", 0))
+    except (TypeError, ValueError):
+        problems.append("refinement plan attempt is not a count")
+    else:
+        if attempt < 1:
+            problems.append("a refinement plan records an attempt below 1")
+    return list(dict.fromkeys(problems))
+
+
 DESIGN_RECORD_VALIDATORS = {
     "reference": reference_problems,
     "reference-analysis": reference_analysis_problems,
@@ -2334,6 +2771,10 @@ DESIGN_RECORD_VALIDATORS = {
     "rendered-evidence": rendered_evidence_problems,
     "design-review": design_review_problems,
     "refinement": refinement_problems,
+    "render-capture-plan": render_capture_plan_problems,
+    "rendered-evidence-set": rendered_evidence_set_problems,
+    "rendered-critique": rendered_critique_problems,
+    "refinement-plan": refinement_plan_problems,
 }
 """Record kind -> validator. One dispatch table, so no caller can append an
 unvalidated design record to the run state."""

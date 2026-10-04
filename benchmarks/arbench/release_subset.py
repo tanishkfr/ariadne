@@ -100,4 +100,18 @@ RELEASE_SUBSET: tuple[str, ...] = (
     "runtime-contracts.doctor-reports-the-runtime-honestly",
     "runtime-contracts.runtime-identity-is-canonical-and-aliases-read",
     "runtime-contracts.no-provider-picker-and-no-vendor-vocabulary",
+    # AR-222 rendered design critique. The three that matter most for a release are the
+    # first two and the last: a capture that cannot identify its source, a review that can
+    # launder judgement as measurement, and a worker that can certify its own change would
+    # each let the product ship a false claim about how it looks.
+    "render.capture-without-source-identity-refused",
+    "render.stale-capture-refused",
+    "render.blank-and-error-captures-refused",
+    "render.reviewer-isolation-boundary",
+    "render.finding-must-cite-a-capture",
+    "render.principles-not-pixels",
+    "render.refinement-is-bounded",
+    "render.worker-cannot-self-certify",
+    "render.no-design-score",
+    "render.budget-not-a-screenshot-matrix",
 )

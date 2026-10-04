@@ -56,6 +56,12 @@ DESIGN_COLLECTIONS = (
     "design_component_inventories",
     "design_implementation_changes",
     "design_implementation_runs",
+    # AR-222 rendered critique. Same bound, same declaration: `contracts.
+    # DESIGN_COLLECTION_KEYS` names all three, and this list is what makes them
+    # default and type-check a persisted run state.
+    "rendered_evidence_sets",
+    "rendered_critiques",
+    "refinement_plans",
 )
 """AR-202D record collections kept in the run state.
 

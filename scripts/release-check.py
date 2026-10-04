@@ -137,6 +137,14 @@ def check_engine_suites() -> dict:
         ("grounded design execution", "test-design-execution.py", 3600),
         ("grounded design execution mutations", "test-design-execution-mutations.py", 7200),
         ("grounded design execution adversarial", "test-design-execution-adversarial.py", 3600),
+        # AR-222 rendered design critique. These launch a real browser, so they are by
+        # far the slowest suites in the gate and get the longest allowances. The mutation
+        # suite re-runs the whole suite once per mutation -- 40 times -- which is why its
+        # budget is the largest here. Excluding them would leave the rendered-evidence
+        # chain untested in the one place that runs on every release.
+        ("rendered design critique", "test-rendered-critique.py", 3600),
+        ("rendered design critique mutations", "test-rendered-critique-mutations.py", 21600),
+        ("rendered design critique adversarial", "test-rendered-critique-adversarial.py", 3600),
     ):
         result = run(python_script(script), timeout=timeout)
         if result.returncode != 0:
