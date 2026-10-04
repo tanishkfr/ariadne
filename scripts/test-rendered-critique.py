@@ -1994,6 +1994,60 @@ def only_the_browser_launch_is_retried_and_only_a_few_times():
     )
 
 
+@case
+def a_surface_server_is_awaited_before_anything_captures_it():
+    """``Popen`` returning is not the server listening.
+
+    The race this guards against produced blank-looking evidence intermittently, and the
+    symptom surfaced far from the cause -- as "no validated capture is available to
+    critique" -- which is precisely how a real bug gets filed as flakiness.
+    """
+    import socket
+    import urllib.request
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = write_surface(Path(directory) / "surface", html=BASIC_HTML, css=BASIC_CSS)
+        server = adapter.LocalServer(root)
+        url = server.start()
+        try:
+            assert url.endswith(f":{server.port}/"), url
+            # If start() returned before the port was listening, this connection would
+            # race, and a captured surface would be a captured connection error.
+            with urllib.request.urlopen(f"{url}index.html", timeout=5) as response:
+                assert response.status == 200, response.status
+                body = response.read().decode("utf-8", "replace")
+            assert "Beacon" in body, body[:200]
+        finally:
+            server.shutdown()
+        # The listener is released asynchronously, so poll rather than assume it is free
+        # the instant the child exits. What is being asserted is that shutdown works, not
+        # that the operating system releases a socket with zero latency.
+        import time as _time
+
+        deadline = _time.monotonic() + 10.0
+        released = False
+        while _time.monotonic() < deadline:
+            with socket.socket() as probe:
+                probe.settimeout(0.5)
+                if probe.connect_ex(("127.0.0.1", server.port)) != 0:
+                    released = True
+                    break
+            _time.sleep(0.1)
+        assert released, (
+            "shutdown must stop the surface server, or the next run inherits a stale port"
+        )
+    assert adapter.SERVER_READY_TIMEOUT_SECONDS > 0
+    assert adapter.SERVER_POLL_SECONDS > 0
+
+
+@case
+def a_surface_server_that_cannot_start_is_refused_rather_than_captured_blank():
+    with tempfile.TemporaryDirectory() as directory:
+        missing = Path(directory) / "not-there"
+        server = adapter.LocalServer(missing)
+        raises(lambda: server.start(), "surface to render does not exist")
+
+
 def run() -> int:
     global CAPTURE
     failures: list[str] = []

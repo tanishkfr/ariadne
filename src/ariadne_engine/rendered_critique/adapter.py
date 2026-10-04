@@ -50,6 +50,14 @@ DEFAULT_NAVIGATION_TIMEOUT_MS = 20000
 DEFAULT_SETTLE_MS = 350
 LAUNCH_ATTEMPTS = 3
 LAUNCH_RETRY_SECONDS = 1.5
+SERVER_READY_TIMEOUT_SECONDS = 20.0
+SERVER_POLL_SECONDS = 0.1
+"""How long a freshly spawned surface server is given to begin listening.
+
+``Popen`` returning is not the server being ready. Waiting for the port is the difference
+between a capture of the surface and a capture of a connection error, and the second looks
+exactly like the first in a PNG until something reads it.
+"""
 """Bounded launch retry. Narrow on purpose -- see :meth:`ChromiumRenderAdapter.launch`.
 
 Retrying is only honest because the retried operation produces no evidence: a browser that
@@ -790,6 +798,18 @@ class LocalServer:
         self._process: Any = None
 
     def start(self) -> str:
+        """Start the server and return its URL, once it is genuinely accepting connections.
+
+        Returning immediately after ``Popen`` is a race: the child has been created but
+        has not yet bound the socket, so the first navigation hits a port nothing is
+        listening on, every capture in the run is refused, and the failure surfaces far
+        from its cause as "no validated capture is available to critique". That is
+        intermittent by nature -- it depends on how fast the interpreter starts -- which is
+        exactly the kind of failure that gets mistaken for flakiness in the tool above.
+
+        So: poll the port until it accepts, and fail loudly if it never does.
+        """
+        import socket
         import subprocess
 
         if not self.directory.is_dir():
@@ -803,7 +823,25 @@ class LocalServer:
             argv, cwd=str(self.directory), stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, shell=False,
         )
-        return f"http://127.0.0.1:{self.port}/"
+        deadline = time.monotonic() + SERVER_READY_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if self._process.poll() is not None:
+                raise CaptureFailed(
+                    f"CAPTURE_FAILED: the surface server exited immediately with code "
+                    f"{self._process.returncode}; nothing can be captured from a surface that is "
+                    "not running"
+                )
+            with socket.socket() as probe:
+                probe.settimeout(0.25)
+                if probe.connect_ex(("127.0.0.1", self.port)) == 0:
+                    return f"http://127.0.0.1:{self.port}/"
+            time.sleep(SERVER_POLL_SECONDS)
+        self.shutdown()
+        raise CaptureFailed(
+            f"CAPTURE_FAILED: the surface server did not begin listening on port {self.port} "
+            f"within {SERVER_READY_TIMEOUT_SECONDS}s; capturing from a surface that may not be up "
+            "would produce blank images that look like evidence"
+        )
 
     def shutdown(self) -> None:
         if self._process is None:
