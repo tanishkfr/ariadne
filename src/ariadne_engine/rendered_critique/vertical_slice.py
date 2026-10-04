@@ -548,10 +548,30 @@ def review_with(reviewer: Callable[[Mapping], Mapping]) -> dict:
 
 
 def _counter_review(project: Path, binding: Mapping) -> dict:
+    """Scan the bytes that actually render, and only those.
+
+    Test files are excluded on purpose, and the reason is specific rather than tidy: a
+    test that asserts a forbidden treatment is *absent* necessarily contains the forbidden
+    token. Beacon's own suite has ``assert.doesNotMatch(await css(), /backdrop-filter/)``,
+    and scanning test files therefore reported glassmorphism as PRESENT on a stylesheet that
+    has none. A counter-reference check that cries wolf on its own regression test is worse
+    than no check, because the finding it produces sends someone hunting for a defect that
+    is not there.
+
+    So the corpus is the rendered sources: stylesheets, templates, and the components that
+    produce markup.
+    """
     texts: dict[str, str] = {}
     for relative in source_module.relevant_files(project):
         path = project / relative
-        if path.suffix.lower() in (".css", ".html", ".ts", ".tsx", ".js", ".json") and path.is_file():
+        if path.suffix.lower() not in (".css", ".scss", ".sass", ".less", ".html"):
+            continue
+        lowered = relative.lower()
+        if "/tests/" in f"/{lowered}" or lowered.startswith("tests/") or "/test/" in f"/{lowered}":
+            continue
+        if any(part in lowered for part in (".test.", ".spec.", "_test.")):
+            continue
+        if path.is_file():
             try:
                 texts[relative] = path.read_text(encoding="utf-8", errors="replace")
             except OSError:

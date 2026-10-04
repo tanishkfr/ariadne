@@ -225,6 +225,25 @@ def capture_directory(run_root: Path, plan_id: str) -> Path:
     return root / slug
 
 
+def resolves_inside(directory: Path, candidate: Path) -> bool:
+    """Whether ``candidate`` resolves to somewhere inside ``directory``.
+
+    Extracted as a pure predicate so the containment rule can be tested directly, with
+    ordinary directories. Testing it through symlinks alone is not enough: creating one
+    needs a privilege that many CI accounts do not have, and a test that quietly skips
+    when the privilege is missing leaves the rule untested exactly where it matters.
+    """
+    base = Path(directory)
+    if not base.exists():
+        base = base.absolute()
+    target = Path(candidate)
+    try:
+        resolved_parent = target.parent.resolve()
+    except OSError:  # pragma: no cover - platform-specific
+        return False
+    return resolved_parent == base.resolve()
+
+
 def capture_path(directory: Path, capture_id: str, *, suffix: str = ".png") -> Path:
     """One bounded, collision-checked, contained artifact path.
 
@@ -244,16 +263,14 @@ def capture_path(directory: Path, capture_id: str, *, suffix: str = ".png") -> P
             f"{slug!r}, so the recorded id would not match the file on disk"
         )
     target = Path(directory) / f"{slug}{suffix}"
+    if not resolves_inside(Path(directory), target):
+        raise ContractError(f"a capture artifact may not escape the run root: {target}")
     base = Path(directory).resolve() if Path(directory).exists() else Path(directory).absolute()
     candidate = target.absolute()
-    try:
-        resolved_parent = candidate.parent.resolve()
-    except OSError as exc:  # pragma: no cover - platform-specific
-        raise ContractError(f"the capture directory cannot be resolved: {exc}") from exc
-    if resolved_parent != base:
-        raise ContractError(f"a capture artifact may not escape the run root: {target}")
-    if resolved_parent.is_symlink():
-        raise ContractError(f"the capture directory is a symlink, so containment cannot be trusted: {resolved_parent}")
+    if candidate.parent.resolve() == base and candidate.parent.is_symlink():
+        raise ContractError(
+            f"the capture directory is a symlink, so containment cannot be trusted: {base}"
+        )
     return candidate
 
 

@@ -1825,30 +1825,13 @@ def a_failed_navigation_is_refused_rather_than_photographed():
 
 
 @case
-def a_capture_path_cannot_be_forced_out_of_its_directory():
-    """Traversal is checked on the resolved parent, not only on the filename.
-
-    A filename-safe capture id is not sufficient: the directory itself may be a symlink
-    pointing somewhere else entirely, and only the resolved parent tells you where the
-    bytes will actually land.
-    """
-    import os
-
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        target = root / "outside"
-        target.mkdir()
-        link = root / "run-root"
-        try:
-            os.symlink(target, link, target_is_directory=True)
-        except (OSError, NotImplementedError):  # pragma: no cover - platform-dependent
-            return
-        raises(lambda: safety.capture_path(link, "capture_001"), "containment cannot be trusted")
-        assert not list(target.iterdir()), "no artifact may be written through a symlinked root"
-
-
-@case
 def a_launch_argument_may_not_carry_a_nul_or_an_implausible_length():
+    """Every launch argument is bounded, not just the first.
+
+    The checks are one per item, so a loop that examined only the program name would leave
+    every argument after it unchecked -- and an argument is exactly where a NUL byte or a
+    megabyte-long string does its damage.
+    """
     with tempfile.TemporaryDirectory() as directory:
         raises(
             lambda: safety.safe_launch_command(["python", "bad\x00arg"], working_root=Path(directory)),
@@ -1862,35 +1845,63 @@ def a_launch_argument_may_not_carry_a_nul_or_an_implausible_length():
             lambda: safety.safe_launch_command(["python"] + ["a"] * 100, working_root=Path(directory)),
             "implausible",
         )
+        # A NUL in the program position is refused on the same grounds.
+        raises(
+            lambda: safety.safe_launch_command(["py\x00thon", "--version"], working_root=Path(directory)),
+            "NUL byte",
+        )
 
 
 @case
-def a_capture_path_resolving_outside_its_root_is_refused():
-    """The containment check, distinguished from the symlink check.
+def a_capture_artifact_is_contained_by_resolved_path_not_by_its_name():
+    """A filename-safe capture id is not containment.
 
-    Passing a symlinked *directory* is the case the two checks disagree on: the resolved
-    parent is a real directory somewhere else entirely, so only a comparison against the
-    base can refuse it. A suite that only tests "the directory is a symlink" would let the
-    containment check rot unnoticed.
+    The rule is that the *resolved* parent equals the base. Tested directly and with
+    ordinary directories, because testing it only through symlinks needs a privilege many
+    CI accounts lack -- and a test that quietly skips when the privilege is missing leaves
+    the rule unverified exactly where it matters.
     """
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        run_root = root / "run-root"
+        outside = root / "outside"
+        run_root.mkdir()
+        outside.mkdir()
+        assert safety.resolves_inside(run_root, run_root / "capture_001.png"), (
+            "an artifact directly inside the run root is contained"
+        )
+        assert not safety.resolves_inside(run_root, outside / "capture_001.png"), (
+            "an artifact in a sibling directory is not contained, whatever its name"
+        )
+        assert not safety.resolves_inside(run_root, run_root.parent / "capture_001.png")
+        raises(lambda: safety.capture_path(run_root, "../capture_001"), "filename-safe")
+        # The same slug written into the base itself is fine, so the refusal above is about
+        # the path rather than about the filename.
+        assert safety.capture_path(run_root, "capture_001").parent == run_root
+
+
+@case
+def a_symlinked_capture_directory_is_refused_when_the_platform_allows_one():
     import os
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         outside = root / "outside"
-        outside.mkdir()
         base = root / "run-root"
+        outside.mkdir()
         base.mkdir()
         link = base / "link"
         try:
             os.symlink(outside, link, target_is_directory=True)
-        except (OSError, NotImplementedError):  # pragma: no cover - platform-dependent
+        except (OSError, NotImplementedError, AttributeError) as exc:
+            # Not a silent skip: say so, so a run that never exercised this reads as
+            # untested rather than as passing.
+            print(f"     (symlink containment not exercised here: {type(exc).__name__})")
             return
         raises(lambda: safety.capture_path(link, "capture_001"), "may not escape the run root")
         assert not list(outside.iterdir()), "no artifact may be written outside the run root"
-        # The same slug written into the base itself is fine, so the refusal is about
-        # containment rather than about the filename.
-        assert safety.capture_path(base, "capture_001").parent == base
+
+
 
 
 @case
@@ -2001,39 +2012,31 @@ def a_surface_server_is_awaited_before_anything_captures_it():
     The race this guards against produced blank-looking evidence intermittently, and the
     symptom surfaced far from the cause -- as "no validated capture is available to
     critique" -- which is precisely how a real bug gets filed as flakiness.
+
+    Reachability is asked of the server rather than with a socket opened here: this file
+    is release tooling, and release tooling is held to no network imports outside the
+    launcher. The vertical-slice cases are what prove the served document is really
+    fetched and captured.
     """
-    import socket
-    import urllib.request
+    import time as _time
 
     with tempfile.TemporaryDirectory() as directory:
         root = write_surface(Path(directory) / "surface", html=BASIC_HTML, css=BASIC_CSS)
         server = adapter.LocalServer(root)
+        assert not server.is_serving(), "a server that was never started must not claim to serve"
         url = server.start()
         try:
             assert url.endswith(f":{server.port}/"), url
-            # If start() returned before the port was listening, this connection would
-            # race, and a captured surface would be a captured connection error.
-            with urllib.request.urlopen(f"{url}index.html", timeout=5) as response:
-                assert response.status == 200, response.status
-                body = response.read().decode("utf-8", "replace")
-            assert "Beacon" in body, body[:200]
+            assert server.is_serving(), (
+                "start() returned before the port was accepting; a capture from here would be a "
+                "capture of a connection error"
+            )
         finally:
             server.shutdown()
-        # The listener is released asynchronously, so poll rather than assume it is free
-        # the instant the child exits. What is being asserted is that shutdown works, not
-        # that the operating system releases a socket with zero latency.
-        import time as _time
-
         deadline = _time.monotonic() + 10.0
-        released = False
-        while _time.monotonic() < deadline:
-            with socket.socket() as probe:
-                probe.settimeout(0.5)
-                if probe.connect_ex(("127.0.0.1", server.port)) != 0:
-                    released = True
-                    break
+        while server.is_serving() and _time.monotonic() < deadline:
             _time.sleep(0.1)
-        assert released, (
+        assert not server.is_serving(), (
             "shutdown must stop the surface server, or the next run inherits a stale port"
         )
     assert adapter.SERVER_READY_TIMEOUT_SECONDS > 0

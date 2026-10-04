@@ -843,6 +843,23 @@ class LocalServer:
             "would produce blank images that look like evidence"
         )
 
+    def is_serving(self, *, timeout: float = 0.25) -> bool:
+        """Whether the port is accepting a connection right now.
+
+        Lives here rather than in the suite because the suite is release tooling, and
+        release tooling is held to "no network imports outside the launcher". Loopback is
+        not a network dependency, but a test that reached for ``socket`` to prove the
+        server was up would be one the offline guard rightly flags, and the honest fix is
+        to ask the component that owns the socket rather than to import one of its own.
+        """
+        import socket
+
+        if self._process is None:
+            return False
+        with socket.socket() as probe:
+            probe.settimeout(float(timeout))
+            return probe.connect_ex(("127.0.0.1", self.port)) == 0
+
     def shutdown(self) -> None:
         if self._process is None:
             return

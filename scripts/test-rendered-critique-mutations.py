@@ -38,6 +38,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 RESTORE_MARKER = ROOT / ".ariadne-mutation-restore.json"
+BACKUP_DIR = ROOT / ".ariadne-mutation-restore"
+"""Where the pre-mutation bytes are stashed, so a killed run can be undone."""
 
 ENGINE = SRC / "ariadne_engine"
 RENDERED = ENGINE / "rendered_critique"
@@ -265,8 +267,8 @@ MUTATIONS: list[tuple[str, Path, str, str]] = [
     (
         "capture artifact escapes the run root",
         RENDERED / "safety.py",
-        '    if resolved_parent != base:',
-        '    if False:',
+        "    return resolved_parent == base.resolve()",
+        "    return True",
     ),
     (
         "browser launch argument injection",
@@ -304,12 +306,69 @@ def _restore(path: Path, original: bytes) -> None:
 
 
 def _write_restore_marker(pending: list[tuple[Path, bytes]]) -> None:
+    """Record what is about to be mutated, and stash the original bytes.
+
+    Storing the bytes rather than only a digest is what makes recovery possible after a
+    hard kill. ``finally`` handles an exception and a normal return; it does not handle
+    a process that is terminated from outside, because the interpreter never gets to run
+    it. ``git checkout`` would restore the file, but only by discarding whatever
+    uncommitted work happened to be in it -- and this repository's guidance is explicit
+    that restoration must not be verified through git alone, because untracked state
+    matters too. So the exact bytes go to disk and come back from there.
+    """
     import json
 
-    RESTORE_MARKER.write_text(
-        json.dumps([{"path": str(path), "sha256": _digest(payload)} for path, payload in pending]),
-        encoding="utf-8",
-    )
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for index, (path, payload) in enumerate(pending):
+        backup = BACKUP_DIR / f"{index:03d}-{path.name}"
+        backup.write_bytes(payload)
+        rows.append({
+            "path": str(path),
+            "backup": backup.name,
+            "sha256": _digest(payload),
+            "bytes": len(payload),
+        })
+    RESTORE_MARKER.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+
+
+def recover_if_needed() -> list[str]:
+    """Restore anything a previous killed run left mutated. Returns what it recovered.
+
+    Called before the baseline runs. A suite that inherits a mutated engine would report
+    mutations as caught for the wrong reason, which is the most expensive possible failure
+    in a mutation harness -- it looks like success.
+    """
+    import json
+
+    if not RESTORE_MARKER.is_file():
+        return []
+    try:
+        rows = json.loads(RESTORE_MARKER.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        RESTORE_MARKER.unlink(missing_ok=True)
+        return []
+    recovered: list[str] = []
+    for row in rows if isinstance(rows, list) else []:
+        path = Path(str(row.get("path", "")))
+        backup = BACKUP_DIR / str(row.get("backup", ""))
+        if not path.is_file() or not backup.is_file():
+            continue
+        payload = backup.read_bytes()
+        if _digest(payload) != str(row.get("sha256", "")):
+            print(f"refusing to restore {path}: the stashed bytes do not match their digest")
+            continue
+        if path.read_bytes() != payload:
+            path.write_bytes(payload)
+            recovered.append(str(path))
+    _clear_restore_marker()
+    for stale in BACKUP_DIR.glob("*"):
+        stale.unlink(missing_ok=True)
+    if recovered:
+        print(f"recovered {len(recovered)} file(s) left mutated by an interrupted run:")
+        for item in recovered:
+            print(f"  restored {item}")
+    return recovered
 
 
 def _digest(payload: bytes) -> str:
@@ -320,7 +379,14 @@ def _digest(payload: bytes) -> str:
 
 def _clear_restore_marker() -> None:
     if RESTORE_MARKER.is_file():
-        RESTORE_MARKER.unlink()
+        RESTORE_MARKER.unlink(missing_ok=True)
+    if BACKUP_DIR.is_dir():
+        for stale in BACKUP_DIR.glob("*"):
+            stale.unlink(missing_ok=True)
+        try:
+            BACKUP_DIR.rmdir()
+        except OSError:  # pragma: no cover - non-empty for another reason
+            pass
 
 
 def run_suite() -> tuple[bool, str]:
@@ -340,6 +406,8 @@ def run_suite() -> tuple[bool, str]:
 
 
 def main() -> int:
+    # Before anything else: undo whatever a previous killed run left behind.
+    recover_if_needed()
     baseline_ok, baseline_output = run_suite()
     if not baseline_ok:
         print("the suite is not green before mutation; a surviving mutation would mean nothing")
@@ -402,5 +470,7 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:  # pragma: no cover - interruption path
-        _clear_restore_marker()
+        # Leave the marker: the next run recovers from it. Clearing it here would
+        # discard the only record of which file was mid-mutation.
+        print("\ninterrupted; the next run will restore anything left mutated")
         raise

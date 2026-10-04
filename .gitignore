@@ -20,7 +20,10 @@ validation/runs/*
 # on one day. The case definitions in benchmarks/arbench/ are the tracked artefact.
 benchmarks/results/
 
-# The AR-221 mutation harness records the bytes a mutation replaced, so an interrupted
-# run can restore the tree. The marker is machine-local recovery state, never an
-# artefact: if one is present the tree is mid-mutation and the next run will restore it.
+# The mutation harness records the bytes a mutation replaced, so an interrupted run can
+# restore the tree. The marker is machine-local recovery state, never an artefact: if one
+# is present the tree is mid-mutation and the next run will restore it. AR-222 upgraded
+# this from a digest-only marker to a stash of the actual bytes, because `finally` does not
+# run when a process is killed from outside and a digest alone cannot undo anything.
 .ariadne-mutation-restore.json
+.ariadne-mutation-restore/
