@@ -52,6 +52,14 @@ LAUNCH_ATTEMPTS = 3
 LAUNCH_RETRY_SECONDS = 1.5
 SERVER_READY_TIMEOUT_SECONDS = 20.0
 SERVER_POLL_SECONDS = 0.1
+BROWSER_EXIT_SECONDS = 5.0
+"""How long shutdown waits for the browser process to exit.
+
+Bounded, because shutdown must not become a hang. The wait exists so the operating
+system has released the files the browser had mapped before a caller deletes them; without
+it, cleanup of a directory the browser was serving fails intermittently and the failure
+lands on an unrelated test.
+"""
 """How long a freshly spawned surface server is given to begin listening.
 
 ``Popen`` returning is not the server being ready. Waiting for the port is the difference
@@ -504,6 +512,17 @@ class ChromiumRenderAdapter(RenderAdapter):
         return report
 
     def shutdown(self) -> None:
+        """Stop the browser and wait for it to actually be gone.
+
+        Best-effort teardown is not good enough here. ``close()`` asks the browser to
+        exit; the operating system may still hold handles on the files it had mapped for
+        a short while afterwards. A caller that then deletes a directory the browser was
+        serving fails with a sharing violation, and the failure lands on whichever test
+        happens to be cleaning up -- which reads as an intermittent behavioural failure
+        rather than as a teardown race.
+
+        So: close everything, then wait, bounded, for the driver process to exit.
+        """
         for closer in (getattr(self._context, "close", None), getattr(self._browser, "close", None),
                        getattr(self._playwright, "stop", None)):
             if closer is None:
@@ -513,6 +532,29 @@ class ChromiumRenderAdapter(RenderAdapter):
             except Exception:  # noqa: BLE001 - shutdown must not mask the real error
                 pass
         self._page = self._context = self._browser = self._playwright = None
+        self._await_browser_exit()
+
+    def _await_browser_exit(self) -> None:
+        """Give the engine process a bounded moment to release its file handles."""
+        deadline = time.monotonic() + BROWSER_EXIT_SECONDS
+        while time.monotonic() < deadline:
+            process = self._driver_process()
+            if process is None:
+                return
+            try:
+                if process.poll() is not None:
+                    return
+            except Exception:  # noqa: BLE001 - introspection is best effort
+                return
+            time.sleep(0.05)
+
+    def _driver_process(self):
+        """The browser's process handle, if the engine exposes one."""
+        for holder in (self._browser, self._playwright):
+            process = getattr(holder, "process", None)
+            if process is not None and hasattr(process, "poll"):
+                return process
+        return None
 
     # -- internals -----------------------------------------------------------
     def _require_page(self) -> Any:

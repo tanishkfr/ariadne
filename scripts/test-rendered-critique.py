@@ -1548,7 +1548,10 @@ def the_vertical_slice_renders_critiques_and_repairs_with_a_browser():
             assert report["failures"], "a blocked render must say why"
             assert "RENDER_CAPABILITY_UNAVAILABLE" in " ".join(report["failures"]), report["failures"]
         return
-    with tempfile.TemporaryDirectory() as directory:
+        # Not a TemporaryDirectory: the browser has just served this tree, and the OS
+        # may still hold handles on it when cleanup runs. Deleting it there fails with a
+        # sharing violation that reads as an intermittent behavioural failure.
+        directory = tempfile.mkdtemp(prefix="ar222-slice-")
         report = ar222.run(working_root=Path(directory), validate=True)
         assert report["completed"], report.get("failures")
         assert report["outcome"] in contracts.RENDER_OUTCOMES, report["outcome"]
@@ -1585,7 +1588,10 @@ def the_vertical_slice_keeps_before_and_after_evidence_and_bounds_repairs():
     probe = adapter.probe_playwright()
     if not probe.available:
         return
-    with tempfile.TemporaryDirectory() as directory:
+        # Not a TemporaryDirectory: the browser has just served this tree, and the OS
+        # may still hold handles on it when cleanup runs. Deleting it there fails with a
+        # sharing violation that reads as an intermittent behavioural failure.
+        directory = tempfile.mkdtemp(prefix="ar222-slice-")
         report = ar222.run(working_root=Path(directory))
         root = Path(report["working_root"]) / "render-evidence"
         first = sorted((root).glob("capture_*.png"))
