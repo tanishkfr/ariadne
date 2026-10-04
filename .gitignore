@@ -27,3 +27,7 @@ benchmarks/results/
 # run when a process is killed from outside and a digest alone cannot undo anything.
 .ariadne-mutation-restore.json
 .ariadne-mutation-restore/
+# AR-222's harness uses its own marker and stash, because sharing the AR-221 path with an
+# incompatible shape crashed AR-221's recovery routine and with it the whole gate.
+.ariadne-mutation-restore-222.json
+.ariadne-mutation-restore-222/

@@ -37,8 +37,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-RESTORE_MARKER = ROOT / ".ariadne-mutation-restore.json"
-BACKUP_DIR = ROOT / ".ariadne-mutation-restore"
+#: Deliberately NOT ``.ariadne-mutation-restore.json``. That path belongs to the AR-221
+#: harness, whose marker is a single object carrying the original file contents inline.
+#: Sharing the filename with an incompatible shape made AR-221's recovery routine read
+#: this harness's list and raise ``TypeError: list indices must be integers``, which
+#: failed the whole engine-suites gate. Two harnesses must not share one marker path, and
+#: neither may assume it is the only thing that will ever write there.
+RESTORE_MARKER = ROOT / ".ariadne-mutation-restore-222.json"
+BACKUP_DIR = ROOT / ".ariadne-mutation-restore-222"
 """Where the pre-mutation bytes are stashed, so a killed run can be undone."""
 
 ENGINE = SRC / "ariadne_engine"

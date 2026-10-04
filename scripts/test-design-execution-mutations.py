@@ -267,6 +267,17 @@ def recover_interrupted_mutation() -> list[str]:
     except (OSError, json.JSONDecodeError):
         RESTORE_MARKER.unlink(missing_ok=True)
         return []
+    # A marker this harness does not recognise is not ours to act on, and must not be a
+    # crash. Another harness may write the same filename with its own shape; reading it
+    # as if it were ours raises TypeError and takes the whole engine-suites gate with it.
+    # Leave it in place -- deleting another harness's recovery state would be worse -- and
+    # say so, so the collision is visible rather than silently ignored.
+    if not isinstance(record, dict) or not {"path", "contents"} <= set(record):
+        print(
+            f"note: {RESTORE_MARKER.name} is not in this harness's format; leaving it for "
+            "whatever wrote it"
+        )
+        return []
     target = ROOT / record["path"]
     target.write_text(record["contents"], encoding="utf-8")
     RESTORE_MARKER.unlink(missing_ok=True)
