@@ -59,28 +59,22 @@ Each is a *field that must exist somewhere in the joined record*, so an AR-223 e
 never has to read prose to work out who produced what or which revision it observed.
 """
 
-ACTOR_ROLES = (
-    "user_or_human_approver",
-    "implementation_worker",
-    "evidence_producer",
-    "independent_reviewer",
-    "repair_worker",
-    "engine",
-)
+ACTOR_ROLES = contracts.PROOF_ACTOR_ROLES
 """The identities a proof path must be able to distinguish.
 
 The reason this list exists is a single future rule: *the worker cannot independently
 certify itself.* Enforcing it needs the roles already recorded, which means adding them now
 -- before anything depends on them -- rather than retro-fitting identities onto records
 that never carried them.
+
+Moved to :data:`ariadne_engine.contracts.PROOF_ACTOR_ROLES` in AR-223. From AR-223 on
+two subsystems need this list -- proof readiness to *detect* a role collision and
+acceptance to *refuse* one -- and two copies of a list whose whole purpose is agreement
+would drift exactly where it matters. The name is kept here so existing readers and the
+AR-222D suites are unaffected.
 """
 
-SELF_CERTIFICATION_PAIRS = (
-    ("implementation_worker", "independent_reviewer"),
-    ("repair_worker", "independent_reviewer"),
-    ("implementation_worker", "evidence_producer"),
-    ("repair_worker", "evidence_producer"),
-)
+SELF_CERTIFICATION_PAIRS = contracts.SELF_CERTIFICATION_PAIRS
 """Role pairs that may not be the same actor.
 
 Evidence produced by the party whose work it evidences, and reviewed by the party that

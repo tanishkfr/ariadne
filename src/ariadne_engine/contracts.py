@@ -143,6 +143,10 @@ REVISION_FIELDS: dict[str, tuple[str, ...]] = {
         "scope",
         "constrained-body",
     ),
+    "acceptance-claim": (
+        "actor",
+        "statement",
+    ),
 }
 """Declared field lists per subject type. Keep small, ordered and documented.
 
@@ -3399,6 +3403,556 @@ AR206_COLLECTIONS = (
 family. A run state that has none of them is a complete 2.0 run state.
 """
 
+# ------------------------------------------------------- AR-223 acceptance plane
+
+SCHEMA_ACCEPTANCE = 1
+"""The AR-223 acceptance record family (contract, requirement, claim, evidence,
+verification decision, verification pass).
+
+Its own schema family, additive and optional in exactly the way AR-202/AR-203's are: a
+run state written by an earlier milestone carries none of these collections and stays
+readable and continuable, which is why nothing here forces a run-state migration.
+"""
+
+READABLE_ACCEPTANCE_SCHEMAS = (1,)
+"""Acceptance record versions this runtime can read. Anything else is refused."""
+
+ACCEPTANCE_CONTRACT = "ariadne-acceptance-1"
+"""Marker recorded in ``state["engine"]["acceptance_contract"]`` when these records exist."""
+
+ACCEPTANCE_CONTRACT_VERSION = "ar-223-acceptance-contract-1"
+"""Which acceptance contract produced these records, distinct from the record schema.
+
+Same reason ``DECISION_CONTRACT_VERSION`` exists: a consumer reading a state has to be
+able to tell *which definitions* produced an answer, not merely which shape it has.
+"""
+
+ACCEPTANCE_VERDICTS = (
+    "PROVEN",
+    "PARTIAL",
+    "UNPROVEN",
+    "FAILED",
+    "CONTRADICTED",
+    "NEEDS_HUMAN",
+)
+"""The stable verdict vocabulary for one requirement in one verification pass.
+
+**There is deliberately no order over these.** Every earlier ordinal in this module --
+``VERIFICATION_LEVEL_ORDER``, for instance -- exists because its members really are a
+ladder. These are not: ``FAILED`` is not "more" than ``UNPROVEN``, it is a different
+answer, and a system that sorts them has already decided that missing evidence is
+failure. The two distinctions that matter most are the two this tuple refuses to blur:
+
+    UNPROVEN  != FAILED          no evidence either way is not a violation
+    FAILED    != CONTRADICTED    violating a requirement is not disproving a claim
+
+``CONTRADICTED`` is also *not* a requirement verdict in the ordinary case: it describes
+a worker's statement, and :mod:`ariadne_engine.acceptance.decisions` keeps requirement
+verdicts and claim verdicts in separate records precisely so the two cannot be
+conflated.
+
+``NEEDS_HUMAN`` is a first-class outcome, not a failure to decide. Abstention is a
+valid answer and pretending otherwise would make the system's confidence its
+weakness.
+"""
+
+REQUIREMENT_ORIGINS = ("EXPLICIT", "DERIVED", "ASSUMED")
+"""Where a requirement came from, and what each is allowed to do.
+
+``EXPLICIT``  the request says it. Blocking.
+``DERIVED``   it follows necessarily from an explicit one. Surfaced, not blocking.
+``ASSUMED``   Ariadne supplied it. Never blocking, always asks a human.
+
+The asymmetry is the whole point. A one-sentence request may legitimately become one
+requirement per surface; it does not become forty-seven blocking obligations the user
+never agreed to. An inferred obligation that can block acceptance is a guess with the
+power to stop a project.
+"""
+
+REQUIREMENT_KINDS = (
+    "FUNCTIONAL",
+    "VISUAL",
+    "INTERACTION",
+    "CONSTRAINT",
+    "REGRESSION",
+    "ACCESSIBILITY",
+    "PERFORMANCE",
+    "SECURITY",
+    "CONTENT",
+    "SUBJECTIVE",
+)
+"""What kind of obligation a requirement states.
+
+``SUBJECTIVE`` is the honest admission that some obligations cannot become deterministic
+``PROVEN`` -- "feels premium" is not a testable predicate, and an engine that grades it
+any other way is grading its own mood.
+"""
+
+EVIDENCE_STANCES = ("AUTHORITATIVE", "REQUIRED", "SUPPORTING", "INSUFFICIENT_ALONE")
+"""Where one evidence kind sits for **one requirement**.
+
+Not an ordering of evidence kinds. There is no global ranking of evidence, because the
+ranking is false: a build result directly establishes *it compiles* and establishes
+nothing at all about whether a button works, a screenshot establishes nothing about
+backend persistence, and a unit test establishes nothing about subjective polish.
+Strength is a property of the (requirement, evidence) pair, so it is declared there.
+"""
+
+ACCEPTANCE_EVIDENCE_KINDS = (
+    "TEST",
+    "BUILD",
+    "STATIC_ANALYSIS",
+    "DIFF",
+    "RUNTIME",
+    "RENDER",
+    "SCREENSHOT",
+    "INTERACTION",
+    "ACCESSIBILITY",
+    "REVIEW",
+    "PERFORMANCE",
+    "PROVENANCE",
+)
+"""The evidence families a requirement's policy may name.
+
+Deliberately a superset of the earlier vocabularies rather than a replacement:
+:data:`DESIGN_REQUIREMENT_EVIDENCE` is ``source``/``rendered``/``behavioural`` and
+``RENDERED_EVIDENCE_KINDS`` is viewport-scoped. Those stay where they are and are
+*mapped into* this vocabulary by
+:mod:`ariadne_engine.acceptance.integrations`, so a rendered-evidence set produced by
+AR-222 remains usable input without being rewritten.
+"""
+
+CLAIM_TYPES = (
+    "IMPLEMENTED",
+    "FIXED",
+    "TESTED",
+    "PRESERVED",
+    "VERIFIED",
+    "COMPLETE",
+)
+"""What a worker says it did. Distinct from evidence kinds by construction.
+
+A claim type is a statement *about* work. An evidence kind is an observation *of* work.
+Keeping the two vocabularies separate in the type system is what makes "claim treated
+as evidence" a structural impossibility rather than a rule somebody has to remember.
+"""
+
+EVIDENCE_STANCES_FOR_CLAIM = ("SUPPORTS", "PARTIALLY_SUPPORTS", "CONTRADICTS")
+"""What a piece of evidence does to a requirement, as opposed to what kind it is.
+
+One evidence item can be a ``TEST`` (kind) that ``CONTRADICTS`` (stance). Conflating
+the two axes is how "screenshot > test > diff" got believed in the first place.
+"""
+
+EVIDENCE_SOURCE_KINDS = (
+    "ENGINE_RECORD",
+    "CI_RUN",
+    "RENDERED_CAPTURE",
+    "HUMAN_OBSERVATION",
+    "ARTIFACT",
+)
+"""Where an observation came from, when it is not a re-readable artefact.
+
+Required alongside ``source_record_id`` so "evidence" that points at nothing is refused:
+an assertion with no source is a claim, and
+:mod:`ariadne_engine.acceptance.claims` is where claims live with a different status.
+``HUMAN_OBSERVATION`` is in the list rather than treated as second-class -- a human
+looking at a screen and reporting what they saw is real evidence, and refusing it would
+only push the system toward trusting files it can re-hash.
+"""
+
+IMPACT_STATES = ("PROVEN_UNAFFECTED", "POTENTIALLY_AFFECTED", "UNKNOWN")
+"""How a code change affects a requirement.
+
+``UNKNOWN`` is not a failure state to be minimised; it is the honest answer when the
+dependency relationship cannot be established, and it must never be reported as
+``PROVEN_UNAFFECTED``. Pretending an unknown relationship is a safe one is how selective
+invalidation turns into selective *forgetting*.
+"""
+
+ACCEPTANCE_STATES = ("NOT_ACCEPTED", "ACCEPTED")
+"""The aggregate outcome. Two values, because a percentage would be a lie.
+
+``5 PROVEN, 1 FAILED, 2 UNPROVEN`` is five proven requirements, one failed one and two
+unproven ones. Reducing that to *74%* invents a scale nobody measured, destroys exactly
+the distinction the verdicts exist to preserve, and produces a number that goes **up**
+when a requirement is deleted.
+"""
+
+HUMAN_GATE_REASONS = (
+    "AMBIGUOUS_PRODUCT_INTENT",
+    "SUBJECTIVE_FINAL_ACCEPTANCE",
+    "PROTECTED_AUTHORIZATION",
+    "MEANING_CHANGING_DESIGN_CHOICE",
+    "POLICY_REQUIRED_HUMAN_GATE",
+    "ASSUMED_REQUIREMENT",
+    "EVIDENCE_CONFLICT_UNRESOLVED",
+)
+"""Why a requirement cannot honestly be decided automatically.
+
+Kept as a finite, named vocabulary rather than free text so ``NEEDS_HUMAN`` is
+actionable: an operator can tell "ask the human about the product" from "the policy
+requires a human gate here" and act on them differently.
+"""
+
+MAX_ACCEPTANCE_CONTRACTS = 500
+"""Hard safety bound for the contract collection."""
+
+MAX_ACCEPTANCE_REQUIREMENTS = 5_000
+"""Hard safety bound for the requirement-definition collection."""
+
+MAX_ACCEPTANCE_CLAIMS = 10_000
+"""Hard safety bound for the claim collection."""
+
+MAX_ACCEPTANCE_EVIDENCE = 50_000
+"""Hard safety bound for the acceptance-evidence collection.
+
+Higher than the other bounds on purpose: evidence is the one collection that grows with
+every observation, and refusing to record it because there is a lot of it would push
+exactly the behaviour a refusal is supposed to prevent -- deciding without evidence.
+"""
+
+MAX_VERIFICATION_DECISIONS = 50_000
+"""Hard safety bound for the verification-decision collection."""
+
+MAX_VERIFICATION_PASSES = 5_000
+"""Hard safety bound for the verification-pass collection."""
+
+AR223_COLLECTIONS = (
+    "acceptance_contracts",
+    "acceptance_requirements",
+    "acceptance_claims",
+    "acceptance_evidence",
+    "verification_decisions",
+    "verification_passes",
+)
+"""The AR-223 acceptance collections, additive and optional like every earlier family."""
+
+
+def _acceptance_schema(record: Mapping[str, Any], problems: list[str], kind: str) -> None:
+    if record.get("schema_version") not in READABLE_ACCEPTANCE_SCHEMAS:
+        problems.append(
+            f"{kind} schema is unsupported: {record.get('schema_version')!r}"
+        )
+
+
+def acceptance_contract_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one acceptance contract (fail closed)."""
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance contract is not an object"]
+    _acceptance_schema(record, problems, "acceptance contract")
+    if not design_id_matches("ctr", str(record.get("contract_id", ""))):
+        problems.append("acceptance contract has a malformed contract id")
+    _enum_problems(record, "status", CONTRACT_STATUSES, problems)
+    _enum_problems(record, "origin", CONTRACT_ORIGINS, problems)
+    for name in ("task_id", "source_text", "source_digest"):
+        _non_empty(record, name, problems)
+    if str(record.get("source_digest", "")) and not re.fullmatch(
+        r"[0-9a-f]{64}", str(record.get("source_digest", ""))
+    ):
+        problems.append("acceptance contract source digest is not a sha256")
+    revision = record.get("revision")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+        problems.append("acceptance contract revision must be a positive integer")
+    if isinstance(revision, int) and not isinstance(revision, bool) and revision > 1:
+        if not str(record.get("supersedes", "")):
+            problems.append(
+                "a contract past revision 1 must name the revision it supersedes. A revision "
+                "without a predecessor cannot be audited"
+            )
+        elif not str(record.get("material_change_reason", "")):
+            problems.append(
+                "a contract past revision 1 must state why the previous one was replaced"
+            )
+    if str(record.get("status", "")) == "SUPERSEDED" and not str(record.get("superseded_by", "")):
+        problems.append("a superseded contract must name what superseded it")
+    return list(dict.fromkeys(problems))
+
+
+CONTRACT_STATUSES = ("ACTIVE", "SUPERSEDED")
+"""A contract is either the live interpretation of a request or the history of one.
+
+Two states, not one. A superseded contract stays readable forever, because a decision made
+against it has to remain auditable against the interpretation it was actually made
+against -- and deleting the interpretation turns that audit into archaeology.
+"""
+
+CONTRACT_ORIGINS = ("USER_REQUEST", "OPERATOR", "IMPORTED", "GENERATIVE")
+"""Who supplied the request text a contract interprets.
+
+``GENERATIVE`` exists so an interpretation Ariadne produced is labelled as one. It does
+not make the contract less binding -- it makes its authorship visible, which is the only
+honest thing to do with text the user never wrote.
+"""
+
+
+def acceptance_requirement_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one requirement definition (fail closed)."""
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance requirement is not an object"]
+    _acceptance_schema(record, problems, "acceptance requirement")
+    if not design_id_matches("rqm", str(record.get("requirement_id", ""))):
+        problems.append("acceptance requirement has a malformed requirement id")
+    _enum_problems(record, "kind", REQUIREMENT_KINDS, problems)
+    origin = _enum_problems(record, "origin", REQUIREMENT_ORIGINS, problems)
+    _enum_problems(record, "status", ("ACTIVE", "SUPERSEDED"), problems)
+    _enum_problems(record, "verification_mode", DECISION_CLASSIFICATIONS, problems)
+    for name in ("contract_id", "text"):
+        _non_empty(record, name, problems)
+    if not isinstance(record.get("blocking", None), bool):
+        problems.append("acceptance requirement blocking must be true or false")
+    if not isinstance(record.get("human_gate", None), bool):
+        problems.append("acceptance requirement human_gate must be true or false")
+    if origin == "ASSUMED" and bool(record.get("blocking")):
+        problems.append(
+            "an ASSUMED requirement cannot block acceptance. The only honest contribution an "
+            "assumption can make is a question, and a question must not be able to stop a project"
+        )
+    if origin == "ASSUMED" and not bool(record.get("human_gate")):
+        problems.append("an ASSUMED requirement must carry a human gate")
+    if origin == "EXPLICIT" and not bool(record.get("blocking")):
+        problems.append(
+            "an EXPLICIT requirement the user actually asked for cannot be advisory; dropping it "
+            "from blocking acceptance is how a requested obligation quietly stops being graded"
+        )
+    policy = record.get("evidence_policy")
+    if not isinstance(policy, Mapping):
+        problems.append("acceptance requirement declares no evidence policy")
+    else:
+        for stance in EVIDENCE_STANCES:
+            values = policy.get(stance, [])
+            if not isinstance(values, (list, tuple)):
+                problems.append(f"evidence policy {stance} is not a list")
+                continue
+            for value in values:
+                if str(value) not in ACCEPTANCE_EVIDENCE_KINDS:
+                    problems.append(f"evidence policy names an unknown evidence kind: {value}")
+        if not any(policy.get(stance) for stance in EVIDENCE_STANCES):
+            problems.append(
+                "the requirement names no evidence that could establish it, so nothing could ever "
+                "satisfy it"
+            )
+        overlap = (
+            {str(item) for item in policy.get("required", ()) or ()}
+            & {str(item) for item in policy.get("insufficient_alone", ()) or ()}
+        )
+        if overlap:
+            problems.append(
+                "evidence is both required and insufficient alone: " + ", ".join(sorted(overlap))
+            )
+        for value in policy.get("insufficient_alone", ()) or ():
+            if str(value) in ("CLAIM", "STATEMENT"):
+                problems.append(
+                    f"{value} cannot be evidence at all. A claim may be what is being verified; "
+                    "it is never the thing that verifies it"
+                )
+    return list(dict.fromkeys(problems))
+
+
+def acceptance_claim_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one worker claim (fail closed).
+
+    There is no field here that lets a claim assert its own truth. A claim carries a
+    statement, an actor, a revision and a set of requirements it is about -- and that is
+    the complete list, because a claim that could carry evidence ids would be a claim
+    that could launder itself into acceptance.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance claim is not an object"]
+    _acceptance_schema(record, problems, "acceptance claim")
+    if not design_id_matches("clm", str(record.get("claim_id", ""))):
+        problems.append("acceptance claim has a malformed claim id")
+    _enum_problems(record, "claim_type", CLAIM_TYPES, problems)
+    _enum_problems(record, "origin", ("PROSE", "STRUCTURED", "CI", "OPERATOR", "IMPORTED"), problems)
+    _enum_problems(record, "actor_role", PROOF_ACTOR_ROLES, problems)
+    _enum_problems(record, "status", ("AWAITING_EVIDENCE", "ASSESSED", "WITHDRAWN"), problems)
+    for name in ("actor", "statement", "statement_digest", "claim_version"):
+        _non_empty(record, name, problems)
+    if not isinstance(record.get("requirement_ids", None), (list, tuple)):
+        problems.append("acceptance claim requirement_ids is not a list")
+    else:
+        for requirement_id in record.get("requirement_ids") or ():
+            if not design_id_matches("rqm", str(requirement_id)):
+                problems.append(f"acceptance claim names a malformed requirement id: {requirement_id}")
+    assertion = record.get("assertion")
+    if not isinstance(assertion, Mapping):
+        problems.append("acceptance claim assertion is not an object")
+    else:
+        for value in assertion.values():
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+                problems.append("a claim assertion holds only checkable scalars")
+    if str(record.get("external")) not in ("True", "False"):
+        problems.append("acceptance claim external must be a boolean")
+    return list(dict.fromkeys(problems))
+
+
+PROOF_ACTOR_ROLES = (
+    "user_or_human_approver",
+    "implementation_worker",
+    "evidence_producer",
+    "independent_reviewer",
+    "repair_worker",
+    "engine",
+)
+"""The identities a proof path must be able to distinguish.
+
+Moved here from :mod:`ariadne_engine.rendered_critique.proof` in AR-223 rather than
+duplicated, because from this point on two subsystems need the same list: proof
+*readiness* to detect a collision, and acceptance to *refuse* one. A list that existed
+twice would let the detector and the enforcer drift, which is the failure mode this
+whole family of records exists to prevent.
+
+The reason the list exists at all is a single rule: *the worker cannot independently
+certify itself.*
+"""
+
+SELF_CERTIFICATION_PAIRS = (
+    ("implementation_worker", "independent_reviewer"),
+    ("repair_worker", "independent_reviewer"),
+    ("implementation_worker", "evidence_producer"),
+    ("repair_worker", "evidence_producer"),
+)
+"""Role pairs that may not be held by the same actor.
+
+Evidence produced by the party whose work it evidences, and reviewed by the party that
+implemented or repaired it, are the two ways independence can be faked.
+"""
+
+
+def acceptance_evidence_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one acceptance-evidence record (fail closed).
+
+    Producer identity, work digest and artefact digest are all mandatory, because each
+    of them closes a different laundering route: a worker presenting its own screenshot
+    as independent review, a stale capture presented as current, and a renamed or edited
+    artefact presented as the one that was observed.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance evidence is not an object"]
+    _acceptance_schema(record, problems, "acceptance evidence")
+    if not design_id_matches("evd", str(record.get("evidence_id", ""))):
+        problems.append("acceptance evidence has a malformed evidence id")
+    _enum_problems(record, "kind", ACCEPTANCE_EVIDENCE_KINDS, problems)
+    _enum_problems(record, "stance", EVIDENCE_STANCES_FOR_CLAIM, problems)
+    _enum_problems(record, "producer_role", PROOF_ACTOR_ROLES, problems)
+    _enum_problems(record, "state", FRESHNESS_STATES, problems)
+    for name in ("producer", "work_digest", "contract_revision", "observation"):
+        _non_empty(record, name, problems)
+    if str(record.get("work_digest", "")) and not re.fullmatch(
+        r"[0-9a-f]{16,64}", str(record.get("work_digest", ""))
+    ):
+        problems.append("acceptance evidence work_digest is not a digest")
+    artifact = record.get("artifact")
+    if not isinstance(artifact, Mapping):
+        problems.append("acceptance evidence artifact is not an object")
+    elif artifact:
+        for name in ("path", "sha256"):
+            if not str(artifact.get(name, "")):
+                problems.append(f"acceptance evidence artifact is missing {name}")
+        if str(artifact.get("sha256", "")) and not re.fullmatch(
+            r"[0-9a-f]{64}", str(artifact.get("sha256", ""))
+        ):
+            problems.append("acceptance evidence artifact sha256 is not a sha256")
+    if not artifact and not str(record.get("source_record_id", "")):
+        problems.append(
+            "acceptance evidence cites neither a re-readable artefact nor the record it was "
+            "derived from. Evidence that points at nothing is an assertion, and an assertion is a "
+            "claim -- a different record type with a different status"
+        )
+    if str(record.get("source_kind", "")) and str(record.get("source_kind", "")) not in EVIDENCE_SOURCE_KINDS:
+        problems.append(
+            f"acceptance evidence names an unknown source kind: {record.get('source_kind')}"
+        )
+    requirements = record.get("requirement_ids")
+    if not isinstance(requirements, (list, tuple)) or not requirements:
+        problems.append(
+            "acceptance evidence names no requirement. Evidence that is not about anything cannot "
+            "establish anything"
+        )
+    return list(dict.fromkeys(problems))
+
+
+def verification_decision_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one verification decision (fail closed).
+
+    The two separations this validator exists to hold:
+
+    * a decision names a **requirement**, and a decision's verdict is about that
+      requirement -- it may not claim ``CONTRADICTED``, which is a statement about a
+      worker's claim and is therefore refused here;
+    * a decision names a **decision path**, so "the model said so with high confidence"
+      is not an available explanation.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["verification decision is not an object"]
+    _acceptance_schema(record, problems, "verification decision")
+    if not design_id_matches("vdz", str(record.get("verification_id", ""))):
+        problems.append("verification decision has a malformed verification id")
+    verdict = _enum_problems(record, "verdict", ACCEPTANCE_VERDICTS, problems)
+    for name in ("requirement_id", "work_digest", "contract_id", "contract_revision",
+                 "decision_path", "reviewer", "rationale"):
+        _non_empty(record, name, problems)
+    if verdict == "CONTRADICTED":
+        problems.append(
+            "CONTRADICTED describes a worker's claim, not a requirement. A requirement that "
+            "current evidence violates is FAILED; the claim it contradicts is a separate record"
+        )
+    if not str(record.get("evidence_ids", "")) and verdict in ("PROVEN", "FAILED", "PARTIAL"):
+        problems.append(
+            f"a {verdict} requirement must cite the evidence that decided it. A verdict with no "
+            "evidence is an assertion"
+        )
+    for name in ("evidence_ids", "claim_ids", "human_gate_reasons"):
+        value = record.get(name, [])
+        if not isinstance(value, (list, tuple)):
+            problems.append(f"verification decision {name} is not a list")
+    uncertainty = record.get("uncertainty", "")
+    if not isinstance(uncertainty, str):
+        problems.append("verification decision uncertainty is not text")
+    if str(record.get("authorization_effect", "")) != "none":
+        problems.append("a verification decision never grants authorization")
+    return list(dict.fromkeys(problems))
+
+
+def verification_pass_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one verification pass (fail closed).
+
+    A pass is one look at one work digest under one contract revision. It carries no
+    aggregate score, because a pass that reported one would be reporting a number whose
+    construction destroyed the distinctions the verdicts preserve.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["verification pass is not an object"]
+    _acceptance_schema(record, problems, "verification pass")
+    if not design_id_matches("vps", str(record.get("pass_id", ""))):
+        problems.append("verification pass has a malformed pass id")
+    _enum_problems(record, "acceptance_state", ACCEPTANCE_STATES, problems)
+    _enum_problems(record, "pass_kind", ("INITIAL", "REVERIFICATION", "REPAIR"), problems)
+    for name in ("contract_id", "contract_revision", "work_digest"):
+        _non_empty(record, name, problems)
+    decisions = record.get("requirement_decisions")
+    if not isinstance(decisions, (list, tuple)):
+        problems.append("verification pass requirement_decisions is not a list")
+    assessments = record.get("claim_assessments")
+    if not isinstance(assessments, (list, tuple)):
+        problems.append("verification pass claim_assessments is not a list")
+    if record.get("aggregate_score") is not None:
+        problems.append(
+            "a verification pass records requirement-level state, never a completion percentage. "
+            "Counts are acceptable; a composite score is not"
+        )
+    if str(record.get("pass_kind", "")) == "REVERIFICATION" and not str(
+        record.get("supersedes_pass_id", "")
+    ):
+        problems.append("a re-verification pass must name the pass it re-verifies")
+    return list(dict.fromkeys(problems))
+
 MAX_CAPABILITY_RECORDS = 5_000
 """Hard safety bound for the capability observation collection."""
 
@@ -3447,6 +4001,12 @@ _COLLECTION_LIMITS = {
     "decision_shadow": MAX_SHADOW_RECORDS,
     "calibration_profiles": MAX_CALIBRATION_PROFILES,
     "decision_adoption": MAX_ADOPTION_SLICES,
+    "acceptance_contracts": MAX_ACCEPTANCE_CONTRACTS,
+    "acceptance_requirements": MAX_ACCEPTANCE_REQUIREMENTS,
+    "acceptance_claims": MAX_ACCEPTANCE_CLAIMS,
+    "acceptance_evidence": MAX_ACCEPTANCE_EVIDENCE,
+    "verification_decisions": MAX_VERIFICATION_DECISIONS,
+    "verification_passes": MAX_VERIFICATION_PASSES,
 }
 
 
@@ -3461,7 +4021,8 @@ def require_collection_capacity(state: Mapping[str, Any], key: str) -> None:
     if limit is None:
         raise ContractError(
             f"{key!r} is not a bounded engine record collection; the bound applies to "
-            + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS])
+            + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS,
+                         *AR223_COLLECTIONS])
         )
     values = state.get(key)
     if values is None:
@@ -4001,3 +4562,5 @@ def adoption_slice_problems(record: Mapping[str, Any]) -> list[str]:
     if str(record.get("authorization_effect", "")) != "none":
         problems.append("an adoption slice never grants authorization")
     return list(dict.fromkeys(problems))
+
+

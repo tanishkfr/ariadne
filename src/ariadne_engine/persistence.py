@@ -81,8 +81,9 @@ ADAPTIVE_COLLECTIONS = (
     *DESIGN_COLLECTIONS,
     *contracts.AR203_COLLECTIONS,
     *contracts.AR205D_COLLECTIONS,
+    *contracts.AR223_COLLECTIONS,
 )
-"""AR-202, AR-202D, AR-203 and AR-205D record collections kept in the run state.
+"""AR-202, AR-202D, AR-203, AR-205D and AR-223 record collections kept in the run state.
 
 They are additive and optional: a state written by an earlier milestone has none
 of them and stays readable and continuable, which is why the records carry their
@@ -194,6 +195,9 @@ def write_state(run_root: Path, state: dict) -> None:
             "decision_schema": contracts.SCHEMA_DECISION,
             "decision_intelligence_contract": contracts.DECISION_INTELLIGENCE_CONTRACT,
             "decision_intelligence_schema": contracts.SCHEMA_DECISION_INTELLIGENCE,
+            "acceptance_contract": contracts.ACCEPTANCE_CONTRACT,
+            "acceptance_schema": contracts.SCHEMA_ACCEPTANCE,
+            "acceptance_contract_version": contracts.ACCEPTANCE_CONTRACT_VERSION,
             "written_at": contracts.utc_now(),
         })
     write_json(state_path(run_root), state)
