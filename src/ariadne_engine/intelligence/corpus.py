@@ -139,6 +139,13 @@ def case(
         )
     if not str(label or "").strip():
         raise ContractError(f"corpus case {case_id} has no label; an unlabelled case cannot be scored")
+    space = answer_space_for(str(family))
+    if str(label) not in space:
+        raise ContractError(
+            f"corpus case {case_id} is labelled {label!r}, which is not in the declared answer "
+            f"space for {family}: {', '.join(space)}. A label outside the space cannot be scored, "
+            "and a near-miss is a typo rather than a finding"
+        )
     if not isinstance(projection, Mapping) or not projection:
         raise ContractError(f"corpus case {case_id} has no projection")
     reviewer = str(provenance.get("reviewer", "")) if isinstance(provenance, Mapping) else ""
@@ -146,6 +153,13 @@ def case(
         raise ContractError(
             f"corpus case {case_id} names no reviewer. A label without a reviewer is a guess with "
             "a row number"
+        )
+    agreement = str(provenance.get("agreement", "")) if isinstance(provenance, Mapping) else ""
+    if agreement not in AGREEMENT_LEVELS:
+        raise ContractError(
+            f"corpus case {case_id} declares agreement {agreement!r}, which is not one of "
+            f"{', '.join(AGREEMENT_LEVELS)}. Agreement a corpus cannot state is agreement it "
+            "does not have"
         )
     return {
         "schema_version": CORPUS_VERSION,
@@ -316,6 +330,33 @@ def select(
         wanted = {str(item) for item in splits}
         rows = [row for row in rows if str(row.get("split", "")) in wanted]
     return rows
+
+
+def definition_for(family: str) -> dict:
+    """One family's definition, with a domain error for an unknown family.
+
+    A bare ``KeyError`` from a dict lookup is the wrong exception here: a caller naming a
+    family that does not exist has made a mistake about the vocabulary, and the refusal should
+    say which families exist.
+    """
+    value = FAMILY_DEFINITIONS.get(str(family))
+    if value is None:
+        raise ContractError(
+            f"unknown decision family: {family!r}; declared: " + ", ".join(sorted(FAMILY_DEFINITIONS))
+        )
+    return dict(value)
+
+
+def answer_space_for(family: str) -> tuple[str, ...]:
+    """The declared answer space of one family, read from the seeded question itself.
+
+    Read from the question rather than restated here, so a corpus label can never be checked
+    against a copy of the vocabulary that has drifted from the one the runtime asks.
+    """
+    from . import evaluation
+
+    question = evaluation.questions()[definition_for(family)["question_id"]]
+    return tuple(str(item) for item in question.get("options", ()) or ())
 
 
 def require_clean(corpus: Mapping[str, Any]) -> None:

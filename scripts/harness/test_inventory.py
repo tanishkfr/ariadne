@@ -149,12 +149,32 @@ CRITICAL_CASES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "beacon-negative-case",
+    "beacon-negative-case",
+    (
+        "hidden overflow",
+        "partial re-review",
+        "focus indication",
+        "duplicate heading",
+    ),
+    ),
+    (
+        "acceptance-intelligence",
         (
-            "hidden overflow",
-            "partial re-review",
-            "focus indication",
-            "duplicate heading",
+            "a claim is not evidence",
+            "missing evidence is not failure",
+            "acceptance state",
+            "independent review",
+            "re-verification",
+        ),
+    ),
+    (
+        "verified-intelligence",
+        (
+            "confidence is not permission",
+            "provider probability",
+            "answer space",
+            "false-confidence",
+            "held-out",
         ),
     ),
 )
@@ -175,6 +195,9 @@ SUITE_FLOORS: dict[str, int] = {
     "scripts/test-ar222d.py": 60,
     "scripts/test-ar222d-mutations.py": 20,
     "scripts/test-ar222d-adversarial.py": 20,
+    "scripts/test-ar223.py": 75,
+    "scripts/test-ar223-adversarial.py": 40,
+    "scripts/test-ar223-mutations.py": 25,
 }
 
 

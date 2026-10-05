@@ -55,6 +55,8 @@ FUNCTIONAL = (
     "test-rendered-critique-adversarial",
     "test-ar222d",
     "test-ar222d-adversarial",
+    "test-ar223",
+    "test-ar223-adversarial",
 )
 
 #: Mutation harnesses. Each one edits source, runs a suite, and restores byte-exact.
@@ -67,6 +69,7 @@ MUTATION = (
     "test-design-execution-mutations",
     "test-rendered-critique-mutations",
     "test-ar222d-mutations",
+    "test-ar223-mutations",
 )
 
 GROUPS = {"clean": CLEAN, "functional": FUNCTIONAL, "mutation": MUTATION}

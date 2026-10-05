@@ -235,6 +235,25 @@ def beacon_state(root: Path | str, *, work_digest: str = "") -> dict:
     )
     evidence.record(
         state,
+        kind="DIFF",
+        stance="SUPPORTS",
+        producer="ar222-bounded-repair",
+        producer_role="implementation_worker",
+        producer_execution="ar222-repair-run",
+        observation=(
+            "one bounded CSS edit to src/styles/app.css, mechanically validated, after which the "
+            "second pass rendered; the second attempt had no bounded edit derivable and stopped"
+        ),
+        requirement_ids=[ids["mechanical"]],
+        work_digest=digest,
+        contract_revision=revision,
+        contract_id=contract_id,
+        task_id="ar223-beacon",
+        source_kind="ENGINE_RECORD",
+        artifact_path=history["path"],
+    )
+    evidence.record(
+        state,
         kind="TEST",
         stance="SUPPORTS",
         producer="ar222-mechanical-validation",

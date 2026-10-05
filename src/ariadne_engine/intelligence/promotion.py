@@ -35,7 +35,7 @@ from typing import Any, Mapping, Sequence
 from ..contracts import ContractError
 from ..decisions.runtime import promotion as runtime_promotion
 from .calibration import MEASURED_SPLITS
-from .corpus import FAMILIES, FAMILY_DEFINITIONS
+from .corpus import FAMILIES, definition_for
 from .corpus_data import corpus as authored_corpus
 
 PROMOTION_VERSION = "ar-223-verified-promotion-1"
@@ -217,7 +217,7 @@ def promote(
         {"family": str(family), "metrics": dict(measured)},
         adversarial={"metrics": dict(adversarial or {})},
     )
-    definition = FAMILY_DEFINITIONS[str(family)]["definition"]
+    definition = definition_for(str(family))["definition"]
     evaluation_id = str(
         evaluation_id or dict(measured).get("evaluation_id", "")
     ) or str(dict(adversarial or {}).get("evaluation_id", ""))
@@ -361,7 +361,7 @@ def enforce_health(
         max_selective_error_rise=0.05,
         max_confident_errors=0,
     )
-    definition = FAMILY_DEFINITIONS[str(family)]["definition"]
+    definition = definition_for(str(family))["definition"]
     slices = runtime_promotion.slices(state, decision_definition=definition)
     active = [record for record in slices if str(record.get("status", "")) == "ACTIVE"]
     if not report["degraded"] or not active:

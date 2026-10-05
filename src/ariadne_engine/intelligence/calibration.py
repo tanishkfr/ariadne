@@ -29,7 +29,7 @@ from typing import Any, Mapping, Sequence
 
 from ..contracts import ContractError
 from ..decisions.runtime import profiles as runtime_profiles
-from .corpus import FAMILIES, FAMILY_DEFINITIONS
+from .corpus import FAMILIES, definition_for
 
 CALIBRATION_VERSION = "ar-223-calibration-1"
 
@@ -218,7 +218,7 @@ def identity(engine: Any, *, family: str, corpus_revision: str = "") -> dict:
         str(question["question_id"]): question
         for question, _ in runtime.seeds.seed_families().values()
     }
-    question = catalogue[FAMILY_DEFINITIONS[str(family)]["question_id"]]
+    question = catalogue[definition_for(str(family))["question_id"]]
     implementation = runtime.reference.ReferenceBoundedEngine(runtime.seeds.build_seed_book())
     status = dict(implementation.status())
     return {
@@ -229,7 +229,7 @@ def identity(engine: Any, *, family: str, corpus_revision: str = "") -> dict:
         "model_revision": str(status.get("model_revision", "")),
         "question_schema_digest": runtime_profiles.question_schema_digest([question]),
         "decision_definition_digest": runtime_profiles.decision_definition_digest(
-            FAMILY_DEFINITIONS[str(family)]["definition"], [question]
+            definition_for(str(family))["definition"], [question]
         ),
         "corpus_revision": str(corpus_revision or CORPUS_VERSION),
         "confidence_kinds": list(status.get("confidence_kinds", []) or []),
@@ -288,14 +288,14 @@ def build_profile(
         str(question["question_id"]): question
         for question, _ in seeds.seed_families().values()
     }
-    question = catalogue[FAMILY_DEFINITIONS[str(family)]["question_id"]]
+    question = catalogue[definition_for(str(family))["question_id"]]
     metrics = dict(report.get("metrics", {}) or {})
     observed = identity(engine, family=family)
     method = str(temperature.get("method", "MEASURED_ONLY"))
     dataset = dataset_digest_for(corpus, family=family)
     measured_size = int(metrics.get("answered", 0) or 0)
     profile = runtime_profiles.build_profile(
-        decision_definition=FAMILY_DEFINITIONS[str(family)]["definition"],
+        decision_definition=definition_for(str(family))["definition"],
         questions=[question],
         runtime=str(observed.get("runtime", "local_bounded")),
         implementation=str(observed.get("implementation", "")),

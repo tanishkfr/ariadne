@@ -468,7 +468,10 @@ def main() -> int:
             ) as opened:
                 path.write_text(mutated, encoding="utf-8")
                 passed, output = run_suite()
-                ledger_report = dict(opened)
+            # Read the report after the with block. The ledger fills report["restoration"] in
+            # its own finally, after the yield, so a copy taken inside the block records no
+            # restoration at all and the check below can never pass on its own merits.
+            ledger_report = dict(opened)
             caught = not passed
         except subprocess.TimeoutExpired:
             caught, output = True, "the mutated suite hung, which is a failure to pass"

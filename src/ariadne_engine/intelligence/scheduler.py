@@ -32,7 +32,7 @@ from typing import Any, Mapping, Sequence
 from ..contracts import ContractError
 from ..decisions.runtime import promotion as runtime_promotion
 from ..decisions.runtime import selection as runtime_selection
-from .corpus import FAMILY_DEFINITIONS
+from .corpus import definition_for
 
 SCHEDULER_VERSION = "ar-223-intelligence-scheduling-1"
 
@@ -285,7 +285,7 @@ def for_family(
     cannot be used on a request that has none, and the way to express that is to say so here
     rather than to discover it as a scope problem downstream.
     """
-    definition = FAMILY_DEFINITIONS[str(family)]["definition"]
+    definition = definition_for(str(family))["definition"]
     from .promotion import RISK_BY_FAMILY
 
     return choose(
