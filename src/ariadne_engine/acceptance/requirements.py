@@ -187,12 +187,13 @@ def create(
     source_refs: Sequence[str] = (),
     scope_paths: Sequence[str] = (),
     human_gate: bool | None = None,
-    split_from: str = "",
-    decision_path: str = "",
-    requirement_id: str = "",
-    task_id: str = "",
-    rationale: str = "",
-) -> dict:
+        split_from: str = "",
+        decision_path: str = "",
+        requirement_id: str = "",
+        task_id: str = "",
+        rationale: str = "",
+        dependencies: Mapping[str, str] | None = None,
+    ) -> dict:
     """Create one requirement definition.
 
     ``blocking`` and ``human_gate`` are derived from the origin when not stated, and
@@ -248,6 +249,7 @@ def create(
         "verification_mode": str(verification_mode),
         "source_refs": [str(item) for item in source_refs or () if str(item).strip()],
         "scope_paths": [str(item) for item in scope_paths or () if str(item).strip()],
+        "dependencies": {str(key): str(value) for key, value in dict(dependencies or {}).items()},
         "split_from": str(split_from),
         "status": "ACTIVE",
         "superseded_by": "",

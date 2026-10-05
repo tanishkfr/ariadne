@@ -82,11 +82,17 @@ def evaluate(
     require_independent_review: bool = True,
     require_human_acceptance: bool = False,
     protected: bool = False,
+    exempt_evidence_ids: Sequence[str] = (),
 ) -> dict:
     """Evaluate the whole acceptance policy over one set of requirement decisions.
 
     Returns the state plus every clause's own verdict, so a reader can see *which* rule
     stopped acceptance rather than being told only that it was not accepted.
+
+    ``exempt_evidence_ids`` lists evidence admitted on the strength of a *proved*
+    dependency relationship rather than a fresh observation at this work digest. The
+    staleness clause skips exactly those rows and nothing else, so the one exception to
+    freshness is named in the signature rather than buried in the code that computes it.
     """
     blockers: list[dict] = []
     advisory: list[dict] = []
@@ -153,8 +159,11 @@ def evaluate(
         for row in decisions_by_requirement.values()
         for identifier in (row.get("evidence_ids") or ())
     }
+    exempt = {str(identifier) for identifier in exempt_evidence_ids or () if str(identifier).strip()}
     stale_cited: list[dict] = []
     for identifier in sorted(cited):
+        if identifier in exempt:
+            continue
         item = evidence_module.by_id(state, identifier)
         if item is None:
             stale_cited.append({
@@ -312,6 +321,7 @@ def run_pass(
     protected: bool = False,
     bounded_advice: Mapping[str, Mapping[str, Any]] | None = None,
     evidence_root: Any = None,
+    unaffected: Sequence[str] = (),
 ) -> dict:
     """Run one complete verification pass and record it.
 
@@ -323,6 +333,14 @@ def run_pass(
     ``bounded_advice`` is keyed by requirement id and is consulted only where the
     deterministic rules left the question open. It cannot promote a requirement, and the
     confidence it carries is recorded rather than obeyed.
+
+    ``unaffected`` names requirements whose dependency relationship to the changed work was
+    *proved* rather than assumed -- the ``PROVEN_UNAFFECTED`` verdict of
+    :mod:`ariadne_engine.acceptance.invalidation`. Evidence about those requirements stays
+    weighable at the new work digest, which is what makes re-verification selective instead of
+    total. Every admitted row is listed in ``admitted_by_dependency_proof`` so the exception is
+    auditable; nothing is quietly admitted, and evidence naming any affected requirement is not
+    eligible however unrelated the rest of it is.
     """
     from . import contract as contract_module
     from . import decisions as decisions_module
@@ -350,6 +368,20 @@ def run_pass(
     for row in rows:
         for requirement_id in row.get("requirement_ids") or ():
             by_requirement.setdefault(str(requirement_id), []).append(row)
+
+    proven_unaffected = {str(item) for item in unaffected or () if str(item).strip()}
+    admitted_by_dependency_proof: list[str] = []
+    for row in evidence_module.evidence(state):
+        subjects = {str(item) for item in row.get("requirement_ids") or ()}
+        if not subjects or not subjects <= proven_unaffected:
+            continue
+        if str(row.get("superseded_by", "")) or str(row.get("contract_revision", "")) != revision:
+            continue
+        if subjects & set(by_requirement):
+            continue
+        for requirement_id in sorted(subjects):
+            by_requirement.setdefault(requirement_id, []).append(row)
+        admitted_by_dependency_proof.append(str(row.get("evidence_id", "")))
 
     decisions_by_requirement: dict[str, dict] = {}
     for requirement_record in requirements:
@@ -393,6 +425,7 @@ def run_pass(
         require_independent_review=require_independent_review,
         require_human_acceptance=require_human_acceptance,
         protected=protected,
+        exempt_evidence_ids=admitted_by_dependency_proof,
     )
 
     pass_id = new_record_id("vps")
@@ -438,6 +471,8 @@ def run_pass(
         "acceptance_readiness": acceptance,
         "acceptance_state": str(acceptance["acceptance_state"]),
         "evidence_root": str(evidence_root or ""),
+    "unaffected_requirements": sorted(proven_unaffected),
+    "admitted_by_dependency_proof": sorted(admitted_by_dependency_proof),
         "aggregate_score": None,
         "explanation": explain(acceptance),
         "recorded_at": utc_now(),
