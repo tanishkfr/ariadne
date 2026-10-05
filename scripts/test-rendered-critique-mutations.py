@@ -36,6 +36,10 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from harness import mutation_ledger  # noqa: E402
+
 SRC = ROOT / "src"
 #: Deliberately NOT ``.ariadne-mutation-restore.json``. That path belongs to the AR-221
 #: harness, whose marker is a single object carrying the original file contents inline.
@@ -46,6 +50,17 @@ SRC = ROOT / "src"
 RESTORE_MARKER = ROOT / ".ariadne-mutation-restore-222.json"
 BACKUP_DIR = ROOT / ".ariadne-mutation-restore-222"
 """Where the pre-mutation bytes are stashed, so a killed run can be undone."""
+
+HARNESS = "ar222-mutations"
+"""The key this harness registers under in the shared mutation ledger.
+
+AR-222D added the ledger because the two separate markers were, between them, unqueryable:
+no other process could ask whether the repository was mid-mutation, and a suite asserting
+that the repository was clean failed with a *misleading* accusation aimed at itself rather
+than at the harness that was editing. The per-harness marker and stash stay exactly as they
+were -- they hold the bytes and remain the recovery path -- and the ledger is added beside
+them as the shared, queryable answer.
+"""
 
 ENGINE = SRC / "ariadne_engine"
 RENDERED = ENGINE / "rendered_critique"
@@ -412,7 +427,15 @@ def run_suite() -> tuple[bool, str]:
 
 
 def main() -> int:
-    # Before anything else: undo whatever a previous killed run left behind.
+    # Before anything else: refuse to start over someone else's active mutation, and undo
+    # whatever a previous killed run of *this* harness left behind.
+    stale = [row for row in mutation_ledger.active_mutations(ROOT)
+             if str(row.get("harness")) != HARNESS]
+    for row in stale:
+        print(f"note   another harness holds the tree mutated: {row.get('harness')} "
+              f"({row.get('mutation_id')}). Running two mutation harnesses at once makes each "
+              f"harness's results meaningless, so this run will not proceed while it is active.")
+        return 1
     recover_if_needed()
     baseline_ok, baseline_output = run_suite()
     if not baseline_ok:
@@ -436,11 +459,20 @@ def main() -> int:
         try:
             path.write_text(source.replace(original_text, mutated_text, 1), encoding="utf-8")
             _write_restore_marker([(path, payload)])
+            # AR-222D: register in the shared ledger, so a commit, a release or another suite
+            # can ask whether this harness currently holds the tree mutated. Registration
+            # happens *after* the stash is on disk, so a kill at any point leaves either a
+            # recoverable stash or an active entry -- never a mutated file with no record.
+            mutation_ledger._register(
+                ROOT, harness=HARNESS, mutation_id=f"M{index:02d}",
+                targets=[str(path)], stash=str(BACKUP_DIR),
+            )
             passed, output = run_suite()
             caught = not passed
         except subprocess.TimeoutExpired:
             caught, output = True, "the mutated suite hung, which is a failure to pass"
         finally:
+            mutation_ledger._deregister(ROOT, harness=HARNESS, mutation_id=f"M{index:02d}")
             _restore(path, payload)
             _clear_restore_marker()
         if caught:
@@ -457,6 +489,12 @@ def main() -> int:
             print(f"        (harness restored {relative.name})")
 
     _clear_restore_marker()
+    # The ledger must be clear once this harness is done. If it is not, the next commit is
+    # blocked, and saying so here is better than letting it surface as a confusing refusal.
+    state = mutation_ledger.mutation_state(ROOT)
+    if state["active"]:
+        print(f"\nthe mutation ledger is still active after the run: {state['count']} entr(y/ies). "
+              "A commit or release will refuse until this is cleared.")
     print()
     for label, reason in skipped:
         print(f"skipped  {label}: {reason}")

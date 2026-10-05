@@ -31,3 +31,9 @@ benchmarks/results/
 # incompatible shape crashed AR-221's recovery routine and with it the whole gate.
 .ariadne-mutation-restore-222.json
 .ariadne-mutation-restore-222/
+# AR-222D adds the *shared* ledger: one registry that every harness registers into, so any
+# other process can ask whether the repository is currently mid-mutation. Per-harness
+# markers hold bytes; this holds state, and state is what a commit has to refuse on.
+.ariadne-mutation-active.json
+# ...and the stashes the shared ledger points at, for harnesses that use it transactionally.
+.ariadne-mutation-stash-*/

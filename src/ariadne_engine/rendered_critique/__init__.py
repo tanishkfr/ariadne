@@ -34,6 +34,15 @@ package extends both and adds the four things that were genuinely missing:
 * **independent critique and bounded repair** where the worker that made the change
   cannot close its own finding (:mod:`critique`, :mod:`refinement`)
 
+AR-222D adds two more, both extensions of the last boundary rather than new subsystems:
+
+* **critic continuity** (:mod:`continuity`) so round 2 asks whether round 1's repair
+  landed, while the reviewer's isolation from the implementer's reasoning is re-checked at
+  the new seam that continuity opens
+* **proof readiness** (:mod:`proof`) so the requirement -> revision -> evidence -> finding
+  -> repair -> new-evidence chain is walkable for AR-223, with **no acceptance verdict in
+  this phase** because the verdict vocabulary belongs to that milestone
+
 The boundaries are the ones AR-220 and AR-221 established, and they are not weakened
 here::
 
@@ -44,26 +53,42 @@ here::
     source implementation != rendered correctness
     mechanical evidence   != rendered evidence != review evidence
     reference alignment   != pixel similarity
+    continuity            != familiarity
+    provenance present    != requirement proven
 
-The three evidence kinds in that last line are the load-bearing addition. Mechanical
-evidence (build, typecheck, tests) proves code compiles. Rendered evidence (a real
-capture bound to an exact source digest) proves what appeared. Review evidence (an
-independent critique of those captures) says whether it satisfies the approved
-direction. None of the three may impersonate another, and the most important
-consequence is negative: a green build cannot answer a design question, and this
-package refuses to pretend otherwise.
+The three evidence kinds in the middle of that list are the load-bearing addition from
+AR-222. Mechanical evidence (build, typecheck, tests) proves code compiles. Rendered
+evidence (a real capture bound to an exact source digest) proves what appeared. Review
+evidence (an independent critique of those captures) says whether it satisfies the approved
+direction. None of the three may impersonate another, and the most important consequence
+is negative: a green build cannot answer a design question, and this package refuses to
+pretend otherwise.
 """
 
 from __future__ import annotations
 
-from . import adapter, contracts_bridge, critique, evidence, plan, refinement, safety, source, trace
+from . import (
+    adapter,
+    continuity,
+    contracts_bridge,
+    critique,
+    evidence,
+    plan,
+    proof,
+    refinement,
+    safety,
+    source,
+    trace,
+)
 
 __all__ = [
     "adapter",
+    "continuity",
     "contracts_bridge",
     "critique",
     "evidence",
     "plan",
+    "proof",
     "refinement",
     "safety",
     "source",

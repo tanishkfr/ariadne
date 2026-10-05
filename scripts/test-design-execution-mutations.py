@@ -24,6 +24,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from harness import mutation_ledger  # noqa: E402
+
+HARNESS = "ar221-mutations"
+"""The key this harness registers under in the shared mutation ledger.
+
+AR-222D added the ledger because this harness's marker and the AR-222 harness's marker were,
+between them, unqueryable: no other process could ask whether the repository was mid-mutation,
+and a suite asserting the repository was clean failed with a misleading accusation aimed at
+itself rather than at the harness that was editing. The per-harness marker stays exactly as it
+was -- it holds the original contents and remains the recovery path -- and the ledger is added
+beside it as the shared, queryable answer.
+"""
 
 from ariadne_engine import contracts  # noqa: E402
 from ariadne_engine.design_execution import (  # noqa: E402
@@ -310,6 +324,17 @@ def restore(mutation: dict) -> None:
 
 
 def main() -> int:
+    # AR-222D: refuse to start while another harness holds the tree mutated. Two mutation
+    # harnesses running concurrently each corrupt the other's results, and the resulting
+    # failure lands on whichever suite happens to assert cleanliness -- which is how a suite
+    # ends up falsely accusing itself of writing to the repository.
+    foreign = [row for row in mutation_ledger.active_mutations(ROOT)
+               if str(row.get("harness")) != HARNESS]
+    for row in foreign:
+        print(f"another harness holds the tree mutated: {row.get('harness')} "
+              f"({row.get('mutation_id')}). Two mutation harnesses at once make each other's "
+              f"results meaningless, so this run will not proceed.")
+        return 1
     recovered = recover_interrupted_mutation()
     for row in recovered:
         print(f"RECOVERED  {row}")
@@ -332,9 +357,16 @@ def main() -> int:
             not_applied.append(f"{mutation['id']} {mutation['rule']}")
             print(f"NOT-APPLIED {mutation['id']}  {mutation['rule']}")
             continue
+        # AR-222D: register in the shared ledger after the marker is on disk, so a commit or
+        # a release can refuse to run while this mutation is applied.
+        mutation_ledger._register(
+            ROOT, harness=HARNESS, mutation_id=mutation["id"],
+            targets=[str(mutation["target"])], stash=str(RESTORE_MARKER),
+        )
         try:
             still_green, tail = suite_passes()
         finally:
+            mutation_ledger._deregister(ROOT, harness=HARNESS, mutation_id=mutation["id"])
             restore(mutation)
         if still_green:
             survivors.append(f"{mutation['id']} {mutation['rule']}")
@@ -350,6 +382,10 @@ def main() -> int:
             if first_failure:
                 print(f"             -> {first_failure}")
 
+    state = mutation_ledger.mutation_state(ROOT)
+    if state["active"]:
+        print(f"\nthe mutation ledger is still active after the run: {state['count']} entr(y/ies). "
+              "A commit or release will refuse until this is cleared.")
     print(f"\n{caught}/{len(MUTATIONS)} mutations caught")
     if survivors:
         print("\nSurvived - each of these is a rule no test actually enforces:")
