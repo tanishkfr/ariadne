@@ -444,6 +444,157 @@ def _reason(resolved: str, triggers: Sequence[str]) -> str:
     )
 
 
+CONSEQUENCE_CLASSES = {
+    "MEANING": (
+        "product meaning", "brand identity", "creative metaphor", "navigation paradigm",
+        "visual language", "interaction model", "information architecture",
+        "positioning", "voice", "tone",
+        # Copy is included deliberately and not narrowly. The AR-223 correction exists
+        # because a CONDITIONAL reading could not distinguish "which icon set" from "the
+        # onboarding wording", and the second is the same class of consequence as changing
+        # the brand: the user wrote the words, so changing them is a decision about meaning
+        # regardless of how small the diff looks.
+        "copy", "wording", "rewording", "worded", "label", "microcopy", "onboarding",
+    ),
+    "AUTHORITY": (
+        "approve", "authorise", "authorize", "sign-off", "sign off", "accept", "ship",
+        "release", "merge", "publish", "grant", "authorization", "authorisation",
+    ),
+    "PROTECTED_HUMAN_DECISION": (
+        "protected", "human approval", "operator decision", "gate", "g1d", "g2", "g3",
+    ),
+}
+"""The consequence classes :func:`risk_sensitive_tier` judges on.
+
+Grouped by *what would have to change* if the engine guessed wrong, not by how the
+proposal reads. This is the vocabulary AR-222D lacked: its classifier decided on the tier
+a lexical match produced, so ``CONDITIONAL`` meant "we could not tell" and it treated
+that uniformly -- escalating some, proceeding on others, with no principle for which.
+
+There is no ``ROUTINE`` entry, and that is deliberate. The low-risk case is the *absence*
+of all three: nothing here is named, so the ambiguity is implementation mechanics, which
+:data:`IMPLEMENTATION_CHANGES` already describes as reversible and free to make. Adding a
+``ROUTINE`` class would need a list of phrases that mean "harmless", and any such list is
+either too short to be safe or too long to be worth having.
+"""
+
+RISK_CLASSES = ("LOW", "HIGH", "PROTECTED")
+"""What a potential consequence means when the tier cannot be decided lexically.
+
+``LOW``   routine implementation ambiguity; bounded autonomy continues
+``HIGH``  meaning or authority is at stake; a human decides
+``PROTECTED`` a protected decision is at stake, regardless of anything else
+"""
+
+_ELEVATED = ("HIGH", "PROTECTED")
+
+
+def risk_sensitive_tier(
+    proposed_change: str,
+    *,
+    decision_kind: str = "",
+    meaning_bearing: bool = False,
+    protected: bool = False,
+    stakes: str = "LOW",
+    confidence: float | None = None,
+) -> dict:
+    """Re-decide one uncertain classification by what is at stake, not by how it reads.
+
+    **The AR-223 correction.** :func:`classify` returns ``CONDITIONAL`` when it cannot
+    place a change, and AR-222D treated that one way for everything. But ``CONDITIONAL``
+    covers both *"the icon set for the empty state is a coin flip"* -- routine, reversible,
+    and nobody's meaning changes -- and *"this might reword the onboarding copy or change
+    the navigation paradigm"*, which is a design decision the engine has no business
+    making alone. Same tier, opposite consequences, one rule applied to both.
+
+    So the rule becomes risk-sensitive:
+
+    * ``CONDITIONAL`` **and** the potential consequence crosses meaning, authority or a
+      protected human decision -- escalate. Fail toward the question.
+    * ``CONDITIONAL`` **and** nothing above is named -- proceed. Bounded autonomy over
+      routine implementation ambiguity continues, because escalating every uncertainty
+      trains people to dismiss escalations, and a gate that fires always is not a gate.
+
+    ``confidence`` is recorded and **never decisive**. A caller-supplied number cannot
+    lower the tier: having a quantity that looks certain is not evidence about what is at
+    stake, and a policy that lets confidence reduce escalation has reintroduced through
+    the side door the rule this whole family exists to enforce. Confidence is not
+    permission.
+    """
+    change = " ".join(str(proposed_change or "").lower().replace("_", " ").split())
+    if not change:
+        raise ContractError("a change must be described before it can be classified")
+    kind = str(decision_kind or "") or change
+    lexical = classify(change, decision_kind=kind, meaning_bearing=meaning_bearing)
+
+    text = f"{change} {kind}".lower()
+    matched = sorted({
+        risk_class for risk_class, cues in CONSEQUENCE_CLASSES.items()
+        if any(cue in text for cue in cues)
+    })
+    triggers = sorted(set(lexical["meaning_triggers"]))
+    elevated_consequences = [
+        item for item in matched if item != "PROTECTED_HUMAN_DECISION"
+    ]
+
+    risk_class = "LOW"
+    if protected or "PROTECTED_HUMAN_DECISION" in matched:
+        risk_class = "PROTECTED"
+    elif triggers or elevated_consequences or stakes.upper() == "HIGH":
+        risk_class = "HIGH"
+
+    uncertain = lexical["tier"] == "CONDITIONAL"
+    escalated_by_risk = uncertain and risk_class in _ELEVATED
+    if escalated_by_risk:
+        lexical = {**lexical, "tier": "HUMAN_REQUIRED", "interrupts_user": True}
+    elif risk_class in _ELEVATED:
+        # Even a decisive AUTOMATIC cannot survive a named meaning or authority
+        # consequence. `classify` already escalates most of these; this catches the rest
+        # so the correction is not merely "escalate the uncertain ones".
+        lexical = {**lexical, "tier": "HUMAN_REQUIRED", "interrupts_user": True}
+
+    return {
+        **lexical,
+        "risk_class": risk_class,
+        "consequences": matched,
+        "uncertain": uncertain,
+        "escalated_by_risk": escalated_by_risk,
+        "confidence": None if confidence is None else float(confidence),
+        "confidence_used": False,
+        "reason": _risk_reason(risk_class, escalated_by_risk, triggers, matched),
+        "ar223_correction": (
+            "an uncertain classification is re-decided by consequence. Meaning, authority and "
+            "protected decisions escalate; routine implementation ambiguity proceeds"
+        ),
+    }
+
+
+def _risk_reason(
+    risk_class: str,
+    escalated_by_risk: bool,
+    triggers: Sequence[str],
+    matched: Sequence[str],
+) -> str:
+    named = ", ".join(sorted({*triggers, *matched})) or risk_class
+    if risk_class == "PROTECTED":
+        return (
+            f"this touches a protected human decision ({named}). Protected decisions are not "
+            "available to bounded autonomy at any confidence"
+        )
+    if escalated_by_risk:
+        return (
+            f"this could not be classified lexically and its potential consequence crosses {named}, "
+            "so it fails toward escalation rather than silent autonomy"
+        )
+    if risk_class == "HIGH":
+        return f"this alters {named}, which is a design decision rather than an implementation one"
+    return (
+        "this is an uncertain but routine implementation ambiguity. Nothing about meaning, authority "
+        "or a protected decision is at stake, so bounded autonomy continues; escalating every "
+        "uncertainty would make escalation meaningless"
+    )
+
+
 def policy() -> dict:
     """The formal policy, as a record a run can carry and a test can assert against."""
     return {
@@ -466,6 +617,19 @@ def policy() -> dict:
             "pick an aesthetic category, choose a provider, choose a component library, choose a font, "
             "or choose cards"
         ),
+        "risk_sensitive": {
+            "risk_classes": list(RISK_CLASSES),
+            "consequence_classes": sorted(CONSEQUENCE_CLASSES),
+            "rule": (
+                "a classification that cannot be decided lexically is re-decided by consequence: "
+                "meaning, authority and protected human decisions escalate; routine implementation "
+                "ambiguity proceeds"
+            ),
+            "confidence": (
+                "a caller-supplied confidence is recorded and never lowers a tier. Confidence is "
+                "not permission"
+            ),
+        },
     }
 
 
@@ -530,15 +694,18 @@ def assert_single_interruption(record: Mapping) -> list[str]:
 
 __all__ = [
     "AUTONOMOUS_DECISIONS",
+    "CONSEQUENCE_CLASSES",
     "DECLINE_REASONS",
     "DIRECTION_APPROVAL_GATE",
     "HUMAN_REQUIRED_DECISIONS",
     "IMPLEMENTATION_CHANGES",
     "INTERRUPTION_TIERS",
     "MEANING_BEARING_CHANGES",
+    "RISK_CLASSES",
     "assert_single_interruption",
     "classify",
     "policy",
     "policy_problems",
+    "risk_sensitive_tier",
     "tier",
 ]
