@@ -125,17 +125,46 @@ def runtime_sources() -> list[tuple[str, Path]]:
         if not path.is_file():
             raise ReleaseError(f"runtime source is missing: {relative}")
         rows.append((PurePosixPath(relative).as_posix(), path))
+IGNORED_TOOLCHAIN_PARTS = ("node_modules", ".next", "dist", "build")
+"""Local toolchain output that is never a release input.
+
+These directories are ignored machine-local state (fixture installs, build
+outputs), not committed source. A release built while they are present must
+not bundle them: artifact bytes have to depend on the committed source alone,
+or two builds from one commit stop agreeing with each other.
+"""
+
+IGNORED_RESIDUE_NAMES = (".ariadne-mutation-active.json",)
+IGNORED_RESIDUE_PREFIXES = (".ariadne-mutation-restore", ".ariadne-mutation-stash-")
+"""Interrupted-harness recovery state. Never an artefact; never shipped."""
+
+
+def _bundled(path: Path) -> bool:
+    return (
+        path.is_file()
+        and path.name != "installation.json"
+        and "__pycache__" not in path.parts
+        and path.suffix not in (".pyc", ".pyo")
+        and not any(part in IGNORED_TOOLCHAIN_PARTS for part in path.parts)
+        and path.name not in IGNORED_RESIDUE_NAMES
+        and not path.name.startswith(IGNORED_RESIDUE_PREFIXES)
+    )
+
+
+def runtime_sources() -> list[tuple[str, Path]]:
+    rows: list[tuple[str, Path]] = []
+    for relative in RUNTIME_TOP_LEVEL + RUNTIME_SCRIPTS:
+        source = RUNTIME_SOURCE_OVERRIDES.get(relative, relative)
+        path = ROOT / source
+        if not path.is_file():
+            raise ReleaseError(f"runtime source is missing: {relative}")
+        rows.append((PurePosixPath(relative).as_posix(), path))
     for tree in RUNTIME_TREES + [RUNTIME_SKILL]:
         root = ROOT / tree
         if not root.is_dir():
             raise ReleaseError(f"runtime source tree is missing: {tree}")
         for path in sorted(root.rglob("*")):
-            if (
-                path.is_file()
-                and path.name != "installation.json"
-                and "__pycache__" not in path.parts
-                and path.suffix not in (".pyc", ".pyo")
-            ):
+            if _bundled(path):
                 rows.append((path.relative_to(ROOT).as_posix(), path))
     names = [name for name, _ in rows]
     if len(names) != len(set(names)):
@@ -320,6 +349,23 @@ def self_test() -> int:
         case(
             "runtime excludes compiled bytecode and its embedded source paths",
             not any("__pycache__" in name or name.endswith((".pyc", ".pyo")) for name in names),
+        )
+        case(
+            "runtime excludes local toolchain output",
+            not any(
+                part in name.split("/")
+                for name in names
+                for part in ("node_modules", ".next", "dist", "build")
+            ),
+        )
+        case(
+            "runtime excludes interrupted-harness recovery residue",
+            not any(
+                "/.ariadne-mutation-active.json" in name
+                or "/.ariadne-mutation-restore" in name
+                or "/.ariadne-mutation-stash-" in name
+                for name in names
+            ),
         )
         case("runtime excludes maintainer machine paths", all("snprasad" not in archive_name.lower() and "testbed" not in archive_name.lower() for archive_name in names))
         case(
