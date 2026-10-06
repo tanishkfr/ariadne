@@ -151,11 +151,15 @@ G1D remains the principal interruption; routine work continues after.
 
 Packaged RC zip verified to ship `design_reference/specificity/*`,
 acceptance engine, `proof.py`, `mcp.py`. AR-222D suite 124/124 and
-adversarial 31/31 green (covers vague-request autonomy, 3-concept
-divergence, COMMON vs UNEXAMINED, own-slop, G1D, no global score, no house
-style). A live Chromium F1-dashboard run with human G1D approval was not
-executed in this environment; recorded as an explicit limitation, not
-claimed.
+adversarial 31/31 green. AR-224R then ran the F1 slice from the extracted
+RC bytes with the vague request and no aesthetic guidance: 29 of 29 gates
+held (3 surfaces modelled first, 3 candidates across 3 families, 150
+skipped-with-reason selections with 14 of 39 sources queried, 4 defaults
+detected with 4 earned and kept, human G1D binding the shown text, zero
+interruptions after approval, no global score, no house style). A live
+Chromium render of the dashboard was not run here; the offline method
+slice is what the package run proves. See
+`50-AR-224R-RELEASE-EVIDENCE.md`.
 
 ## 23. Design source ecosystem
 
@@ -193,12 +197,20 @@ parity). RC wheel `ariadne-2.2.0rc1` built from exact commit `d5ab42c`.
 
 ## 28. Linux clean install
 
-NOT EXECUTED. No Linux environment available here. Recorded honestly;
-no workflow file claimed as proof.
+PASS on real Linux (AR-224R): WSL2 Ubuntu, kernel
+6.18.33.2-microsoft-standard-WSL2 x86_64, Python 3.14.4. User-local pip
+install of the RC wheel printed 2.2.0rc1; `install` plus `doctor`
+reported healthy; the installed controller verified a temp project end
+to end (VP-0001 with requirement detail, VP-0002 on a second digest,
+three-line comparison). Installed wheel digest equals the manifest
+digest, so the tested bytes are the manifested bytes.
 
 ## 29. macOS clean install
 
-NOT EXECUTED. Same as 28.
+NOT EXECUTED. No macOS hardware, virtual machine, or Mac runner exists
+or was provisioned here. The wheel is platform-neutral pure Python and
+the macOS data-home branch is covered by distribution path tests, which
+bounds but never replaces a real Mac run. The limitation stays public.
 
 ## 30. Release artifacts
 
@@ -260,15 +272,19 @@ Measured in-process: verify about 12 ms, digest 0.06 ms, receipt load
 ## 38. Full regression
 
 Green: engine-core 578/578, decision-runtime 510/510 plus mutations
-38/38, AR-222D 124/124 plus adversarial 31/31, AR-223 78/78 plus 43/43
-plus 30/30, AR-224 38/38 plus 22/22 plus 20/20, release 97/97,
-distribution 55/55, wheel 14/14, check PASS, build self-test 19/19,
-AR-220 reference 109/109, AR-222 critique 87/87.
-OBSERVED failure: AR-221 design-execution 67/68 — `the real vertical
-slice reaches mechanical validation` exhausts the bounded repair budget.
-Reproduced on pristine base `f0affa6` in a detached worktree, so
-pre-existing and environmental, not AR-224. AR-221 mutations/adversarial
-and AR-222 mutations/adversarial plus benchmarks not rerun here.
+38/38, AR-222D 124/124 plus adversarial 31/31 plus mutations 35/35,
+AR-223 78/78 plus 43/43 plus 30/30, AR-224 38/38 plus 22/22 plus 20/20,
+release 97/97, distribution 55/55, wheel 14/14, check PASS, build
+self-test 19/19, AR-220 reference 109/109 plus mutations 22/22, AR-221
+design-execution 68/68 plus adversarial 35/35 plus mutations 25/25,
+AR-222 critique 87/87 plus adversarial 27/27 plus mutations 40/40,
+decision mutations 9/9 with sources byte-identical, benchmarks curated
+release gate 89 pass with 0 fail, 0 observed, 0 error, 0 skip.
+The earlier AR-221 67/68 was a missing `node_modules` in the fresh
+worktree; `npm ci` from the committed lockfile restored it and 68/68
+reproduced. Two tool-killed harness runs left ledger entries that were
+recovered (one transactionally, one via checkout of an AR-222 file);
+ledger reads idle and the tree is clean. Nothing further is omitted.
 
 ## 39. RC source commit
 
@@ -309,7 +325,12 @@ for aesthetics.
 
 Exercised in-process via `mcp.dispatch` over the stable state API
 (contract, verify, retrieve, compare) with agreement to engine semantics.
-Installed-transport MCP conformance beyond this not claimed.
+AR-224R additionally exercised the installed design-reference MCP
+transport from the extracted RC tree with a four-verb fixture connector:
+3 default adapters honestly unavailable with inert search, exactly the 4
+transport verbs advertised, tagged data return, no approve verb, and
+undeclared capabilities refused — 12 of 12 gates held. Authority stays
+engine-side.
 
 ## 46. Stable source commit
 
@@ -336,20 +357,23 @@ authorized.
 ## 51. Known limitations
 
 Shipped in `48-AR-224-KNOWN-LIMITATIONS.md` and RC notes: no OS sandbox,
-proof covers declared requirements only, subjective needs human, external
-providers change, some providers browser-only/disabled,
+undeclared behavior stays unproven, subjective needs human, external
+providers change, browser-only/disabled sources,
 FAILURE_CLASSIFICATION and EVIDENCE_RELEVANCE stay EVALUATED, benchmark
-is not frontier, no hosted service, ChatGPT ready not published, Boreal
-consumer-only and untouched, digest not signature, injection bounded not
-eliminated, plus Linux/macOS clean install not executed, live F1 render
-not executed, AR-221 slice OBSERVED failure, attestation unavailable.
+is not frontier, no hosted service, ChatGPT ready-not-published, Boreal
+consumer-only and untouched, digest-not-signature, bounded-not-eliminated
+injection, plus macOS install not executed, live F1 pixels not rendered,
+attestation unavailable. Linux install and the AR-221 slice left this
+list during AR-224R because both were measured.
 
 ## 52. Final repository state
 
-Branch `v2/2.2-ar224-proof-pass` at `d5ab42c`, clean tracked tree,
-mutation ledger idle, `dist/` local candidate artifacts (ignored),
-frozen worktrees untouched at `f0affa6`. BOREAL UNTOUCHED. NO PYPI.
+Branch `v2/2.2-ar224-proof-pass`, clean tracked tree, mutation ledger
+idle, `dist/` local candidate artifacts from RC source `d5ab42c`
+(ignored), frozen worktrees untouched at `f0affa6`. Later evidence
+commits touch docs only; runtime source is byte-identical to `d5ab42c`,
+so no rebuild was required. BOREAL UNTOUCHED. NO PYPI.
 
 ## 53. Closure status
 
-AR-224 BLOCKED
+AR-224 RELEASE-READY — HUMAN RELEASE AUTHORIZATION REQUIRED
