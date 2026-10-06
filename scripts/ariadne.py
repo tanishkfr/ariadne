@@ -7857,12 +7857,15 @@ def proof_verify_command(args: argparse.Namespace) -> int:
     run_root, state = resolve_and_load(args)
     state["run_root"] = str(run_root)
     against = getattr(args, "against", None)
+    inline_task = getattr(args, "task", None)
     task_text = ""
     task_id = str(getattr(args, "task_id", "") or "")
     if against:
         task_text = _read_text_arg(against, "--against task/spec")
-    elif getattr(args, "task", None):
-        task_text = _read_text_arg(getattr(args, "task", None), "--task text")
+        if not task_id and Path(str(against)).is_file():
+            task_id = Path(str(against)).stem or "proof-task"
+    elif inline_task:
+        task_text = _read_text_arg(inline_task, "--task text")
     else:
         # zero-arg: current context must uniquely identify the contract
         contract_record = PROOF.resolve_zero_arg(state, task_id=task_id)
@@ -7870,6 +7873,8 @@ def proof_verify_command(args: argparse.Namespace) -> int:
         task_id = str(contract_record.get("task_id", "") or task_id)
         if not task_text.strip():
             raise RuntimeError_("current context names a contract with no retrievable request text; supply --against")
+    if not task_id:
+        task_id = "proof-task"
     statements: list[str] = []
     claims_arg = getattr(args, "claims", None)
     if claims_arg:
