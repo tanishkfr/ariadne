@@ -1,3 +1,52 @@
+# Ariadne 2.2.0
+
+Ariadne 2.2.0 is the stable release of Ariadne 2.2 — Proof & Grounding,
+promoted unchanged in behavior from the 2.2.0rc1 candidate after remote
+verification of the candidate artifacts. Install from the immutable
+stable wheel below, run `python -m ariadne doctor`, and verify work with
+`ariadne verify` from the installed release.
+
+Three releases tell the story of this engine:
+
+```text
+2.0
+Execution Intelligence
+
+2.1
+Native bounded Decision Runtime
+
+2.2
+Grounding + independent proof
+```
+
+What 2.2 establishes as product surface: Grounded Design Intelligence
+with real design and reference acquisition, the Design Specificity
+Grammar with anti-unexamined-default reasoning, content before layout
+with concept exploration ahead of convergence, project identity
+precedence with Minimal Creative Interruption, rendered independent
+critique with bounded refinement, the Proof Pass with its
+Claim-Evidence Gap, requirement-level verification across PROVEN,
+PARTIAL, UNPROVEN, FAILED, CONTRADICTED and NEEDS_HUMAN, selective
+evidence invalidation with re-verification, Proof Receipts carrying
+proof history and comparison, Verified Intelligence evaluation and
+promotion, the CLI with its stable Python API and MCP, plus a thin
+ChatGPT-facing integration contract.
+
+What this release refuses to claim: bug-free code, certified
+correctness, universal 100% accuracy, or a full sandbox. A receipt
+records what was evaluated against which requirements using which
+evidence, and nothing beyond that.
+
+Measured runtime truth, scoped to the reviewed reference runtime rather
+than to models in general: REVIEW_ESCALATION is ACTIVE at accuracy 1.000
+with ECE 0.053; ROUTE_FAMILY is ACTIVE at accuracy 1.000 with ECE 0.031;
+FAILURE_CLASSIFICATION remains EVALUATED at accuracy 0.314;
+EVIDENCE_RELEVANCE remains EVALUATED at accuracy 0.339. For every
+promoted profile, authorization_effect stays none: promotion opens
+decision eligibility and never action authority.
+
+The candidate notes follow below.
+
 # Ariadne 2.2.0rc1
 
 Ariadne 2.2.0rc1 is the release candidate for Ariadne 2.2 — Proof and

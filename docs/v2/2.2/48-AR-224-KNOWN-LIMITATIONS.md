@@ -15,3 +15,5 @@
 - Cryptographic attestation state is reported in the release manifest;
   a hash is never called a signature.
 - Prompt injection remains bounded by authority, not magically eliminated.
+- No macOS install or smoke was run for this candidate; the wheel is
+  platform-neutral pure Python, which narrows but never closes that gap.
