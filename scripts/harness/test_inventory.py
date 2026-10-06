@@ -177,6 +177,16 @@ CRITICAL_CASES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "held-out",
         ),
     ),
+    (
+        "proof-pass",
+        (
+            "ambiguous current task refuses rather than choosing",
+            "receipt history is append only and never overwritten",
+            "receipt digest binds content and detects tampering",
+            "unrelated receipts refuse direct comparison",
+            "mcp cannot mint reviewer or human approval",
+        ),
+    ),
 )
 
 #: Recorded floors per suite. A count below its floor is a loss even when every named
@@ -198,6 +208,9 @@ SUITE_FLOORS: dict[str, int] = {
     "scripts/test-ar223.py": 75,
     "scripts/test-ar223-adversarial.py": 40,
     "scripts/test-ar223-mutations.py": 25,
+    "scripts/test-ar224.py": 35,
+    "scripts/test-ar224-adversarial.py": 20,
+    "scripts/test-ar224-mutations.py": 18,
 }
 
 

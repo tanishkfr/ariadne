@@ -82,6 +82,7 @@ ADAPTIVE_COLLECTIONS = (
     *contracts.AR203_COLLECTIONS,
     *contracts.AR205D_COLLECTIONS,
     *contracts.AR223_COLLECTIONS,
+    *contracts.AR224_COLLECTIONS,
 )
 """AR-202, AR-202D, AR-203, AR-205D and AR-223 record collections kept in the run state.
 

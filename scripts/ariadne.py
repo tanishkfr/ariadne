@@ -148,6 +148,7 @@ ORCHESTRATION = ENGINE.orchestration
 PROMPTING = ENGINE.prompting
 SERIALIZATION = ENGINE.serialization
 MIGRATION = ENGINE.migration
+PROOF = ENGINE.proof
 
 # The run-state *file* schema is unchanged in AR-201: new authority lives in
 # versioned records inside the state, so published runtimes keep reading it.
@@ -7812,6 +7813,134 @@ def verify_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_text_arg(value: str | None, what: str) -> str:
+    if not value:
+        raise RuntimeError_(f"Proof Pass needs {what}")
+    path = Path(str(value))
+    if path.is_file():
+        return path.read_text(encoding="utf-8")
+    return str(value)
+
+
+def _work_digest_for_args(args: argparse.Namespace, task_text: str) -> str:
+    explicit = str(getattr(args, "work_digest", "") or "").strip()
+    if explicit:
+        if not re.fullmatch(r"[0-9a-f]{16,64}", explicit):
+            raise RuntimeError_("work digest must be hex 16-64 chars")
+        return explicit
+    work_root = getattr(args, "work_root", None) or getattr(args, "against", None)
+    # --against names the task/spec file; --work-root names the work directory.
+    # When only --against is given, the digest binds task text + work root path.
+    ref = ""
+    work_path = getattr(args, "work_root", None)
+    if work_path:
+        root = Path(str(work_path)).resolve()
+        if not root.exists():
+            raise RuntimeError_(f"work root does not exist: {work_path}")
+        names = sorted(p.name for p in root.iterdir())[:50]
+        ref = str(root) + "|" + "|".join(names)
+    elif work_root and not Path(str(work_root)).is_file():
+        ref = str(work_root)
+    return PROOF.work_digest_for(task_text, ref)
+
+
+def proof_verify_command(args: argparse.Namespace) -> int:
+    """AR-224 Proof Pass: original request + work in, Proof Receipt out.
+
+    Legacy `verify --input/--status` still routes to verify_command; this is the
+    outcome-oriented surface. Zero-arg form resolves the single active contract
+    and refuses ambiguity rather than choosing.
+    """
+    # legacy compatibility: explicit old flags keep old semantics
+    if getattr(args, "input", None) or getattr(args, "status", False):
+        return verify_command(args)
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+    against = getattr(args, "against", None)
+    task_text = ""
+    task_id = str(getattr(args, "task_id", "") or "")
+    if against:
+        task_text = _read_text_arg(against, "--against task/spec")
+    elif getattr(args, "task", None):
+        task_text = _read_text_arg(getattr(args, "task", None), "--task text")
+    else:
+        # zero-arg: current context must uniquely identify the contract
+        contract_record = PROOF.resolve_zero_arg(state, task_id=task_id)
+        task_text = str(contract_record.get("source_text", ""))
+        task_id = str(contract_record.get("task_id", "") or task_id)
+        if not task_text.strip():
+            raise RuntimeError_("current context names a contract with no retrievable request text; supply --against")
+    statements: list[str] = []
+    claims_arg = getattr(args, "claims", None)
+    if claims_arg:
+        raw = _read_text_arg(claims_arg, "--claims")
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                statements = [str(s) for s in parsed]
+            elif isinstance(parsed, dict) and isinstance(parsed.get("claims"), list):
+                statements = [str(s) for s in parsed["claims"]]
+            else:
+                statements = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        except json.JSONDecodeError:
+            statements = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    digest = _work_digest_for_args(args, task_text)
+    try:
+        receipt = PROOF.verify_task(
+            state, task_text=task_text, work_ref=str(getattr(args, "work_root", "") or ""),
+            work_digest=digest, task_id=task_id,
+            completion_statements=tuple(statements),
+        )
+    except CONTRACTS.ContractError as exc:
+        raise RuntimeError_(str(exc)) from exc
+    state["updated_at"] = now()
+    write_state(run_root, state)
+    code = PROOF.exit_code_for(str(receipt.get("acceptance_state", "")))
+    if getattr(args, "json", False):
+        print(json.dumps(receipt, indent=2, sort_keys=True, default=str))
+        return code
+    print(PROOF.format_human(receipt, task_title=task_text[:80]))
+    return code
+
+
+def proof_show_command(args: argparse.Namespace) -> int:
+    run_root, state = resolve_and_load(args)
+    proof_id = str(getattr(args, "proof_id", "") or getattr(args, "proof", "") or "").strip()
+    if not proof_id:
+        raise RuntimeError_("supply a proof id (VP-NNNN)")
+    row = PROOF.get_receipt(state, proof_id)
+    if row is None:
+        raise RuntimeError_(f"no proof receipt {proof_id!r}")
+    if getattr(args, "json", False):
+        print(json.dumps(row, indent=2, sort_keys=True, default=str))
+        return 0
+    print(PROOF.format_human(row))
+    return 0
+
+
+def proof_compare_command(args: argparse.Namespace) -> int:
+    run_root, state = resolve_and_load(args)
+    before = str(getattr(args, "before", "") or "").strip() or str(getattr(args, "proof_a", "") or "").strip()
+    after = str(getattr(args, "after", "") or "").strip() or str(getattr(args, "proof_b", "") or "").strip()
+    # positional: `ariadne compare VP-001 VP-002`
+    rest = getattr(args, "proofs", None) or []
+    if (not before or not after) and len(rest) >= 2:
+        before, after = str(rest[0]), str(rest[1])
+    if not before or not after:
+        raise RuntimeError_("supply two proof ids to compare")
+    try:
+        comp = PROOF.compare_receipts(PROOF.get_receipt(state, before), PROOF.get_receipt(state, after))
+    except CONTRACTS.ContractError as exc:
+        raise RuntimeError_(str(exc)) from exc
+    if comp is None:
+        raise RuntimeError_("comparison refused")
+    if getattr(args, "json", False):
+        print(json.dumps(comp, indent=2, sort_keys=True, default=str))
+        return 0
+    print(PROOF.format_comparison_human(comp))
+    return 0
+
+
 def decision_provider_from_spec(provider_spec: dict | None):
     """Build a decision provider from an offline JSON spec (never a live service)."""
     spec = dict(provider_spec or {"kind": "unavailable"})
@@ -8917,14 +9046,41 @@ def parser() -> argparse.ArgumentParser:
 
     verify_p = sub.add_parser(
         "verify",
-        help="record a verification claim or inspect verification status (stale evidence never satisfies)",
+        help="Proof Pass: verify work against its request (request + work in, receipt out)",
     )
     run_selector(verify_p)
-    verify_p.add_argument("--input", help="JSON with the claim, level, evidence and reproduction")
-    verify_p.add_argument("--status", action="store_true", help="inspect verification status instead of recording")
-    verify_p.add_argument("--subject", help="limit the status view to one subject")
-    verify_p.add_argument("--dependency", action="append", help="name=value current dependency fingerprint")
+    verify_p.add_argument("--input", help="legacy JSON claim path (kept for compatibility)")
+    verify_p.add_argument("--status", action="store_true", help="legacy status view (kept for compatibility)")
+    verify_p.add_argument("--subject", help="legacy: limit the status view to one subject")
+    verify_p.add_argument("--dependency", action="append", help="legacy: name=value dependency fingerprint")
+    verify_p.add_argument("--against", help="task/spec file or inline request text to verify against")
+    verify_p.add_argument("--task", help="inline original request text")
+    verify_p.add_argument("--task-id", help="task identity for zero-arg lineage")
+    verify_p.add_argument("--work-root", help="work directory the digest binds")
+    verify_p.add_argument("--work-digest", help="explicit hex work digest (16-64 chars)")
+    verify_p.add_argument("--claims", help="worker completion claims file or inline text")
     verify_p.add_argument("--json", action="store_true")
+
+    proof_p = sub.add_parser(
+        "proof",
+        help="show one Proof Receipt by id (human-readable by default, --json for machines)",
+    )
+    run_selector(proof_p)
+    proof_p.add_argument("proof_id", nargs="?", help="proof id VP-NNNN")
+    proof_p.add_argument("--proof", help="proof id VP-NNNN (flag form)")
+    proof_p.add_argument("--json", action="store_true")
+
+    compare_p = sub.add_parser(
+        "compare",
+        help="compare two Proof Receipts with lineage safety",
+    )
+    run_selector(compare_p)
+    compare_p.add_argument("proofs", nargs="*", help="two proof ids VP-... VP-...")
+    compare_p.add_argument("--before", help="earlier proof id")
+    compare_p.add_argument("--after", help="later proof id")
+    compare_p.add_argument("--proof-a", help="earlier proof id (alias)")
+    compare_p.add_argument("--proof-b", help="later proof id (alias)")
+    compare_p.add_argument("--json", action="store_true")
 
     decide_p = sub.add_parser(
         "decide",
@@ -9254,7 +9410,10 @@ def main() -> int:
             "recover": recover_command,
             "migrate": migrate_command,
             "capabilities": capabilities_command,
-            "verify": verify_command,
+            "verify": proof_verify_command,
+            "proof": proof_show_command,
+            "compare": proof_compare_command,
+            "verify-legacy": verify_command,
             "decide": decide_command,
             "decision-trace": decision_trace_command,
             "decision-runtime": decision_runtime_command,

@@ -1345,6 +1345,122 @@ def _migration_action(action, run_root=None, project=None, *, args=None) -> Resu
     return Result(exit_code=0, message=migration.render(value))
 
 
+# ------------------------------------------------------ AR-224 Proof Pass API
+# State-level helpers delegate to proof.py (same engine, no second
+# implementation). Result wrappers below expose them over run state files.
+
+def create_proof_contract_state(state, *, task_text, task_id=""):
+    """State-level: build the verification model from request text (no hand-built contract)."""
+    from . import proof as proof_module
+
+    return proof_module.ensure_contract(state, task_text=task_text, task_id=task_id)
+
+
+def verify_work_state(
+    state,
+    *,
+    task_text,
+    work_ref="",
+    work_digest="",
+    task_id="",
+    worker_identity="worker",
+    completion_statements=(),
+    require_independent_review=False,
+):
+    """State-level: request + work in, Proof Receipt out (delegates to acceptance engine)."""
+    from . import proof as proof_module
+
+    return proof_module.verify_task(
+        state, task_text=task_text, work_ref=work_ref, work_digest=work_digest,
+        task_id=task_id, worker_identity=worker_identity,
+        completion_statements=tuple(completion_statements or ()),
+        require_independent_review=require_independent_review,
+    )
+
+
+def get_proof_state(state, proof_id):
+    """State-level: load one receipt by proof id (survives process restart via persisted state)."""
+    from . import proof as proof_module
+
+    row = proof_module.get_receipt(state, proof_id)
+    if row is None:
+        raise ContractError(f"no proof receipt {proof_id!r}")
+    problems = proof_module.receipt_problems(row)
+    if problems:
+        raise ContractError("stored receipt failed validation: " + "; ".join(problems))
+    return row
+
+
+def compare_proofs_state(state, before_id, after_id):
+    """State-level: compare two receipts with lineage checks (delegates, never invents)."""
+    from . import proof as proof_module
+
+    a = get_proof_state(state, before_id)
+    b = get_proof_state(state, after_id)
+    return proof_module.compare_receipts(a, b)
+
+
+def _proof_action(action, run_root=None, project=None, *, args=None, **options) -> Result:
+    from . import proof as proof_module
+
+    try:
+        root = _migration_run_root(run_root, project, args)
+        state = persistence.load_state(root)
+        if action == "create_contract":
+            receipt_contract = proof_module.ensure_contract(
+                state, task_text=str(options.get("task_text", "")),
+                task_id=str(options.get("task_id", "")),
+            )
+            persistence.write_state(root, state)
+            return Result(exit_code=0, message=json.dumps(receipt_contract, indent=2, sort_keys=True, default=str) + "\n", state_changed=True)
+        if action == "verify":
+            receipt = proof_module.verify_task(
+                state, task_text=str(options.get("task_text", "")),
+                work_ref=str(options.get("work_ref", "") or ""),
+                work_digest=str(options.get("work_digest", "") or ""),
+                task_id=str(options.get("task_id", "") or ""),
+                worker_identity=str(options.get("worker_identity", "") or "worker"),
+                completion_statements=tuple(options.get("completion_statements", ()) or ()),
+            )
+            persistence.write_state(root, state)
+            if options.get("as_json"):
+                return Result(exit_code=proof_module.exit_code_for(receipt.get("acceptance_state", "")), message=json.dumps(receipt, indent=2, sort_keys=True, default=str) + "\n", state_changed=True)
+            return Result(exit_code=proof_module.exit_code_for(receipt.get("acceptance_state", "")), message=proof_module.format_human(receipt, task_title=str(options.get("task_text", ""))[:80]) + "\n", state_changed=True)
+        if action == "get":
+            row = get_proof_state(state, str(options.get("proof_id", "")))
+            if options.get("as_json"):
+                return Result(exit_code=0, message=json.dumps(row, indent=2, sort_keys=True, default=str) + "\n")
+            return Result(exit_code=0, message=proof_module.format_human(row) + "\n")
+        if action == "compare":
+            comp = compare_proofs_state(state, str(options.get("before", "")), str(options.get("after", "")))
+            if options.get("as_json"):
+                return Result(exit_code=0, message=json.dumps(comp, indent=2, sort_keys=True, default=str) + "\n")
+            return Result(exit_code=0, message=proof_module.format_comparison_human(comp) + "\n")
+    except ContractError as exc:
+        return Result(exit_code=1, message=f"STOPPED: {exc}\n")
+    return Result(exit_code=3, message="STOPPED: unknown proof action\n")
+
+
+def create_contract(run_root=None, project=None, *, task_text="", task_id="", args=None) -> Result:
+    """Create the verification contract from the original request (stable, outcome-oriented)."""
+    return _proof_action("create_contract", run_root, project, args=args, task_text=task_text, task_id=task_id)
+
+
+def verify(run_root=None, project=None, *, task_text="", work_ref="", work_digest="", task_id="", worker_identity="worker", completion_statements=(), as_json=False, args=None) -> Result:
+    """Verify work against its request; returns a Proof Receipt (stable)."""
+    return _proof_action("verify", run_root, project, args=args, task_text=task_text, work_ref=work_ref, work_digest=work_digest, task_id=task_id, worker_identity=worker_identity, completion_statements=completion_statements, as_json=as_json)
+
+
+def get_verification(run_root=None, project=None, *, proof_id="", as_json=False, args=None) -> Result:
+    """Load one Proof Receipt by id (stable)."""
+    return _proof_action("get", run_root, project, args=args, proof_id=proof_id, as_json=as_json)
+
+
+def compare_verifications(run_root=None, project=None, *, before="", after="", as_json=False, args=None) -> Result:
+    """Compare two Proof Receipts with lineage safety (stable)."""
+    return _proof_action("compare", run_root, project, args=args, before=before, after=after, as_json=as_json)
+
+
 def plan_migration(run_root=None, project=None, *, args: argparse.Namespace | None = None) -> Result:
     """Dry run: what a v1 -> v2 migration would change, preserve, back up and refuse."""
     return _migration_action("plan", run_root, project, args=args)
@@ -1472,4 +1588,12 @@ __all__ = [
     "apply_migration",
     "rollback_migration",
     "migration_report",
+    "create_proof_contract_state",
+    "verify_work_state",
+    "get_proof_state",
+    "compare_proofs_state",
+    "create_contract",
+    "verify",
+    "get_verification",
+    "compare_verifications",
 ]

@@ -3628,6 +3628,14 @@ AR223_COLLECTIONS = (
 )
 """The AR-223 acceptance collections, additive and optional like every earlier family."""
 
+MAX_PROOF_RECEIPTS = 5_000
+"""Hard safety bound for the AR-224 proof-receipt collection."""
+
+AR224_COLLECTIONS = (
+    "proof_receipts",
+)
+"""The AR-224 proof-receipt collection, additive and optional like every earlier family."""
+
 
 def _acceptance_schema(record: Mapping[str, Any], problems: list[str], kind: str) -> None:
     if record.get("schema_version") not in READABLE_ACCEPTANCE_SCHEMAS:
@@ -4007,6 +4015,7 @@ _COLLECTION_LIMITS = {
     "acceptance_evidence": MAX_ACCEPTANCE_EVIDENCE,
     "verification_decisions": MAX_VERIFICATION_DECISIONS,
     "verification_passes": MAX_VERIFICATION_PASSES,
+    "proof_receipts": MAX_PROOF_RECEIPTS,
 }
 
 
@@ -4022,7 +4031,7 @@ def require_collection_capacity(state: Mapping[str, Any], key: str) -> None:
         raise ContractError(
             f"{key!r} is not a bounded engine record collection; the bound applies to "
             + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS,
-                         *AR223_COLLECTIONS])
+                         *AR223_COLLECTIONS, *AR224_COLLECTIONS])
         )
     values = state.get(key)
     if values is None:

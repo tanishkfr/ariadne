@@ -66,6 +66,10 @@ STABLE_V2 = (
     "apply_migration",
     "rollback_migration",
     "migration_report",
+    "create_contract",
+    "verify",
+    "get_verification",
+    "compare_verifications",
     "connect",
     "EngineClient",
     "describe_public_api",
@@ -151,6 +155,10 @@ PROVISIONAL = (
     "orchestration_report",
     "audit_prompts",
     "set_efficiency",
+    "create_proof_contract_state",
+    "verify_work_state",
+    "get_proof_state",
+    "compare_proofs_state",
 )
 
 INTERNAL = (
@@ -321,6 +329,18 @@ class EngineClient:
 
     def migration_report(self, **options) -> api.Result:
         return api.migration_report(**options)
+
+    def create_contract(self, **options) -> api.Result:
+        return api.create_contract(**options)
+
+    def verify(self, **options) -> api.Result:
+        return api.verify(**options)
+
+    def get_verification(self, **options) -> api.Result:
+        return api.get_verification(**options)
+
+    def compare_verifications(self, **options) -> api.Result:
+        return api.compare_verifications(**options)
 
 
 def connect(runtime_root=None) -> EngineClient:
