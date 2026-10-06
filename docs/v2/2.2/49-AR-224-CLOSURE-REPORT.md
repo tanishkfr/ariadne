@@ -214,10 +214,10 @@ bounds but never replaces a real Mac run. The limitation stays public.
 
 ## 30. Release artifacts
 
-`dist/` from exact RC source `d5ab42c` (ignored, local): runtime zip,
-wheel, release manifest, versioned notes, SHA256SUMS plus per-file .sha256.
-`build-release --self-test` 19/19 (deterministic, excludes pycache and
-machine paths, VERSION authority).
+`dist/` rebuilt from `c40ebac` (ignored, local): runtime zip, wheel,
+release manifest, versioned notes, SHA256SUMS plus per-file .sha256.
+`build-release --self-test` 21/21 (deterministic, excludes pycache,
+machine paths, toolchain output and harness residue, VERSION authority).
 
 ## 31. Release manifest
 
@@ -334,25 +334,57 @@ engine-side.
 
 ## 46. Stable source commit
 
-NONE. Stable `2.2.0` not attempted; VERSION remains `2.2.0rc1`.
+`c40ebac` (branch `v2/2.2-ar224-proof-pass`). First stable source
+`eb2931e` was superseded before announcement for the reason in 46b;
+no runtime Python file differs between them, only `scripts/build-release.py`
+plus version/docs files already recorded.
+
+## 46b. Corrected stable source (disclosed rebuild)
+
+The first `v2.2.0` publication (tag and assets, never announced) bundled
+26MB of ignored `node_modules` because `runtime_sources()` walked the
+whole engine tree. That is a release-tooling source defect: artifact
+bytes depended on untracked local state, so a clean-checkout rebuild
+would disagree. The fix excludes toolchain output and harness residue
+and adds two self-test gates (now 21/21). Rebuilt from `c40ebac` with
+the fixture packages still present: 231 files, zero `node_modules`.
+Affected package evidence was invalidated and re-run against the new
+bytes (release suite, fresh Windows and Linux installs with full
+slices, F1 29/29, MCP 12/12). The defective release, tag, and branch
+were deleted the same session and the stable line re-published below.
+No historical release or tag was touched at any point.
 
 ## 47. Stable tag
 
-NONE (`v2.2.0` not created).
+`v2.2.0`, annotated, peeling to `c40ebac` on the public remote. The
+earlier tag object for the superseded source was deleted with its
+release before any announcement.
 
 ## 48. Stable assets
 
-NONE.
+Public set (7 files): wheel `7a3cf0a4...c9a5f5`, runtime zip
+`dcabdec6...14c3`, manifest, versioned notes, SHA256SUMS plus per-file
+`.sha256`. Sizes back at the RC scale (wheel about 1.3MB). Downloaded
+copies are bit-identical to the local build.
 
 ## 49. Stable remote verification
 
-NOT PERFORMED (see 42).
+PERFORMED after re-publication: release exists, draft false, prerelease
+false, target `release/2.2.0`, tag peels to `c40ebac`, 7 assets present,
+downloaded SHA256SUMS all match, manifest names `2.2.0`/`c40ebac`, tag
+README install command points at the `v2.2.0` wheel, PyPI still shows
+the unrelated 1.1.0 project only, and a fresh downloaded-wheel install
+(version 2.2.0, healthy doctor, verify to VP-0001, proof, second verify
+to VP-0002, compare) passes on Windows.
 
 ## 50. Public release URL
 
-NONE. Nothing published. Explicit: NO PYPI (permanent for 2.2; namespace
-collision). GitHub Releases is the only distribution surface when
-authorized.
+`https://github.com/tanishkfr/ariadne/releases/tag/v2.2.0` (stable, not
+draft, not prerelease). RC at
+`https://github.com/tanishkfr/ariadne/releases/tag/v2.2.0rc1`
+(prerelease). Explicit: NO PYPI (permanent for 2.2; namespace
+collision); PyPI `ariadne` remains the unrelated 1.1.0 project.
+GitHub Releases is the only distribution surface.
 
 ## 51. Known limitations
 
@@ -369,11 +401,11 @@ list during AR-224R because both were measured.
 ## 52. Final repository state
 
 Branch `v2/2.2-ar224-proof-pass`, clean tracked tree, mutation ledger
-idle, `dist/` local candidate artifacts from RC source `d5ab42c`
-(ignored), frozen worktrees untouched at `f0affa6`. Later evidence
-commits touch docs only; runtime source is byte-identical to `d5ab42c`,
-so no rebuild was required. BOREAL UNTOUCHED. NO PYPI.
+idle, `dist/` local stable artifacts from `c40ebac` (ignored), frozen
+worktrees untouched at `f0affa6`. The `c40ebac` fix commit changes
+release tooling only; engine and product sources are byte-identical to
+the verified RC source. BOREAL UNTOUCHED. NO PYPI.
 
 ## 53. Closure status
 
-AR-224 RELEASE-READY — HUMAN RELEASE AUTHORIZATION REQUIRED
+AR-224 COMPLETE — ARIADNE 2.2 RELEASED
