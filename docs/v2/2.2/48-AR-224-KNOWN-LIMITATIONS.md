@@ -1,8 +1,8 @@
 # AR-224 Known Limitations (public)
 
 - Not an OS sandbox.
-- Proof Pass evaluates declared requirements and evidence; it does not
-  prove all bugs absent.
+- A passing receipt covers the declared requirements only; undeclared
+  behavior was never examined and stays unproven.
 - Subjective requirements may require human judgment (NEEDS_HUMAN).
 - External design providers change or disappear; project evidence stays primary.
 - Some providers remain browser-only or disabled; the registry says which.
