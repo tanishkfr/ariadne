@@ -123,6 +123,13 @@ CRITIQUE = ENGINE.critique
 CAPABILITIES = ENGINE.capabilities
 VERIFICATION = ENGINE.verification
 PROVENANCE = ENGINE.provenance
+DESIGN_REFERENCE = ENGINE.design_reference
+REFERENCE_SETS = DESIGN_REFERENCE.sets
+# AR-221 grounded design execution. The plan, the inventory and the trace are
+# aliased separately rather than through a package attribute, so a verb that only
+# inspects the trace does not pull the compiler into the process.
+IMPLEMENTATION_PLAN = ENGINE.design_execution.plan
+IMPLEMENTATION_CHANGES = ENGINE.design_execution.changes
 DECISIONS = ENGINE.decisions
 # AR-206 native Decision Runtime. Aliased at module scope so the CLI never reaches
 # through DECISIONS.runtime for the session helpers: a runtime-location concern is not
@@ -141,6 +148,7 @@ ORCHESTRATION = ENGINE.orchestration
 PROMPTING = ENGINE.prompting
 SERIALIZATION = ENGINE.serialization
 MIGRATION = ENGINE.migration
+PROOF = ENGINE.proof
 
 # The run-state *file* schema is unchanged in AR-201: new authority lives in
 # versioned records inside the state, so published runtimes keep reading it.
@@ -4472,6 +4480,210 @@ def design_check_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def design_implementation_plan_command(args: argparse.Namespace) -> int:
+    """Show the implementation plans a run compiled, and what each obliges (AR-221).
+
+    Read-only, like every other inspection verb. It reports each constraint with the
+    basis it came from, the treatments that were bound, the prohibitions, and the
+    mechanical checks that would certify the result. It does not claim the result
+    looks right and does not offer to run anything.
+    """
+    run_root, state = resolve_and_load(args)
+    view = API.implementation_plans(state, task_id=getattr(args, "task", "") or "")
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    latest = view.get("latest") or {}
+    if not latest:
+        print("No implementation plan recorded in this run.")
+        for problem in view.get("problems") or []:
+            print(f"  problem: {problem}")
+        return 0
+    print(IMPLEMENTATION_PLAN.summarise(latest))
+    if latest.get("component_reuse_decisions"):
+        print("\nComponent reuse")
+        for row in latest["component_reuse_decisions"]:
+            print(f"  {row.get('need')}: {row.get('decision')}")
+            print(f"    {row.get('reason')}")
+    if latest.get("implementation_references"):
+        print("\nImplementation references")
+        for row in latest["implementation_references"]:
+            print(
+                f"  {row.get('source')} [{row.get('reuse_status')}, {row.get('license') or 'licence unknown'}]"
+            )
+            print(f"    files: {', '.join(row.get('files_inspected') or []) or 'none recorded'}")
+            if row.get("aesthetic_inherited"):
+                print("    note: this reference's aesthetic was adopted, which needs justification")
+    if view.get("problems"):
+        print("\nPlan problems")
+        for problem in view["problems"]:
+            print(f"  - {problem}")
+    return 0
+
+
+def design_component_inventory_command(args: argparse.Namespace) -> int:
+    """Show what the project already provides, and how each primitive will be obtained.
+
+    The reuse ladder runs before anything is generated, so this surface is the place
+    to check that decision rather than after the fact. External registries appear
+    last in the order and never as a default.
+    """
+    run_root, state = resolve_and_load(args)
+    view = API.inspect_component_inventory(state, task_id=getattr(args, "task", "") or "")
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    record = view.get("inventory") or {}
+    if not record:
+        print("No component inventory recorded in this run.")
+        return 0
+    primitives = record.get("primitives") or {}
+    search = record.get("search") or {}
+    print("Project Component Inventory")
+    print(f"  files scanned:    {record.get('component_files_scanned', 0)}")
+    print(f"  search:           {'fallback scan' if search.get('fallback_scan_used') else 'declared directories'}")
+    print(f"  families present: {', '.join(primitives.get('present') or []) or 'none'}")
+    print(f"  families absent:  {', '.join(primitives.get('absent') or []) or 'none'}")
+    variables = (record.get("tokens") or {}).get("css_variables") or {}
+    print(f"  design tokens:    {len(variables)} CSS variables in "
+          f"{', '.join((record.get('tokens') or {}).get('files') or []) or 'no named file'}")
+    print("\nComponent reuse decisions")
+    for row in view.get("reuse_decisions") or []:
+        target = f" ({row['existing_component']})" if row.get("existing_component") else ""
+        print(f"  {row.get('need')}: {row.get('decision')}{target}")
+        print(f"    {row.get('reason')}")
+    return 0
+
+
+def design_implementation_trace_command(args: argparse.Namespace) -> int:
+    """Print the chain from requirement to changed file, gaps included.
+
+    Every break is printed. A trace that quietly repaired itself would be worse than
+    no trace, because it would manufacture the confidence this command exists to let
+    a reader check.
+    """
+    run_root, state = resolve_and_load(args)
+    report = API.inspect_implementation_trace(state, plan_id=getattr(args, "plan", "") or "")
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2, sort_keys=True, default=str))
+        return 0
+    if not report.get("found"):
+        for gap in report.get("gaps") or []:
+            print(gap)
+        return 0
+    print(IMPLEMENTATION_CHANGES.render_trace(report))
+    summary = report.get("summary") or {}
+    print(
+        f"\n{summary.get('changes', 0)} change(s); material {summary.get('material', 0)}, "
+        f"grounded {summary.get('grounded_material', 0)}, "
+        f"ungrounded {summary.get('ungrounded_material', 0)}"
+    )
+    return 0
+
+
+def design_references_command(args: argparse.Namespace) -> int:
+    """Show the design evidence behind a run (AR-220 inspection surface).
+
+    Deliberately narrow and read-only: it prints what was inspected, how it was
+    classified, and what it was used for. It starts nothing, fetches nothing and
+    writes nothing, so inspecting the evidence can never change the evidence.
+
+    The wording is the public product language - Design References, Reference Set,
+    Design Evidence, Design Direction - with source providers named only in the
+    provenance detail, because "getdesign mode" would describe the tool rather
+    than the evidence.
+    """
+    run_root, state = resolve_and_load(args)
+    records = [record for record in REFERENCES.references(state) if record.get("classification")]
+    if getattr(args, "json", False):
+        print(json.dumps(
+            {
+                "references": [_reference_view(record) for record in records],
+                "reference_sets": [
+                    REFERENCE_SETS.summarise(record)
+                    for record in REFERENCE_SETS.reference_sets(state)
+                ],
+                "capabilities": design_reference_capability_view(),
+            },
+            indent=2, sort_keys=True, default=str,
+        ))
+        return 0
+    if not records:
+        print("No classified design references recorded in this run.")
+        return 0
+    print("Design Evidence")
+    for record in records:
+        classification = record.get("classification", {})
+        print(
+            f"  {record.get('title', record['reference_id'])}\n"
+            f"    Source: {classification.get('source_provider', 'unknown')}"
+            f" ({classification.get('source_kind', 'unclassified')})\n"
+            f"    Evidence: {classification.get('evidence_level', 'unknown')}"
+            f" · retrieved {classification.get('retrieved_at', 'unknown')}\n"
+            f"    Observations: {len(record.get('observed_patterns') or [])}"
+            f" · state {record.get('state', 'unknown')}"
+        )
+        for limitation in list(record.get("limitations") or [])[:2]:
+            print(f"    Limitation: {limitation}")
+        attempts = (record.get("injection_scan") or {}).get("instruction_attempts") or []
+        if attempts:
+            print(
+                f"    Note: source text attempted {len(attempts)} instruction(s); recorded as data, "
+                "granting nothing"
+            )
+    for summary_line in REFERENCE_SETS.reference_sets(state):
+        print()
+        print(REFERENCE_SETS.summarise(summary_line))
+    return 0
+
+
+def design_reference_capability_command(args: argparse.Namespace) -> int:
+    """Report which design-reference transports exist and which are available."""
+    view = design_reference_capability_view()
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    print("Design Reference capability")
+    for row in view["transports"]:
+        state_text = "available" if row.get("enabled") else "unavailable"
+        print(f"  {row.get('id')}: {state_text}")
+        if row.get("unavailable_reason"):
+            print(f"    {row['unavailable_reason']}")
+    print(f"  external reference capability: {view['external']['external_reference_capability']}")
+    print("  no transport is required for Ariadne to design")
+    return 0
+
+
+def design_reference_capability_view() -> dict:
+    """The honest availability of every declared design-reference transport."""
+    matrix = DESIGN_REFERENCE.capability_matrix()
+    return {
+        "transports": matrix["transports"],
+        "external": DESIGN_REFERENCE.external_capability_state(),
+        "required_for_core": False,
+    }
+
+
+def _reference_view(record: dict) -> dict:
+    classification = record.get("classification") if isinstance(record.get("classification"), dict) else {}
+    return {
+        "reference_id": record.get("reference_id"),
+        "title": record.get("title"),
+        "state": record.get("state"),
+        "source_provider": classification.get("source_provider"),
+        "source_kind": classification.get("source_kind"),
+        "evidence_level": classification.get("evidence_level"),
+        "access_mode": classification.get("access_mode"),
+        "freshness": classification.get("freshness"),
+        "retrieved_at": classification.get("retrieved_at"),
+        "content_digest": classification.get("content_digest"),
+        "normalized_digest": record.get("normalized_digest"),
+        "observed_patterns": len(record.get("observed_patterns") or []),
+        "limitations": list(record.get("limitations") or []),
+        "instruction_attempts": len((record.get("injection_scan") or {}).get("instruction_attempts") or []),
+    }
+
+
 def design_report_command(args: argparse.Namespace) -> int:
     run_root, state = resolve_and_load(args)
     report = DESIGN.report(state)
@@ -7601,6 +7813,139 @@ def verify_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_text_arg(value: str | None, what: str) -> str:
+    if not value:
+        raise RuntimeError_(f"Proof Pass needs {what}")
+    path = Path(str(value))
+    if path.is_file():
+        return path.read_text(encoding="utf-8")
+    return str(value)
+
+
+def _work_digest_for_args(args: argparse.Namespace, task_text: str) -> str:
+    explicit = str(getattr(args, "work_digest", "") or "").strip()
+    if explicit:
+        if not re.fullmatch(r"[0-9a-f]{16,64}", explicit):
+            raise RuntimeError_("work digest must be hex 16-64 chars")
+        return explicit
+    work_root = getattr(args, "work_root", None) or getattr(args, "against", None)
+    # --against names the task/spec file; --work-root names the work directory.
+    # When only --against is given, the digest binds task text + work root path.
+    ref = ""
+    work_path = getattr(args, "work_root", None)
+    if work_path:
+        root = Path(str(work_path)).resolve()
+        if not root.exists():
+            raise RuntimeError_(f"work root does not exist: {work_path}")
+        names = sorted(p.name for p in root.iterdir())[:50]
+        ref = str(root) + "|" + "|".join(names)
+    elif work_root and not Path(str(work_root)).is_file():
+        ref = str(work_root)
+    return PROOF.work_digest_for(task_text, ref)
+
+
+def proof_verify_command(args: argparse.Namespace) -> int:
+    """AR-224 Proof Pass: original request + work in, Proof Receipt out.
+
+    Legacy `verify --input/--status` still routes to verify_command; this is the
+    outcome-oriented surface. Zero-arg form resolves the single active contract
+    and refuses ambiguity rather than choosing.
+    """
+    # legacy compatibility: explicit old flags keep old semantics
+    if getattr(args, "input", None) or getattr(args, "status", False):
+        return verify_command(args)
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+    against = getattr(args, "against", None)
+    inline_task = getattr(args, "task", None)
+    task_text = ""
+    task_id = str(getattr(args, "task_id", "") or "")
+    if against:
+        task_text = _read_text_arg(against, "--against task/spec")
+        if not task_id and Path(str(against)).is_file():
+            task_id = Path(str(against)).stem or "proof-task"
+    elif inline_task:
+        task_text = _read_text_arg(inline_task, "--task text")
+    else:
+        # zero-arg: current context must uniquely identify the contract
+        contract_record = PROOF.resolve_zero_arg(state, task_id=task_id)
+        task_text = str(contract_record.get("source_text", ""))
+        task_id = str(contract_record.get("task_id", "") or task_id)
+        if not task_text.strip():
+            raise RuntimeError_("current context names a contract with no retrievable request text; supply --against")
+    if not task_id:
+        task_id = "proof-task"
+    statements: list[str] = []
+    claims_arg = getattr(args, "claims", None)
+    if claims_arg:
+        raw = _read_text_arg(claims_arg, "--claims")
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                statements = [str(s) for s in parsed]
+            elif isinstance(parsed, dict) and isinstance(parsed.get("claims"), list):
+                statements = [str(s) for s in parsed["claims"]]
+            else:
+                statements = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        except json.JSONDecodeError:
+            statements = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    digest = _work_digest_for_args(args, task_text)
+    try:
+        receipt = PROOF.verify_task(
+            state, task_text=task_text, work_ref=str(getattr(args, "work_root", "") or ""),
+            work_digest=digest, task_id=task_id,
+            completion_statements=tuple(statements),
+        )
+    except CONTRACTS.ContractError as exc:
+        raise RuntimeError_(str(exc)) from exc
+    state["updated_at"] = now()
+    write_state(run_root, state)
+    code = PROOF.exit_code_for(str(receipt.get("acceptance_state", "")))
+    if getattr(args, "json", False):
+        print(json.dumps(receipt, indent=2, sort_keys=True, default=str))
+        return code
+    print(PROOF.format_human(receipt, task_title=task_text[:80]))
+    return code
+
+
+def proof_show_command(args: argparse.Namespace) -> int:
+    run_root, state = resolve_and_load(args)
+    proof_id = str(getattr(args, "proof_id", "") or getattr(args, "proof", "") or "").strip()
+    if not proof_id:
+        raise RuntimeError_("supply a proof id (VP-NNNN)")
+    row = PROOF.get_receipt(state, proof_id)
+    if row is None:
+        raise RuntimeError_(f"no proof receipt {proof_id!r}")
+    if getattr(args, "json", False):
+        print(json.dumps(row, indent=2, sort_keys=True, default=str))
+        return 0
+    print(PROOF.format_human(row))
+    return 0
+
+
+def proof_compare_command(args: argparse.Namespace) -> int:
+    run_root, state = resolve_and_load(args)
+    before = str(getattr(args, "before", "") or "").strip() or str(getattr(args, "proof_a", "") or "").strip()
+    after = str(getattr(args, "after", "") or "").strip() or str(getattr(args, "proof_b", "") or "").strip()
+    # positional: `ariadne compare VP-001 VP-002`
+    rest = getattr(args, "proofs", None) or []
+    if (not before or not after) and len(rest) >= 2:
+        before, after = str(rest[0]), str(rest[1])
+    if not before or not after:
+        raise RuntimeError_("supply two proof ids to compare")
+    try:
+        comp = PROOF.compare_receipts(PROOF.get_receipt(state, before), PROOF.get_receipt(state, after))
+    except CONTRACTS.ContractError as exc:
+        raise RuntimeError_(str(exc)) from exc
+    if comp is None:
+        raise RuntimeError_("comparison refused")
+    if getattr(args, "json", False):
+        print(json.dumps(comp, indent=2, sort_keys=True, default=str))
+        return 0
+    print(PROOF.format_comparison_human(comp))
+    return 0
+
+
 def decision_provider_from_spec(provider_spec: dict | None):
     """Build a decision provider from an offline JSON spec (never a live service)."""
     spec = dict(provider_spec or {"kind": "unavailable"})
@@ -8706,14 +9051,41 @@ def parser() -> argparse.ArgumentParser:
 
     verify_p = sub.add_parser(
         "verify",
-        help="record a verification claim or inspect verification status (stale evidence never satisfies)",
+        help="Proof Pass: verify work against its request (request + work in, receipt out)",
     )
     run_selector(verify_p)
-    verify_p.add_argument("--input", help="JSON with the claim, level, evidence and reproduction")
-    verify_p.add_argument("--status", action="store_true", help="inspect verification status instead of recording")
-    verify_p.add_argument("--subject", help="limit the status view to one subject")
-    verify_p.add_argument("--dependency", action="append", help="name=value current dependency fingerprint")
+    verify_p.add_argument("--input", help="legacy JSON claim path (kept for compatibility)")
+    verify_p.add_argument("--status", action="store_true", help="legacy status view (kept for compatibility)")
+    verify_p.add_argument("--subject", help="legacy: limit the status view to one subject")
+    verify_p.add_argument("--dependency", action="append", help="legacy: name=value dependency fingerprint")
+    verify_p.add_argument("--against", help="task/spec file or inline request text to verify against")
+    verify_p.add_argument("--task", help="inline original request text")
+    verify_p.add_argument("--task-id", help="task identity for zero-arg lineage")
+    verify_p.add_argument("--work-root", help="work directory the digest binds")
+    verify_p.add_argument("--work-digest", help="explicit hex work digest (16-64 chars)")
+    verify_p.add_argument("--claims", help="worker completion claims file or inline text")
     verify_p.add_argument("--json", action="store_true")
+
+    proof_p = sub.add_parser(
+        "proof",
+        help="show one Proof Receipt by id (human-readable by default, --json for machines)",
+    )
+    run_selector(proof_p)
+    proof_p.add_argument("proof_id", nargs="?", help="proof id VP-NNNN")
+    proof_p.add_argument("--proof", help="proof id VP-NNNN (flag form)")
+    proof_p.add_argument("--json", action="store_true")
+
+    compare_p = sub.add_parser(
+        "compare",
+        help="compare two Proof Receipts with lineage safety",
+    )
+    run_selector(compare_p)
+    compare_p.add_argument("proofs", nargs="*", help="two proof ids VP-... VP-...")
+    compare_p.add_argument("--before", help="earlier proof id")
+    compare_p.add_argument("--after", help="later proof id")
+    compare_p.add_argument("--proof-a", help="earlier proof id (alias)")
+    compare_p.add_argument("--proof-b", help="later proof id (alias)")
+    compare_p.add_argument("--json", action="store_true")
 
     decide_p = sub.add_parser(
         "decide",
@@ -8816,6 +9188,42 @@ def parser() -> argparse.ArgumentParser:
     )
     run_selector(design_report_p)
     design_report_p.add_argument("--json", action="store_true")
+
+    design_references_p = sub.add_parser(
+        "design-references", help="show the design evidence recorded in a run",
+    )
+    run_selector(design_references_p)
+    design_references_p.add_argument("--json", action="store_true")
+
+    design_reference_capability_p = sub.add_parser(
+        "design-reference-capability",
+        help="report which design-reference sources are available",
+    )
+    design_reference_capability_p.add_argument("--json", action="store_true")
+
+    design_implementation_plan_p = sub.add_parser(
+        "design-implementation-plan",
+        help="show the implementation plans a run compiled from an approved direction",
+    )
+    run_selector(design_implementation_plan_p)
+    design_implementation_plan_p.add_argument("--json", action="store_true")
+    design_implementation_plan_p.add_argument("--task", help="restrict to one task id")
+
+    design_component_inventory_p = sub.add_parser(
+        "design-component-inventory",
+        help="show what the project already provides and how each primitive will be obtained",
+    )
+    run_selector(design_component_inventory_p)
+    design_component_inventory_p.add_argument("--json", action="store_true")
+    design_component_inventory_p.add_argument("--task", help="restrict to one task id")
+
+    design_implementation_trace_p = sub.add_parser(
+        "design-implementation-trace",
+        help="print the chain from requirement to changed file, gaps included",
+    )
+    run_selector(design_implementation_trace_p)
+    design_implementation_trace_p.add_argument("--json", action="store_true")
+    design_implementation_trace_p.add_argument("--plan", help="the implementation plan id")
 
     design_approve_p = sub.add_parser(
         "approve-design-direction",
@@ -9007,7 +9415,10 @@ def main() -> int:
             "recover": recover_command,
             "migrate": migrate_command,
             "capabilities": capabilities_command,
-            "verify": verify_command,
+            "verify": proof_verify_command,
+            "proof": proof_show_command,
+            "compare": proof_compare_command,
+            "verify-legacy": verify_command,
             "decide": decide_command,
             "decision-trace": decision_trace_command,
             "decision-runtime": decision_runtime_command,
@@ -9016,6 +9427,11 @@ def main() -> int:
             "record-design": record_design,
             "design-check": design_check_command,
             "design-report": design_report_command,
+            "design-references": design_references_command,
+            "design-reference-capability": design_reference_capability_command,
+            "design-implementation-plan": design_implementation_plan_command,
+            "design-component-inventory": design_component_inventory_command,
+            "design-implementation-trace": design_implementation_trace_command,
             "approve-design-direction": approve_design_direction,
             "economics": economics_command,
             "request-map": request_map_command,

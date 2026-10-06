@@ -143,6 +143,10 @@ REVISION_FIELDS: dict[str, tuple[str, ...]] = {
         "scope",
         "constrained-body",
     ),
+    "acceptance-claim": (
+        "actor",
+        "statement",
+    ),
 }
 """Declared field lists per subject type. Keep small, ordered and documented.
 
@@ -942,6 +946,361 @@ and the retrieval mode is what keeps those two facts from collapsing.
 REFERENCE_DECISIONS = ("adopted", "rejected", "deferred")
 """How a reference finding was treated by the design."""
 
+# ---------------------------------------------------------------------------
+# AR-220 grounded-design vocabulary.
+#
+# These extend the AR-202D reference family rather than replacing it. A
+# ``DesignReference`` is an AR-202D reference record plus the classification a
+# design workflow needs in order to reason about *which kind of evidence* it is
+# holding, and the AR-202D lifecycle still governs how that evidence was
+# reached. Nothing here is a trust score.
+# ---------------------------------------------------------------------------
+
+REFERENCE_SOURCE_KINDS = (
+    "FIRST_PARTY_DESIGN_MD",
+    "CURATED_DESIGN_ANALYSIS",
+    "LIVE_SITE_INSPECTION",
+    "FIGMA_DOCUMENT",
+    "SOURCE_REPOSITORY",
+    "COMPONENT_REGISTRY",
+    "LOCAL_DESIGN_FILE",
+    "MCP_RESULT",
+    "CLI_RESULT",
+    "SECONDARY_DESCRIPTION",
+)
+"""What kind of source produced a design reference.
+
+The kinds are not equal trust and are never collapsed into one ranking. A
+curated analysis of a real design system is useful evidence about that system's
+public appearance, and it is *not* the vendor's own design documentation. The
+kind is recorded so a reader can tell the two apart without re-deriving it.
+
+``FIRST_PARTY_DESIGN_MD``    published by the brand itself
+``CURATED_DESIGN_ANALYSIS``  a third party's analysis of publicly visible design
+``LIVE_SITE_INSPECTION``     a rendering or a live page that was looked at
+``FIGMA_DOCUMENT``           a design-tool document
+``SOURCE_REPOSITORY``        tokens/components read out of a code repository
+``COMPONENT_REGISTRY``       a published component registry entry
+``LOCAL_DESIGN_FILE``        a design document already inside this project
+``MCP_RESULT``               returned by an MCP transport
+``CLI_RESULT``               returned by a CLI transport
+``SECONDARY_DESCRIPTION``    prose describing a design, with nothing inspected
+"""
+
+REFERENCE_EVIDENCE_LEVELS = (
+    "DIRECTLY_INSPECTED",
+    "SOURCE_INSPECTED",
+    "CAPTURED",
+    "CURATED_ANALYSIS",
+    "SECONDARY_DESCRIPTION",
+    "UNVERIFIED",
+)
+"""How the evidence behind a reference was actually obtained.
+
+These deliberately echo :data:`RENDERED_EVIDENCE_STATES`: a claim is never
+recorded at a strength above what was performed, and ``UNVERIFIED`` is a valid,
+recorded answer rather than an absence.
+
+``DIRECTLY_INSPECTED``     the source itself was read or looked at
+``SOURCE_INSPECTED``       the primary source code/design was inspected
+``CAPTURED``               a rendered artifact was captured and hashed
+``CURATED_ANALYSIS``       a third party's published analysis was read
+``SECONDARY_DESCRIPTION``  prose only; nothing was inspected
+``UNVERIFIED``             a claim exists with no supporting retrieval
+"""
+
+REFERENCE_ROLES = (
+    "PRIMARY_DIRECTION",
+    "INTERACTION_REFERENCE",
+    "LAYOUT_REFERENCE",
+    "TYPOGRAPHY_REFERENCE",
+    "COMPONENT_REFERENCE",
+    "IMPLEMENTATION_REFERENCE",
+    "COUNTER_REFERENCE",
+)
+"""What job one reference is being asked to do.
+
+A reference may hold several roles at once, and ``COUNTER_REFERENCE`` is a role
+rather than a rejection: it records the anti-pattern the design must avoid
+becoming, with the same evidence requirement as any other role.
+
+``IMPLEMENTATION_REFERENCE`` is deliberately distinct from the aesthetic roles.
+``Linear`` is hierarchy evidence; a resizable-panel implementation is
+implementation evidence. Conflating them is how a reference turns into a
+clone instruction.
+"""
+
+REFERENCE_TREATMENTS = ("BORROW", "ADAPT", "AVOID")
+"""How one reference's characteristics may be used.
+
+``BORROW``  use the principle as observed
+``ADAPT``   use the principle, changed for this project
+``AVOID``   the observed characteristic is the anti-pattern here
+
+This is the executable form of "a reference is evidence, not an instruction to
+copy": every extracted characteristic must land in exactly one of the three.
+"""
+
+REFERENCE_ACCESS_MODES = (
+    "PUBLIC",
+    "ACCESS_RESTRICTED",
+    "DECLARED_LOCAL",
+    "UNREACHABLE",
+)
+"""How a source was reached.
+
+``ACCESS_RESTRICTED`` is a real, valid, terminal answer. Ariadne never bypasses
+a login, a paywall or an entitlement, and a source it may not read is recorded
+as restricted rather than approximated.
+"""
+
+REFERENCE_FRESHNESS = ("CURRENT", "STALE", "CHANGED", "HISTORICAL", "UNKNOWN")
+"""Freshness of a reference's evidence.
+
+``STALE``/``CHANGED`` reuse :func:`ariadne_engine.references.reference_currentness`
+so the AR-202D vocabulary is not forked. ``HISTORICAL`` is a deliberate choice -
+a 1996 design is not stale if it was selected to be a 1996 design.
+"""
+
+REFERENCE_DIVERSITY_VERDICTS = ("DIVERSE_ENOUGH", "TOO_HOMOGENEOUS", "UNKNOWN")
+"""The deterministic verdict over a reference set's spread.
+
+``UNKNOWN`` is returned whenever the set carries too little classified
+information to judge. Reporting ``UNKNOWN`` is honest; reporting
+``DIVERSE_ENOUGH`` from three unclassified records would not be.
+"""
+
+REFERENCE_PATTERN_DIMENSIONS = (
+    "information-hierarchy", "navigation", "density", "layout-grid", "spacing",
+    "typography", "color-roles", "surface-treatment", "borders", "radii",
+    "depth", "component-geometry", "interaction", "motion",
+    "responsive-behavior", "imagery-media",
+)
+"""The controlled vocabulary a normalised observation is filed under.
+
+This is deliberately *not* the same list as ``REFERENCE_ANALYSIS_DIMENSIONS``.
+That list is what an analysis may be recorded against; this one is what a
+normalised reference may have observed about it, so extraction and judgement
+stay separate steps. Some useful references are qualitative, and a qualitative
+observation belongs here too.
+"""
+
+REFERENCE_BUDGET_DEFAULTS = {
+    "candidate_retrieval": 12,
+    "deep_inspection": 5,
+    "primary_references": 3,
+    "counter_references": 2,
+}
+"""Bounded research budget defaults. Defaults, not universal truths.
+
+A task may expand a budget, and the expansion is recorded with a reason rather
+than applied silently. There is no unbounded "keep researching until satisfied"
+loop, because that loop is how a reference budget stops existing.
+"""
+
+MAX_DESIGN_REFERENCE_BYTES = 262_144
+"""Hard cap on one retrieved design document (256 KiB).
+
+One giant design document must not be able to consume the run's whole context.
+Oversized input is refused with a named reason, not truncated into a summary
+that looks like the whole thing.
+"""
+
+MAX_DESIGN_REFERENCE_CANDIDATES = 64
+"""Hard cap on the candidates one search may return into the run."""
+
+MAX_DESIGN_REFERENCE_INDEX = 1024
+"""Hard cap on a *supplied* catalog index.
+
+Deliberately separate from :data:`MAX_DESIGN_REFERENCE_CANDIDATES`. The real
+getdesign.md catalog publishes 550+ entries and the maintainers' own collection
+index lists 73, so bounding the index at the candidate cap would refuse the real
+corpus in order to protect a much smaller thing. What has to stay bounded is how
+many candidates enter a run and how many are deeply inspected; a supplied index
+is operator-supplied input to a local search, not a fan-out.
+"""
+
+MAX_DESIGN_REFERENCE_SECTIONS = 200
+"""Hard cap on parsed sections in one design document."""
+
+MAX_DESIGN_REFERENCE_PATTERNS = 64
+"""Hard cap on normalised observations kept per reference."""
+
+# ---------------------------------------------------------------------------
+# AR-221 grounded design execution vocabulary
+#
+# Everything below exists to answer one question about a *code change*:
+#
+#     > Why was this component changed, and what says it should look like that?
+#
+# AR-220 classified the evidence a direction rests on. AR-221 classifies the
+# obligations a direction imposes on the code, and requires every material one
+# to name where it came from.
+# ---------------------------------------------------------------------------
+
+IMPLEMENTATION_CONSTRAINT_CATEGORIES = (
+    "layout", "typography", "color", "spacing", "component", "interaction",
+    "motion", "surface", "responsive", "accessibility", "navigation", "asset",
+)
+"""The kinds of obligation an approved direction can impose on an implementation.
+
+A category is not a permission: it says which part of the interface a constraint
+governs, so a colour constraint cannot be used to justify a navigation change and
+a reviewer can see at a glance which parts of the design were actually specified.
+"""
+
+IMPLEMENTATION_CONSTRAINT_BASES = (
+    "PROJECT_IDENTITY",
+    "REQUIREMENT",
+    "APPROVED_DIRECTION",
+    "REFERENCE_PRINCIPLE",
+    "IMPLEMENTATION_REFERENCE",
+    "ENGINEERING_CONSTRAINT",
+)
+"""Where an implementation constraint comes from. Every material one must name one.
+
+The order in this tuple is *not* the precedence order; :data:`CONSTRAINT_PRECEDENCE`
+is. The tuple is the vocabulary, and it deliberately separates two things that are
+usually conflated: a ``REFERENCE_PRINCIPLE`` says what an inspected source
+demonstrates, while an ``APPROVED_DIRECTION`` says a human accepted it for *this*
+project. A reference principle that was never adopted into an approved direction has
+no standing to constrain code.
+"""
+
+CONSTRAINT_PRECEDENCE = {
+    "REQUIREMENT": 100,
+    "PROJECT_IDENTITY": 80,
+    "APPROVED_DIRECTION": 60,
+    "ENGINEERING_CONSTRAINT": 55,
+    "IMPLEMENTATION_REFERENCE": 30,
+    "REFERENCE_PRINCIPLE": 20,
+}
+"""Permanent precedence: the highest number wins.
+
+    explicit user requirement
+            >
+    approved project identity / local design system
+            >
+    approved design direction
+            >
+    external references
+
+``ENGINEERING_CONSTRAINT`` sits between the direction and an implementation
+reference because a correct engineering constraint (a build that must typecheck, a
+route that must exist) outranks a borrowed pattern while still losing to a human
+decision. Accessibility is not in this table at all: it is a floor under every row,
+enforced by :data:`ACCESSIBILITY_FLOOR_BASES` rather than by out-ranking anything.
+"""
+
+ACCESSIBILITY_FLOOR_BASES = ("REQUIREMENT", "PROJECT_IDENTITY", "ENGINEERING_CONSTRAINT")
+"""Bases an accessibility constraint may legitimately hold.
+
+An accessibility obligation may never be introduced *by* a reference principle, and
+no other basis may cancel one. That asymmetry is the point: inspiration cannot
+justify removing keyboard access, focus visibility, semantics, labels, contrast,
+reduced-motion support or touch targets.
+"""
+
+PLAN_STATUSES = ("READY", "IMPLEMENTING", "IMPLEMENTED", "MECHANICALLY_VALIDATED", "ESCALATED", "REFUSED")
+"""Lifecycle of one ``DesignImplementationPlan``.
+
+``MECHANICALLY_VALIDATED`` is the ceiling AR-221 can reach. There is deliberately no
+``ACCEPTED`` and no ``APPROVED``: source inspection can prove that code exists and
+passes its checks, and cannot prove that it looks right. Judging appearance is
+AR-222's job and it needs rendered evidence AR-221 does not produce.
+"""
+
+COMPONENT_REUSE_DECISIONS = (
+    "REUSE_PROJECT_COMPONENT",
+    "ADAPT_PROJECT_COMPONENT",
+    "USE_APPROVED_REGISTRY_COMPONENT",
+    "BUILD_CUSTOM_COMPONENT",
+)
+"""How one required primitive will be obtained, in preference order.
+
+The order is the decision procedure, not a ranking of desirability. External
+registries are *last*, and only ever after the project's own components have been
+inspected and found wanting. Generating a replacement for a component the repository
+already ships is a defect, not a neutral choice, so it has to be recorded as one.
+"""
+
+REUSE_STATUSES = (
+    "INSPECT_ONLY",
+    "REUSE_ALLOWED",
+    "REUSE_WITH_ATTRIBUTION",
+    "REUSE_RESTRICTED",
+    "UNKNOWN",
+)
+"""What may be done with a reusable implementation reference.
+
+``UNKNOWN`` is not a permissive default. An unrecorded licence is an unrecorded
+licence, and code copied under it is a liability the run cannot characterise. The
+distinction matters most for the state a reader is most likely to misread as
+permission.
+"""
+
+MATERIAL_DESIGN_CATEGORIES = (
+    "brand_color",
+    "type_family",
+    "type_scale",
+    "navigation_structure",
+    "primary_layout",
+    "component_geometry",
+    "interaction_model",
+    "motion_system",
+    "surface_language",
+    "responsive_structure",
+    "asset_identity",
+)
+"""The design decisions that need grounding before they enter the code.
+
+Everything outside this list is *incidental*: a 1px alignment correction, a padding
+nudge, vendor-prefix normalisation, a browser quirk. Refusing incidental detail
+would train the workflow to attach a rationale to every line, which is its own kind
+of dishonesty - the traceability record stops meaning anything.
+"""
+
+CATEGORY_GROUNDS_MATERIAL = {
+    "color": ("brand_color",),
+    "typography": ("type_family", "type_scale"),
+    "spacing": ("component_geometry",),
+    "layout": ("primary_layout", "responsive_structure"),
+    "navigation": ("navigation_structure",),
+    "component": ("component_geometry",),
+    "interaction": ("interaction_model",),
+    "accessibility": ("interaction_model",),
+    "motion": ("motion_system",),
+    "surface": ("surface_language",),
+    "responsive": ("responsive_structure",),
+    "asset": ("asset_identity",),
+}
+"""Which material categories a plan constraint of each kind accounts for.
+
+A declared correspondence rather than a name comparison, because the two vocabularies
+answer different questions: a plan states *what it governs* (colour, navigation) while
+the material detector reports *what changed in the source* (a radius, a landmark).
+Matching the strings directly would ground a layout constraint for a font-size change
+or refuse a navigation constraint for a `<nav>`, both of which are wrong in the same
+direction - the trace would look complete and mean nothing.
+
+``spacing`` maps to ``component_geometry`` deliberately. A padding nudge matches none
+of the geometry signals and so stays incidental, while a row height, a min-width or a
+radius does - which is the distinction between tuning and committing to a geometry.
+Giving spacing its own material category would make every padding tweak look
+deliberate.
+"""
+
+MAX_IMPLEMENTATION_CONSTRAINTS = 200
+MAX_IMPLEMENTATION_CHANGES = 2_000
+MAX_PLAN_FORBIDDEN_PATTERNS = 64
+MAX_PLAN_REUSE_DECISIONS = 200
+"""Bounds on one plan's tables.
+
+A plan is an interface contract, not a document. Past these sizes it stops being
+readable by the worker it is written for, and a rule nobody can read is not a rule.
+"""
+
+
 COMPONENT_LADDER = (
     "existing-project-component",
     "existing-design-system",
@@ -990,11 +1349,17 @@ RENDERED_EVIDENCE_KINDS = (
 )
 """Artifact kinds a capture adapter may produce."""
 
-RENDER_CAPTURE_METHODS = ("offline-fixture", "declared-observer")
+RENDER_CAPTURE_METHODS = ("offline-fixture", "declared-observer", "browser-render")
 """How a capture artifact was produced. ``offline-fixture`` is the deterministic
 adapter AR-202D ships; ``declared-observer`` is an operator-declared external
 observer that recorded the artifact itself and is trusted only as far as it
-declares its method, environment and revision."""
+declares its method, environment and revision; ``browser-render`` (AR-222) is an
+artifact a real rendering engine produced in this run, bound to the exact source
+digest and environment that produced it.
+
+The method names how the bytes were made. It never says whose judgement they
+carry: a browser capture is evidence of what rendered, never evidence that the
+render satisfies the direction."""
 
 DESIGN_REVIEW_DIMENSIONS = (
     "hierarchy", "clarity", "composition", "density", "spacing", "typography",
@@ -1041,6 +1406,17 @@ DESIGN_FAILURE_KINDS = (
     "DESIGN_REVIEW_FAILURE",
     "REQUIREMENT_EVIDENCE_INSUFFICIENT",
     "REFINEMENT_LIMIT_REACHED",
+    # AR-222: the rendered-critique phase. Each is a distinct refusal, not a
+    # synonym for RENDER_CAPTURE_FAILED, because they call for different
+    # responses: an unavailable browser is an environment answer, a stale
+    # capture is a re-capture, an exhausted budget is a human decision.
+    "RENDER_CAPABILITY_UNAVAILABLE",
+    "RENDER_STALE_EVIDENCE",
+    "RENDER_CAPTURE_INVALID",
+    "RENDER_CAPTURE_BUDGET_EXCEEDED",
+    "RENDER_REVIEW_NOT_INDEPENDENT",
+    "RENDER_REPAIR_LIMIT_EXHAUSTED",
+    "DIRECTION_REVISION_REQUIRED",
 )
 """Design-specific failure kinds. Each maps onto an existing AR-202 failure class
 in :mod:`ariadne_engine.execution`; the taxonomy itself is not duplicated."""
@@ -1053,6 +1429,112 @@ DESIGN_EVIDENCE_STRENGTH = {
     "VERIFIED": 4,
 }
 """Ordinal evidence strength used for comparisons. Never presented as a quality score."""
+
+# ------------------------------------------------------------------ AR-222
+
+CAPTURE_PLAN_STATUSES = ("PLANNED", "CAPTURED", "PARTIAL", "ABANDONED")
+"""Lifecycle of one bounded capture plan.
+
+``PLANNED``   targets chosen and justified, nothing captured yet
+``CAPTURED``   every planned target was captured and validated
+``PARTIAL``    some targets were not captured, each with a recorded reason
+``ABANDONED``  the plan was not executed; the reason is recorded
+"""
+
+CAPTURE_TARGET_BASES = ("REQUIREMENT", "DIRECTION_PRINCIPLE", "MATERIALITY", "REGRESSION")
+"""Why a capture target exists. A target with no basis is a screenshot nobody asked for."""
+
+CAPTURE_TARGET_KINDS = ("viewport-state", "interaction-state", "responsive-state", "theme-variant")
+"""The four kinds of capture a plan may justify. Deliberately not a matrix."""
+
+DEFAULT_CAPTURE_BUDGET = {
+    "primary_viewport_states": 3,
+    "interaction_states": 6,
+    "responsive_captures": 3,
+    "theme_variants": 2,
+    "repair_capture_cycles": 2,
+}
+"""Bounded capture economics (AR-222).
+
+These are *defaults*, not universal limits: a plan may exceed any of them by
+recording a reason in ``budget_expansions``. What is not permitted is exceeding
+one silently, or producing captures nobody can name a basis for. The
+``repair_capture_cycles`` default is deliberately the same number as
+``design_execution``'s repair budget, so one stage cannot claim a fresh
+allowance for every phase.
+"""
+
+RENDER_OUTCOMES = (
+    "RENDERED_DIRECTION_CONFORMANT",
+    "RENDERED_WITH_KNOWN_FINDINGS",
+    "DIRECTION_REVISION_REQUIRED",
+    "RENDER_VALIDATION_BLOCKED",
+)
+"""The precise result of a rendered review. There is no ``looks good``.
+
+``RENDERED_DIRECTION_CONFORMANT``    the render satisfies the approved direction
+``RENDERED_WITH_KNOWN_FINDINGS``     it does not fully, and the gaps are named
+``DIRECTION_REVISION_REQUIRED``      satisfying it would need a new direction
+``RENDER_VALIDATION_BLOCKED``        the render could not be established here
+"""
+
+CRITIQUE_COVERAGE_STATES = ("REVIEWED", "PARTIAL", "NOT_APPLICABLE", "NOT_REVIEWED")
+"""Per-dimension coverage. Reported instead of one scalar score.
+
+``NOT_APPLICABLE`` is a real answer and is preferred over inventing criticism
+about a dimension the surface does not have.
+"""
+
+FINDING_BASES = ("DETERMINISTIC", "BOUNDED_JUDGEMENT")
+"""Whether a finding is a reproducible fact or a bounded qualitative judgement.
+
+A qualitative judgement is never presented as a measurement. Both are findings;
+collapsing them would let taste acquire the authority of arithmetic.
+"""
+
+ARTIFACT_VALIDATION_STATES = ("VALID", "BLANK", "LOADING", "ERROR_DOCUMENT", "UNREADABLE", "NO_CONTENT")
+"""Why a captured artifact cannot stand as evidence of the intended interface.
+
+These are refusals, not grades: an error page is not a badly designed page, and
+critiquing one is a category error rather than a finding.
+"""
+
+REPAIR_ATTEMPT_OUTCOMES = ("VALIDATED", "FAILED_VALIDATION", "ABANDONED")
+"""What one bounded repair attempt achieved before the next capture cycle."""
+
+REPAIR_FINDING_STATES = (
+    "OPEN",
+    "ACCEPTED_FOR_REPAIR",
+    "REPAIRED_CANDIDATE",
+    "VERIFIED_RESOLVED",
+    "STILL_PRESENT",
+    "ESCALATED",
+    "WAIVED_BY_HUMAN",
+)
+"""Finding lifecycle across a rendered repair cycle.
+
+``REPAIRED_CANDIDATE`` means the worker changed something. Only an independent
+re-review of fresh rendered evidence can produce ``VERIFIED_RESOLVED``; the
+worker that made the change cannot be the party that closes its own finding.
+"""
+
+DIRECTION_BOUNDED_REPAIRS = (
+    "increase hierarchy contrast",
+    "reduce excessive spacing",
+    "restore project accent",
+    "fix panel proportions",
+    "remove forbidden surface treatment",
+    "correct typography scale",
+    "improve focus visibility",
+    "fix responsive overflow",
+)
+"""Named repairs that move a render *toward* an already-approved direction.
+
+A repair outside this vocabulary is not automatically forbidden -- a blocking
+accessibility failure is not cosmetic -- but it must be justified by a cited
+principle, and one that would introduce a new visual language is refused with
+``DIRECTION_REVISION_REQUIRED`` rather than quietly taken.
+"""
 
 
 def design_id_matches(prefix: str, value: str) -> bool:
@@ -1143,6 +1625,10 @@ def reference_problems(record: Mapping[str, Any]) -> list[str]:
         if not item.get("observations"):
             problems.append("reference inspection entry has no observations")
         problems.extend(artifact_problems(item, "evidence"))
+    # AR-220: when a record carries an AR-220 classification block it is held to
+    # the grounded-design vocabulary here, so the check runs on every lifecycle
+    # transition rather than only at normalisation time.
+    problems.extend(design_reference_classification_problems(record))
     return list(dict.fromkeys(problems))
 
 
@@ -1213,6 +1699,14 @@ truncated.
 DESIGN_COLLECTION_KEYS = (
     "design_references", "rendered_evidence", "design_requirements", "design_directions",
     "component_candidates", "design_reviews", "design_refinements",
+    "design_reference_sets",
+    "design_implementation_plans", "design_component_inventories",
+    "design_implementation_changes", "design_implementation_runs",
+    # AR-222: the rendered-critique collections. `persistence.DESIGN_COLLECTIONS` must
+    # name the same three, or a persisted run state would be neither defaulted nor
+    # type-checked for them -- which is exactly the half-integration that
+    # `design_reference_sets` suffered from.
+    "rendered_evidence_sets", "rendered_critiques", "refinement_plans",
 )
 """The append-only authoritative collections this bound applies to."""
 
@@ -1452,6 +1946,491 @@ def design_review_problems(record: Mapping[str, Any]) -> list[str]:
     return list(dict.fromkeys(problems))
 
 
+def reference_set_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation for an AR-220 ``ReferenceSet`` record.
+
+    A reference set exists to assemble enough evidence to support a design
+    direction, so the refusals here are about evidential sufficiency rather than
+    taste: a set with no primary reference has no direction to ground, and a
+    set that records a counter-reference must record what it is countering.
+    """
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("reference set carries the wrong schema version")
+    for name in ("reference_set_id", "run_id", "requirement_scope", "created_at"):
+        if not str(record.get(name, "")).strip():
+            problems.append(f"reference set is missing {name}")
+    members = record.get("members")
+    if not isinstance(members, list):
+        problems.append("reference set members must be a list")
+        members = []
+    if not members:
+        problems.append("a reference set must contain at least one reference")
+    seen: set[str] = set()
+    role_counts: dict[str, int] = {}
+    for member in members:
+        if not isinstance(member, Mapping):
+            problems.append("reference set member must be a mapping")
+            continue
+        reference_id = str(member.get("reference_id", "")).strip()
+        if not reference_id:
+            problems.append("reference set member names no reference")
+            continue
+        if reference_id in seen:
+            problems.append(f"reference set lists {reference_id} more than once")
+        seen.add(reference_id)
+        if member.get("counter_pattern") is not None and "COUNTER_REFERENCE" in (member.get("roles") or []):
+            if not str(member.get("counter_pattern", "")).strip():
+                problems.append(
+                    f"reference set member {reference_id} is a counter-reference and must record the "
+                    "anti-pattern it rules out; disliking something is not a counter-reference"
+                )
+        for role in member.get("roles") or []:
+            if str(role) not in REFERENCE_ROLES:
+                problems.append(f"reference set member {reference_id} has an unknown role: {role}")
+            else:
+                role_counts[str(role)] = role_counts.get(str(role), 0) + 1
+    if members and not role_counts.get("PRIMARY_DIRECTION"):
+        problems.append(
+            "a reference set with no PRIMARY_DIRECTION reference cannot ground a design direction"
+        )
+    coverage = record.get("coverage")
+    if not isinstance(coverage, Mapping) or not str(coverage.get("verdict", "")):
+        problems.append("a reference set must record a deterministic coverage verdict")
+    diversity = record.get("diversity")
+    if not isinstance(diversity, Mapping) or not str(diversity.get("verdict", "")):
+        problems.append("a reference set must record a deterministic diversity verdict")
+    budget = record.get("budget")
+    if not isinstance(budget, Mapping) or not str(budget.get("verdict", "")):
+        problems.append("a reference set must record its research budget verdict")
+    return list(dict.fromkeys(problems))
+
+
+def reference_set_member_problems(
+    member: Mapping[str, Any], *, references_by_id: Mapping[str, Mapping[str, Any]]
+) -> list[str]:
+    """Cross-record checks a ``ReferenceSet`` cannot make on its own.
+
+    A set may only name references that exist, and may only give a member a role
+    that its own evidence supports. The second check is the one that matters:
+    a curated analysis cannot be recorded as if it were a first-party design
+    system just by naming it in a set.
+    """
+    problems: list[str] = []
+    reference_id = str(member.get("reference_id", "")).strip()
+    record = references_by_id.get(reference_id)
+    if record is None:
+        return [f"reference set names {reference_id or 'an unnamed reference'}, which does not exist"]
+    classification = record.get("classification")
+    if not isinstance(classification, Mapping):
+        problems.append(f"{reference_id} carries no source classification, so it cannot hold a set role")
+        return problems
+    declared = str(classification.get("source_kind", ""))
+    if declared not in REFERENCE_SOURCE_KINDS:
+        problems.append(f"{reference_id} has an unsupported source kind: {declared or 'missing'}")
+    if str(classification.get("evidence_level", "")) not in REFERENCE_EVIDENCE_LEVELS:
+        problems.append(f"{reference_id} has an unsupported evidence level")
+    roles = [str(role) for role in (member.get("roles") or [])]
+    if "COUNTER_REFERENCE" in roles and str(declared) == "FIRST_PARTY_DESIGN_MD":
+        # Not impossible, but it must be said out loud: a vendor's own design
+        # system used as an anti-pattern is a claim a reviewer should see.
+        if not str(member.get("note", "")).strip():
+            problems.append(
+                f"{reference_id} is a first-party source used as a counter-reference and must say why"
+            )
+    treatments = member.get("treatments")
+    if treatments is not None:
+        if not isinstance(treatments, list) or not treatments:
+            problems.append(f"{reference_id} declares treatments and must list at least one")
+        else:
+            for treatment in treatments:
+                if not isinstance(treatment, Mapping):
+                    problems.append(f"{reference_id} declares a malformed treatment")
+                    continue
+                if str(treatment.get("treatment", "")) not in REFERENCE_TREATMENTS:
+                    problems.append(f"{reference_id} declares an unknown treatment: {treatment.get('treatment')}")
+                if not str(treatment.get("pattern", "")).strip():
+                    problems.append(f"{reference_id} declares a treatment with no observed pattern")
+    return problems
+
+
+def design_reference_classification_problems(record: Mapping[str, Any]) -> list[str]:
+    """Validate the AR-220 classification block of a reference record."""
+    problems: list[str] = []
+    classification = record.get("classification")
+    if classification is None:
+        return problems
+    if not isinstance(classification, Mapping):
+        return ["a reference classification must be a mapping"]
+    source_kind = str(classification.get("source_kind", ""))
+    if source_kind not in REFERENCE_SOURCE_KINDS:
+        problems.append(f"unsupported reference source kind: {source_kind or 'missing'}")
+    if str(classification.get("evidence_level", "")) not in REFERENCE_EVIDENCE_LEVELS:
+        problems.append(f"unsupported reference evidence level: {classification.get('evidence_level') or 'missing'}")
+    if str(classification.get("access_mode", "")) not in REFERENCE_ACCESS_MODES:
+        problems.append(f"unsupported reference access mode: {classification.get('access_mode') or 'missing'}")
+    if str(classification.get("freshness", "")) not in REFERENCE_FRESHNESS:
+        problems.append(f"unsupported reference freshness: {classification.get('freshness') or 'missing'}")
+    if not str(classification.get("source_provider", "")).strip():
+        problems.append("a classified reference must name the provider it came from")
+    if not str(classification.get("source_identity", "")).strip():
+        problems.append("a classified reference must name a stable source identity")
+    if not str(classification.get("retrieved_at", "")).strip():
+        problems.append("a classified reference must record when it was retrieved")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(classification.get("content_digest", ""))):
+        problems.append("a classified reference must bind its normalised record to a content digest")
+    observed = record.get("observed_patterns")
+    if observed is not None:
+        if not isinstance(observed, list):
+            problems.append("observed_patterns must be a list")
+        else:
+            if len(observed) > MAX_DESIGN_REFERENCE_PATTERNS:
+                problems.append(
+                    f"observed_patterns exceeds the bound of {MAX_DESIGN_REFERENCE_PATTERNS} entries"
+                )
+            for pattern in observed:
+                if not isinstance(pattern, Mapping):
+                    problems.append("observed pattern must be a mapping")
+                    continue
+                dimension = str(pattern.get("dimension", ""))
+                if dimension not in REFERENCE_PATTERN_DIMENSIONS:
+                    problems.append(f"unknown observed-pattern dimension: {dimension or 'missing'}")
+                if not str(pattern.get("observation", "")).strip():
+                    problems.append(f"an observed pattern on {dimension or 'an unnamed dimension'} says nothing")
+                if dimension in ("behavior", "behaviour", "motion", "interaction") and not str(
+                    pattern.get("basis", "")
+                ).strip():
+                    problems.append(
+                        f"an observed {dimension} pattern must name the basis it was read from; "
+                        "motion and behaviour cannot be observed in static text"
+                    )
+    treatments = record.get("treatments")
+    if treatments is not None:
+        if not isinstance(treatments, list) or not treatments:
+            problems.append("treatments must be a non-empty list when present")
+        else:
+            for treatment in treatments:
+                if not isinstance(treatment, Mapping):
+                    problems.append("treatment must be a mapping")
+                    continue
+                if str(treatment.get("treatment", "")) not in REFERENCE_TREATMENTS:
+                    problems.append(f"unknown reference treatment: {treatment.get('treatment')}")
+                if not str(treatment.get("pattern", "")).strip():
+                    problems.append("a treatment must name the observed pattern it applies to")
+    return list(dict.fromkeys(problems))
+
+
+def implementation_plan_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one ``DesignImplementationPlan``.
+
+    A plan converts an *approved* direction into obligations on code, so the
+    refusals are about authority and traceability rather than taste:
+
+    * it must be bound to a direction, a reference set and a recorded approval;
+    * every material constraint must name a basis, and a basis has a precedence;
+    * a constraint asserted by a reference principle may not claim the precedence of
+      a human decision, because that is how a borrowed pattern becomes a rule;
+    * an accessibility constraint may not be sourced from an external reference;
+    * every AVOID treatment must arrive as a *detector*, not as prose a worker is
+      asked to remember.
+    """
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("implementation plan carries the wrong schema version")
+    if not design_id_matches("dip", str(record.get("plan_id", ""))):
+        problems.append("implementation plan has a malformed plan id")
+    for name in ("run_id", "task_id", "direction_id", "reference_set_id", "created_at", "project_scope"):
+        _non_empty(record, name, problems)
+    binding = record.get("approval_binding")
+    if not isinstance(binding, Mapping):
+        problems.append("an implementation plan must bind an approval; a plan with no approval is a wish")
+    else:
+        if str(binding.get("gate", "")) != "G1D":
+            problems.append(f"an implementation plan must bind gate G1D, not {binding.get('gate') or 'none'}")
+        for name in ("approval_id", "direction_revision_hash", "approved_at", "identity", "channel"):
+            if not str(binding.get(name, "")).strip():
+                problems.append(f"implementation plan approval binding is missing {name}")
+        if not _is_sha256(binding.get("direction_revision_hash")):
+            problems.append("implementation plan approval binding is not bound to a direction revision digest")
+        if str(binding.get("channel", "")) not in APPROVAL_CHANNELS:
+            problems.append(f"implementation plan records an unknown approval channel: {binding.get('channel')}")
+
+    if str(record.get("status", "")) not in PLAN_STATUSES:
+        problems.append(f"implementation plan has an unsupported status: {record.get('status') or 'missing'}")
+
+    surfaces = record.get("target_surfaces")
+    if not isinstance(surfaces, list) or not [str(item).strip() for item in surfaces]:
+        problems.append("an implementation plan must name the target surfaces it governs")
+
+    constraints = record.get("constraints")
+    if not isinstance(constraints, list):
+        problems.append("implementation plan constraints must be a list")
+        constraints = []
+    elif not constraints:
+        problems.append("an implementation plan states no implementation constraint")
+    if len(constraints) > MAX_IMPLEMENTATION_CONSTRAINTS:
+        problems.append(f"implementation plan exceeds the bound of {MAX_IMPLEMENTATION_CONSTRAINTS} constraints")
+    seen_constraints: set[str] = set()
+    for constraint in constraints:
+        if not isinstance(constraint, Mapping):
+            problems.append("implementation constraint must be a mapping")
+            continue
+        constraint_id = str(constraint.get("constraint_id", ""))
+        if not design_id_matches("dic", constraint_id):
+            problems.append(f"implementation constraint has a malformed id: {constraint_id or 'missing'}")
+        elif constraint_id in seen_constraints:
+            problems.append(f"implementation plan repeats constraint {constraint_id}")
+        seen_constraints.add(constraint_id)
+        if str(constraint.get("category", "")) not in IMPLEMENTATION_CONSTRAINT_CATEGORIES:
+            problems.append(f"implementation constraint has an unsupported category: {constraint.get('category') or 'missing'}")
+        basis = str(constraint.get("basis", ""))
+        if basis not in IMPLEMENTATION_CONSTRAINT_BASES:
+            problems.append(f"implementation constraint has an unsupported basis: {basis or 'missing'}")
+        if not str(constraint.get("statement", "")).strip():
+            problems.append(f"implementation constraint {constraint_id} states nothing")
+        if not str(constraint.get("evidence", "")).strip():
+            problems.append(
+                f"implementation constraint {constraint_id} names a basis but no evidence; a basis "
+                "without a source is a label"
+            )
+        if str(constraint.get("category", "")) == "accessibility" and basis not in ACCESSIBILITY_FLOOR_BASES:
+            problems.append(
+                f"accessibility constraint {constraint_id} is sourced from {basis or 'nothing'}; an external "
+                "reference cannot be the origin of an accessibility obligation, and no reference may cancel one"
+            )
+        if str(constraint.get("accessibility_floor", "")) == "TRUE" and basis not in ACCESSIBILITY_FLOOR_BASES:
+            problems.append(f"constraint {constraint_id} claims the accessibility floor from {basis or 'nothing'}")
+
+    # Every AVOID treatment has to become a checkable prohibition. A rejection a
+    # worker is merely *told* about is a rejection that survives review.
+    treatments = record.get("borrow_adapt_avoid_bindings")
+    if not isinstance(treatments, list) or not treatments:
+        problems.append("an implementation plan binds no BORROW/ADAPT/AVOID treatment to any constraint")
+    else:
+        for binding_row in treatments:
+            if not isinstance(binding_row, Mapping):
+                problems.append("treatment binding must be a mapping")
+                continue
+            if str(binding_row.get("treatment", "")) not in REFERENCE_TREATMENTS:
+                problems.append(f"unknown treatment in plan: {binding_row.get('treatment')}")
+            if not str(binding_row.get("pattern", "")).strip():
+                problems.append("a treatment binding must name the observed pattern it applies to")
+            if str(binding_row.get("treatment", "")) == "ADAPT" and not str(binding_row.get("project_anchor", "")).strip():
+                problems.append(
+                    "an ADAPT treatment must name the project anchor it was transformed onto; an "
+                    "adaptation with nothing to adapt to is a borrow recorded under another name"
+                )
+
+    forbidden = record.get("forbidden_copy_patterns")
+    if not isinstance(forbidden, list):
+        problems.append("forbidden_copy_patterns must be a list")
+    else:
+        if len(forbidden) > MAX_PLAN_FORBIDDEN_PATTERNS:
+            problems.append(f"forbidden_copy_patterns exceeds the bound of {MAX_PLAN_FORBIDDEN_PATTERNS}")
+        for row in forbidden:
+            if not isinstance(row, Mapping):
+                problems.append("forbidden copy pattern must be a mapping")
+                continue
+            if not str(row.get("pattern_id", "")).strip():
+                problems.append("a forbidden copy pattern must have an id")
+            if not str(row.get("reason", "")).strip():
+                problems.append(f"forbidden copy pattern {row.get('pattern_id')} records no reason")
+            if not isinstance(row.get("detectors"), list) or not row.get("detectors"):
+                problems.append(
+                    f"forbidden copy pattern {row.get('pattern_id')} has no detector; a prohibition "
+                    "nobody can evaluate is an intention"
+                )
+
+    reuse = record.get("component_reuse_decisions")
+    if not isinstance(reuse, list) or not reuse:
+        problems.append("an implementation plan records no component reuse decision")
+    else:
+        if len(reuse) > MAX_PLAN_REUSE_DECISIONS:
+            problems.append(f"component_reuse_decisions exceeds the bound of {MAX_PLAN_REUSE_DECISIONS}")
+        for row in reuse:
+            if not isinstance(row, Mapping):
+                problems.append("component reuse decision must be a mapping")
+                continue
+            if str(row.get("decision", "")) not in COMPONENT_REUSE_DECISIONS:
+                problems.append(f"unsupported component reuse decision: {row.get('decision') or 'missing'}")
+            if not str(row.get("need", "")).strip():
+                problems.append("a component reuse decision must name the need it answers")
+            if not str(row.get("reason", "")).strip():
+                problems.append(f"component reuse decision for {row.get('need')} records no reason")
+            if str(row.get("decision", "")) == "USE_APPROVED_REGISTRY_COMPONENT" and not str(
+                row.get("approval_id", "")
+            ).strip():
+                problems.append(
+                    f"component reuse decision for {row.get('need')} selects an approved registry component "
+                    "with no recorded approval; an authorization id is a claim like any other"
+                )
+
+    if not isinstance(record.get("validation_requirements"), list) or not record.get("validation_requirements"):
+        problems.append("an implementation plan declares no mechanical validation requirement")
+
+    for name in ("requirement_bindings", "reference_bindings", "target_surfaces"):
+        value = record.get(name)
+        if value is not None and not isinstance(value, list):
+            problems.append(f"implementation plan {name} must be a list")
+
+    provenance = record.get("provenance")
+    if not isinstance(provenance, Mapping) or not str(provenance.get("created_by", "")).strip():
+        problems.append("implementation plan carries no provenance")
+    return list(dict.fromkeys(problems))
+
+
+def component_inventory_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one project component inventory."""
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("component inventory carries the wrong schema version")
+    if not design_id_matches("dci", str(record.get("inventory_id", ""))):
+        problems.append("component inventory has a malformed inventory id")
+    for name in ("run_id", "task_id", "project_root", "recorded_at"):
+        _non_empty(record, name, problems)
+    if not isinstance(record.get("probes"), list) or not record.get("probes"):
+        problems.append("a component inventory records no probe")
+    components = record.get("components")
+    if not isinstance(components, list):
+        problems.append("component inventory components must be a list")
+    else:
+        for row in components:
+            if not isinstance(row, Mapping):
+                problems.append("inventory component must be a mapping")
+                continue
+            if not str(row.get("path", "")).strip():
+                problems.append("an inventory component must name the path it was found at")
+            if _path_escapes_project(str(row.get("path", ""))):
+                problems.append(f"inventory component path is not project-relative: {row.get('path')}")
+    if not isinstance(record.get("reuse_decisions"), list) or not record.get("reuse_decisions"):
+        problems.append("a component inventory records no reuse decision")
+    return list(dict.fromkeys(problems))
+
+
+def _path_escapes_project(value: str) -> bool:
+    """Whether a recorded change path reaches outside the project.
+
+    A drive-letter path is absolute without a leading slash or a ``..``, so a check
+    that only looks for those two treats ``C:/Windows/System32/config`` as
+    project-relative - on the one platform where that matters most.
+    """
+    normalised = str(value).replace("\\", "/")
+    if normalised.startswith(("/", "\\")):
+        return True
+    if ".." in normalised.split("/"):
+        return True
+    return bool(re.match(r"^[A-Za-z]:[\\/]", normalised))
+
+
+def implementation_change_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one implementation change record."""
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("implementation change carries the wrong schema version")
+    if not design_id_matches("dic", str(record.get("change_id", ""))):
+        problems.append(f"implementation change has a malformed id: {record.get('change_id') or 'missing'}")
+    for name in ("plan_id", "task_id", "path", "change_kind", "recorded_at"):
+        _non_empty(record, name, problems)
+    if _path_escapes_project(str(record.get("path", ""))):
+        problems.append(f"implementation change path escapes the project: {record.get('path')}")
+    verdict = str(record.get("verdict", ""))
+    if verdict not in IMPLEMENTATION_CHANGE_VERDICTS:
+        problems.append(f"implementation change has an unsupported verdict: {verdict or 'missing'}")
+    if not str(record.get("implementation_source", "")).strip():
+        problems.append(f"implementation change {record.get('change_id')} names no implementation source")
+    if verdict == "UNGROUNDED_DESIGN_CHANGE" and not str(record.get("problem", "")).strip():
+        problems.append("an ungrounded design change must say what is ungrounded about it")
+    if verdict == "GROUNDED" and not record.get("constraint_ids"):
+        problems.append(
+            f"implementation change {record.get('change_id')} claims to be grounded but cites no "
+            "implementation constraint"
+        )
+    if verdict == "GROUNDED" and not record.get("grounding_constraint_ids"):
+        problems.append(
+            f"implementation change {record.get('change_id')} is GROUNDED but records no grounding "
+            "constraint; citing a constraint that does not account for the change is the same as "
+            "citing nothing"
+        )
+    for name in ("requirement_ids", "principle_ids", "reference_ids"):
+        value = record.get(name)
+        if value is not None and not isinstance(value, list):
+            problems.append(f"implementation change {name} must be a list")
+    return list(dict.fromkeys(problems))
+
+
+def implementation_run_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one grounded implementation run."""
+    problems: list[str] = []
+    if str(record.get("schema_version", "")) != str(SCHEMA_DESIGN):
+        problems.append("implementation run carries the wrong schema version")
+    if not design_id_matches("dir", str(record.get("run_record_id", ""))):
+        problems.append("implementation run has a malformed run record id")
+    for name in ("plan_id", "task_id", "started_at"):
+        _non_empty(record, name, problems)
+    if str(record.get("outcome", "")) not in IMPLEMENTATION_RUN_OUTCOMES:
+        problems.append(f"implementation run has an unsupported outcome: {record.get('outcome') or 'missing'}")
+    if str(record.get("outcome", "")) == "ESCALATED" and not str(record.get("escalation_reason", "")).strip():
+        problems.append("an escalated implementation run must record why it escalated")
+    if not isinstance(record.get("validation_attempts"), list) or not record.get("validation_attempts"):
+        problems.append("an implementation run records no mechanical validation attempt")
+    if not isinstance(record.get("telemetry"), Mapping):
+        problems.append("an implementation run records no telemetry")
+    acceptance = record.get("acceptance")
+    if not isinstance(acceptance, Mapping):
+        problems.append("an implementation run records no acceptance boundary")
+    else:
+        if str(acceptance.get("visual_acceptance", "")) not in ("NOT_CLAIMED", "VERIFIED_BY_RENDERED_CHECK"):
+            problems.append(
+                f"implementation run records an unknown visual-acceptance claim: "
+                f"{acceptance.get('visual_acceptance') or 'missing'}"
+            )
+        reason = str(acceptance.get("reason", "")).strip()
+        if str(acceptance.get("visual_acceptance", "")) != "VERIFIED_BY_RENDERED_CHECK" and not reason:
+            problems.append(
+                "a run that does not claim visual acceptance must say why; silence reads as a claim that "
+                "none was needed, which is the assumption this field exists to remove"
+            )
+        if str(acceptance.get("visual_acceptance", "")) == "VERIFIED_BY_RENDERED_CHECK" and not str(
+            acceptance.get("rendered_check_id", "")
+        ).strip():
+            problems.append(
+                "a run that claims visual acceptance must name the independent rendered check that "
+                "established it; source inspection cannot stand in for one"
+            )
+    return list(dict.fromkeys(problems))
+
+
+IMPLEMENTATION_CHANGE_VERDICTS = (
+    "GROUNDED",
+    "GROUNDED_INCIDENTAL",
+    "UNGROUNDED_DESIGN_CHANGE",
+    "ACCESSIBILITY_REGRESSION",
+    "REFERENCE_CLONING",
+    "OUT_OF_SCOPE",
+)
+"""How one file-level change stands relative to the approved plan.
+
+``GROUNDED`` requires a cited constraint. ``GROUNDED_INCIDENTAL`` is the honest
+answer for a 1px correction, and refusing it would make the grounded tier
+meaningless. The three failure verdicts are separate values rather than a single
+``failed`` because a reference-cloning violation and an accessibility regression
+call for different responses from the same reader.
+"""
+
+IMPLEMENTATION_RUN_OUTCOMES = (
+    "IMPLEMENTED",
+    "MECHANICALLY_VALIDATED",
+    "ESCALATED",
+    "REFUSED",
+)
+"""What one grounded implementation run actually achieved.
+
+No outcome in this tuple asserts that the result looks right. ``MECHANICALLY_VALIDATED``
+means the build, typecheck and tests passed; appearance is AR-222's judgement, made
+from rendered evidence this phase does not capture.
+"""
+
+
 def refinement_problems(record: Mapping[str, Any]) -> list[str]:
     """Structural validation of one bounded refinement cycle."""
     problems = design_schema_problems(record)
@@ -1473,15 +2452,333 @@ def refinement_problems(record: Mapping[str, Any]) -> list[str]:
     return list(dict.fromkeys(problems))
 
 
+def render_capture_plan_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one bounded render-capture plan (AR-222).
+
+    The load-bearing check here is that every target names a *basis*. A plan whose
+    targets exist because nobody objected to them is not a bounded plan, it is a
+    screenshot matrix, and refusing it here is cheaper than triaging fifty images
+    nobody asked for.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("rcp", str(record.get("capture_plan_id", ""))):
+        problems.append("capture plan has a malformed capture_plan_id")
+    for name in ("implementation_plan_id", "direction_id", "render_source_digest", "recorded_at"):
+        _non_empty(record, name, problems)
+    if not _is_sha256(record.get("render_source_digest")):
+        problems.append("capture plan is not bound to a render source digest")
+    if str(record.get("status", "")) not in CAPTURE_PLAN_STATUSES:
+        problems.append(f"capture plan has an unsupported status: {record.get('status') or 'missing'}")
+    targets = record.get("targets")
+    if not isinstance(targets, list) or not targets:
+        problems.append("capture plan declares no targets")
+        return list(dict.fromkeys(problems))
+    seen_ids: set[str] = set()
+    for target in targets:
+        if not isinstance(target, Mapping):
+            problems.append("a capture target must be an object")
+            continue
+        target_id = str(target.get("target_id", ""))
+        if not design_id_matches("rct", target_id):
+            problems.append(f"capture target has a malformed target id: {target_id or 'missing'}")
+        elif target_id in seen_ids:
+            problems.append(f"capture plan repeats a target id: {target_id}")
+        else:
+            seen_ids.add(target_id)
+        if str(target.get("kind", "")) not in CAPTURE_TARGET_KINDS:
+            problems.append(f"capture target has an unsupported kind: {target.get('kind') or 'missing'}")
+        basis = target.get("materiality_basis")
+        if not isinstance(basis, list) or not [item for item in basis if str(item).strip()]:
+            problems.append(f"capture target {target_id or '?'} names no materiality basis")
+        for entry in (basis or []):
+            if not isinstance(entry, Mapping) or str(entry.get("basis", "")) not in CAPTURE_TARGET_BASES:
+                problems.append(f"capture target {target_id or '?'} has an unsupported materiality basis")
+        viewport = target.get("viewport")
+        if not isinstance(viewport, Mapping) or not str(viewport.get("width", "")).strip():
+            problems.append(f"capture target {target_id or '?'} declares no viewport width")
+    problems.extend(capture_budget_problems(record))
+    return list(dict.fromkeys(problems))
+
+
+def capture_budget_problems(record: Mapping[str, Any]) -> list[str]:
+    """Bounded capture economics: exceeding a default needs a recorded reason.
+
+    The defaults are advisory; silence about exceeding them is not. This is the
+    difference between "these defaults did not fit this task" -- which is a normal
+    answer -- and a run that quietly captured everything.
+    """
+    problems: list[str] = []
+    budget = record.get("capture_budget")
+    if not isinstance(budget, Mapping):
+        problems.append("capture plan records no capture budget")
+        return problems
+    limits: dict[str, int] = {}
+    for name, default in DEFAULT_CAPTURE_BUDGET.items():
+        limit = budget.get(name, default)
+        try:
+            limit_value = int(limit)
+        except (TypeError, ValueError):
+            problems.append(f"capture budget entry {name} is not a count")
+            continue
+        if limit_value < 0:
+            problems.append(f"capture budget entry {name} cannot be negative")
+        limits[name] = limit_value
+    expansions = budget.get("expansions")
+    if not isinstance(expansions, list):
+        problems.append("capture budget records no expansion list")
+        return problems
+    stated = {str(item.get("name", "")) for item in expansions if isinstance(item, Mapping)}
+    for expansion in expansions:
+        if not isinstance(expansion, Mapping):
+            problems.append("a capture budget expansion must be an object")
+            continue
+        if not str(expansion.get("reason", "")).strip():
+            problems.append(
+                f"expanding {expansion.get('name', '?')} requires a recorded reason"
+            )
+    counts = capture_counts_over_budget(record)
+    for name, count in sorted(counts.items()):
+        limit = limits.get(name)
+        if limit is None:
+            continue
+        if count > limit and name not in stated:
+            problems.append(
+                f"the plan captures {count} {name} against a budget of {limit} without recording "
+                "why the default did not fit this task"
+            )
+    return problems
+
+
+def capture_counts_over_budget(record: Mapping[str, Any]) -> dict[str, int]:
+    """Measured capture counts per budget axis, so the budget is arithmetic not opinion."""
+    counts = {"primary_viewport_states": 0, "interaction_states": 0, "responsive_captures": 0, "theme_variants": 0}
+    for target in record.get("targets") or []:
+        if not isinstance(target, Mapping):
+            continue
+        kind = str(target.get("kind", ""))
+        if kind == "viewport-state":
+            counts["primary_viewport_states"] += 1
+        elif kind == "interaction-state":
+            counts["interaction_states"] += 1
+        elif kind == "responsive-state":
+            counts["responsive_captures"] += 1
+        elif kind == "theme-variant":
+            counts["theme_variants"] += 1
+    return counts
+
+
+def rendered_evidence_set_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one capture run's manifest (AR-222).
+
+    A manifest is the unit that makes captures checkable in aggregate: it names the
+    source digest every capture in the run was bound to, and it names the browser
+    that produced them. A capture list without a source digest is a gallery.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("res", str(record.get("evidence_set_id", ""))):
+        problems.append("rendered evidence set has a malformed evidence_set_id")
+    for name in ("capture_plan_id", "render_source_digest", "started_at", "browser"):
+        _non_empty(record, name, problems)
+    if not _is_sha256(record.get("render_source_digest")):
+        problems.append("rendered evidence set is not bound to a render source digest")
+    if str(record.get("status", "")) not in ("COMPLETE", "PARTIAL", "FAILED"):
+        problems.append(f"rendered evidence set has an unsupported status: {record.get('status') or 'missing'}")
+    captures = record.get("captures")
+    if not isinstance(captures, list) or not captures:
+        problems.append("rendered evidence set records no captures")
+        return list(dict.fromkeys(problems))
+    seen: set[str] = set()
+    for capture in captures:
+        if not isinstance(capture, Mapping):
+            problems.append("a capture entry must be an object")
+            continue
+        capture_id = str(capture.get("capture_id", ""))
+        if not capture_id:
+            problems.append("a capture entry has no capture_id")
+        elif capture_id in seen:
+            problems.append(f"rendered evidence set repeats a capture id: {capture_id}")
+        else:
+            seen.add(capture_id)
+        for name in ("route", "state", "viewport", "artifact_path", "digest", "captured_at"):
+            _non_empty(capture, name, problems)
+        viewport = capture.get("viewport")
+        if not isinstance(viewport, Mapping) or not str(viewport.get("width", "")).strip():
+            problems.append(f"capture {capture_id or '?'} declares no viewport width")
+        if not _is_sha256(capture.get("digest")):
+            problems.append(f"capture {capture_id or '?'} has no artifact digest")
+        if capture.get("render_source_digest") is not None and not _is_sha256(capture.get("render_source_digest")):
+            problems.append(f"capture {capture_id or '?'} has a malformed source digest")
+        elif str(capture.get("render_source_digest", "")) != str(record.get("render_source_digest", "")):
+            problems.append(
+                f"capture {capture_id or '?'} is bound to a different source digest than its evidence set; "
+                "a set that mixes revisions cannot be reviewed as one result"
+            )
+    return list(dict.fromkeys(problems))
+
+
+def rendered_critique_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one independent rendered critique (AR-222).
+
+    Two things are checked that a structural review cannot check on its own, because
+    they are the two ways this record could otherwise be forged:
+
+    1. the reviewer must be a different execution from the implementer, and
+    2. the review must not have been handed the implementation's rationale.
+
+    The second is a *record* of what was withheld, not a claim about the reviewer's
+    reading. It is checkable; the reviewer's state of mind is not, and pretending
+    otherwise would be the exact impersonation this phase exists to prevent.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("drc", str(record.get("critique_id", ""))):
+        problems.append("rendered critique has a malformed critique_id")
+    for name in ("evidence_set_id", "direction_id", "reviewer_identity", "recorded_at"):
+        _non_empty(record, name, problems)
+    if not _is_sha256(record.get("render_source_digest")):
+        problems.append("rendered critique is not bound to the source digest it reviewed")
+    if str(record.get("overall_status", "")) not in RENDER_OUTCOMES:
+        problems.append(f"rendered critique has an unsupported overall status: {record.get('overall_status') or 'missing'}")
+    reviewer = str(record.get("reviewer_execution", ""))
+    implementer = str(record.get("implementing_execution", ""))
+    if not reviewer:
+        problems.append("rendered critique names no reviewer execution")
+    if not implementer:
+        problems.append("rendered critique names no implementing execution")
+    if reviewer and implementer and reviewer == implementer:
+        problems.append(
+            "the reviewing execution is the implementing execution; the worker that produced a render "
+            "does not get to decide whether its own render looks right"
+        )
+    isolation = record.get("isolation")
+    if not isinstance(isolation, Mapping):
+        problems.append("rendered critique records no review isolation boundary")
+    else:
+        if not str(isolation.get("withheld", "") or "").strip():
+            problems.append("rendered critique records nothing it withheld from the reviewer")
+        if isolation.get("implementation_rationale_transported"):
+            problems.append(
+                "the reviewer was handed implementation rationale; a visual review of a render cannot "
+                "start from the worker's account of what it intended to build"
+            )
+    coverage = record.get("coverage")
+    if not isinstance(coverage, Mapping) or not coverage:
+        problems.append("rendered critique reports no coverage")
+    else:
+        for dimension, verdict in coverage.items():
+            if not isinstance(verdict, Mapping):
+                problems.append(f"coverage entry for {dimension} is not an object")
+                continue
+            if str(verdict.get("state", "")) not in CRITIQUE_COVERAGE_STATES:
+                problems.append(f"coverage for {dimension} has an unsupported state")
+            if str(verdict.get("state", "")) == "REVIEWED" and not verdict.get("capture_ids"):
+                problems.append(f"coverage for {dimension} is REVIEWED but cites no capture")
+    findings = record.get("findings")
+    if not isinstance(findings, list):
+        problems.append("rendered critique records no findings list")
+        return list(dict.fromkeys(problems))
+    for finding in findings:
+        if not isinstance(finding, Mapping):
+            problems.append("a rendered critique finding must be an object")
+            continue
+        for name in ("finding_id", "dimension", "severity", "basis", "observation", "expected_basis"):
+            _non_empty(finding, name, problems)
+        if str(finding.get("dimension", "")) not in DESIGN_REVIEW_DIMENSIONS:
+            problems.append(f"rendered critique finding has an unsupported dimension: {finding.get('dimension')}")
+        if str(finding.get("severity", "")) not in DESIGN_SEVERITIES:
+            problems.append(f"rendered critique finding has an unsupported severity: {finding.get('severity')}")
+        if str(finding.get("basis", "")) not in FINDING_BASES:
+            problems.append(f"rendered critique finding has an unsupported basis: {finding.get('basis')}")
+        citations = finding.get("capture_ids")
+        if not isinstance(citations, list) or not citations:
+            problems.append(
+                f"rendered critique finding {finding.get('finding_id', '?')} cites no rendered capture; "
+                "a judgement about a render must point at the render"
+            )
+        if str(finding.get("state", "OPEN")) not in REPAIR_FINDING_STATES:
+            problems.append(f"rendered critique finding has an unsupported state: {finding.get('state')}")
+    return list(dict.fromkeys(problems))
+
+
+def refinement_plan_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one bounded rendered-refinement plan (AR-222).
+
+    The plan is bounded in three directions at once, and all three are checked here:
+    what it may change, what it may not change, and which approved principle authorises
+    it. A plan that cannot name the principle it serves is a redesign in a plan's
+    clothing.
+    """
+    problems = design_schema_problems(record)
+    if not isinstance(record, Mapping):
+        return problems
+    if not design_id_matches("rfp", str(record.get("refinement_plan_id", ""))):
+        problems.append("refinement plan has a malformed refinement_plan_id")
+    for name in ("critique_id", "direction_id", "recorded_at"):
+        _non_empty(record, name, problems)
+    if str(record.get("status", "")) not in ("PROPOSED", "IN_PROGRESS", "VALIDATED", "RE_RENDERED", "REJECTED", "ESCALATED"):
+        problems.append(f"refinement plan has an unsupported status: {record.get('status') or 'missing'}")
+    finding_ids = record.get("finding_ids")
+    if not isinstance(finding_ids, list) or not finding_ids:
+        problems.append("refinement plan names no findings")
+    if not isinstance(record.get("allowed_scope"), list) or not record.get("allowed_scope"):
+        problems.append("refinement plan has no allowed scope")
+    if not isinstance(record.get("forbidden_scope"), list):
+        problems.append("refinement plan records no forbidden scope")
+    outcomes = record.get("required_outcomes")
+    if not isinstance(outcomes, list) or not [item for item in outcomes if str(item).strip()]:
+        problems.append("refinement plan declares no required outcomes")
+    if not isinstance(record.get("validation"), list) or not record.get("validation"):
+        problems.append("refinement plan declares no validation commands")
+    justification = record.get("authorising_principles")
+    if not isinstance(justification, list) or not justification:
+        problems.append(
+            "refinement plan names no authorising approved principle; a repair must move the result "
+            "toward a direction that was already approved, not invent one"
+        )
+    for entry in (justification or []):
+        if not isinstance(entry, Mapping) or not str(entry.get("principle_id", "")).strip():
+            problems.append("an authorising principle entry names no principle")
+        elif not str(entry.get("direction_id", "")).strip():
+            problems.append("an authorising principle entry is not bound to a direction")
+    new_direction = record.get("introduces_new_direction")
+    if new_direction:
+        problems.append(
+            "refinement plan declares that it introduces a new design direction; that is "
+            "DIRECTION_REVISION_REQUIRED, not a repair"
+        )
+    try:
+        attempt = int(record.get("attempt", 0))
+    except (TypeError, ValueError):
+        problems.append("refinement plan attempt is not a count")
+    else:
+        if attempt < 1:
+            problems.append("a refinement plan records an attempt below 1")
+    return list(dict.fromkeys(problems))
+
+
 DESIGN_RECORD_VALIDATORS = {
     "reference": reference_problems,
     "reference-analysis": reference_analysis_problems,
+    "reference-set": reference_set_problems,
     "component-candidate": component_candidate_problems,
     "design-direction": design_direction_problems,
     "design-requirement": design_requirement_problems,
+    "implementation-plan": implementation_plan_problems,
+    "component-inventory": component_inventory_problems,
+    "implementation-change": implementation_change_problems,
+    "implementation-run": implementation_run_problems,
     "rendered-evidence": rendered_evidence_problems,
     "design-review": design_review_problems,
     "refinement": refinement_problems,
+    "render-capture-plan": render_capture_plan_problems,
+    "rendered-evidence-set": rendered_evidence_set_problems,
+    "rendered-critique": rendered_critique_problems,
+    "refinement-plan": refinement_plan_problems,
 }
 """Record kind -> validator. One dispatch table, so no caller can append an
 unvalidated design record to the run state."""
@@ -2106,6 +3403,564 @@ AR206_COLLECTIONS = (
 family. A run state that has none of them is a complete 2.0 run state.
 """
 
+# ------------------------------------------------------- AR-223 acceptance plane
+
+SCHEMA_ACCEPTANCE = 1
+"""The AR-223 acceptance record family (contract, requirement, claim, evidence,
+verification decision, verification pass).
+
+Its own schema family, additive and optional in exactly the way AR-202/AR-203's are: a
+run state written by an earlier milestone carries none of these collections and stays
+readable and continuable, which is why nothing here forces a run-state migration.
+"""
+
+READABLE_ACCEPTANCE_SCHEMAS = (1,)
+"""Acceptance record versions this runtime can read. Anything else is refused."""
+
+ACCEPTANCE_CONTRACT = "ariadne-acceptance-1"
+"""Marker recorded in ``state["engine"]["acceptance_contract"]`` when these records exist."""
+
+ACCEPTANCE_CONTRACT_VERSION = "ar-223-acceptance-contract-1"
+"""Which acceptance contract produced these records, distinct from the record schema.
+
+Same reason ``DECISION_CONTRACT_VERSION`` exists: a consumer reading a state has to be
+able to tell *which definitions* produced an answer, not merely which shape it has.
+"""
+
+ACCEPTANCE_VERDICTS = (
+    "PROVEN",
+    "PARTIAL",
+    "UNPROVEN",
+    "FAILED",
+    "CONTRADICTED",
+    "NEEDS_HUMAN",
+)
+"""The stable verdict vocabulary for one requirement in one verification pass.
+
+**There is deliberately no order over these.** Every earlier ordinal in this module --
+``VERIFICATION_LEVEL_ORDER``, for instance -- exists because its members really are a
+ladder. These are not: ``FAILED`` is not "more" than ``UNPROVEN``, it is a different
+answer, and a system that sorts them has already decided that missing evidence is
+failure. The two distinctions that matter most are the two this tuple refuses to blur:
+
+    UNPROVEN  != FAILED          no evidence either way is not a violation
+    FAILED    != CONTRADICTED    violating a requirement is not disproving a claim
+
+``CONTRADICTED`` is also *not* a requirement verdict in the ordinary case: it describes
+a worker's statement, and :mod:`ariadne_engine.acceptance.decisions` keeps requirement
+verdicts and claim verdicts in separate records precisely so the two cannot be
+conflated.
+
+``NEEDS_HUMAN`` is a first-class outcome, not a failure to decide. Abstention is a
+valid answer and pretending otherwise would make the system's confidence its
+weakness.
+"""
+
+REQUIREMENT_ORIGINS = ("EXPLICIT", "DERIVED", "ASSUMED")
+"""Where a requirement came from, and what each is allowed to do.
+
+``EXPLICIT``  the request says it. Blocking.
+``DERIVED``   it follows necessarily from an explicit one. Surfaced, not blocking.
+``ASSUMED``   Ariadne supplied it. Never blocking, always asks a human.
+
+The asymmetry is the whole point. A one-sentence request may legitimately become one
+requirement per surface; it does not become forty-seven blocking obligations the user
+never agreed to. An inferred obligation that can block acceptance is a guess with the
+power to stop a project.
+"""
+
+REQUIREMENT_KINDS = (
+    "FUNCTIONAL",
+    "VISUAL",
+    "INTERACTION",
+    "CONSTRAINT",
+    "REGRESSION",
+    "ACCESSIBILITY",
+    "PERFORMANCE",
+    "SECURITY",
+    "CONTENT",
+    "SUBJECTIVE",
+)
+"""What kind of obligation a requirement states.
+
+``SUBJECTIVE`` is the honest admission that some obligations cannot become deterministic
+``PROVEN`` -- "feels premium" is not a testable predicate, and an engine that grades it
+any other way is grading its own mood.
+"""
+
+EVIDENCE_STANCES = ("AUTHORITATIVE", "REQUIRED", "SUPPORTING", "INSUFFICIENT_ALONE")
+"""Where one evidence kind sits for **one requirement**.
+
+Not an ordering of evidence kinds. There is no global ranking of evidence, because the
+ranking is false: a build result directly establishes *it compiles* and establishes
+nothing at all about whether a button works, a screenshot establishes nothing about
+backend persistence, and a unit test establishes nothing about subjective polish.
+Strength is a property of the (requirement, evidence) pair, so it is declared there.
+"""
+
+ACCEPTANCE_EVIDENCE_KINDS = (
+    "TEST",
+    "BUILD",
+    "STATIC_ANALYSIS",
+    "DIFF",
+    "RUNTIME",
+    "RENDER",
+    "SCREENSHOT",
+    "INTERACTION",
+    "ACCESSIBILITY",
+    "REVIEW",
+    "PERFORMANCE",
+    "PROVENANCE",
+)
+"""The evidence families a requirement's policy may name.
+
+Deliberately a superset of the earlier vocabularies rather than a replacement:
+:data:`DESIGN_REQUIREMENT_EVIDENCE` is ``source``/``rendered``/``behavioural`` and
+``RENDERED_EVIDENCE_KINDS`` is viewport-scoped. Those stay where they are and are
+*mapped into* this vocabulary by
+:mod:`ariadne_engine.acceptance.integrations`, so a rendered-evidence set produced by
+AR-222 remains usable input without being rewritten.
+"""
+
+CLAIM_TYPES = (
+    "IMPLEMENTED",
+    "FIXED",
+    "TESTED",
+    "PRESERVED",
+    "VERIFIED",
+    "COMPLETE",
+)
+"""What a worker says it did. Distinct from evidence kinds by construction.
+
+A claim type is a statement *about* work. An evidence kind is an observation *of* work.
+Keeping the two vocabularies separate in the type system is what makes "claim treated
+as evidence" a structural impossibility rather than a rule somebody has to remember.
+"""
+
+EVIDENCE_STANCES_FOR_CLAIM = ("SUPPORTS", "PARTIALLY_SUPPORTS", "CONTRADICTS")
+"""What a piece of evidence does to a requirement, as opposed to what kind it is.
+
+One evidence item can be a ``TEST`` (kind) that ``CONTRADICTS`` (stance). Conflating
+the two axes is how "screenshot > test > diff" got believed in the first place.
+"""
+
+EVIDENCE_SOURCE_KINDS = (
+    "ENGINE_RECORD",
+    "CI_RUN",
+    "RENDERED_CAPTURE",
+    "HUMAN_OBSERVATION",
+    "ARTIFACT",
+)
+"""Where an observation came from, when it is not a re-readable artefact.
+
+Required alongside ``source_record_id`` so "evidence" that points at nothing is refused:
+an assertion with no source is a claim, and
+:mod:`ariadne_engine.acceptance.claims` is where claims live with a different status.
+``HUMAN_OBSERVATION`` is in the list rather than treated as second-class -- a human
+looking at a screen and reporting what they saw is real evidence, and refusing it would
+only push the system toward trusting files it can re-hash.
+"""
+
+IMPACT_STATES = ("PROVEN_UNAFFECTED", "POTENTIALLY_AFFECTED", "UNKNOWN")
+"""How a code change affects a requirement.
+
+``UNKNOWN`` is not a failure state to be minimised; it is the honest answer when the
+dependency relationship cannot be established, and it must never be reported as
+``PROVEN_UNAFFECTED``. Pretending an unknown relationship is a safe one is how selective
+invalidation turns into selective *forgetting*.
+"""
+
+ACCEPTANCE_STATES = ("NOT_ACCEPTED", "ACCEPTED")
+"""The aggregate outcome. Two values, because a percentage would be a lie.
+
+``5 PROVEN, 1 FAILED, 2 UNPROVEN`` is five proven requirements, one failed one and two
+unproven ones. Reducing that to *74%* invents a scale nobody measured, destroys exactly
+the distinction the verdicts exist to preserve, and produces a number that goes **up**
+when a requirement is deleted.
+"""
+
+HUMAN_GATE_REASONS = (
+    "AMBIGUOUS_PRODUCT_INTENT",
+    "SUBJECTIVE_FINAL_ACCEPTANCE",
+    "PROTECTED_AUTHORIZATION",
+    "MEANING_CHANGING_DESIGN_CHOICE",
+    "POLICY_REQUIRED_HUMAN_GATE",
+    "ASSUMED_REQUIREMENT",
+    "EVIDENCE_CONFLICT_UNRESOLVED",
+)
+"""Why a requirement cannot honestly be decided automatically.
+
+Kept as a finite, named vocabulary rather than free text so ``NEEDS_HUMAN`` is
+actionable: an operator can tell "ask the human about the product" from "the policy
+requires a human gate here" and act on them differently.
+"""
+
+MAX_ACCEPTANCE_CONTRACTS = 500
+"""Hard safety bound for the contract collection."""
+
+MAX_ACCEPTANCE_REQUIREMENTS = 5_000
+"""Hard safety bound for the requirement-definition collection."""
+
+MAX_ACCEPTANCE_CLAIMS = 10_000
+"""Hard safety bound for the claim collection."""
+
+MAX_ACCEPTANCE_EVIDENCE = 50_000
+"""Hard safety bound for the acceptance-evidence collection.
+
+Higher than the other bounds on purpose: evidence is the one collection that grows with
+every observation, and refusing to record it because there is a lot of it would push
+exactly the behaviour a refusal is supposed to prevent -- deciding without evidence.
+"""
+
+MAX_VERIFICATION_DECISIONS = 50_000
+"""Hard safety bound for the verification-decision collection."""
+
+MAX_VERIFICATION_PASSES = 5_000
+"""Hard safety bound for the verification-pass collection."""
+
+AR223_COLLECTIONS = (
+    "acceptance_contracts",
+    "acceptance_requirements",
+    "acceptance_claims",
+    "acceptance_evidence",
+    "verification_decisions",
+    "verification_passes",
+)
+"""The AR-223 acceptance collections, additive and optional like every earlier family."""
+
+MAX_PROOF_RECEIPTS = 5_000
+"""Hard safety bound for the AR-224 proof-receipt collection."""
+
+AR224_COLLECTIONS = (
+    "proof_receipts",
+)
+"""The AR-224 proof-receipt collection, additive and optional like every earlier family."""
+
+
+def _acceptance_schema(record: Mapping[str, Any], problems: list[str], kind: str) -> None:
+    if record.get("schema_version") not in READABLE_ACCEPTANCE_SCHEMAS:
+        problems.append(
+            f"{kind} schema is unsupported: {record.get('schema_version')!r}"
+        )
+
+
+def acceptance_contract_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one acceptance contract (fail closed)."""
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance contract is not an object"]
+    _acceptance_schema(record, problems, "acceptance contract")
+    if not design_id_matches("ctr", str(record.get("contract_id", ""))):
+        problems.append("acceptance contract has a malformed contract id")
+    _enum_problems(record, "status", CONTRACT_STATUSES, problems)
+    _enum_problems(record, "origin", CONTRACT_ORIGINS, problems)
+    for name in ("task_id", "source_text", "source_digest"):
+        _non_empty(record, name, problems)
+    if str(record.get("source_digest", "")) and not re.fullmatch(
+        r"[0-9a-f]{64}", str(record.get("source_digest", ""))
+    ):
+        problems.append("acceptance contract source digest is not a sha256")
+    revision = record.get("revision")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+        problems.append("acceptance contract revision must be a positive integer")
+    if isinstance(revision, int) and not isinstance(revision, bool) and revision > 1:
+        if not str(record.get("supersedes", "")):
+            problems.append(
+                "a contract past revision 1 must name the revision it supersedes. A revision "
+                "without a predecessor cannot be audited"
+            )
+        elif not str(record.get("material_change_reason", "")):
+            problems.append(
+                "a contract past revision 1 must state why the previous one was replaced"
+            )
+    if str(record.get("status", "")) == "SUPERSEDED" and not str(record.get("superseded_by", "")):
+        problems.append("a superseded contract must name what superseded it")
+    return list(dict.fromkeys(problems))
+
+
+CONTRACT_STATUSES = ("ACTIVE", "SUPERSEDED")
+"""A contract is either the live interpretation of a request or the history of one.
+
+Two states, not one. A superseded contract stays readable forever, because a decision made
+against it has to remain auditable against the interpretation it was actually made
+against -- and deleting the interpretation turns that audit into archaeology.
+"""
+
+CONTRACT_ORIGINS = ("USER_REQUEST", "OPERATOR", "IMPORTED", "GENERATIVE")
+"""Who supplied the request text a contract interprets.
+
+``GENERATIVE`` exists so an interpretation Ariadne produced is labelled as one. It does
+not make the contract less binding -- it makes its authorship visible, which is the only
+honest thing to do with text the user never wrote.
+"""
+
+
+def acceptance_requirement_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one requirement definition (fail closed)."""
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance requirement is not an object"]
+    _acceptance_schema(record, problems, "acceptance requirement")
+    if not design_id_matches("rqm", str(record.get("requirement_id", ""))):
+        problems.append("acceptance requirement has a malformed requirement id")
+    _enum_problems(record, "kind", REQUIREMENT_KINDS, problems)
+    origin = _enum_problems(record, "origin", REQUIREMENT_ORIGINS, problems)
+    _enum_problems(record, "status", ("ACTIVE", "SUPERSEDED"), problems)
+    _enum_problems(record, "verification_mode", DECISION_CLASSIFICATIONS, problems)
+    for name in ("contract_id", "text"):
+        _non_empty(record, name, problems)
+    if not isinstance(record.get("blocking", None), bool):
+        problems.append("acceptance requirement blocking must be true or false")
+    if not isinstance(record.get("human_gate", None), bool):
+        problems.append("acceptance requirement human_gate must be true or false")
+    if origin == "ASSUMED" and bool(record.get("blocking")):
+        problems.append(
+            "an ASSUMED requirement cannot block acceptance. The only honest contribution an "
+            "assumption can make is a question, and a question must not be able to stop a project"
+        )
+    if origin == "ASSUMED" and not bool(record.get("human_gate")):
+        problems.append("an ASSUMED requirement must carry a human gate")
+    if origin == "EXPLICIT" and not bool(record.get("blocking")):
+        problems.append(
+            "an EXPLICIT requirement the user actually asked for cannot be advisory; dropping it "
+            "from blocking acceptance is how a requested obligation quietly stops being graded"
+        )
+    policy = record.get("evidence_policy")
+    if not isinstance(policy, Mapping):
+        problems.append("acceptance requirement declares no evidence policy")
+    else:
+        for stance in EVIDENCE_STANCES:
+            values = policy.get(stance, [])
+            if not isinstance(values, (list, tuple)):
+                problems.append(f"evidence policy {stance} is not a list")
+                continue
+            for value in values:
+                if str(value) not in ACCEPTANCE_EVIDENCE_KINDS:
+                    problems.append(f"evidence policy names an unknown evidence kind: {value}")
+        if not any(policy.get(stance) for stance in EVIDENCE_STANCES):
+            problems.append(
+                "the requirement names no evidence that could establish it, so nothing could ever "
+                "satisfy it"
+            )
+        overlap = (
+            {str(item) for item in policy.get("required", ()) or ()}
+            & {str(item) for item in policy.get("insufficient_alone", ()) or ()}
+        )
+        if overlap:
+            problems.append(
+                "evidence is both required and insufficient alone: " + ", ".join(sorted(overlap))
+            )
+        for value in policy.get("insufficient_alone", ()) or ():
+            if str(value) in ("CLAIM", "STATEMENT"):
+                problems.append(
+                    f"{value} cannot be evidence at all. A claim may be what is being verified; "
+                    "it is never the thing that verifies it"
+                )
+    return list(dict.fromkeys(problems))
+
+
+def acceptance_claim_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one worker claim (fail closed).
+
+    There is no field here that lets a claim assert its own truth. A claim carries a
+    statement, an actor, a revision and a set of requirements it is about -- and that is
+    the complete list, because a claim that could carry evidence ids would be a claim
+    that could launder itself into acceptance.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance claim is not an object"]
+    _acceptance_schema(record, problems, "acceptance claim")
+    if not design_id_matches("clm", str(record.get("claim_id", ""))):
+        problems.append("acceptance claim has a malformed claim id")
+    _enum_problems(record, "claim_type", CLAIM_TYPES, problems)
+    _enum_problems(record, "origin", ("PROSE", "STRUCTURED", "CI", "OPERATOR", "IMPORTED"), problems)
+    _enum_problems(record, "actor_role", PROOF_ACTOR_ROLES, problems)
+    _enum_problems(record, "status", ("AWAITING_EVIDENCE", "ASSESSED", "WITHDRAWN"), problems)
+    for name in ("actor", "statement", "statement_digest", "claim_version"):
+        _non_empty(record, name, problems)
+    if not isinstance(record.get("requirement_ids", None), (list, tuple)):
+        problems.append("acceptance claim requirement_ids is not a list")
+    else:
+        for requirement_id in record.get("requirement_ids") or ():
+            if not design_id_matches("rqm", str(requirement_id)):
+                problems.append(f"acceptance claim names a malformed requirement id: {requirement_id}")
+    assertion = record.get("assertion")
+    if not isinstance(assertion, Mapping):
+        problems.append("acceptance claim assertion is not an object")
+    else:
+        for value in assertion.values():
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+                problems.append("a claim assertion holds only checkable scalars")
+    if str(record.get("external")) not in ("True", "False"):
+        problems.append("acceptance claim external must be a boolean")
+    return list(dict.fromkeys(problems))
+
+
+PROOF_ACTOR_ROLES = (
+    "user_or_human_approver",
+    "implementation_worker",
+    "evidence_producer",
+    "independent_reviewer",
+    "repair_worker",
+    "engine",
+)
+"""The identities a proof path must be able to distinguish.
+
+Moved here from :mod:`ariadne_engine.rendered_critique.proof` in AR-223 rather than
+duplicated, because from this point on two subsystems need the same list: proof
+*readiness* to detect a collision, and acceptance to *refuse* one. A list that existed
+twice would let the detector and the enforcer drift, which is the failure mode this
+whole family of records exists to prevent.
+
+The reason the list exists at all is a single rule: *the worker cannot independently
+certify itself.*
+"""
+
+SELF_CERTIFICATION_PAIRS = (
+    ("implementation_worker", "independent_reviewer"),
+    ("repair_worker", "independent_reviewer"),
+    ("implementation_worker", "evidence_producer"),
+    ("repair_worker", "evidence_producer"),
+)
+"""Role pairs that may not be held by the same actor.
+
+Evidence produced by the party whose work it evidences, and reviewed by the party that
+implemented or repaired it, are the two ways independence can be faked.
+"""
+
+
+def acceptance_evidence_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one acceptance-evidence record (fail closed).
+
+    Producer identity, work digest and artefact digest are all mandatory, because each
+    of them closes a different laundering route: a worker presenting its own screenshot
+    as independent review, a stale capture presented as current, and a renamed or edited
+    artefact presented as the one that was observed.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["acceptance evidence is not an object"]
+    _acceptance_schema(record, problems, "acceptance evidence")
+    if not design_id_matches("evd", str(record.get("evidence_id", ""))):
+        problems.append("acceptance evidence has a malformed evidence id")
+    _enum_problems(record, "kind", ACCEPTANCE_EVIDENCE_KINDS, problems)
+    _enum_problems(record, "stance", EVIDENCE_STANCES_FOR_CLAIM, problems)
+    _enum_problems(record, "producer_role", PROOF_ACTOR_ROLES, problems)
+    _enum_problems(record, "state", FRESHNESS_STATES, problems)
+    for name in ("producer", "work_digest", "contract_revision", "observation"):
+        _non_empty(record, name, problems)
+    if str(record.get("work_digest", "")) and not re.fullmatch(
+        r"[0-9a-f]{16,64}", str(record.get("work_digest", ""))
+    ):
+        problems.append("acceptance evidence work_digest is not a digest")
+    artifact = record.get("artifact")
+    if not isinstance(artifact, Mapping):
+        problems.append("acceptance evidence artifact is not an object")
+    elif artifact:
+        for name in ("path", "sha256"):
+            if not str(artifact.get(name, "")):
+                problems.append(f"acceptance evidence artifact is missing {name}")
+        if str(artifact.get("sha256", "")) and not re.fullmatch(
+            r"[0-9a-f]{64}", str(artifact.get("sha256", ""))
+        ):
+            problems.append("acceptance evidence artifact sha256 is not a sha256")
+    if not artifact and not str(record.get("source_record_id", "")):
+        problems.append(
+            "acceptance evidence cites neither a re-readable artefact nor the record it was "
+            "derived from. Evidence that points at nothing is an assertion, and an assertion is a "
+            "claim -- a different record type with a different status"
+        )
+    if str(record.get("source_kind", "")) and str(record.get("source_kind", "")) not in EVIDENCE_SOURCE_KINDS:
+        problems.append(
+            f"acceptance evidence names an unknown source kind: {record.get('source_kind')}"
+        )
+    requirements = record.get("requirement_ids")
+    if not isinstance(requirements, (list, tuple)) or not requirements:
+        problems.append(
+            "acceptance evidence names no requirement. Evidence that is not about anything cannot "
+            "establish anything"
+        )
+    return list(dict.fromkeys(problems))
+
+
+def verification_decision_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one verification decision (fail closed).
+
+    The two separations this validator exists to hold:
+
+    * a decision names a **requirement**, and a decision's verdict is about that
+      requirement -- it may not claim ``CONTRADICTED``, which is a statement about a
+      worker's claim and is therefore refused here;
+    * a decision names a **decision path**, so "the model said so with high confidence"
+      is not an available explanation.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["verification decision is not an object"]
+    _acceptance_schema(record, problems, "verification decision")
+    if not design_id_matches("vdz", str(record.get("verification_id", ""))):
+        problems.append("verification decision has a malformed verification id")
+    verdict = _enum_problems(record, "verdict", ACCEPTANCE_VERDICTS, problems)
+    for name in ("requirement_id", "work_digest", "contract_id", "contract_revision",
+                 "decision_path", "reviewer", "rationale"):
+        _non_empty(record, name, problems)
+    if verdict == "CONTRADICTED":
+        problems.append(
+            "CONTRADICTED describes a worker's claim, not a requirement. A requirement that "
+            "current evidence violates is FAILED; the claim it contradicts is a separate record"
+        )
+    if not str(record.get("evidence_ids", "")) and verdict in ("PROVEN", "FAILED", "PARTIAL"):
+        problems.append(
+            f"a {verdict} requirement must cite the evidence that decided it. A verdict with no "
+            "evidence is an assertion"
+        )
+    for name in ("evidence_ids", "claim_ids", "human_gate_reasons"):
+        value = record.get(name, [])
+        if not isinstance(value, (list, tuple)):
+            problems.append(f"verification decision {name} is not a list")
+    uncertainty = record.get("uncertainty", "")
+    if not isinstance(uncertainty, str):
+        problems.append("verification decision uncertainty is not text")
+    if str(record.get("authorization_effect", "")) != "none":
+        problems.append("a verification decision never grants authorization")
+    return list(dict.fromkeys(problems))
+
+
+def verification_pass_problems(record: Mapping[str, Any]) -> list[str]:
+    """Structural validation of one verification pass (fail closed).
+
+    A pass is one look at one work digest under one contract revision. It carries no
+    aggregate score, because a pass that reported one would be reporting a number whose
+    construction destroyed the distinctions the verdicts preserve.
+    """
+    problems: list[str] = []
+    if not isinstance(record, Mapping):
+        return ["verification pass is not an object"]
+    _acceptance_schema(record, problems, "verification pass")
+    if not design_id_matches("vps", str(record.get("pass_id", ""))):
+        problems.append("verification pass has a malformed pass id")
+    _enum_problems(record, "acceptance_state", ACCEPTANCE_STATES, problems)
+    _enum_problems(record, "pass_kind", ("INITIAL", "REVERIFICATION", "REPAIR"), problems)
+    for name in ("contract_id", "contract_revision", "work_digest"):
+        _non_empty(record, name, problems)
+    decisions = record.get("requirement_decisions")
+    if not isinstance(decisions, (list, tuple)):
+        problems.append("verification pass requirement_decisions is not a list")
+    assessments = record.get("claim_assessments")
+    if not isinstance(assessments, (list, tuple)):
+        problems.append("verification pass claim_assessments is not a list")
+    if record.get("aggregate_score") is not None:
+        problems.append(
+            "a verification pass records requirement-level state, never a completion percentage. "
+            "Counts are acceptable; a composite score is not"
+        )
+    if str(record.get("pass_kind", "")) == "REVERIFICATION" and not str(
+        record.get("supersedes_pass_id", "")
+    ):
+        problems.append("a re-verification pass must name the pass it re-verifies")
+    return list(dict.fromkeys(problems))
+
 MAX_CAPABILITY_RECORDS = 5_000
 """Hard safety bound for the capability observation collection."""
 
@@ -2154,6 +4009,13 @@ _COLLECTION_LIMITS = {
     "decision_shadow": MAX_SHADOW_RECORDS,
     "calibration_profiles": MAX_CALIBRATION_PROFILES,
     "decision_adoption": MAX_ADOPTION_SLICES,
+    "acceptance_contracts": MAX_ACCEPTANCE_CONTRACTS,
+    "acceptance_requirements": MAX_ACCEPTANCE_REQUIREMENTS,
+    "acceptance_claims": MAX_ACCEPTANCE_CLAIMS,
+    "acceptance_evidence": MAX_ACCEPTANCE_EVIDENCE,
+    "verification_decisions": MAX_VERIFICATION_DECISIONS,
+    "verification_passes": MAX_VERIFICATION_PASSES,
+    "proof_receipts": MAX_PROOF_RECEIPTS,
 }
 
 
@@ -2168,7 +4030,8 @@ def require_collection_capacity(state: Mapping[str, Any], key: str) -> None:
     if limit is None:
         raise ContractError(
             f"{key!r} is not a bounded engine record collection; the bound applies to "
-            + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS])
+            + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS,
+                         *AR223_COLLECTIONS, *AR224_COLLECTIONS])
         )
     values = state.get(key)
     if values is None:
@@ -2708,3 +4571,5 @@ def adoption_slice_problems(record: Mapping[str, Any]) -> list[str]:
     if str(record.get("authorization_effect", "")) != "none":
         problems.append("an adoption slice never grants authorization")
     return list(dict.fromkeys(problems))
+
+

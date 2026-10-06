@@ -34,6 +34,10 @@ Layers:
                           shadow mode, promotion and scopes, evaluation identity,
                           cache binding, the security invariants, packaging, and
                           the additive-migration guarantees)
+
+AR-222 adds ``ar222_cases.py``: the rendered design-critique cases (exact source
+binding, stale-capture refusal, reviewer isolation, principle-based alignment,
+bounded refinement, and the absence of any scalar design score).
 """
 
 from . import cases  # noqa: F401  (registers the AR-200/AR-201 cases)
@@ -45,3 +49,4 @@ from . import ar204_measure_cases  # noqa: F401  (registers the AR-204 measureme
 from . import ar205_cases  # noqa: F401  (registers the AR-205 release-engineering cases)
 from . import ar205d_cases  # noqa: F401  (registers the AR-205D decision-intelligence cases)
 from . import ar206_cases  # noqa: F401  (registers the AR-206 Decision Runtime cases)
+from . import ar222_cases  # noqa: F401  (registers the AR-222 rendered-critique cases)

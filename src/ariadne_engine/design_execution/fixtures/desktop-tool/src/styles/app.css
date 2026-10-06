@@ -1,0 +1,163 @@
+/*
+ * Beacon application styles.
+ *
+ * Pre-implementation state. This is the stylesheet a feature-branch preview leaves
+ * behind: it works, it renders, and it is the generic version of itself. The glass
+ * cards, the gradient hero and the pill-shaped chips are the specific things a
+ * grounded design direction has to remove.
+ */
+
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+.app {
+  display: block;
+  padding: var(--space-4);
+}
+
+/* A centred welcome panel, of the kind every generated dashboard ships with. */
+.hero {
+  text-align: center;
+  padding: 64px 24px;
+  border-radius: var(--radius-lg);
+  background: radial-gradient(circle at 50% 0%, rgba(79, 124, 255, 0.35), rgba(11, 13, 17, 0) 70%);
+  border: 1px solid var(--border);
+}
+
+.hero h1 {
+  font-size: 32px;
+  margin: 0 0 8px;
+}
+
+.hero p {
+  color: var(--text-muted);
+  margin: 0 0 24px;
+}
+
+/* Translucent cards on a blurred backdrop. */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.glass-card {
+  position: relative;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.glass-card h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+}
+
+.glass-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Every action is a pill. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--raised);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.chip-primary {
+  border-radius: 999px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chip-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.cta-label {
+  text-shadow: 0 0 18px rgba(79, 124, 255, 0.8);
+}
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-4);
+}
+
+.log-table th,
+.log-table td {
+  text-align: left;
+  padding: 12px var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.log-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.log-table td code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.status-2xx {
+  color: #4ade80;
+}
+
+.status-4xx {
+  color: #fbbf24;
+}
+
+.status-5xx {
+  color: #f87171;
+}
+
+/* Keyboard focus is barely visible. The direction requires a visible ring. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glass-card {
+    transition: transform var(--duration-base) var(--ease-standard);
+  }
+
+  .glass-card:hover {
+    transform: translateY(-2px);
+  }
+}

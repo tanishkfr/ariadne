@@ -120,6 +120,34 @@ EVENT_TYPES = (
     "decision_runtime_shadow_recorded",
     "decision_runtime_promoted",
     "decision_runtime_suspended",
+
+    # AR-221 Grounded Design Execution. The dotted names in the phase brief map onto
+    # this log's existing convention rather than starting a second one:
+    # `design.implementation.plan_created` is recorded as
+    # `design_implementation_plan_created`, next to `design_direction_approved`.
+    "design_implementation_plan_created",
+    "design_component_inventory_created",
+    "design_component_reuse_selected",
+    "design_implementation_started",
+    "design_implementation_change_recorded",
+    "design_implementation_ungrounded_change",
+    "design_implementation_validated",
+    "design_implementation_escalated",
+    # AR-222 rendered critique. `design.render.capture_stale` is load-bearing:
+    # it is the event that records a capture ceasing to describe its source, which
+    # is what stops an old screenshot from closing a visual review.
+    "design_render_plan_created",
+    "design_render_started",
+    "design_render_capture_created",
+    "design_render_capture_stale",
+    "design_render_capability_unavailable",
+    "design_critique_started",
+    "design_critique_finding_created",
+    "design_critique_finding_resolved",
+    "design_critique_escalated",
+    "design_refinement_plan_created",
+    "design_refinement_validated",
+    "design_refinement_rerendered",
 )
 """The declared event vocabulary. A type outside this set is refused, so the log
 cannot accumulate an undocumented ad-hoc event name."""

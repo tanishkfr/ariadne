@@ -19,3 +19,21 @@ validation/runs/*
 # Benchmark run records, for the same reason: a measured result belongs to one machine
 # on one day. The case definitions in benchmarks/arbench/ are the tracked artefact.
 benchmarks/results/
+
+# The mutation harness records the bytes a mutation replaced, so an interrupted run can
+# restore the tree. The marker is machine-local recovery state, never an artefact: if one
+# is present the tree is mid-mutation and the next run will restore it. AR-222 upgraded
+# this from a digest-only marker to a stash of the actual bytes, because `finally` does not
+# run when a process is killed from outside and a digest alone cannot undo anything.
+.ariadne-mutation-restore.json
+.ariadne-mutation-restore/
+# AR-222's harness uses its own marker and stash, because sharing the AR-221 path with an
+# incompatible shape crashed AR-221's recovery routine and with it the whole gate.
+.ariadne-mutation-restore-222.json
+.ariadne-mutation-restore-222/
+# AR-222D adds the *shared* ledger: one registry that every harness registers into, so any
+# other process can ask whether the repository is currently mid-mutation. Per-harness
+# markers hold bytes; this holds state, and state is what a commit has to refuse on.
+.ariadne-mutation-active.json
+# ...and the stashes the shared ledger points at, for harnesses that use it transactionally.
+.ariadne-mutation-stash-*/

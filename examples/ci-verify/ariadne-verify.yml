@@ -1,0 +1,29 @@
+# OSS CI example: issue/spec -> PR/change -> evidence -> ariadne verify.
+# No hosted GitHub App required. Copy into .github/workflows/ariadne-verify.yml.
+name: ariadne-verify
+on:
+  pull_request:
+jobs:
+  proof-pass:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Ariadne RC
+        run: |
+          gh release download v2.2.0rc1 --pattern 'ariadne-*-py3-none-any.whl' --repo tanishkfr/ariadne
+          pip install ./ariadne-*-py3-none-any.whl
+          ariadne --version
+      - name: Run Proof Pass
+        run: |
+          ariadne verify --against ./spec/issue.md --work-root ./ --json > proof.json
+          ariadne proof $(python -c "import json;print(json.load(open('proof.json'))['proof_id'])")
+      - name: Upload Proof Receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: proof-receipt
+          path: proof.json
+# Exit semantics: 0 ACCEPTED, 1 NOT_ACCEPTED, 2 VERIFICATION_BLOCKED, 3 usage/config error.
+# Requirement failed != Ariadne crashed. Blocking work never yields a green verified status.

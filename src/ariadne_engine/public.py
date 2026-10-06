@@ -66,6 +66,10 @@ STABLE_V2 = (
     "apply_migration",
     "rollback_migration",
     "migration_report",
+    "create_contract",
+    "verify",
+    "get_verification",
+    "compare_verifications",
     "connect",
     "EngineClient",
     "describe_public_api",
@@ -97,6 +101,18 @@ PROVISIONAL = (
     "record_refinement",
     "design_report",
     "route_design_evidence",
+    # AR-221 Grounded Design Execution. Five operations, no more: create and read a
+    # DesignImplementationPlan, inspect the component inventory a plan rests on,
+    # read the implementation trace, and run grounded implementation through the
+    # existing orchestration. Deliberately provisional - the shape is proven, the
+    # vocabulary around grounded execution is still settling, and a consumer binding
+    # to it now should expect to move. What is deliberately absent is every internal
+    # of the compiler, the packet and the classifier.
+    "create_implementation_plan",
+    "implementation_plans",
+    "inspect_component_inventory",
+    "inspect_implementation_trace",
+    "run_grounded_implementation",
     "record_capability_observation",
     "execution_provenance",
     "record_provider_observation",
@@ -139,6 +155,10 @@ PROVISIONAL = (
     "orchestration_report",
     "audit_prompts",
     "set_efficiency",
+    "create_proof_contract_state",
+    "verify_work_state",
+    "get_proof_state",
+    "compare_proofs_state",
 )
 
 INTERNAL = (
@@ -309,6 +329,18 @@ class EngineClient:
 
     def migration_report(self, **options) -> api.Result:
         return api.migration_report(**options)
+
+    def create_contract(self, **options) -> api.Result:
+        return api.create_contract(**options)
+
+    def verify(self, **options) -> api.Result:
+        return api.verify(**options)
+
+    def get_verification(self, **options) -> api.Result:
+        return api.get_verification(**options)
+
+    def compare_verifications(self, **options) -> api.Result:
+        return api.compare_verifications(**options)
 
 
 def connect(runtime_root=None) -> EngineClient:

@@ -420,9 +420,15 @@ def _provenance_problems(value: CaptureArtifact, path: Path, adapter: str) -> li
     ``declared-observer``
         the artifact must carry the observer's explicit declaration, so the record
         says out loud that the engine did not produce it.
+    ``browser-render`` (AR-222)
+        the same manifest obligation as ``offline-fixture``, plus the identity of the
+        rendering engine. A real browser produces a perfectly ordinary PNG, so
+        nothing about the file distinguishes a genuine render from a plausible
+        one; the obligation has to be the same evidence, not a weaker claim about
+        the method.
     """
     problems: list[str] = []
-    if value.method == "offline-fixture":
+    if value.method in ("offline-fixture", "browser-render"):
         manifest_path = path.parent / MANIFEST_NAME
         if not manifest_path.is_file():
             return [
@@ -440,6 +446,15 @@ def _provenance_problems(value: CaptureArtifact, path: Path, adapter: str) -> li
             problems.append("the capture manifest does not record the artifact digest being claimed")
         if str(manifest.get("adapter", "")) != adapter:
             problems.append(f"the capture manifest was written by {manifest.get('adapter')!r}, not {adapter!r}")
+        if value.method == "browser-render":
+            environment = value.environment if isinstance(value.environment, Mapping) else {}
+            if not str(environment.get("browser", "")):
+                problems.append(
+                    "a browser render must name the browser that produced it; an image with no engine "
+                    "behind it is not a rendering, it is a picture"
+                )
+            if not str(environment.get("render_source_digest", value.extra.get("render_source_digest", ""))):
+                problems.append("a browser render must carry the source digest it was bound to")
     elif value.method == "declared-observer":
         if str(value.extra.get("trust", "")) != "declared":
             problems.append(

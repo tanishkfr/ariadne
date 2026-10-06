@@ -88,6 +88,17 @@ def _tool(name: str):
     return _TOOLS[name]
 
 
+def transport_tool():
+    """The packet transport, through a supported seam.
+
+    AR-221 needs ``prepare-stage.safe_validation_argv`` to vet the mechanical
+    validation commands an implementation plan may run. Re-implementing that
+    allowlist inside the engine would create a second one that could drift from
+    the one S4B actually enforces, so the existing primitive is reused instead.
+    """
+    return _tool("transport")
+
+
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 

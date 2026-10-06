@@ -47,6 +47,21 @@ DESIGN_COLLECTIONS = (
     "rendered_evidence",
     "design_reviews",
     "design_refinements",
+    # AR-220 and AR-221 additions. `design_reference_sets` was missing here while
+    # `contracts.DESIGN_COLLECTION_KEYS` already bound it, which meant a persisted
+    # run state was never defaulted or type-checked for that collection. The bound
+    # and the declaration have to agree or the collection is only half-integrated.
+    "design_reference_sets",
+    "design_implementation_plans",
+    "design_component_inventories",
+    "design_implementation_changes",
+    "design_implementation_runs",
+    # AR-222 rendered critique. Same bound, same declaration: `contracts.
+    # DESIGN_COLLECTION_KEYS` names all three, and this list is what makes them
+    # default and type-check a persisted run state.
+    "rendered_evidence_sets",
+    "rendered_critiques",
+    "refinement_plans",
 )
 """AR-202D record collections kept in the run state.
 
@@ -66,8 +81,10 @@ ADAPTIVE_COLLECTIONS = (
     *DESIGN_COLLECTIONS,
     *contracts.AR203_COLLECTIONS,
     *contracts.AR205D_COLLECTIONS,
+    *contracts.AR223_COLLECTIONS,
+    *contracts.AR224_COLLECTIONS,
 )
-"""AR-202, AR-202D, AR-203 and AR-205D record collections kept in the run state.
+"""AR-202, AR-202D, AR-203, AR-205D and AR-223 record collections kept in the run state.
 
 They are additive and optional: a state written by an earlier milestone has none
 of them and stays readable and continuable, which is why the records carry their
@@ -179,6 +196,9 @@ def write_state(run_root: Path, state: dict) -> None:
             "decision_schema": contracts.SCHEMA_DECISION,
             "decision_intelligence_contract": contracts.DECISION_INTELLIGENCE_CONTRACT,
             "decision_intelligence_schema": contracts.SCHEMA_DECISION_INTELLIGENCE,
+            "acceptance_contract": contracts.ACCEPTANCE_CONTRACT,
+            "acceptance_schema": contracts.SCHEMA_ACCEPTANCE,
+            "acceptance_contract_version": contracts.ACCEPTANCE_CONTRACT_VERSION,
             "written_at": contracts.utc_now(),
         })
     write_json(state_path(run_root), state)

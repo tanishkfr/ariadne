@@ -1,3 +1,23 @@
+# Ariadne 2.2.0rc1
+
+Ariadne 2.2.0rc1 is the release candidate for Ariadne 2.2 — Proof and
+Grounding. It turns the completed 2.2 engine into a coherent public
+product: Proof Pass verification, Proof Receipts with history and
+comparison, a stable CLI, Python API and MCP surface, an agent-neutral
+worker handoff, CI integration, and the design workflow with its
+Specificity Grammar intact.
+
+Workers produce. Ariadne determines what is actually proven. A receipt
+states what was evaluated against which requirements using which evidence;
+it never claims bug-free, perfect or guaranteed. Install from the
+immutable candidate wheel below, run `python -m ariadne doctor`, and use
+`ariadne verify` from the packaged install. The stage packets are written
+so that a first-time-user can follow them on Windows, macOS and Linux,
+and comprehension guidance with the Codex skill location is documented in
+`INSTALL.md` and `QUICKSTART.md`.
+
+The 2.1.0 notes follow below.
+
 # Ariadne 2.1.0
 
 Ariadne 2.1.0 ships Ariadne's native bounded Decision Runtime: an on-device inference

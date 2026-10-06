@@ -206,6 +206,23 @@ ALLOW_REPEAT = re.compile(
 # real duplication -- fix the duplication instead.
 DUPE_EXEMPT = ("prompts/", "templates/AGENTS.md")
 
+# Verbatim third-party fixtures, vendored so their recorded digests describe what
+# the source actually returned.
+#
+# These are exempt for a structural reason, not for convenience. The duplicate-
+# sentence rule exists to catch Ariadne-authored prose being copy-pasted into
+# several Ariadne-authored documents, where one of the copies is the source of
+# truth and the rest should reference it. A vendored corpus has no source of truth
+# *inside this repository*: the text belongs to its publisher, editing it would
+# break the binding between the recorded content digest and the bytes the
+# retrieval produced, and the corpus is legitimately repetitive because every
+# document in it describes the same nine sections.
+#
+# Editing a fixture to satisfy this rule would be strictly worse than exempting
+# it: it would make the regression corpus disagree with the retrieval it claims to
+# record. The exemption is therefore scoped to the fixture directory alone.
+VENDORED_FIXTURES = ("src/ariadne_engine/design_reference/fixtures/",)
+
 # This script verifies ARIADNE. validation/runs/ holds the OUTPUT of
 # experiments run with it -- generated artifacts, not canonical documentation.
 #
@@ -427,7 +444,7 @@ def check_duplicates(min_words=9):
     """
     seen = collections.defaultdict(set)
     for path in md_files():
-        if rel(path).startswith(DUPE_EXEMPT):
+        if rel(path).startswith(DUPE_EXEMPT + VENDORED_FIXTURES):
             continue
         text = open(path, encoding="utf-8").read()
         text = re.sub(r"```.*?```", " ", text, flags=re.S)      # skip code blocks

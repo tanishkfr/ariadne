@@ -108,7 +108,7 @@ Ariadne installs from immutable GitHub release artifacts. It is not published to
 Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.1.0/ariadne-2.1.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.2.0rc1/ariadne-2.2.0rc1-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 (or py -m ariadne install)
@@ -137,6 +137,30 @@ A fully deterministic, model-free introduction lives in [examples/README.md](exa
 python examples/01_basic_task.py
 python examples/04_bounded_decision.py
 ```
+
+## Proof Pass
+
+Workers produce. Ariadne determines what is actually proven. Give Ariadne
+the original request and the work; it constructs the verification model,
+so normal use never assembles contracts by hand:
+
+```bash
+ariadne verify --against task.md --work-root ./work
+ariadne proof VP-0001
+```
+
+Repair, verify again, then compare the two receipts:
+
+```bash
+ariadne verify --against task.md --work-root ./work
+ariadne compare VP-0001 VP-0002
+```
+
+`ariadne verify --json` emits a versioned machine-readable receipt for CI,
+MCP and conversational integrations. Exit codes are 0 ACCEPTED,
+1 NOT_ACCEPTED, 2 VERIFICATION_BLOCKED and 3 usage or configuration error.
+A receipt states what was evaluated against which requirements using which
+evidence; it never claims bug-free, perfect or guaranteed.
 
 ## A short walkthrough
 

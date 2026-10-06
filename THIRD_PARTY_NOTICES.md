@@ -151,3 +151,100 @@ precisely the failure this architecture refuses.
 
 See also `LAYA-ADAPTATION.md`, which records the adaptation question for this
 feature specifically.
+
+---
+
+# Third-party notices - Ariadne 2.2 development (AR-220)
+
+## Scope
+
+This section records the third-party position of **AR-220 Grounded Design
+Intelligence** (branch `v2/2.2-grounded-design-intelligence`, no release). It adds
+`src/ariadne_engine/design_reference/`, the AR-220 vocabulary in
+`src/ariadne_engine/contracts.py`, two CLI verbs, two test suites and one fixture
+recorder.
+
+## Code position
+
+**AR-220 added no third-party runtime component and no third-party code.**
+
+Every line of `design_reference/` is original Ariadne code. It is pure Python
+standard library, consistent with the AR-206 position above:
+
+- the DESIGN.md parser is a bounded YAML-subset parser written for this feature,
+  not a wrapper around PyYAML or any other library;
+- `pyproject.toml` is unchanged and still declares `dependencies = []`;
+- no MCP server, Node package or CLI tool is installed, imported or required;
+- the getdesign.md, MCP and CLI adapters are *boundaries*: they declare what a
+  source may provide and refuse anything undeclared. None of them ships a client.
+
+The same assertion is enforced by the AR-220 suite: `test_no_network_in_the_suite`
+inspects the acquisition module for network primitives and asserts every declared
+CLI adapter is disabled.
+
+## Data position: the frozen getdesign.md corpus
+
+This is the part of AR-220 that touches other people's material, so it is recorded
+in detail.
+
+`src/ariadne_engine/design_reference/fixtures/getdesign-md/` contains five
+`DESIGN.md` documents retrieved once from the **public, MIT-licensed repository
+`VoltAgent/awesome-design-md`** (repository: <https://github.com/VoltAgent/awesome-design-md>,
+licence: MIT), together with the catalog index parsed from that repository's README
+and the provenance of every retrieval in `retrieval.json`.
+
+| Item | Detail |
+|------|--------|
+| Source repository | `VoltAgent/awesome-design-md` |
+| Licence | MIT |
+| Retrieved documents | `linear.app`, `cursor`, `warp`, `vercel`, `cohere` |
+| Retrieved bytes | 24 354 / 21 771 / 24 438 / 41 405 / 20 020 |
+| Retrieved at | 2026-10-03T19:18Z (one retrieval; frozen) |
+| Modification | **None.** The bytes are stored verbatim so the recorded digest describes what the source returned. |
+
+### Why the repository and not the catalog
+
+getdesign.md's Terms of Service (section 7) prohibit "automated means to scrape
+the Service". The raw `DESIGN.md` files are separately published by the
+maintainers in an open MIT-licensed repository, which is both a permitted path and
+the one the site itself documents for agents (`npx getdesign@latest add {slug}`).
+Ariadne therefore reads the repository, performs **no crawling**, follows no links,
+walks no sitemap and requests no gated endpoint.
+
+### Attribution and the identity boundary
+
+Every reference produced from this corpus records
+`source_provider = getdesign.md`, `source_kind = CURATED_DESIGN_ANALYSIS` and
+`attribution = "getdesign.md curated analysis via VoltAgent/awesome-design-md (MIT)"`.
+
+Each entry page states: *"Independent analysis of publicly observable patterns,
+curated as a starting point for inspiration. Not affiliated with or endorsed by"* the
+referenced brand, and the Terms repeat that these documents *"are not official design
+systems from the listed companies."* Ariadne records that classification as a
+constant in the adapter: there is no code path that can reclassify a curated
+analysis as `FIRST_PARTY_DESIGN_MD`.
+
+Trademarks, wordmarks, logos and imagery referenced by these documents remain the
+property of their respective owners and are used nominatively. Ariadne stores no
+logo, wordmark or image from any of them.
+
+## The separate `getdesign` project
+
+`MohtashamMurshid/getdesign` (MIT, <https://github.com/MohtashamMurshid/getdesign>)
+is a **different project** from getdesign.md. It is on-demand design-system
+extraction from any URL, with an implemented web app and agent skill and a planned
+HTTP API, CLI and TypeScript SDK.
+
+AR-220 studied its documented 9-section extraction contract and its grounding
+principles. **No code was copied or adapted from it.** Ariadne's controlled pattern
+vocabulary was written for this feature against the public `DESIGN.md` corpus, and
+Ariadne's parser targets the Google Stitch `DESIGN.md` frontmatter shape rather than
+that project's output. Ariadne is not affiliated with, endorsed by or powered by
+either project. Full audit: `docs/v2/2.2/03-GETDESIGN-MD-AUDIT.md`.
+
+## Google Stitch DESIGN.md specification
+
+`DESIGN.md` is a third-party interchange format introduced by Google Stitch. Ariadne
+consumes it through an adapter and never adopts it as an internal canonical schema;
+unknown fields are preserved and warned about rather than discarded. See
+`docs/v2/2.2/04-DESIGN-MD-FORMAT.md`.
