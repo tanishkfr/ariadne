@@ -213,6 +213,19 @@ def extract(
         requirement_scope = requirements_module.active_requirements(
             state, contract_id=contract_id,
         )
+    else:
+        # A scope entry may arrive as a requirement id instead of a record. An id
+        # is resolved against the state, and one that resolves to nothing is
+        # dropped rather than guessed: an unmapped claim stays honest.
+        resolved_scope = []
+        for entry in requirement_scope:
+            if isinstance(entry, Mapping):
+                resolved_scope.append(entry)
+                continue
+            record = requirements_module.requirement(state, str(entry))
+            if record is not None:
+                resolved_scope.append(record)
+        requirement_scope = resolved_scope
     external = str(origin) in ("PROSE", "CI", "IMPORTED")
     created: list[dict] = []
     for piece in split_statements(statement):

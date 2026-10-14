@@ -160,6 +160,19 @@ PROVISIONAL = (
     # selector, the registry entry format, and the packet transport.
     "plan_task",
     "start_task",
+    # Ariadne 2.3B task execution. Provisional for the same reason: the T1
+    # lifecycle records (attempts, evidence, ledger states) are real and tested,
+    # and their shape may move while the execution vocabulary settles. The worker
+    # adapter registry, packet transport internals, lock protocol and selection
+    # scoring stay internal.
+    "run_task",
+    "task_report",
+    "task_return",
+    "task_validate",
+    "task_repair",
+    "task_review",
+    "task_verify",
+    "task_accept",
     "audit_prompts",
     "set_efficiency",
     "create_proof_contract_state",

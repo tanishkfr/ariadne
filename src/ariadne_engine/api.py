@@ -1335,6 +1335,63 @@ def start_task(
     )
 
 
+# ------------------------------------------------------ Ariadne 2.3B task execution
+# The T1 lifecycle over run state: run, return, validate, repair, review, verify,
+# accept, and the task briefing. Each delegates to the same runtime command the
+# CLI runs, so the programmatic surface cannot be weaker than the operator's.
+
+def run_task(run_root=None, project=None, *, args: argparse.Namespace | None = None, **options) -> Result:
+    """Drive a prepared T1 task through worker execution and the engine lifecycle."""
+    return _call("task_run_command", {"run_root": run_root, "project": project, **options}, args=args)
+
+
+def task_report(run_root=None, project=None, task="", *, args: argparse.Namespace | None = None, **options) -> Result:
+    """The durable task briefing: state, attempts, methods, gates, continuation."""
+    return _call(
+        "task_status_command",
+        {"run_root": run_root, "project": project, "task": task, **options},
+        args=args,
+    )
+
+
+def task_return(run_root=None, project=None, input=None, *, args: argparse.Namespace | None = None, **options) -> Result:
+    """Ingest one T1 worker return and continue into independent validation."""
+    return _call(
+        "task_return_command",
+        {"run_root": run_root, "project": project, "input": input, **options},
+        args=args,
+    )
+
+
+def task_validate(run_root=None, project=None, *, args: argparse.Namespace | None = None, **options) -> Result:
+    """Rerun the task contract's required checks on the returned attempt."""
+    return _call("task_validate_command", {"run_root": run_root, "project": project, **options}, args=args)
+
+
+def task_repair(run_root=None, project=None, *, args: argparse.Namespace | None = None, **options) -> Result:
+    """Prepare one bounded repair attempt inside the repair budget."""
+    return _call("task_repair_command", {"run_root": run_root, "project": project, **options}, args=args)
+
+
+def task_review(run_root=None, project=None, *, args: argparse.Namespace | None = None, **options) -> Result:
+    """Prepare or ingest the independent review of the validated attempt."""
+    return _call("task_review_command", {"run_root": run_root, "project": project, **options}, args=args)
+
+
+def task_verify(run_root=None, project=None, *, args: argparse.Namespace | None = None, **options) -> Result:
+    """Run the engine's Proof Pass for the current task."""
+    return _call("task_verify_command", {"run_root": run_root, "project": project, **options}, args=args)
+
+
+def task_accept(run_root=None, project=None, identity=None, outcome=None, *, args: argparse.Namespace | None = None, **options) -> Result:
+    """Record the human acceptance or rejection of a verified task."""
+    return _call(
+        "task_accept_command",
+        {"run_root": run_root, "project": project, "identity": identity, "outcome": outcome, **options},
+        args=args,
+    )
+
+
 def orchestration_report(state, task_id) -> dict:
     """What orchestration bought for one task, from measured records only."""
     from . import orchestration
@@ -1625,6 +1682,14 @@ __all__ = [
     "orchestration_report",
     "plan_task",
     "start_task",
+    "run_task",
+    "task_report",
+    "task_return",
+    "task_validate",
+    "task_repair",
+    "task_review",
+    "task_verify",
+    "task_accept",
     "audit_prompts",
     "set_efficiency",
     "plan_migration",

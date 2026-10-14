@@ -470,7 +470,12 @@ def ensure_claims(
     if completion_statements:
         for stmt in completion_statements:
             mapped = claims_module.map_to_requirements(stmt, requirements)
-            scope = [str(m.get("requirement_id", "")) for m in mapped if m.get("requirement_id")]
+            # ``requirement_scope`` is a list of requirement *records*; the mapped
+            # rows carry ids, so resolve them back before handing the scope over.
+            # Passing bare ids here crashed claim extraction the first time a real
+            # task statement overlapped a requirement (Ariadne 2.3B).
+            scope_ids = {str(m.get("requirement_id", "")) for m in mapped if m.get("requirement_id")}
+            scope = [req for req in requirements if str(req.get("requirement_id", "")) in scope_ids]
             out.extend(claims_module.extract(
                 state, actor=worker_identity, statement=stmt, origin="PROSE",
                 contract_id=contract_id, work_digest=work_digest, task_id=task_id,
@@ -495,6 +500,7 @@ def ensure_evidence(
     work_digest: str,
     evidence_kind: str = "RUNTIME",
     observation: str = "",
+    kinds: Sequence[str] | None = None,
 ) -> list[dict]:
     from .acceptance import evidence as evidence_module
 
@@ -503,23 +509,28 @@ def ensure_evidence(
     existing = evidence_module.current(state, work_digest=work_digest, contract_revision=revision)
     if existing:
         return existing
+    # ``kinds`` lets a caller present more than one observed evidence kind (for
+    # example RUNTIME plus a TEST the engine itself reran). The default keeps the
+    # original single-RUNTIME behavior for every existing caller.
+    evidence_kinds = [str(item) for item in (kinds or (evidence_kind,)) if str(item)]
     out = []
-    for req in requirements:
-        # Minimal honest evidence: an engine observation bound to the exact work
-        # digest, derived from the contract record. It establishes that work was
-        # presented for verification, not that the requirement is satisfied --
-        # verdicts therefore stay UNPROVEN until stronger evidence arrives, which
-        # is exactly the Claim-Evidence Gap the product must keep visible.
-        out.append(evidence_module.record(
-            state, kind=evidence_kind, stance="SUPPORTS",
-            producer="ar-224-verify", producer_role="engine",
-            observation=observation or f"work {work_digest[:12]} presented for verification",
-            requirement_ids=[str(req.get("requirement_id", ""))],
-            source_record_id=str(contract_record.get("contract_id", "")),
-            source_kind="ENGINE_RECORD",
-            work_digest=work_digest, contract_revision=revision, contract_id=contract_id,
-            task_id=str(contract_record.get("task_id", "")),
-        ))
+    for kind in evidence_kinds:
+        for req in requirements:
+            # Minimal honest evidence: an engine observation bound to the exact work
+            # digest, derived from the contract record. It establishes that work was
+            # presented for verification, not that the requirement is satisfied --
+            # verdicts therefore stay UNPROVEN until stronger evidence arrives, which
+            # is exactly the Claim-Evidence Gap the product must keep visible.
+            out.append(evidence_module.record(
+                state, kind=kind, stance="SUPPORTS",
+                producer="ar-224-verify", producer_role="engine",
+                observation=observation or f"work {work_digest[:12]} presented for verification",
+                requirement_ids=[str(req.get("requirement_id", ""))],
+                source_record_id=str(contract_record.get("contract_id", "")),
+                source_kind="ENGINE_RECORD",
+                work_digest=work_digest, contract_revision=revision, contract_id=contract_id,
+                task_id=str(contract_record.get("task_id", "")),
+            ))
     return out
 
 
@@ -534,11 +545,18 @@ def verify_task(
     completion_statements: Sequence[str] = (),
     independent_review: Mapping[str, Any] | None = None,
     require_independent_review: bool = False,
+    evidence_kinds: Sequence[str] | None = None,
+    evidence_observation: str = "",
 ) -> dict:
     """Outcome-oriented verify: request + work in, Proof Receipt out.
 
     Delegates every semantic to the AR-223 acceptance engine; this layer only
     constructs the verification model the user must not build by hand.
+    ``evidence_kinds`` and ``evidence_observation`` let a caller whose run
+    genuinely observed more than the default RUNTIME presentation (for example a
+    T1 task whose contract commands the engine itself reran) record those kinds;
+    the observation text is stored verbatim, so an overstatement would be a
+    visible lie in the record rather than an invisible one.
     """
     from .acceptance import gates as gates_module
 
@@ -554,7 +572,10 @@ def verify_task(
         work_digest=digest, worker_identity=worker_identity,
         completion_statements=completion_statements,
     )
-    ensure_evidence(state, contract_record=contract_record, requirements=requirements, work_digest=digest)
+    ensure_evidence(
+        state, contract_record=contract_record, requirements=requirements, work_digest=digest,
+        observation=str(evidence_observation or ""), kinds=evidence_kinds,
+    )
     contract_module_active = contract_record
     pass_record = gates_module.run_pass(
         state, contract_id=str(contract_module_active.get("contract_id", "")),
