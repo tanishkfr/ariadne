@@ -32,6 +32,8 @@ from .contracts import ContractError, InvalidTransition, PolicyRefusal
 
 STAGE_TRANSITIONS: frozenset[tuple[str | None, str | None]] = frozenset({
     (None, "S1"),
+    (None, "T1"),        # the universal task entry prepares a bounded task packet
+    ("T1", "T1"),        # a same-stage task retry prepares a new linked child
     ("S1", "S1"),        # reasoner retry: a new linked child at the same boundary
     ("S1", "S2"),
     ("S1", "S3"),

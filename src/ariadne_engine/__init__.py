@@ -81,7 +81,9 @@ from . import (  # noqa: E402
     review,
     routing,
     serialization,
+    skills,
     statemachine,
+    tasks,
     tooling,
     verification,
 )
@@ -123,7 +125,9 @@ __all__ = [
     "review",
     "routing",
     "serialization",
+    "skills",
     "statemachine",
+    "tasks",
     "tooling",
     "verification",
 ]
