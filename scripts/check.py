@@ -76,6 +76,8 @@ REQUIRED = [
     ".agents/skills/ariadne/references/creative-intelligence.md",
     ".agents/skills/ariadne/references/creative-operations.md",
     "skills/visual-qa.md", "skills/creative-review.md", "skills/social-strategy.md",
+    "TASK-ROUTING.md",
+    "prompts/task-kickoff.md",
 ]
 
 #: The only directories a document may live in. An explicit list, searched without
@@ -254,6 +256,17 @@ SKILL_FILES = [
     "skills/visual-qa.md",
     "skills/creative-review.md",
     "skills/social-strategy.md",
+    # Ariadne 2.3A native engineering skills: same executable contract, so the
+    # same check holds them to a declared trigger, owner, inputs, output and a
+    # stop condition.
+    "skills/root-cause.md",
+    "skills/blast-radius.md",
+    "skills/behavior-tests.md",
+    "skills/architecture-evaluation.md",
+    "skills/adversarial-review.md",
+    "skills/performance-investigation.md",
+    "skills/anti-slop.md",
+    "skills/engineering-reflection.md",
 ]
 
 DEPENDENCY_AUTHORITY_FILES = (

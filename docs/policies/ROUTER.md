@@ -6,6 +6,8 @@ Then: [WORKFLOW.md](WORKFLOW.md) for stages, gates, roles, and autonomy.
 
 **The router does not match keywords.** It builds a small interpretation of what you asked for, then routes from that. Keyword matching confidently produces the wrong workflow whenever your intent differs from your literal words, which is most of the time.
 
+**Scope.** This router interprets *creative projects*. An everyday engineering request — a defect, a feature, a refactor, a measured performance change, an audit, a read-only question — enters the lightweight task workflow described in [TASK-ROUTING.md](TASK-ROUTING.md) instead. A request that arrives as a project still routes here, through these five modes, unchanged.
+
 ---
 
 ## Rule index

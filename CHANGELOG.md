@@ -9,6 +9,51 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+
+## 2.3 development (AR-225) — NOT RELEASED
+
+`VERSION` remains **2.2.0** until release readiness is established. AR-225 is
+development work on the `v2/2.3a-universal-entry` branch and no release is claimed.
+
+### Universal task entry: a request no longer has to be a project
+
+**The lesson.** Every route into Ariadne assumed a creative project: five modes, a
+design thesis, a direction gate. That assumption was wrong for most of what people
+actually ask a coding agent to do. "Fix the failing export" was forced to become a
+project brief or was abandoned to an unreviewed ad-hoc edit — the two worst options,
+and the second is how verified work stops being verified.
+
+AR-225 adds the entry boundary: `$ariadne` interprets the request, discovers the
+real project state, and selects one of two workflows.
+
+- **`ariadne_engine/tasks.py`** builds the interpretation frame (action, object,
+  read-only, design obligation), the workflow family, and the plan. It reuses the
+  existing characterisation and the simple/standard/complex path planner; it does
+  not replace them.
+- **`ariadne_engine/skills.py`** is the native engineering skill registry —
+  root-cause investigation, blast-radius analysis, behaviour-focused tests,
+  architecture evaluation, adversarial review, performance investigation,
+  anti-slop, and engineering reflection — with deterministic selection, reasons,
+  exclusions, capability gaps, and selected-only document loading.
+- **`T1`** is the lightweight task boundary: `ariadne.py task-plan` is read-only
+  planning; `ariadne.py task-start` prepares one bounded worker packet with the
+  same contract shape an S4B packet has. The stage transitions table gained
+  `(None, T1)` and `(T1, T1)` and nothing else.
+- **The creative workflow is unchanged.** A request that arrives as a project still
+  routes through ROUTER.md, Design Intelligence, and G1.
+
+Authority is untouched: a plan names gates, never grants one; a selected skill is
+a method, not a permission; dependencies still stop at G2; deployment still stops
+at G4; acceptance is still the human G3 decision.
+
+Two latent transport self-test defects were repaired on the way, because they made
+negative controls unrunnable: the S2 privacy control removed a filename that had
+moved under `docs/policies/`, and three canonical-source controls looked for
+`DESIGN-TASTE.md` at its pre-reorganisation path. A control that cannot run is not
+a control.
+
+---
+
 ## 2.2 development (AR-220) — NOT RELEASED
 
 `VERSION` remains **2.1.0**. The release gate ties `VERSION` to the release-notes

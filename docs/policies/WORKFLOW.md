@@ -17,6 +17,23 @@ Routing: [ROUTER.md](ROUTER.md). Tools: [MODEL-ROUTING.md](MODEL-ROUTING.md).
 
 ---
 
+## The task boundary (T1)
+
+Requests that are not creative projects do not enter S1-S6. They enter the
+lightweight task workflow: the intent is interpreted, the workflow family chosen,
+and one bounded implementation boundary prepared. That boundary is **T1**, and it
+carries the same worker contract an S4B packet does — objective, permitted scope,
+invariants, prohibited actions, stop and escalation conditions, validation
+commands, and a bounded repair budget.
+
+The lifecycle is unchanged in meaning: `baseline -> implementation -> validation
+-> routine repair -> validation -> result/checkpoint`. A worker return is
+`IMPLEMENTED`, never accepted; validation, review, and the G3 human acceptance
+decision keep their existing owners. Entry rules live in
+[TASK-ROUTING.md](TASK-ROUTING.md).
+
+---
+
 ## The five gates
 
 A gate is a full stop. Work does not continue until a human types approval.
