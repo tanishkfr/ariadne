@@ -1,6 +1,6 @@
 ---
 name: ariadne
-description: Start, run, resume, or recover an Ariadne creative-production project from an ordinary-language brief. Use when the user invokes Ariadne, asks to build a website/app/game/content project through Ariadne, or returns to an existing Ariadne project. Do not use for unrelated repository maintenance or a one-off code edit.
+description: Start, run, resume, or recover an Ariadne project or everyday engineering task from an ordinary-language brief. Use when the user invokes Ariadne, asks to build a website/app/game/content project through Ariadne, asks for a feature, bug fix, refactor, performance change, audit, or verification of existing work, or returns to an existing Ariadne project. Do not use for unrelated repository maintenance or an edit the user has not asked Ariadne to run or verify.
 ---
 
 # Ariadne
@@ -26,6 +26,41 @@ version, file hashes and this managed skill agree, and `scripts/ariadne.py`,
 the three files are the minimum check. If validation fails, stop with one
 action: run `ariadne install` to repair it. Do not reconstruct policies from
 this skill or from conversation history.
+
+## Any request: task or project
+
+`$ariadne` accepts everyday engineering requests as well as creative projects.
+Interpret first, then act:
+
+1. If a run already records this project, resume it as in the section below.
+2. Otherwise run `python <root>/scripts/ariadne.py task-plan --project <project>
+   --request "<the user's words>"` before starting anything. It writes nothing,
+   and it returns the interpretation frame, the workflow family, the execution
+   path, the selected native skills, and the gates ahead.
+3. Follow the plan's `Next` line:
+   - **task** — run `ariadne.py task-start` with the same request, plus
+     `--scope <path>` for every permitted file, directory, or narrow glob and
+     `--validate "<command>"` for every bounded validation command. These two
+     are part of the bounded worker contract; never invent them. The prepared T1
+     packet is the work surface, and its selected skill methods are inside it.
+   - **project** — start the full creative workflow with `ariadne.py start` as
+     described below. Do not run `task-start` for a project: a new direction
+     needs the design-intelligence stages and the human G1 decision.
+   - **resume** — run `status --project <project>` and continue from its next
+     action.
+   - **unresolved** — ask the one question the plan names, then re-run
+     `task-plan`. Do not guess a workflow.
+   - **read-only** — perform the investigation in this session; no worker packet
+     and no write authorisation are needed.
+4. Only pass `--intent`, `--action`, or `--object` when you have actually
+   interpreted the user's words; declarations are recorded as user-declared and
+   outrank the token evidence. Never pass them to force a workflow the request
+   does not support.
+
+Task boundaries keep every existing rule: dependencies still stop at G2, work
+that leaves the machine still stops at G4, and acceptance remains the human G3
+decision. `task-plan` and `task-start` never grant anything; a selected skill is
+a method, not a permission.
 
 ## Start or resume
 

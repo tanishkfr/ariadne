@@ -43,6 +43,7 @@ FRIENDLY_STAGES = {
     "S3": "design direction",
     "S4A": "implementation plan",
     "S4B": "implementation and mechanical QA",
+    "T1": "task implementation",
     "S5": "independent review",
     "S6": "retrospective",
 }
@@ -142,6 +143,11 @@ ECONOMICS = ENGINE.economics
 EFFICIENCY = ENGINE.efficiency
 HARNESS = ENGINE.harness
 TOOLING = ENGINE.tooling
+# Ariadne 2.3A universal task entry. The runtime drives the engine's
+# interpretation, plan, and skill selection; it owns no classification rule of
+# its own, so the CLI and the programmatic API cannot disagree about a route.
+TASKS = ENGINE.tasks
+SKILLS = ENGINE.skills
 ARTIFACTS = ENGINE.artifacts
 HISTORY = ENGINE.history
 ORCHESTRATION = ENGINE.orchestration
@@ -683,6 +689,11 @@ def transport_namespace(**values) -> argparse.Namespace:
         assets=None,
         target=None,
         lenses=None,
+        # Ariadne 2.3A task packet transport.
+        task_plan=None,
+        task_contract=None,
+        task_request=None,
+        attempt=1,
     )
     defaults.update(values)
     return argparse.Namespace(**defaults)
@@ -1824,6 +1835,376 @@ def discover(args: argparse.Namespace) -> int:
                 print(f"  {path}")
             print("Choose the intended run explicitly; Ariadne will not guess between histories.")
     return 0 if len(matches) == 1 else 2
+
+
+# ------------------------------------------------ universal task entry (2.3A)
+
+def _task_request_value(args: argparse.Namespace) -> str:
+    request = getattr(args, "request", None)
+    if getattr(args, "request_file", None):
+        request = read(Path(args.request_file).resolve()).strip()
+    if not request or not str(request).strip():
+        raise RuntimeError_("A task needs an ordinary-language request or --request-file")
+    return str(request).strip()
+
+
+def _declared_host_capabilities(args: argparse.Namespace) -> dict | None:
+    """Host capabilities as the caller declared them, over the core defaults.
+
+    Without flags the runtime's own core contract is the declared set
+    (:data:`tooling.CORE_CAPABILITIES`). ``--host-capability name=unavailable``
+    marks one capability absent, and ``--host-capability name`` adds one the host
+    actually offers (for example ``capture`` for rendered evidence). A capability
+    that is neither offered nor declared is absent, never assumed.
+    """
+    overrides = getattr(args, "host_capability", None) or ()
+    if not overrides:
+        return None
+    values = {str(name): "available" for name in TOOLING.CORE_CAPABILITIES}
+    for item in overrides:
+        name, _, status = str(item).partition("=")
+        name = name.strip()
+        if not name:
+            raise RuntimeError_("--host-capability needs a capability name, optionally name=status")
+        values[name] = status.strip() or "available"
+    return values
+
+
+def build_task_plan(args: argparse.Namespace) -> tuple[Path, dict, list[Path]]:
+    """Interpret one request into a task plan without writing anything.
+
+    Used by both ``task-plan`` and ``task-start``, so the read-only briefing and
+    the prepared run can never disagree about what was interpreted.
+    """
+    project = Path(args.project).resolve()
+    request = _task_request_value(args)
+    runs = discover_run_roots(project)
+    plan = TASKS.plan(
+        request=request,
+        project=project,
+        project_evidence=TASKS.inspect_project(project),
+        run_roots=[str(path) for path in runs],
+        declared_intent=str(getattr(args, "intent", "") or ""),
+        declared_action=str(getattr(args, "action", "") or ""),
+        declared_object=str(getattr(args, "object", "") or ""),
+        scope=tuple(getattr(args, "scope", None) or ()),
+        validation=tuple(getattr(args, "validate", None) or ()),
+        dependencies=tuple(getattr(args, "dependency", None) or ()),
+        declared_capabilities=_declared_host_capabilities(args),
+        explicit_skills=tuple(getattr(args, "skill", None) or ()),
+        run_id=slug(project.name),
+    )
+    return project, plan, runs
+
+
+def print_task_plan(plan: dict) -> None:
+    """The operator-facing planning block. The frame is shown, not just the result."""
+    frame = plan.get("frame") or {}
+    workflow = plan.get("workflow") or {}
+    path = plan.get("path") or {}
+    selection = plan.get("skills") or {}
+    scope_view = plan.get("scope") or {}
+    validation_view = plan.get("validation") or {}
+    print("TASK PLAN")
+    print(f"Request:      {str(plan.get('request', ''))[:160]}")
+    print(f"Action:       {frame.get('action') or 'UNRESOLVED'} ({frame.get('action_source') or 'not-observed'})")
+    print(f"Object:       {frame.get('object') or 'UNRESOLVED'} ({frame.get('object_source') or 'not-observed'})")
+    print(f"Intent:       {frame.get('family') or 'UNRESOLVED'} (confidence {frame.get('confidence', 'LOW')})")
+    print(f"Workflow:     {workflow.get('family')} — {workflow.get('reason', '')}")
+    print(f"Execution:    {path.get('path', 'not planned')}; retained: {', '.join(path.get('retained') or []) or 'none'}")
+    if path.get("skipped"):
+        print(f"Skipped:      {', '.join(path.get('skipped') or [])}")
+    print(f"Write auth:   {plan.get('write_authorization')}")
+    selected = selection.get("selected") or []
+    if selection.get("delegated_to"):
+        print(f"Skills:        delegated to {selection['delegated_to']}")
+    elif selected:
+        print("Skills:")
+        for entry in selected:
+            marker = "mandatory" if entry.get("mandatory") else "selected"
+            print(f"  - {entry.get('id')} ({marker}): {entry.get('reason')}")
+    else:
+        print("Skills:        none selected — " + (
+            "no additional skill applies to this task"
+            if selection.get("status") == "selected" else
+            "the selection was refused: " + "; ".join(str(item.get('reason', '')) for item in selection.get('conflicts') or [])
+        ))
+    gaps = (plan.get("capabilities") or {}).get("gaps") or []
+    if gaps:
+        print("Capability gaps:")
+        for gap in gaps:
+            print(f"  - {gap.get('capability')}: {gap.get('reason')}")
+    print(f"Scope:        {', '.join(scope_view.get('declared') or []) or 'not declared'}")
+    declared_validation = validation_view.get("declared") or []
+    print(f"Validation:   {', '.join(declared_validation) or 'not declared'}"
+          + (f"; detected: {', '.join(validation_view.get('detected') or [])}" if validation_view.get("detected") else ""))
+    gates = (plan.get("approvals") or {}).get("gates_ahead") or []
+    print(f"Gates ahead:  {', '.join(gates) or 'none recorded'}")
+    print(f"Status:       {plan.get('status')}")
+    for index, question in enumerate(plan.get("questions") or [], start=1):
+        print(f"Question {index}:   {question.get('question')} ({question.get('why')})")
+    print(f"Next:         {plan.get('next')}")
+
+
+def task_plan_command(args: argparse.Namespace) -> int:
+    """Read-only universal entry: interpret, route, select skills, prepare nothing."""
+    project, plan, runs = build_task_plan(args)
+    if getattr(args, "json", False):
+        payload = {
+            "project": str(project),
+            "runs": [str(path) for path in runs],
+            "plan": plan,
+            "skills_registry": SKILLS.registry_view() if getattr(args, "registry", False) else None,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    else:
+        print_task_plan(plan)
+        if getattr(args, "registry", False):
+            view = SKILLS.registry_view()
+            print("")
+            print(f"Skill registry: {view['count']} entries, policy {view['policy']}")
+            for entry in view["skills"]:
+                print(f"  - {entry['id']} v{entry['version']}: {entry['title']}")
+    return 0 if str(plan.get("status")) == TASKS.STATUS_READY else 2
+
+
+def _task_scope_rows(plan: dict) -> list[tuple[str, str, str]]:
+    rows = []
+    for item in (plan.get("scope") or {}).get("declared") or []:
+        text = str(item)
+        actions = "read, edit"
+        if any(character in text for character in "*?[]"):
+            actions = "read (glob)"
+        rows.append((text, actions, "declared permitted scope for this task"))
+    if not rows:
+        rows.append(("src/", "read", "no scope was declared; the worker may only read until the scope is resolved"))
+    return rows
+
+
+def _task_validation_rows(plan: dict) -> list[tuple[str, str, bool, str]]:
+    rows = []
+    for index, command in enumerate((plan.get("validation") or {}).get("declared") or [], start=1):
+        rows.append((f"declared check {index}", str(command), True, "exit code 0"))
+    return rows
+
+
+def _task_run_state(run_id: str, project: Path, plan: dict, run_root: Path) -> dict:
+    return {
+        "schema_version": RUNTIME_SCHEMA,
+        "run_id": run_id,
+        "mode": "task",
+        "project": str(project),
+        "run_root": str(run_root),
+        "created_at": now(),
+        "updated_at": now(),
+        "status": "active",
+        "request": str(plan.get("request", "")).strip(),
+        "adopt_existing": False,
+        "evidence_state": "task entry planned; provider task not yet observed",
+        "packets": [],
+        "provider_preflight": None,
+        "notes": [],
+        "human_interventions": [],
+        "creative_evidence_required": False,
+        "next": str(plan.get("next", "")),
+    }
+
+
+def _prepare_task_run(project: Path, plan: dict, args: argparse.Namespace) -> int:
+    """Create the task run and prepare the bounded worker packet through the transport."""
+    run_root = Path(args.run_root).resolve() if getattr(args, "run_root", None) else default_run_root(project)
+    if run_root.exists():
+        raise RuntimeError_(
+            f"A run directory already exists at {run_root}. Resume it instead of starting over."
+        )
+    run_id = str(getattr(args, "run_id", None) or slug(project.name))
+    contract_text = TASKS.task_contract(
+        plan,
+        scope=_task_scope_rows(plan),
+        validation=_task_validation_rows(plan),
+        role=str(getattr(args, "worker_role", None) or "bulk"),
+    )
+    contract_problems = TRANSPORT.worker_contract_problems(contract_text)
+    if contract_problems:
+        # Refused before anything is written: an unusable contract is not a run.
+        raise RuntimeError_(
+            "the generated task contract is not usable: " + "; ".join(contract_problems)
+        )
+    run_root.mkdir(parents=True)
+    (run_root / LOG_NAME).write_text(initial_log(run_id, project, str(plan.get("request", ""))), encoding="utf-8")
+
+    task_dir = run_root / "tasks" / str(plan.get("plan_id", "plan"))
+    task_dir.mkdir(parents=True)
+    (task_dir / "PLAN.json").write_text(
+        json.dumps(plan, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+    )
+    request_path = task_dir / "REQUEST.md"
+    request_path.write_text(str(plan.get("request", "")).rstrip() + "\n", encoding="utf-8")
+    contract_path = task_dir / "TASK-CONTRACT.md"
+    contract_path.write_text(contract_text, encoding="utf-8")
+
+    state = _task_run_state(run_id, project, plan, run_root)
+    TASKS.record_plan(state, plan)
+
+    packet_id, output = allocate_packet(run_root, run_id, "T1")
+    transport_args = transport_namespace(
+        stage=None,
+        project=str(project),
+        output=str(output),
+        packet_id=packet_id,
+        retry=bool(getattr(args, "retry", False)),
+        provider=str(getattr(args, "provider", "") or "") or None,
+        worker_role=str(getattr(args, "worker_role", "") or "") or None,
+        attempt=int(getattr(args, "attempt", 1) or 1),
+        synthetic_validation=bool(getattr(args, "synthetic_validation", False)),
+        task_plan=str(task_dir / "PLAN.json"),
+        task_contract=str(contract_path),
+        task_request=str(request_path),
+    )
+    revision = str(TRANSPORT.project_git_snapshot(project).get("head", ""))
+    candidates = TRANSPORT.plan_task_sources(plan, project, transport_args)
+    context_decision = CONTEXT.decide(
+        state,
+        stage="T1",
+        candidates=candidates,
+        characterisation=plan.get("characterisation") or {},
+        run_root=run_root,
+        revision_hash=revision,
+    )
+    context_plan = CONTEXT.plan(context_decision)
+    TRANSPORT.prepare_task(transport_args, context_plan=context_plan)
+    prepared_manifest = json.loads(read(output / TRANSPORT.MANIFEST_NAME))
+    final_context = CONTEXT.finalise(context_decision, prepared_manifest)
+    CONTEXT.record(state, final_context)
+    CONTEXT.update_cache(run_root, state, final_context, prepared_manifest, revision_hash=revision)
+    context_metrics = CONTEXT.summarise(final_context)
+    emit_event(
+        run_root, "context_decided", state=state, task_id=packet_id, stage="T1",
+        decision=final_context["decision_id"], **context_metrics,
+    )
+
+    task_characterisation = plan.get("characterisation") or {}
+    route_decision = ROUTING.route(
+        state,
+        stage="T1",
+        characterisation=task_characterisation,
+        task_id=packet_id,
+        declared_role=str(getattr(args, "worker_role", None) or ""),
+        reason="the lightweight task boundary selects its implementation worker role",
+    )
+    ROUTING.record(state, route_decision)
+    if route_decision.get("status") in ("no-route", "blocked"):
+        raise RuntimeError_(
+            "the worker route for this task is not available: " + str(route_decision.get("reason", ""))
+        )
+
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="stage",
+            to="T1",
+            reason="The interpreted task prepared one bounded implementation boundary.",
+            evidence=(str(output), packet_id),
+            packet={"id": packet_id, "stage": "T1", "path": str(output)},
+            actor="human",
+            operation="task-start",
+        ),
+        permitted=True,
+    )
+    worker = update_worker_state(state, prepared_manifest, None, escalation_increment=0, execution={})
+    append_worker_telemetry(
+        run_root,
+        "worker-prepared",
+        task_id=worker.get("task_id", packet_id),
+        worker_role=worker.get("worker_role", "bulk"),
+        provider=worker.get("provider", "unknown"),
+        model=worker.get("model", "unknown"),
+        attempt=worker.get("attempt", 1),
+        validation_attempts=0,
+        files_changed=[],
+        tests_result="not run",
+        escalation_count=0,
+        review_outcome="not reviewed",
+        accepted="unknown",
+        usage="unknown",
+        cost="unknown",
+        execution="",
+    )
+    state["updated_at"] = now()
+    state["evidence_state"] = "verified-transport; task not yet observed"
+    state["next"] = "Run the prepared task in the selected implementation worker, then record its return."
+    write_state(run_root, state)
+    append_log(
+        run_root,
+        "Task prepared",
+        str(plan.get("request", "")).strip(),
+        (
+            "Verified: task contract bounded, packet sources hashed, context decision recorded, "
+            f"skills selected: {', '.join(str(item.get('id')) for item in (plan.get('skills') or {}).get('selected') or []) or 'none'}."
+        ),
+        [str(output / "packet.txt"), str(output / "manifest.json"), str(contract_path)],
+        "Transport verified; no provider task has run and no gate was granted.",
+        "Open the selected implementation worker session with packet.txt.",
+    )
+    print(f"Done. The task is prepared at {output}.")
+    print(f"Packet: {output / 'packet.txt'}")
+    print(f"Contract: {contract_path}")
+    print("From you: open the selected implementation worker session and paste packet.txt.")
+    print(
+        "Skills selected: "
+        + (", ".join(str(item.get("id")) for item in (plan.get("skills") or {}).get("selected") or []) or "none")
+        + ". Independent validation remains Ariadne's, not the worker's report."
+    )
+    return 0
+
+
+def task_start_command(args: argparse.Namespace) -> int:
+    """The universal entry's write path: prepare the interpreted task, or redirect it."""
+    project, plan, runs = build_task_plan(args)
+    workflow = plan.get("workflow") or {}
+    family = str(workflow.get("family", ""))
+    # Resume before anything else: a continuation request is answered by the run
+    # that already exists, and the duplicate-history refusal is for a second
+    # history on the same project, not for continuing one.
+    if family == TASKS.WORKFLOW_RESUME:
+        print("Resume the recorded run: python scripts/ariadne.py status --project <project>")
+        for run_root in (workflow.get("resume") or {}).get("runs") or []:
+            print(f"  recorded run: {run_root}")
+        return 2
+    if family == TASKS.WORKFLOW_PROJECT:
+        print("This request belongs to the full project workflow: " + str(workflow.get("reason", "")))
+        print("Start it with: python scripts/ariadne.py start --project <project> --request <request>")
+        return 2
+    if family == TASKS.WORKFLOW_UNRESOLVED:
+        print("I need one answer before preparing anything:")
+        for question in plan.get("questions") or []:
+            print(f"  - {question.get('question')} ({question.get('why')})")
+        return 2
+    status = str(plan.get("status", ""))
+    if status == TASKS.STATUS_BLOCKED:
+        print("Stop. This task cannot be prepared as stated:")
+        for blocked in (plan.get("scope") or {}).get("protected") or []:
+            print(f"  - {blocked.get('reason')} ({blocked.get('path')}) — needs {blocked.get('gate')}")
+        for conflict in ((plan.get("skills") or {}).get("conflicts") or []):
+            print(f"  - {conflict.get('reason')}")
+        return 1
+    if status != TASKS.STATUS_READY:
+        print("This task needs a decision before preparation:")
+        for question in plan.get("questions") or []:
+            print(f"  - {question.get('question')} ({question.get('why')})")
+        return 2
+    if str(plan.get("write_authorization")) == "none":
+        print("This is a read-only task; no worker packet and no write authorization are needed.")
+        print("Perform the investigation in this session and record any claim through Ariadne verification.")
+        print(f"Intent: {str((plan.get('frame') or {}).get('family'))}; next: {plan.get('next')}")
+        return 0
+    if runs:
+        raise RuntimeError_(
+            "A run already records this project: "
+            + ", ".join(str(path) for path in runs)
+            + "; resume it with status or advance instead of creating a second history."
+        )
+    return _prepare_task_run(project, plan, args)
 
 
 def preflight_decision(availability: str, quota: str, workload: str) -> tuple[str, str]:
@@ -5768,6 +6149,7 @@ def skill_contract_problems(
         "skill-activation",
         "reasoner-status", "select-reasoner", "record-reasoner-failure",
         "references/creative-operations.md",
+        "task-plan", "task-start",
         "Never grant a gate",
     ):
         if token not in skill_text:
@@ -5797,6 +6179,12 @@ def repository_contract_problems() -> list[str]:
         ROOT / "scripts" / "reasoners.py",
         ROOT / "adapters" / "reasoners.json",
         ROOT / "adapters" / "reasoner-contract.md",
+        # Ariadne 2.3A universal task entry: the lightweight workflow is only
+        # real when its prompt, its policy, and its skill methods are present.
+        ROOT / "prompts" / "task-kickoff.md",
+        ROOT / "docs" / "policies" / "TASK-ROUTING.md",
+        ROOT / "skills" / "root-cause.md",
+        ROOT / "skills" / "anti-slop.md",
     ]
     for path in required:
         if not path.is_file():
@@ -7036,10 +7424,14 @@ def self_test() -> int:
         _s5_entry, s5_packet = current_packet(state)
         s5_manifest = json.loads(read(s5_packet / TRANSPORT.MANIFEST_NAME))
         delivered = [source["label"] for source in s5_manifest["sources"] if source.get("delivered", True)]
+        # The evaluation rubric moved under docs/policies during the documentation
+        # reorganisation; the label is the source's real path now, and the case was
+        # silently red because it still named the bare filename.
+        s5_expected_delivery = ["current S5 prompt block", "docs/policies/EVALUATION-RUBRICS.md"]
         case(
             "complete return automatically reaches isolated S5",
             state["packets"][-1]["stage"] == "S5"
-            and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"],
+            and delivered == s5_expected_delivery,
         )
         REASONERS.detect = fixture_detect
         try:
@@ -7055,7 +7447,7 @@ def self_test() -> int:
             ]
             s5_claude_isolated = (
                 s5_manifest["provider"] == "claude"
-                and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"]
+                and delivered == s5_expected_delivery
             )
         finally:
             REASONERS.detect = real_detect
@@ -8757,6 +9149,46 @@ def parser() -> argparse.ArgumentParser:
     discover_p.add_argument("--project", required=True)
     discover_p.add_argument("--json", action="store_true")
 
+    def task_entry_arguments(target) -> None:
+        target.add_argument("--project", required=True)
+        target.add_argument("--request")
+        target.add_argument("--request-file")
+        target.add_argument("--intent", choices=list(TASKS.INTENT_FAMILIES),
+                            help="the interpreted intent family; omit to let the frame interpret the request")
+        target.add_argument("--action", choices=list(TASKS.ACTION_VOCABULARY),
+                            help="the interpreted frame action, when the caller resolved it")
+        target.add_argument("--object", help="the interpreted object, when the caller resolved it")
+        target.add_argument("--scope", action="append", help="permitted files, directories, or globs; repeatable")
+        target.add_argument("--validate", action="append",
+                            help="a bounded validation command for the task contract; repeatable")
+        target.add_argument("--dependency", action="append",
+                            help="a dependency the human already approved; raises G2 accountability, never grants it")
+        target.add_argument("--host-capability", action="append",
+                            help="declare a host capability, optionally name=unavailable; repeatable")
+        target.add_argument("--skill", action="append",
+                            help="explicitly request a native skill by id; repeatable")
+        target.add_argument("--json", action="store_true")
+
+    task_plan_p = sub.add_parser(
+        "task-plan",
+        help="interpret a request, choose the workflow, and select skills without writing anything",
+    )
+    task_entry_arguments(task_plan_p)
+    task_plan_p.add_argument("--registry", action="store_true", help="include the native skill registry view")
+
+    task_start_p = sub.add_parser(
+        "task-start",
+        help="prepare one bounded task packet for an interpreted lightweight task",
+    )
+    task_entry_arguments(task_start_p)
+    task_start_p.add_argument("--run-root")
+    task_start_p.add_argument("--run-id")
+    task_start_p.add_argument("--provider")
+    task_start_p.add_argument("--worker-role", choices=list(TRANSPORT.WORKER_ROLES))
+    task_start_p.add_argument("--attempt", type=int, default=1)
+    task_start_p.add_argument("--retry", action="store_true")
+    task_start_p.add_argument("--synthetic-validation", action="store_true")
+
     status_p = sub.add_parser("status", help="show the current project state and next action")
     run_selector(status_p)
     status_p.add_argument("--json", action="store_true")
@@ -9385,6 +9817,8 @@ def main() -> int:
         commands = {
             "start": ENGINE_API.start_run,
             "discover": discover,
+            "task-plan": task_plan_command,
+            "task-start": task_start_command,
             "status": ENGINE_API.status,
             "reasoner-status": reasoner_status,
             "select-reasoner": select_reasoner,

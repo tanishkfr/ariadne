@@ -153,6 +153,13 @@ PROVISIONAL = (
     "compact_history",
     "plan_execution_path",
     "orchestration_report",
+    # Ariadne 2.3A universal task entry. Provisional on purpose: the interpretation
+    # frame, the plan record, and the skill-selection record are real and tested,
+    # and their shape may still move while the vocabulary around the lightweight
+    # task workflow settles. What is deliberately absent is every internal of the
+    # selector, the registry entry format, and the packet transport.
+    "plan_task",
+    "start_task",
     "audit_prompts",
     "set_efficiency",
     "create_proof_contract_state",

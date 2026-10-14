@@ -1294,6 +1294,47 @@ def plan_execution_path(*, stakes="UNKNOWN", **options) -> dict:
     return orchestration.path_plan(stakes=stakes, **options)
 
 
+def plan_task(
+    project=None,
+    request=None,
+    *,
+    args: argparse.Namespace | None = None,
+    **options,
+) -> Result:
+    """Interpret one request and return the universal-entry plan (writes nothing).
+
+    Provisional surface: the task entry is real and tested, and its record shape
+    may still evolve within v2. It never prepares a packet, never creates a run,
+    and never grants anything; ``start_task`` is the write path.
+    """
+    return _call(
+        "task_plan_command",
+        {"project": project, "request": request, **options},
+        args=args,
+    )
+
+
+def start_task(
+    run_root=None,
+    project=None,
+    request=None,
+    *,
+    args: argparse.Namespace | None = None,
+    **options,
+) -> Result:
+    """Prepare one lightweight task packet for an interpreted task request.
+
+    Provisional surface. It refuses a project-workflow or unresolved request and
+    directs the caller to the right next action; it creates no gate and grants no
+    write authorisation the plan did not carry.
+    """
+    return _call(
+        "task_start_command",
+        {"run_root": run_root, "project": project, "request": request, **options},
+        args=args,
+    )
+
+
 def orchestration_report(state, task_id) -> dict:
     """What orchestration bought for one task, from measured records only."""
     from . import orchestration
@@ -1582,6 +1623,8 @@ __all__ = [
     "compact_history",
     "plan_execution_path",
     "orchestration_report",
+    "plan_task",
+    "start_task",
     "audit_prompts",
     "set_efficiency",
     "plan_migration",
