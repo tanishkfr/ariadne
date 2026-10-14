@@ -649,7 +649,7 @@ def worker_validation_problems(value: dict, packet_id: str | None = None) -> lis
         problems.append("worker validation evidence has wrong kind")
     if packet_id and value.get("packet_id") != packet_id:
         problems.append("worker validation evidence has wrong packet ID")
-    if value.get("stage") != "S4B":
+    if value.get("stage") not in WORKER_PACKET_STAGES:
         problems.append("worker validation evidence has wrong stage")
     if value.get("status") not in ("passed", "failed", "blocked"):
         problems.append("worker validation evidence has invalid status")
@@ -806,7 +806,7 @@ def worker_retry_context(
     """Carry only bounded repair clues forward; never replay an old transcript."""
     if (
         not parent
-        or parent.get("stage") != "S4B"
+        or parent.get("stage") not in WORKER_PACKET_STAGES
         or evidence_path is None
         or not evidence_path.is_file()
     ):
@@ -839,6 +839,18 @@ def worker_retry_context(
             "failed_checks": failed_checks[:VALIDATION_COMMAND_LIMIT],
             "changed": [compact_worker_text(path, 240) for path in changed_paths[:20]],
             "outside": [compact_worker_text(path, 240) for path in outside_paths[:20]],
+        }
+    if evidence_kind == "attempt-outcome":
+        try:
+            outcome = json.loads(read(evidence_path))
+        except (OSError, json.JSONDecodeError):
+            return {**context, "status": "unreadable", "failure_reason": "prior attempt outcome could not be read"}
+        return {
+            **context,
+            "status": outcome.get("status", "unknown"),
+            "failure_kind": outcome.get("failure_kind", "unknown"),
+            "failure_reason": compact_worker_text(outcome.get("failure_reason")),
+            "note": compact_worker_text(outcome.get("provenance", "")),
         }
     if evidence_kind == "structured-return-handoff":
         try:
@@ -1613,7 +1625,7 @@ def task_stage_contract_problems(specs: dict | None = None) -> list[str]:
 
 
 def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
-    if parent.get("stage") == "S4B":
+    if parent.get("stage") in WORKER_PACKET_STAGES:
         validation = parent_dir / "evidence" / "validation.json"
         if validation.is_file():
             try:
@@ -1624,10 +1636,23 @@ def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
             if problems:
                 raise PacketError("parent worker validation is malformed: " + "; ".join(problems))
             return validation, "worker-validation"
+    if parent.get("stage") in WORKER_PACKET_STAGES:
+        # An attempt that was interrupted before any return (a lost worker, an
+        # abandoned execution) still carries its engine-recorded outcome; that is
+        # the bounded evidence a repair attempt continues from.
+        outcome = parent_dir / "evidence" / "attempt-outcome.json"
+        if outcome.is_file():
+            try:
+                value = json.loads(read(outcome))
+            except (json.JSONDecodeError, OSError) as exc:
+                raise PacketError(f"parent attempt outcome is malformed: {exc}") from exc
+            if not isinstance(value, dict) or not value.get("status") or not value.get("failure_kind"):
+                raise PacketError("parent attempt outcome is malformed: status and failure_kind are required")
+            return outcome, "attempt-outcome"
     transcript = parent_dir / parent.get("expected_transcript", "evidence/transcript.md")
     if transcript.is_file():
         return transcript, "verbatim-transcript"
-    if parent.get("stage") == "S4B":
+    if parent.get("stage") in WORKER_PACKET_STAGES:
         returned = parent_dir / "evidence" / "return-handoff.md"
         if returned.is_file():
             problems = return_handoff_problems(read(returned))
@@ -2079,6 +2104,26 @@ def prepare_task(args: argparse.Namespace, context_plan: dict | None = None) -> 
     except (TypeError, ValueError):
         attempt = 1
     commands = validation_commands(contract_text)
+    parent_record: dict | None = None
+    parent_manifest_path: Path | None = None
+    parent_evidence_path: Path | None = None
+    parent_evidence_kind: str | None = None
+    parent_arg = str(getattr(args, "parent_packet", "") or "").strip()
+    if parent_arg or bool(getattr(args, "retry", False)):
+        if not parent_arg:
+            raise PacketError("a task retry requires the parent packet directory (--parent-packet)")
+        parent_dir = Path(parent_arg).resolve()
+        if not parent_dir.is_dir():
+            raise PacketError(f"the parent packet directory does not exist: {parent_dir}")
+        parent_manifest_path = parent_dir / MANIFEST_NAME
+        if not parent_manifest_path.is_file():
+            raise PacketError("the parent packet has no manifest")
+        parent_record = json.loads(read(parent_manifest_path))
+        if str(parent_record.get("stage")) not in TASK_STAGES[TASK_PACKET_STAGE]["allowed_parents"]:
+            raise PacketError(
+                f"a task packet may only retry a linked task packet, not {parent_record.get('stage')!r}"
+            )
+        parent_evidence_path, parent_evidence_kind = parent_evidence(parent_record, parent_dir)
     worker = {
         "task_id": packet_id,
         "role": role,
@@ -2094,7 +2139,7 @@ def prepare_task(args: argparse.Namespace, context_plan: dict | None = None) -> 
             {key: value for key, value in command.items() if key != "argv"}
             for command in commands
         ],
-        "retry_context": None,
+        "retry_context": worker_retry_context(parent_record, parent_evidence_path, parent_evidence_kind),
     }
     project_baseline = project_git_snapshot(project)
     return_target = (project / ".ariadne" / "returns" / f"{packet_id}.md").resolve()
@@ -2123,12 +2168,12 @@ def prepare_task(args: argparse.Namespace, context_plan: dict | None = None) -> 
         "project_baseline": project_baseline,
         "ariadne_commit": git_head(),
         "project": str(project),
-        "parent_id": None,
-        "parent_manifest": None,
-        "parent_manifest_sha256": None,
-        "parent_evidence": None,
-        "parent_evidence_kind": None,
-        "parent_evidence_sha256": None,
+        "parent_id": str(parent_record.get("packet_id", "")) if parent_record else None,
+        "parent_manifest": str(parent_manifest_path) if parent_manifest_path else None,
+        "parent_manifest_sha256": sha256_file(parent_manifest_path) if parent_manifest_path else None,
+        "parent_evidence": str(parent_evidence_path) if parent_evidence_path else None,
+        "parent_evidence_kind": parent_evidence_kind,
+        "parent_evidence_sha256": sha256_file(parent_evidence_path) if parent_evidence_path else None,
         "retry": bool(getattr(args, "retry", False)),
         "adopt_existing": False,
         "packet_file": PACKET_NAME,
@@ -2182,7 +2227,7 @@ def prepare_task(args: argparse.Namespace, context_plan: dict | None = None) -> 
 **Packet ID:** `{packet_id}`
 **Stage:** `{stage}`
 **Provider:** `{provider}`
-**Parent:** `none â€” task boundary`
+**Parent:** `{parent_record.get('packet_id') if parent_record else 'none — task boundary'}`
 **Ariadne commit:** `{manifest['ariadne_commit']}`
 **Project:** `{project}`
 **Status:** `PREPARED â€” NOT RUN`
@@ -3148,6 +3193,7 @@ def parser() -> argparse.ArgumentParser:
     task_parser.add_argument("--worker-role", choices=list(WORKER_ROLES))
     task_parser.add_argument("--attempt", type=int, default=1)
     task_parser.add_argument("--retry", action="store_true")
+    task_parser.add_argument("--parent-packet", help="the parent T1 packet directory a repair attempt continues")
     task_parser.add_argument("--synthetic-validation", action="store_true")
     writing_parser = sub.add_parser("prepare-writing", help="prepare a minimal writing draft, review, or revision packet")
     writing_parser.add_argument("--phase", required=True, choices=["draft", "review", "revise"])
