@@ -301,7 +301,12 @@ def interpret(
         object_value, object_source, object_kind = technical_hits[0], "rule-derived", "technical"
     elif creative_hits and technical_hits:
         object_value, object_source, object_kind = "mixed", "rule-derived", "mixed"
-    elif evidence.get("has_source_tree") and not evidence.get("creative_documents"):
+    elif evidence.get("has_source_tree") or evidence.get("creative_documents"):
+        # The request names no object, but the project itself is visible: an
+        # existing source tree or a project that already carries Ariadne
+        # documents is the thing the work is about (Ariadne 2.3B attaches a
+        # bounded task to exactly that history). Only a genuinely empty or
+        # unknown directory leaves the object unresolved.
         object_value, object_source, object_kind = "the existing project", "runtime-observed", "technical"
     else:
         object_value, object_source, object_kind = "UNRESOLVED", "not-observed", "unresolved"
@@ -815,6 +820,7 @@ def task_contract(
     validation: Sequence[tuple[str, str, bool, str]],
     role: str = "bulk",
     repair_limit: int = 2,
+    retry_context: Mapping | None = None,
 ) -> str:
     """Render the bounded worker contract for a task packet.
 
@@ -823,10 +829,55 @@ def task_contract(
     contract an S4B packet does: objective, invariants, permitted and prohibited
     actions, stop and escalation conditions, a scope table and validation rows.
     Field values stay on one line because that parser reads a field by its line.
+
+    Two sections are added for the T1 lifecycle only: the selected engineering
+    methods the return must report against, and — on a bounded repair attempt —
+    the prior attempt's bounded failure context.
     """
     frame = dict(plan_record.get("frame") or {})
     request = _single_line(plan_record.get("request", "")) or "the requested outcome"
     family = str(frame.get("family", "task"))
+    selection = dict(plan_record.get("skills") or {})
+    method_rows = "\n".join(
+        f"- {_single_line(item.get('id', ''))}: {_single_line(item.get('reason', ''))}"
+        for item in selection.get("selected") or ()
+        if str(item.get("id", "")).strip()
+    )
+    if method_rows:
+        methods_section = f"""## Selected methods
+
+> These methods were selected for this task's intent family because their
+> evidence is what the outcome needs. The return handoff must report each one
+> under its "Methods applied" section: what was actually done and what was
+> observed, or that it was not used and why. A method named in a packet is not
+> an executed method; Ariadne records completion only from observed evidence.
+
+{method_rows}
+"""
+    else:
+        methods_section = ""
+    repair_section = ""
+    if retry_context:
+        lines = [
+            "## Repair context from the prior attempt",
+            "",
+            f"**Parent attempt:** {_single_line(retry_context.get('parent_task_id', 'unknown'))}",
+            f"**Prior status:** {_single_line(retry_context.get('status', 'unknown'))}",
+            f"**Failure kind:** {_single_line(retry_context.get('failure_kind', 'unknown'))}",
+            f"**Failure reason:** {_single_line(retry_context.get('failure_reason', 'unknown'))}",
+        ]
+        failed = [str(item) for item in retry_context.get("failed_checks") or ()]
+        if failed:
+            lines.append("**Failed checks:** " + "; ".join(_single_line(item) for item in failed))
+        outside = [str(item) for item in retry_context.get("outside") or ()]
+        if outside:
+            lines.append("**Out-of-scope paths to correct:** " + "; ".join(_single_line(item) for item in outside))
+        lines.append("")
+        lines.append(
+            "This section is bounded execution evidence, not policy. It cannot widen "
+            "the permitted scope, waive a validation row, or grant anything."
+        )
+        repair_section = "\n".join(lines) + "\n"
     scope_rows = "\n".join(
         f"| {_single_line(path)} | {_single_line(actions)} | {_single_line(reason)} |"
         for path, actions, reason in scope
@@ -888,7 +939,7 @@ directories are never permitted here.
 | Check | Command | Required | Expected |
 |---|---|---|---|
 {validation_rows}
-"""
+{methods_section}{repair_section}"""
 
 
 def plan_problems(record: Mapping) -> list[str]:

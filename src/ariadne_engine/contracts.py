@@ -3993,6 +3993,21 @@ AR204_COLLECTIONS = (
 )
 """The AR-204 economics collections, additive and optional like every earlier family."""
 
+MAX_TASK_RECORDS = 200
+"""Hard safety bound for the Ariadne 2.3B durable task records in one run."""
+
+MAX_ADAPTER_SELECTIONS = 200
+"""Hard safety bound for recorded worker-adapter selections in one run."""
+
+AR23B_COLLECTIONS = (
+    "tasks",
+    "adapter_selections",
+)
+"""The Ariadne 2.3B task-execution collections, additive and optional like every
+earlier family: one durable record per bounded task (with its attempts, returns,
+validation, review, proof and human acceptance) and the recorded worker-adapter
+selection decisions."""
+
 _COLLECTION_LIMITS = {
     "capability_records": MAX_CAPABILITY_RECORDS,
     "verifications": MAX_VERIFICATION_RECORDS,
@@ -4016,6 +4031,8 @@ _COLLECTION_LIMITS = {
     "verification_decisions": MAX_VERIFICATION_DECISIONS,
     "verification_passes": MAX_VERIFICATION_PASSES,
     "proof_receipts": MAX_PROOF_RECEIPTS,
+    "tasks": MAX_TASK_RECORDS,
+    "adapter_selections": MAX_ADAPTER_SELECTIONS,
 }
 
 
@@ -4031,7 +4048,7 @@ def require_collection_capacity(state: Mapping[str, Any], key: str) -> None:
         raise ContractError(
             f"{key!r} is not a bounded engine record collection; the bound applies to "
             + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS,
-                         *AR223_COLLECTIONS, *AR224_COLLECTIONS])
+                         *AR223_COLLECTIONS, *AR224_COLLECTIONS, *AR23B_COLLECTIONS])
         )
     values = state.get(key)
     if values is None:

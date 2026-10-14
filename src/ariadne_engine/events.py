@@ -148,6 +148,22 @@ EVENT_TYPES = (
     "design_refinement_plan_created",
     "design_refinement_validated",
     "design_refinement_rerendered",
+
+    # Ariadne 2.3B task-execution vocabulary. The T1 lifecycle records its own
+    # transitions in the same append-only log rather than a second event system:
+    # a task is prepared, a worker adapter is preflighted and selected, skills
+    # are recorded from evidence, repair is prepared, and the engine's Proof
+    # Pass or the human acceptance decision settles the task.
+    "task_prepared",
+    "task_attached",
+    "task_worker_preflighted",
+    "task_worker_selected",
+    "task_skill_recorded",
+    "task_repair_prepared",
+    "task_proof_recorded",
+    "task_accepted",
+    "task_rejected",
+    "task_blocked",
 )
 """The declared event vocabulary. A type outside this set is refused, so the log
 cannot accumulate an undocumented ad-hoc event name."""
