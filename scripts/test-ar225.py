@@ -595,18 +595,21 @@ def task_start_never_prepares_a_creative_project_request():
 
 
 @case
-def task_start_refuses_to_create_a_second_history():
+def task_start_refuses_a_second_history_while_an_attempt_is_open():
     with workspace() as base:
         project = make_project(base)
         first_code, first_text = run_cli(
             "task-start", "--project", str(project), "--request", BUG_REQUEST, *BUG_ARGS,
         )
         assert first_code == 0, first_text
+        # 2.3B attaches a settled follow-up task to the recorded history instead of
+        # refusing outright; while the prepared attempt is still open, however, a
+        # second task is refused so no duplicate history and no duplicate work exist.
         code, text = run_cli(
             "task-start", "--project", str(project), "--request", BUG_REQUEST, *BUG_ARGS,
         )
         assert code == 1
-        assert "already records this project" in text
+        assert "still open" in text
         assert len(packet_dirs(run_root_for(project))) == 1
 
 
