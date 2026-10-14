@@ -10,6 +10,57 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLI
 
 ---
 
+## 2.3 development (AR-230) — NOT RELEASED
+
+`VERSION` remains **2.2.0** until release readiness is established. AR-230 is
+development work on the `v2/2.3b-end-to-end-execution` branch and no release is
+claimed.
+
+### End-to-end task execution: selection is not doing the work
+
+**The lesson.** AR-225 could prepare a bounded T1 packet and then stopped: a
+person still had to open a worker session, paste the packet, and hand the result
+back by hand. A system that selects the right process and then waits is a
+planner, not an agent, and the gap is exactly where unverified ad-hoc edits
+re-enter. AR-230 connects the prepared boundary to real execution without
+building a second engine.
+
+- **`ariadne_engine/task_execution.py`** declares worker adapters (a discovered
+  CLI harness, the invoking session, a human-driven session, or a custom local
+  command), selects one from measured facts, and records the preflight. It owns
+  the durable task record — objective, scope, contract hash, baseline revision,
+  attempts, returns, validation, review, proof and acceptance — and the
+  skill-evidence ledger that separates a worker's report from an engine
+  observation.
+- **`ariadne.py task-run`** runs the lifecycle: select and preflight, launch the
+  adapter, ingest the structured return through the same strict path an S4B
+  handoff uses (schema, task identity, contract hash, execution revision,
+  repository scope, method report), rerun the contract's required checks
+  independently, prepare and run bounded repairs inside the existing budget,
+  hand off to the required review, and finish with Proof Pass. A harness that
+  cannot authenticate is recorded as a provider failure, never a pass.
+- **`ariadne.py task-return` / `task-validate` / `task-repair` / `task-review` /
+  `task-verify` / `task-accept` / `task-status`** are the operator and
+  invoking-session surface for the same lifecycle, including resuming after an
+  interruption (`--abandon-open` records a lost worker truthfully) and the
+  human acceptance decision, which the engine records but never mints.
+- **Follow-up tasks attach.** A settled request against a recorded project
+  becomes a new bounded task inside the same run — its own identity, contract
+  and evidence — instead of a refusal or a second history. An open attempt or a
+  mid-flight creative boundary is refused by name.
+- The `Methods applied` section in the return handoff makes the selected skills
+  influence the work: a T1 return that never reports a selected method is
+  refused, a reported method is `invoked` (worker-reported), and only an
+  observable evidence output makes it `completed`.
+
+The suite `scripts/test-ar23b.py` drives the real CLI over temporary git
+projects: worker execution and validation, attachment, resume, interruption
+recovery, stale returns, contract tampering, out-of-scope changes, bounded
+repair and its limit, reviewer independence, honest blockers, the skill ledger,
+creative-workflow compatibility, and parallel-run state safety.
+
+---
+
 ## 2.3 development (AR-225) — NOT RELEASED
 
 `VERSION` remains **2.2.0** until release readiness is established. AR-225 is

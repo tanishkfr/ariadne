@@ -43,6 +43,24 @@ Interpret first, then act:
      `--validate "<command>"` for every bounded validation command. These two
      are part of the bounded worker contract; never invent them. The prepared T1
      packet is the work surface, and its selected skill methods are inside it.
+     Then carry the task through its lifecycle without making the user operate
+     packet machinery:
+     - `ariadne.py task-run` chooses a compatible worker adapter (the invoking
+       session, an installed CLI harness, or a deliberate `--adapter` /
+       `--worker-command`), records the preflight, runs the attempt, ingests the
+       return, reruns the contract's checks independently, and repairs inside
+       the bounded budget before Proof Pass.
+     - To perform the packet yourself, bind it first with
+       `task-run --adapter host-session`, do the work in this session, write the
+       marked return handoff to the transport target the packet names, and
+       record it with `task-return --input <file> --adapter host-session`. The
+       return must carry the `Methods applied` section: one line per selected
+       method, saying what was actually done and observed.
+     - When the plan retains the independent review, use `task-review` — prepare
+       the request, then ingest a judgement from a genuinely distinct
+       `--identity`. Proof Pass follows automatically; `task-status` is the
+       resume briefing. `task-accept` records the human decision and is never
+       run on the human's behalf.
    - **project** — start the full creative workflow with `ariadne.py start` as
      described below. Do not run `task-start` for a project: a new direction
      needs the design-intelligence stages and the human G1 decision.
@@ -52,7 +70,11 @@ Interpret first, then act:
      `task-plan`. Do not guess a workflow.
    - **read-only** — perform the investigation in this session; no worker packet
      and no write authorisation are needed.
-4. Only pass `--intent`, `--action`, or `--object` when you have actually
+4. A settled follow-up request against a project Ariadne already records
+   attaches as a new bounded task inside that history: `task-start` does this
+   without a second run, and refuses while an attempt is still open or while the
+   creative workflow is mid-flight. Only pass `--intent`, `--action`, or
+   `--object` when you have actually
    interpreted the user's words; declarations are recorded as user-declared and
    outrank the token evidence. Never pass them to force a workflow the request
    does not support.

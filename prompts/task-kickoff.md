@@ -59,11 +59,16 @@ RULES
 8. At most the routine repair budget named in the contract. Stop and report a
    repository conflict, an invariant at risk, a dangerous action, or an
    out-of-scope requirement instead of improvising.
+9. Report every selected method under the return's `Methods applied` heading:
+   one line per method saying what was actually done and what was observed, or
+   that it was not used and why. A method named in a packet is not an executed
+   method, and Ariadne records completion only from evidence it can observe.
 
 DONE MEANS
 The reproduction no longer reproduces - the required validation commands pass -
-the change stays inside the permitted scope - the return handoff is complete and
-verbatim - no gate is claimed. When done, fill the marked return handoff from
+the change stays inside the permitted scope - the return handoff is complete,
+including the `Methods applied` report, and verbatim - no gate is claimed. When
+done, fill the marked return handoff from
 templates/RETURN-HANDOFF.md and write it to the return target inside the packet,
 exactly as the packet instructs.
 
