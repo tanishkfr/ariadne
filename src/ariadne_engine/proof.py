@@ -107,6 +107,7 @@ def create_receipt_from_pass(
     proof_id: str = "",
     previous_id: str = "",
     reviewer: str = "ariadne-engine",
+    extra: Mapping[str, Any] | None = None,
 ) -> dict:
     pid = proof_id or str(pass_record.get("pass_id", ""))
     # pass_id is vps_...; proof_id must be VP-NNNN. If caller passed a vps id,
@@ -157,6 +158,10 @@ def create_receipt_from_pass(
         },
         "previous_proof_id": previous_id,
     }
+    for key, value in dict(extra or {}).items():
+        if key in receipt:
+            raise contracts.ContractError(f"receipt extra data may not replace the receipt's own {key}")
+        receipt[str(key)] = value
     receipt["receipt_digest"] = receipt_digest(receipt)
     problems = receipt_problems(receipt)
     if problems:
@@ -577,6 +582,7 @@ def verify_task(
     digest = str(work_digest or "").strip() or work_digest_for(task_text, work_ref)
     if not re.fullmatch(r"[0-9a-f]{16,64}", digest):
         raise contracts.ContractError("work digest must be hex 16-64 chars")
+    validation_mapping: dict[str, object] = {"recorded": [], "replayed": [], "refused": []}
     contract_record = ensure_contract(state, task_text=task_text, task_id=task_id)
     requirements = ensure_requirements(state, contract_record=contract_record, task_text=task_text)
     ensure_claims(
@@ -589,7 +595,7 @@ def verify_task(
         observation=str(evidence_observation or ""), kinds=evidence_kinds,
     )
     if engine_validations:
-        integrations_module.from_worker_validation(
+        validation_mapping = integrations_module.from_worker_validation(
             state,
             validations=list(engine_validations),
             implementation_fingerprint=str(implementation_fingerprint or ""),
@@ -609,6 +615,10 @@ def verify_task(
     receipt = create_receipt_from_pass(
         pass_record, proof_id=next_proof_id(state),
         previous_id=previous_proof_id(state),
+        # The receipt must be able to say what it did with each recorded engine
+        # result -- mapped, replayed, or refused and why. A pass that silently
+        # dropped a stale record would be as misleading as one that counted it.
+        extra={"validation_mapping": validation_mapping} if engine_validations else None,
     )
     contracts.require_collection_capacity(state, COLLECTION)
     return store_receipt(state, receipt)

@@ -12453,6 +12453,18 @@ def proof_verify_command(args: argparse.Namespace) -> int:
         print(json.dumps(receipt, indent=2, sort_keys=True, default=str))
         return code
     print(PROOF.format_human(receipt, task_title=task_text[:80]))
+    mapping = receipt.get("validation_mapping") if isinstance(receipt, dict) else None
+    if isinstance(mapping, dict):
+        for row in mapping.get("recorded") or []:
+            print(
+                "Recorded engine validation as TEST evidence: packet "
+                f"{row.get('source_record_id', '')} ({row.get('evidence_id', '')})."
+            )
+        for row in mapping.get("refused") or []:
+            print(
+                "Refused recorded engine validation "
+                f"{row.get('packet_id') or '(unknown packet)'}: {row.get('reason', 'no reason recorded')}"
+            )
     return code
 
 

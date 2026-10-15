@@ -489,6 +489,9 @@ def replaying_a_pass_neither_duplicates_nor_loses_test_evidence():
         assert len(rows) == 1, f"replay duplicated evidence: {len(rows)} rows"
         assert second["acceptance_state"] == "ACCEPTED"
         assert first["requirement_decisions"][0]["verdict"] == second["requirement_decisions"][0]["verdict"]
+        assert second["validation_mapping"]["replayed"], (
+            "a replayed pass must account for the existing evidence instead of recording blind"
+        )
 
 
 # --------------------------------------------------------------- stale steps
@@ -509,6 +512,8 @@ def a_source_change_moves_the_revision_and_stales_the_recorded_tests():
         (project / "app.js").write_text("export const widget = 2;\n", encoding="utf-8")
         second = verify(state)
         assert second["work_digest"] != first["work_digest"], "the pass revision must bind the implementation"
+        refused = second["validation_mapping"]["refused"]
+        assert refused and "stale" in json.dumps(refused), refused
         reason = _refusal_reason(state)
         assert "stale" in reason, reason
         assert not test_rows(state, second["work_digest"]), "stale results must not appear current"
