@@ -112,7 +112,7 @@ Ariadne installs from immutable GitHub release artifacts. It is not published to
 Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.2.0/ariadne-2.2.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.3.0/ariadne-2.3.0-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 (or py -m ariadne install)

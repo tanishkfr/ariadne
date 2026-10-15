@@ -10,11 +10,13 @@ Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLI
 
 ---
 
-## 2.3 development (AR-230) — NOT RELEASED
+## 2.3 development (AR-230) — RELEASE CANDIDATE 2.3.0
 
-`VERSION` remains **2.2.0** until release readiness is established. AR-230 is
-development work on the `v2/2.3b-end-to-end-execution` branch and no release is
-claimed.
+2.3 is prepared as release candidate **2.3.0** on the
+`v2/2.3b-end-to-end-execution` branch. Publication (tag, push, release) awaits
+explicit human authorization per [RELEASING.md](RELEASING.md) and has not been
+granted; until then no stable release is claimed and the 2.2 stable release
+remains the published one.
 
 ### End-to-end task execution: selection is not doing the work
 
@@ -61,10 +63,12 @@ creative-workflow compatibility, and parallel-run state safety.
 
 ---
 
-## 2.3 development (AR-231) - NOT RELEASED
+## 2.3 development (AR-231) — RELEASE CANDIDATE 2.3.0
 
-VERSION remains **2.2.0** until release readiness is established; the 2.3C
-acceptance run left two blockers (below) and no release is claimed.
+Shipped as part of release candidate **2.3.0** (see the note at the AR-230
+section: publication awaits explicit human authorization). The 2.3C
+acceptance-run blockers below were closed by the 2.3C-R release closure in the
+same candidate.
 
 ### Universal skills, persistent intelligence, and the trust boundary
 
