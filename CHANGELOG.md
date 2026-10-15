@@ -111,7 +111,7 @@ ender-pending lifecycle state refuses to call an unrendered implementation
   stale digests, and a live browser case that fails a staged interaction defect,
   repairs it inside the budget, and recaptures fresh evidence.
 
-### 2.3C acceptance-run blockers (unresolved)
+### 2.3C acceptance-run blockers (historical — closed by 2.3C-R below)
 
 1. The full generative-UI website run reached S4B with the site built,
    browser-verified, captured and critiqued, but its independent worker
@@ -124,6 +124,75 @@ ender-pending lifecycle state refuses to call an unrendered implementation
    installed but unauthenticated; codex/cursor/opencode are absent). Harness
    discovery and failure classification are verified live; a genuine external
    execution remains environment-blocked.
+
+### 2.3C-R release closure: fix the producer, not the validator
+
+**The lesson.** Every one of the four unresolved areas had the same shape one
+layer down: a stage gate demanding evidence the pipeline could not produce, and a
+contract producer whose disagreements with its own stage nobody checked. The
+cheap move each time was to relax the gate; the correct move was to fix the
+producer — and every fix surfaced a further latent gap that only real execution
+could reveal. The freed-up acceptance run, driven end to end this time, is the
+proof the closure holds.
+
+- **The S4B permitted scope is checked against the plan before a worker runs.**
+  Preparation now cross-checks the handoff's own `Files to create` declarations
+  and the stage's required outputs (`QA.md`, `AGENTS.md` — both obligations of the
+  canonical S4B prompt) against the permitted-files table; disagreement is an
+  explicit refusal naming the paths, and `verify` re-runs the same check against
+  the live handoff. `worker_scope_patterns()` is the one canonical,
+  authorization-aware scope representation every runtime check now interprets —
+  including the creative validate-worker path, which previously re-derived its
+  patterns from the mutable handoff file. The recorded 2.3C contract is carried
+  verbatim in the self-test as a permanent regression.
+- **An authorization refusal now has a resolution surface, and only a human can
+  use it.** Routing still never continues around a refusal; blocked results still
+  never enter routine repair. `ariadne.py resolve-authorization` records the
+  human's decision, identity-bound, after verifying for itself that the
+  reconciled contract is internally consistent, covers every refused path, and
+  covers the repository's current deviation from the attempt's baseline. One
+  resolution buys exactly one new attempt (`advance`); the contract revision is
+  bound by hash; a same-stage retry re-points its baseline's contract-document
+  entries at the reconciled facts (the reconciliation edit is the authorization
+  change, not worker tampering) and records which entries were refreshed.
+- **The design workflow can reach the browser pipeline it already owned.**
+  AR-222 shipped a real Chromium capture pipeline wired only to the task flow,
+  and the design workflow's own capture events could reach no browser at all
+  (fixture, declared-observer ceiling, or a stub), so the S5 observation gate —
+  which requires rendered requirements closed as `verified` — was unreachable
+  for any real project. `ChromiumCaptureAdapter` exposes the same pipeline to
+  `record-design`'s capture and verification events: byte-for-byte reproduction
+  across independent sessions is the contract (canonicalised artifacts, caret
+  hidden, ephemeral ports recorded as the logical route), the rendered-verify
+  handler now actually passes the re-produced artifact, captures carry manifest
+  provenance bound to the render-source digest, and measurements carry
+  deterministic computed-style samples. Nothing starts a browser implicitly.
+- **The live Codex run found and fixed two more integration defects.** The
+  authenticated Codex CLI (the first third-party harness this project has ever
+  executed for real) rejected the engine's historical `--full-auto` invocation
+  — the preset now uses `codex exec --sandbox workspace-write -` — and the first
+  genuinely bare (no `.gitignore`) Python repository exposed that the
+  interpreter's own caches, written by the contract's own declared test
+  commands, were classified as out-of-scope work; `VALIDATION_CACHE_PATTERNS`
+  now treats them as engine-neutral. Both defects had been invisible because
+  every previous fixture happened to paper over them.
+- **The original acceptance project resumes and completes through S5.**
+  Attempt 2 (`genui-lab-S4B-C1`) validated within-contract at the reconciled
+  contract with attempt 1 and its evidence preserved; the six approved design
+  requirements were closed `verified` over engine captures that each reproduced
+  byte-for-byte in an independent execution; the mechanical evidence was
+  re-run on the revision; and the S5 review ran in a fresh, isolated external
+  Codex session with no build context. The review returned an honest
+  "Ship with fixes" (34/50, 28/40) with its own declared limitation that its
+  sandbox could not run a browser. Proof Pass VP-0004 stands at `NOT_ACCEPTED`
+  with the two project requirements `PARTIAL`: the engine has no wiring yet that
+  records its own S4B validation reruns as project-level TEST acceptance
+  evidence, so the receipt is conservative and the human G3 decision remains —
+  exactly where an acceptance boundary belongs.
+- **One recorded sun-set lesson.** A control that cannot run is not a control:
+  `check.py --self-test` had been silently dead since the documentation
+  reorganisation renamed the privacy policy's path inside its mutation source;
+  it now fails loudly if the source goes missing again.
 
 ## 2.3 development (AR-225) — NOT RELEASED
 
