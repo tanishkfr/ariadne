@@ -3092,14 +3092,15 @@ def ingest_task_return(
         write_state(run_root, state)
         raise RuntimeError_("Return handoff rejected: " + "; ".join(verification))
 
-    patterns = [
-        str(row.get("path", "")) for row in worker_manifest.get("scope") or () if row.get("path")
-    ]
-    patterns.append(f".ariadne/returns/{entry['id']}.md")
-    for recorded in state.get("packets") or []:
-        if isinstance(recorded, dict) and recorded.get("id"):
-            patterns.append(f".ariadne/returns/{recorded['id']}.md")
-    patterns.extend(TRANSPORT.RUNTIME_EVIDENCE_PATTERNS)
+    patterns = TRANSPORT.worker_scope_patterns(
+        worker_manifest,
+        [entry["id"]]
+        + [
+            recorded.get("id")
+            for recorded in state.get("packets") or []
+            if isinstance(recorded, dict) and recorded.get("id")
+        ],
+    )
     baseline = manifest.get("project_baseline") or {}
     scope = TRANSPORT.worker_scope_check(baseline, TRANSPORT.project_git_snapshot(project), patterns, project)
     if scope["status"] != "within-contract":
@@ -3391,14 +3392,15 @@ def run_task_validation(
     baseline = manifest.get("project_baseline")
     if not isinstance(baseline, dict):
         return blocked("repository-conflict", "The packet has no repository baseline to contain worker changes.")
-    patterns = [
-        str(row.get("path", "")) for row in worker_manifest.get("scope") or () if row.get("path")
-    ]
-    patterns.append(f".ariadne/returns/{entry['id']}.md")
-    for recorded in state.get("packets") or []:
-        if isinstance(recorded, dict) and recorded.get("id"):
-            patterns.append(f".ariadne/returns/{recorded['id']}.md")
-    patterns.extend(TRANSPORT.RUNTIME_EVIDENCE_PATTERNS)
+    patterns = TRANSPORT.worker_scope_patterns(
+        worker_manifest,
+        [entry["id"]]
+        + [
+            recorded.get("id")
+            for recorded in state.get("packets") or []
+            if isinstance(recorded, dict) and recorded.get("id")
+        ],
+    )
     current = TRANSPORT.project_git_snapshot(project)
     scope = TRANSPORT.worker_scope_check(baseline, current, patterns, project)
     if scope["status"] != "within-contract":
@@ -6895,20 +6897,24 @@ def validate_worker(args: argparse.Namespace) -> int:
     worker = manifest.get("worker", {})
     baseline = manifest.get("project_baseline")
     current = TRANSPORT.project_git_snapshot(project)
-    scope_rows = TRANSPORT.worker_contract(handoff_text).get("scope_rows", [])
-    patterns = [row[0].strip("`") for row in scope_rows if row]
-    patterns.append(f".ariadne/returns/{entry['id']}.md")
-    # A retry at the same boundary inherits the earlier attempt's baseline, so the
-    # earlier attempt's engine-written return file is present on disk but absent
-    # from that baseline. It is Ariadne's own evidence, not this worker's change.
-    for recorded in state.get("packets") or []:
-        if isinstance(recorded, dict) and recorded.get("id"):
-            patterns.append(f".ariadne/returns/{recorded['id']}.md")
-    # Ariadne's own evidence ledgers are written by Ariadne commands, not by the
-    # worker. Treating them as in-contract keeps the runtime from blocking the
-    # evidence that its own continuation preconditions require; it does not widen
-    # the worker's implementation scope.
-    patterns.extend(TRANSPORT.RUNTIME_EVIDENCE_PATTERNS)
+    # The permission check reads the packet's hash-bound, prepared-time scope -
+    # the one canonical representation - never a re-derivation from the live
+    # project files. A retry at the same boundary inherits the earlier attempt's
+    # baseline, so the earlier attempt's engine-written return file is present on
+    # disk but absent from that baseline; it is Ariadne's own evidence, not this
+    # worker's change. Ariadne's own evidence ledgers are written by Ariadne
+    # commands, not by the worker: treating them as in-contract keeps the runtime
+    # from blocking the evidence that its own continuation preconditions require;
+    # it does not widen the worker's implementation scope.
+    patterns = TRANSPORT.worker_scope_patterns(
+        worker,
+        [entry["id"]]
+        + [
+            recorded.get("id")
+            for recorded in state.get("packets") or []
+            if isinstance(recorded, dict) and recorded.get("id")
+        ],
+    )
 
     base_record = {
         "schema_version": TRANSPORT.WORKER_VALIDATION_SCHEMA,

@@ -56,6 +56,16 @@ The worker never edits these directly: the runtime's ``record-creative`` and
 ``record-operations`` commands do. Without this, a run could not record the skill
 and operations evidence that the S5 continuation precondition requires, and the
 worker contract would be failing the runtime's own evidence writes."""
+WORKER_STAGE_REQUIRED_OUTPUTS = {"S4B": ("QA.md", "AGENTS.md")}
+"""Outputs a worker stage must produce for its own continuation to be possible.
+
+The S5 boundary refuses a project without executed QA.md mechanical evidence
+(``check_project_boundary`` below), and the canonical S4B prompt instructs the
+worker to create or fill QA.md and to update AGENTS.md's ``## Current state``
+before finishing. A permitted-files table that does not cover a required output
+means the stage cannot complete as declared, so preparation refuses the contract
+up front instead of letting the worker discover the gap at validation time (the
+2.3C acceptance run's S4B block)."""
 WRITING_INTENTS = (
     "CREATIVE", "ACADEMIC", "SCIENTIFIC", "HUMAN-DRAFT TRANSFORMATION", "SOCIAL"
 )
@@ -637,6 +647,103 @@ def worker_scope_check(
         "head_changed": head_changed,
         "commit_error": commit_error,
     }
+
+
+def worker_scope_patterns(worker: dict | None, packet_ids: tuple | list = ()) -> list[str]:
+    """The one canonical, authorization-aware permitted-scope representation.
+
+    The authorization is the prepared packet's ``worker.scope`` table, which was
+    copied from the approved contract at preparation time and is bound into the
+    packet manifest (and summarised in the hash-covered packet text). Appended
+    items are engine-owned, never worker-granted: the structured return files the
+    transport instructs the worker to write, and Ariadne's own evidence ledgers.
+    Every scope check in the runtime interprets exactly this list; nothing in it
+    widens the declared contract.
+    """
+    patterns: list[str] = []
+
+    def add(value: str) -> None:
+        value = str(value or "").strip()
+        if value and value not in patterns:
+            patterns.append(value)
+
+    rows = (worker or {}).get("scope") if isinstance(worker, dict) else None
+    for row in rows or ():
+        add(row.get("path", "") if isinstance(row, dict) else row)
+    for packet_id in packet_ids:
+        if str(packet_id or "").strip():
+            add(f".ariadne/returns/{str(packet_id).strip()}.md")
+    for pattern in RUNTIME_EVIDENCE_PATTERNS:
+        add(pattern)
+    return patterns
+
+
+def worker_plan_paths(handoff_text: str) -> list[str]:
+    """The files a handoff's implementation plan declares it will write.
+
+    The structured ``## Files to create`` table is the plan's file declaration.
+    Prose elsewhere is deliberately not parsed: a half-read sentence is not a
+    contract, and a plan must not widen its own permissions by mentioning extra
+    files in passing.
+    """
+    rows = markdown_table_rows(markdown_section(handoff_text, "Files to create"))
+    paths = []
+    for row in rows:
+        if not row:
+            continue
+        path = row[0].strip().strip("`").replace("\\", "/")
+        if not path or path.lower() in ("path", "file", "path / glob"):
+            continue
+        if re.search(r"<[^>]+>", path):
+            continue
+        paths.append(path)
+    return paths
+
+
+def scope_covers_path(path: str, patterns: list[str]) -> bool:
+    """Whether one permitted-scope pattern set covers a concrete plan path."""
+    candidate = str(path or "").replace("\\", "/").strip().strip("`").rstrip("/")
+    if not candidate:
+        return False
+    for pattern in patterns:
+        if worker_path_matches(candidate, pattern):
+            return True
+        # A plan row may name the directory a tree pattern permits ("tests" is
+        # covered by "tests/**"); the directory itself is the narrowest case of
+        # the same authorization, not a widening of it.
+        root = str(pattern).replace("\\", "/").split("*", 1)[0].strip().rstrip("/")
+        if root and (candidate == root or candidate.startswith(root + "/")):
+            return True
+    return False
+
+
+def worker_plan_scope_problems(handoff_text: str, stage: str = "S4B") -> list[str]:
+    """Plan/permitted-table disagreement, detected before any worker runs.
+
+    The permitted files and systems table is the authorization. A plan cannot
+    grant itself permissions merely by naming additional files: every
+    plan-declared path must already be covered, every stage-required output must
+    already be covered, and any disagreement is an explicit refusal the caller
+    turns into a reconciliation request. Nothing here ever widens the contract.
+    """
+    contract = worker_contract(handoff_text)
+    permitted = [
+        row[0].strip("`").replace("\\", "/")
+        for row in contract["scope_rows"]
+        if row and row[0].strip()
+    ]
+    problems = []
+    for path in worker_plan_paths(handoff_text):
+        if not scope_covers_path(path, permitted):
+            problems.append(
+                f"the plan names {path}, which the permitted files and systems table does not cover"
+            )
+    for path in WORKER_STAGE_REQUIRED_OUTPUTS.get(str(stage or "").upper(), ()):
+        if not scope_covers_path(path, permitted):
+            problems.append(
+                f"the {stage} stage requires {path} to be produced, but the permitted files and systems table does not cover it"
+            )
+    return problems
 
 
 def worker_validation_problems(value: dict, packet_id: str | None = None) -> list[str]:
@@ -1936,6 +2043,15 @@ def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
         contract_problems = worker_contract_problems(handoff_text)
         if contract_problems:
             raise PacketError("HANDOFF.md worker contract is incomplete: " + "; ".join(contract_problems))
+        scope_problems = worker_plan_scope_problems(handoff_text, stage="S4B")
+        if scope_problems:
+            raise PacketError(
+                "S4B plan/packet scope disagreement detected before worker execution: "
+                + "; ".join(scope_problems)
+                + ". Reconcile the plan and the permitted files and systems table (an explicit "
+                "authorization change), then prepare the packet again; a plan cannot widen its "
+                "own permissions."
+            )
         contract = worker_contract(handoff_text)
         role = (getattr(args, "worker_role", None) or contract["worker_role"]).strip().lower()
         if role not in WORKER_ROLES:
@@ -2355,6 +2471,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
                 handoff_path = project_path / "HANDOFF.md"
                 if handoff_path.is_file():
                     problems.extend(worker_contract_problems(read(handoff_path)))
+                    problems.extend(worker_plan_scope_problems(read(handoff_path), stage="S4B"))
             else:
                 contract_path = Path(str(manifest.get("task_contract", "")))
                 if not contract_path.is_file():
@@ -2598,6 +2715,135 @@ def self_test() -> int:
         "selected-skill:skills/component-research.md"
     )
     case("missing selected S3 skill transport fails", bool(repository_contract_problems(changed)))
+
+    # --- The permitted-scope authorization contract -------------------------
+    # The 2.3C acceptance run's S4B block: the plan and the permitted table
+    # agreed, the worker did what the stage required, and validation refused
+    # the stage-required QA output the table never declared. This contract is
+    # reconstructed verbatim from the recorded packet (genui-lab-S4B).
+    recorded_2_3c_contract = (
+        "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n"
+        "## Files to create\n\n"
+        "| Path | Purpose |\n|---|---|\n"
+        "| index.html | shell markup |\n"
+        "| styles.css | token system |\n"
+        "| app.js | deterministic generator |\n"
+        "| build.py | dist build |\n"
+        "| tests/test_site.py | validation suite |\n"
+        "| README.md | instructions |\n\n"
+        "## Worker execution contract\n\n"
+        "**Worker role:** bulk\n\n"
+        "### Permitted files and systems\n\n"
+        "| Path / glob | Actions | Reason |\n|---|---|---|\n"
+        "| index.html | edit, create | markup |\n"
+        "| styles.css | edit, create | styles |\n"
+        "| app.js | edit, create | behavior |\n"
+        "| build.py | edit, create | build |\n"
+        "| tests/test_site.py | edit, create | tests |\n"
+        "| README.md | edit, create | docs |\n"
+        "| dist/** | create | output |\n"
+    )
+    reproduction = worker_plan_scope_problems(recorded_2_3c_contract, stage="S4B")
+    case(
+        "the recorded 2.3C under-declared S4B contract is refused before a worker runs",
+        any("QA.md" in problem for problem in reproduction)
+        and any("AGENTS.md" in problem for problem in reproduction),
+    )
+    case(
+        "the recorded contract's plan files are all covered (only the stage outputs were under-declared)",
+        not any("plan names" in problem for problem in reproduction),
+    )
+    case(
+        "declaring the stage outputs clears the refusal",
+        not worker_plan_scope_problems(
+            recorded_2_3c_contract.replace(
+                "| dist/** | create | output |",
+                "| dist/** | create | output |\n"
+                "| QA.md | edit, create | mechanical QA record |\n"
+                "| AGENTS.md | read, edit | stage-state update |",
+            ),
+            stage="S4B",
+        ),
+    )
+    plan_creep = worker_plan_scope_problems(
+        recorded_2_3c_contract.replace(
+            "| README.md | instructions |",
+            "| README.md | instructions |\n| generator.js | split the generator for node testing |",
+        ),
+        stage="S4B",
+    )
+    case(
+        "a plan naming an undeclared file is a refusal, not a permission (adversarial: plan creep)",
+        any("generator.js" in problem and "does not cover" in problem for problem in plan_creep),
+    )
+    case(
+        "a new file is covered by a declared tree, not by its own existence",
+        scope_covers_path("tests/generator_check.mjs", ["tests/**"])
+        and not scope_covers_path("tests/generator_check.mjs", ["tests/test_site.py"])
+        and not scope_covers_path(".gitignore", ["index.html", "src/**"])
+        and not scope_covers_path("build/site.js", ["dist/**"])
+        and scope_covers_path("dist", ["dist/**"]),
+    )
+    canonical_patterns = worker_scope_patterns({"scope": [{"path": "src/**"}]}, ["P1"])
+    case(
+        "the canonical scope representation adds only engine-owned transport entries",
+        canonical_patterns == ["src/**", ".ariadne/returns/P1.md", *RUNTIME_EVIDENCE_PATTERNS],
+    )
+    case(
+        "the canonical scope representation grants no project root, wildcard root, or sensitive path",
+        not any(
+            pattern in ("*", "**", "**/*", ".", "./", "/") or worker_sensitive_path(pattern)
+            for pattern in worker_scope_patterns(
+                {"scope": [{"path": "src/**"}, {"path": "QA.md"}]},
+                ["P1", "P1-C1"],
+            )
+        ),
+    )
+    case(
+        "the manifest scope is the authorization and nothing is silently appended to it",
+        worker_scope_patterns({"scope": [{"path": "src/**"}, {"path": "docs/**"}]})[
+            :2
+        ]
+        == ["src/**", "docs/**"]
+        and len(worker_scope_patterns({"scope": [{"path": "src/**"}, {"path": "docs/**"}]}))
+        == 2 + len(RUNTIME_EVIDENCE_PATTERNS),
+    )
+
+    def scope_status(paths: list[str], patterns: list[str]) -> str:
+        return worker_scope_check(
+            {"state": "clean", "head": "h", "entries": []},
+            {
+                "state": "dirty",
+                "head": "h",
+                "entries": [
+                    {"path": path, "status": "??", "exists": True, "sha256": "x"}
+                    for path in paths
+                ],
+            },
+            patterns,
+        )["status"]
+
+    case(
+        "declared .gitignore is within contract; undeclared .gitignore is refused",
+        scope_status([".gitignore"], ["index.html", ".gitignore"]) == "within-contract"
+        and scope_status([".gitignore"], ["index.html"]) == "out-of-scope",
+    )
+    case(
+        "a declared tests/** tree covers a new harness file; a named test file does not",
+        scope_status(["tests/generator_check.mjs"], ["tests/**"]) == "within-contract"
+        and scope_status(["tests/generator_check.mjs"], ["tests/test_site.py"]) == "out-of-scope",
+    )
+    case(
+        "declared generated output is within contract; an undeclared output directory is refused",
+        scope_status(["dist/site.js"], ["dist/**"]) == "within-contract"
+        and scope_status(["build/site.js"], ["dist/**"]) == "out-of-scope",
+    )
+    case(
+        "the declared QA record is within contract; undeclared QA artifacts are refused",
+        scope_status(["QA.md"], ["QA.md"]) == "within-contract"
+        and scope_status([".ariadne/qa/desktop.png"], [".ariadne/creative-evidence.json"])
+        == "out-of-scope",
+    )
 
     with self_test_workspace() as sandbox:
         project = sandbox / "project"
@@ -2993,6 +3239,9 @@ def self_test() -> int:
         (project / "HANDOFF.md").write_text(
             "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n"
             "## Dependencies to install\n\nNone.\n\n"
+            "## Files to create\n\n"
+            "| Path | Purpose |\n|---|---|\n"
+            "| src/app.js | the fixture implementation |\n\n"
             "## Worker execution contract\n\n"
             "**Worker role:** bulk\n\n"
             "**Objective:** Build the approved fixture.\n\n"
@@ -3006,7 +3255,9 @@ def self_test() -> int:
             "**Routine repair limit:** 2\n\n"
             "### Permitted files and systems\n\n"
             "| Path / glob | Actions | Reason |\n|---|---|---|\n"
-            "| src/** | read / edit / create | fixture implementation |\n\n"
+            "| src/** | read / edit / create | fixture implementation |\n"
+            "| QA.md | read / edit / create | the mechanical QA record this boundary produces |\n"
+            "| AGENTS.md | read / edit | the stage-state update the S4B prompt requires |\n\n"
             "## Validation commands\n\n"
             "| Check | Command | Required | Expected |\n|---|---|---|---|\n"
             "| diff hygiene | `git diff --check` | yes | exit code 0 |\n",
@@ -3067,6 +3318,119 @@ def self_test() -> int:
             "provider identity is not used as a core implementation policy",
             claude_reasoner_misroute_blocked is False,
         )
+        # --- plan/packet scope consistency, at the preparation boundary -------
+        fixture_handoff = read(project / "HANDOFF.md")
+
+        def prepare_refusal(output_name: str) -> tuple[str | None, Path]:
+            target = sandbox / output_name
+            try:
+                prepare(ns(stage="S4B", project=str(project), output=str(target), parent=str(s4a_dir)))
+                return None, target
+            except PacketError as exc:
+                return str(exc), target
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| QA.md | read / edit / create | the mechanical QA record this boundary produces |\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-UNDER-DECLARED")
+        case(
+            "an S4B contract that never declares its stage-required QA output is refused before a worker runs",
+            refusal is not None
+            and "plan/packet scope disagreement" in refusal
+            and "QA.md" in refusal,
+        )
+        case(
+            "the refused contract leaves no packet behind and no worker can run against it",
+            not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/app.js | the fixture implementation |",
+                "| src/app.js | the fixture implementation |\n| deploy.py | the deployment helper the plan names |",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-PLAN-CREEP")
+        case(
+            "a plan cannot grant itself an undeclared file (mutation: plan names deploy.py)",
+            refusal is not None and "deploy.py" in refusal and "does not cover" in refusal
+            and not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/app.js | the fixture implementation |",
+                "| src/app.js | the fixture implementation |\n| deploy.py | the deployment helper the plan names |",
+            ).replace(
+                "| src/** | read / edit / create | fixture implementation |",
+                "| src/** | read / edit / create | fixture implementation |\n"
+                "| deploy.py | edit, create | reconciled: the plan names it and the table now authorizes it |",
+            ),
+            encoding="utf-8",
+        )
+        reconciled_dir = sandbox / "R1-S4B-RECONCILED"
+        prepare(ns(stage="S4B", project=str(project), output=str(reconciled_dir), parent=str(s4a_dir)))
+        reconciled_manifest = json.loads(read(reconciled_dir / MANIFEST_NAME))
+        case(
+            "an explicitly reconciled table prepares, and the packet hash binds the authorized scope",
+            not verify_packet(reconciled_dir)
+            and [row["path"] for row in reconciled_manifest["worker"]["scope"]]
+            == ["src/**", "deploy.py", "QA.md", "AGENTS.md"]
+            and "Permitted scope: src/**, deploy.py, QA.md, AGENTS.md" in read(reconciled_dir / PACKET_NAME),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/app.js | the fixture implementation |",
+                "| src/app.js | the fixture implementation |\n| .env | credentials the plan claims to need |",
+            ).replace(
+                "| src/** | read / edit / create | fixture implementation |",
+                "| src/** | read / edit / create | fixture implementation |\n"
+                "| .env | edit, create | the plan and the table agree on a sensitive path |",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-SENSITIVE")
+        case(
+            "plan and table collusion on a sensitive path is still refused",
+            refusal is not None and "sensitive" in refusal and not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/** | read / edit / create | fixture implementation |",
+                "| ** | read / edit / create | every path the plan might want |",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-WILDCARD")
+        case(
+            "a wildcard-root authorization is refused, never an unconditional allowlist",
+            refusal is not None and "too broad" in refusal and not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| QA.md | read / edit / create | the mechanical QA record this boundary produces |\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+        case(
+            "verification detects a live handoff that under-declares after preparation",
+            any("does not cover" in problem for problem in verify_packet(s4b_dir)),
+        )
+        (project / "HANDOFF.md").write_text(fixture_handoff, encoding="utf-8")
+        case(
+            "the restored contract verifies again (positive control)",
+            not verify_packet(s4b_dir),
+        )
+
         s4b_manifest_path = s4b_dir / MANIFEST_NAME
         s4b_manifest_original = read(s4b_manifest_path)
         malformed_return_target = json.loads(s4b_manifest_original)
