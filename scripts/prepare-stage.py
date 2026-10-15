@@ -704,12 +704,21 @@ moment the run records anything, which would train everyone to ignore it."""
 def implementation_fingerprint(snapshot: dict) -> str:
     """The deterministic fingerprint of the validated implementation surface.
 
-    Built from ``project_git_snapshot`` entries as ``path|status|exists|sha256``
-    lines, so it is re-computable from any later snapshot of the same tree. A
-    file the snapshot could not read (a sensitive path whose bytes are never
-    read) contributes its path and status but not its content: the fingerprint
-    still moves when the read set changes, and never leaks secret bytes.
+    Built from the snapshot's commit head plus every ``project_git_snapshot``
+    entry as ``path|status|exists|sha256`` lines, so it is re-computable from
+    any later snapshot of the same tree. The head is part of the payload
+    because the entry list is only the *dirty* set: without it, a validation
+    recorded on a clean tree and a later commit (also a clean tree) would
+    collapse to the same value, and the staleness gate would fail open for
+    committed changes. A file the snapshot could not read (a sensitive path
+    whose bytes are never read) contributes its path and status but not its
+    content: the fingerprint still moves when the read set changes, and never
+    leaks secret bytes. A snapshot the transport could not inspect renders the
+    fingerprint unknown (an empty string) rather than silently equal to a real
+    one, so the mapper refuses instead of guessing.
     """
+    if str(snapshot.get("state", "")) not in ("clean", "dirty"):
+        return ""
     entries = [
         entry for entry in snapshot.get("entries", [])
         if isinstance(entry, dict)
@@ -720,13 +729,16 @@ def implementation_fingerprint(snapshot: dict) -> str:
         )
     ]
     payload = "\n".join(
-        "|".join([
-            str(entry.get("path", "")),
-            str(entry.get("status", "")),
-            "1" if entry.get("exists") else "0",
-            str(entry.get("sha256") or ""),
-        ])
-        for entry in sorted(entries, key=lambda item: str(item.get("path", "")))
+        ["head|" + str(snapshot.get("head", ""))]
+        + [
+            "|".join([
+                str(entry.get("path", "")),
+                str(entry.get("status", "")),
+                "1" if entry.get("exists") else "0",
+                str(entry.get("sha256") or ""),
+            ])
+            for entry in sorted(entries, key=lambda item: str(item.get("path", "")))
+        ]
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -737,6 +749,64 @@ def validated_revision(snapshot: dict) -> dict:
         "head": str(snapshot.get("head", "") or "unknown"),
         "implementation_fingerprint": implementation_fingerprint(snapshot),
     }
+
+
+def attach_validated_revision(record: dict, snapshot: dict) -> dict:
+    """Bind one validation record to the implementation bytes it ran against.
+
+    The one producer of the ``validated_revision`` field: it attaches the
+    revision when the implementation surface could be fingerprinted, and
+    attaches nothing when it could not, because a record that cannot be proven
+    current must read as unbound rather than as valid. Kept as one function so
+    the producer's write and the acceptance mapper's refusal checks reference
+    the same shape.
+    """
+    revision = validated_revision(snapshot)
+    if revision["implementation_fingerprint"]:
+        record["validated_revision"] = revision
+    return record
+
+
+def current_implementation_fingerprint(state: dict) -> str:
+    """The implementation fingerprint of the run's project as it stands now.
+
+    Empty when the run names no existing project directory or the snapshot
+    cannot be inspected: the acceptance mapper refuses fingerprint-less
+    mappings, so an unknown surface can never launder a stale validation into
+    current evidence.
+    """
+    project = Path(str(state.get("project", "") or ""))
+    if not project.is_dir():
+        return ""
+    return implementation_fingerprint(project_git_snapshot(project))
+
+
+def recorded_worker_validations(state: dict) -> list[dict]:
+    """The recorded S4B validation records, bound to the packet that holds them.
+
+    Only records that pass the transport's own structural verification are
+    returned; a malformed or damaged evidence file is skipped, never guessed at,
+    so the acceptance pass can only ever weigh records the transport would also
+    accept. Whether a record is genuine and still current is decided downstream
+    by the acceptance mapper, from the engine execution and the revision
+    binding the record names -- not here.
+    """
+    rows: list[dict] = []
+    for entry in state.get("packets") or []:
+        if not isinstance(entry, dict) or str(entry.get("stage", "")) != "S4B":
+            continue
+        packet_id = str(entry.get("id", ""))
+        record_path = Path(str(entry.get("path", ""))) / "evidence" / "validation.json"
+        if not record_path.is_file():
+            continue
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict) or worker_validation_problems(record, packet_id):
+            continue
+        rows.append({"packet_id": packet_id, "record": record})
+    return rows
 
 
 def worker_scope_patterns(worker: dict | None, packet_ids: tuple | list = ()) -> list[str]:

@@ -53,7 +53,6 @@ TRANSPORT = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(TRANSPORT)
 
 CASES: list = []
-SKIPS: list[tuple[str, str]] = []
 
 TASK = "Build the widget page."
 
@@ -61,10 +60,6 @@ TASK = "Build the widget page."
 def case(fn):
     CASES.append(fn)
     return fn
-
-
-class SkipCase(Exception):
-    """The environment cannot honestly run this case; it is recorded, not faked."""
 
 
 # --------------------------------------------------------------- fixtures
@@ -125,15 +120,15 @@ def record_validation(
 ) -> dict:
     """One validation record shaped exactly as ``validate_worker`` writes it.
 
-    The record is written through the real transport helpers and bound to a real
-    engine-created execution -- the same construction the runtime performs. Cases
-    that need a *fabricated* record mutate one of these fields, which is the
-    point: the refusal must name the field that made it a non-observation.
+    The record is written through the real producer helper
+    (``TRANSPORT.attach_validated_revision``) and bound to a real engine-created
+    execution whose result carries the revision the engine recorded -- the same
+    construction the runtime performs. Cases that need a *fabricated* record
+    mutate one of these fields, which is the point: the refusal must name the
+    field that made it a non-observation.
     """
     snapshot = TRANSPORT.project_git_snapshot(project)
     revision = dict(TRANSPORT.validated_revision(snapshot))
-    if fingerprint is not None:
-        revision["implementation_fingerprint"] = fingerprint
     record = {
         "schema_version": TRANSPORT.WORKER_VALIDATION_SCHEMA,
         "kind": "worker-validation",
@@ -173,8 +168,12 @@ def record_validation(
         "status": status,
         "failure_kind": failure_kind,
         "failure_reason": "none",
-        "validated_revision": revision,
     }
+    TRANSPORT.attach_validated_revision(record, snapshot)
+    if fingerprint is not None:
+        # A forged claim: what lands in the file disagrees with the revision the
+        # engine's own execution result below carries.
+        record["validated_revision"] = {**revision, "implementation_fingerprint": fingerprint}
     if with_execution:
         execution = execution_module.create(
             state,
@@ -187,9 +186,15 @@ def record_validation(
             reason="independent worker validation of the recorded implementation",
         )
         execution_module.mark_started(state, str(execution["execution_id"]))
+        completed_result = {
+            "packet_id": packet_id, "status": status,
+            "artifact": str(packet / "evidence" / "validation.json"),
+        }
+        if record.get("validated_revision"):
+            completed_result["validated_revision"] = dict(revision)
         execution_module.complete(
             state, str(execution["execution_id"]),
-            result={"packet_id": packet_id, "status": status, "artifact": str(packet / "evidence" / "validation.json")},
+            result=completed_result,
             evidence=(str(packet / "evidence" / "validation.json"),),
         )
         record["execution"] = {
@@ -210,20 +215,17 @@ def validations_for(state: dict, packet_id: str = "widget-S4B") -> list[dict]:
     return [{"packet_id": packet_id, "record": record}]
 
 
-def verify(state: dict, *, fingerprint: str = "") -> dict:
-    current = fingerprint or current_fingerprint(state)
-    # Mirrors the CLI's revision composition: the pass digest binds the
-    # implementation bytes, so a source change moves the revision.
-    digest = proof.work_digest_for(TASK, "ar23d-work|impl:" + current)
+def verify(state: dict) -> dict:
+    # The real entry point, with the real composition: the Proof Pass derives
+    # the recorded validations and the implementation fingerprint from the run
+    # state itself, and binds its digest to that implementation.
     return proof.verify_task(
-        state, task_text=TASK, work_digest=digest, task_id="widget-task",
-        engine_validations=validations_for(state),
-        implementation_fingerprint=current,
+        state, task_text=TASK, work_ref="ar23d-work", task_id="widget-task",
     )
 
 
 def current_fingerprint(state: dict) -> str:
-    return TRANSPORT.implementation_fingerprint(TRANSPORT.project_git_snapshot(Path(state["project"])))
+    return TRANSPORT.current_implementation_fingerprint(state)
 
 
 def test_rows(state: dict, digest: str, requirement_id: str = "") -> list[dict]:
@@ -466,9 +468,63 @@ def a_forged_fingerprint_cannot_vouch_for_a_moved_tree():
         project = make_project(root)
         packet = make_packet(root, project)
         state = make_state(root, project, [{"id": "widget-S4B", "stage": "S4B", "path": str(packet)}])
-        # The record claims a fingerprint of a tree that is not the current one.
+        # The record file claims a fingerprint the engine's own execution result
+        # never validated: the claim is compared against the engine-held value.
         record_validation(state, project, packet, fingerprint="0" * 64)
-        assert "stale" in _refusal_reason(state)
+        reason = _refusal_reason(state)
+        assert "disagrees with the engine's own record" in reason, reason
+
+
+@case
+def a_record_cannot_vouch_for_another_packets_execution():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        project = make_project(root)
+        packet_a = make_packet(root, project, "widget-S4B-A")
+        packet_b = make_packet(root, project, "widget-S4B-B")
+        state = make_state(root, project, [
+            {"id": "widget-S4B-A", "stage": "S4B", "path": str(packet_a)},
+            {"id": "widget-S4B-B", "stage": "S4B", "path": str(packet_b)},
+        ])
+        record = record_validation(state, project, packet_a, packet_id="widget-S4B-A")
+        # Packet B's own validation never ran: its (otherwise well-formed)
+        # record cites packet A's genuinely passed execution.
+        record["packet_id"] = "widget-S4B-B"
+        (packet_b / "evidence" / "validation.json").write_text(
+            json.dumps(record, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        summary = integrations_module.from_worker_validation(
+            state,
+            validations=[{"packet_id": "widget-S4B-B", "record": record}],
+            implementation_fingerprint=current_fingerprint(state),
+            contract_id="ctr_probe",
+            contract_revision="1",
+            requirements=[{
+                "requirement_id": "rqm_probe",
+                "evidence_policy": {"AUTHORITATIVE": [], "REQUIRED": ["TEST"], "SUPPORTING": [], "INSUFFICIENT_ALONE": []},
+            }],
+            task_id="widget-task",
+            work_digest=proof.work_digest_for(TASK, "ar23d-work"),
+        )
+        assert not summary["recorded"], "another packet's execution must not vouch for this record"
+        assert "did not validate this packet" in summary["refused"][0]["reason"], summary["refused"]
+
+
+@case
+def an_uninspectable_project_can_never_map_evidence():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        project = root / "no-git-here"
+        project.mkdir()
+        (project / "app.js").write_text("export const widget = 1;\n", encoding="utf-8")
+        packet = make_packet(root, project)
+        state = make_state(root, project, [{"id": "widget-S4B", "stage": "S4B", "path": str(packet)}])
+        assert current_fingerprint(state) == "", "an uninspectable snapshot must not render a plausible fingerprint"
+        record = record_validation(state, project, packet)
+        assert "validated_revision" not in record, (
+            "the producer must attach nothing rather than claim an unprovable revision"
+        )
+        assert "predates" in _refusal_reason(state)
 
 
 # ------------------------------------------------------------------- replay
@@ -611,6 +667,38 @@ def one_sided_observation_never_reaches_distinct_provider():
 
 
 @case
+def a_committed_change_moves_the_revision():
+    # A validation recorded on a clean tree must not stay current across a
+    # commit: the fingerprint binds the commit head, not only the dirty set.
+    def commit_project(project: Path, message: str) -> None:
+        subprocess.run(["git", "add", "-A"], cwd=project, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-c", "user.email=ar23d@example.invalid", "-c", "user.name=ar23d",
+             "commit", "-qm", message],
+            cwd=project, check=True, capture_output=True,
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        project = make_project(root)
+        commit_project(project, "widget v1")
+        packet = make_packet(root, project)
+        state = make_state(root, project, [{"id": "widget-S4B", "stage": "S4B", "path": str(packet)}])
+        record_validation(state, project, packet)
+        first = verify(state)
+        assert first["acceptance_state"] == "ACCEPTED"
+        (project / "app.js").write_text("export const widget = 2;\n", encoding="utf-8")
+        commit_project(project, "widget v2")
+        second = verify(state)
+        assert second["work_digest"] != first["work_digest"], (
+            "a committed implementation change must move the pass revision"
+        )
+        assert "stale" in json.dumps(second["validation_mapping"]["refused"])
+        assert not test_rows(state, second["work_digest"])
+        assert second["acceptance_state"] != "ACCEPTED"
+
+
+@case
 def the_producer_records_a_valid_revision_binding():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -622,6 +710,10 @@ def the_producer_records_a_valid_revision_binding():
         fingerprint = record["validated_revision"]["implementation_fingerprint"]
         assert len(fingerprint) == 64 and fingerprint == current_fingerprint(state)
         assert TRANSPORT.worker_validation_problems(record, "widget-S4B") == []
+        # The producer helper is the one place the field is written: it attaches
+        # nothing for an uninspectable snapshot and the engine's own execution
+        # result carries the same revision (checked by the cross-binding cases).
+        assert "validated_revision" not in TRANSPORT.attach_validated_revision({}, {"state": "unknown", "entries": []})
         # A malformed binding is refused by the transport's own structural check.
         broken = json.loads(json.dumps(record))
         broken["validated_revision"]["implementation_fingerprint"] = "not-a-digest"
@@ -673,7 +765,7 @@ def no_current_fingerprint_means_no_mapping():
 def the_engine_cli_gathers_only_structurally_valid_records():
     assert hasattr(TRANSPORT, "implementation_fingerprint")
     assert hasattr(TRANSPORT, "validated_revision")
-    import ariadne as runtime  # the runtime module under scripts/
+    assert hasattr(TRANSPORT, "attach_validated_revision")
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -681,14 +773,38 @@ def the_engine_cli_gathers_only_structurally_valid_records():
         packet = make_packet(root, project)
         state = make_state(root, project, [{"id": "widget-S4B", "stage": "S4B", "path": str(packet)}])
         record_validation(state, project, packet)
-        gathered = runtime.recorded_worker_validations(state)
+        gathered = TRANSPORT.recorded_worker_validations(state)
         assert len(gathered) == 1 and gathered[0]["packet_id"] == "widget-S4B"
         (packet / "evidence" / "validation.json").write_text("{not json", encoding="utf-8")
-        assert runtime.recorded_worker_validations(state) == []
+        assert TRANSPORT.recorded_worker_validations(state) == []
         # A non-S4B packet never contributes validations.
         (packet / "evidence" / "validation.json").write_text("{}", encoding="utf-8")
         state["packets"][0]["stage"] = "S5"
-        assert runtime.recorded_worker_validations(state) == []
+        assert TRANSPORT.recorded_worker_validations(state) == []
+
+
+@case
+def the_verify_doors_all_weigh_the_same_evidence():
+    # The API door (and the MCP tool that delegates to it) must not see a
+    # different world than the CLI: both call the same engine entry point, so a
+    # genuine current validation must become TEST evidence through either.
+    from ariadne_engine import api as api_module
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        project = make_project(root)
+        packet = make_packet(root, project)
+        state = make_state(root, project, [{"id": "widget-S4B", "stage": "S4B", "path": str(packet)}])
+        record_validation(state, project, packet)
+        receipt = api_module.verify_work_state(
+            state, task_text=TASK, work_ref="ar23d-work", task_id="widget-task",
+        )
+        assert receipt["acceptance_state"] == "ACCEPTED", receipt["acceptance_state"]
+        assert receipt.get("validation_mapping", {}).get("recorded"), (
+            "the API door must map the same recorded engine validation the CLI maps"
+        )
+        rows = test_rows(state, receipt["work_digest"])
+        assert rows, "the API door must produce current TEST evidence for a genuine validation"
 
 
 def main() -> int:
@@ -703,18 +819,13 @@ def main() -> int:
         total += 1
         try:
             fn()
-        except SkipCase as exc:
-            SKIPS.append((name, str(exc)))
-            print(f"skip {name}: {exc}")
-            continue
         except BaseException as exc:  # noqa: BLE001
             print(f"FAIL {name}: {exc}")
             failures.append(name)
             continue
         print(f"ok   {name}")
         passed += 1
-    skipped = f" ({len(SKIPS)} skipped)" if SKIPS else ""
-    print(f"{passed}/{total} passed{skipped}")
+    print(f"{passed}/{total} passed")
     if failures:
         print("AR-23D suite: FAILURES PRESENT")
         return 1

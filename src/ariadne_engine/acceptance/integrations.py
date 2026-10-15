@@ -299,6 +299,12 @@ def _worker_validation_refusal(
     result = execution.get("result") if isinstance(execution.get("result"), Mapping) else {}
     if str(result.get("status", "")) != "passed":
         return f"execution {execution_id} completed without a passed result"
+    engine_packet = str(result.get("packet_id", ""))
+    if not engine_packet or engine_packet != str(record.get("packet_id", "")):
+        return (
+            f"execution {execution_id} did not validate this packet; a passed execution for one "
+            "packet cannot vouch for another packet's record"
+        )
     revision = execution.get("revision") if isinstance(execution.get("revision"), Mapping) else {}
     project = str(revision.get("project", ""))
     state_project = str(state.get("project", ""))
@@ -314,6 +320,22 @@ def _worker_validation_refusal(
         return (
             "the record predates validated-revision binding, so the result cannot be proven current "
             "for any implementation revision"
+        )
+    # The execution's own result carries the revision the engine recorded at
+    # validation time. Comparing the file's claim against that engine-held value
+    # (and only then against the current tree) means a later edit of the record
+    # file cannot assert a revision the execution never validated.
+    held = result.get("validated_revision") if isinstance(result.get("validated_revision"), Mapping) else {}
+    held_fingerprint = str(held.get("implementation_fingerprint", ""))
+    if not held_fingerprint:
+        return (
+            f"execution {execution_id} does not carry the revision it validated, so the record's "
+            "revision claim cannot be checked against the engine's own account"
+        )
+    if held_fingerprint != recorded:
+        return (
+            "the recorded implementation fingerprint disagrees with the engine's own record of the "
+            "revision that execution validated"
         )
     if not str(implementation_fingerprint or "").strip():
         return "the acceptance pass could not establish the current implementation fingerprint"
@@ -443,7 +465,13 @@ def from_worker_validation(
     return summary
 
 
-
+def from_design_requirements(
+    state: dict,
+    *,
+    contract_id: str,
+    task_id: str = "",
+    kind: str = "FUNCTIONAL",
+) -> list[dict]:
     """Create requirement definitions from AR-202D design-requirement closure records.
 
     ``DESIGN_REQUIREMENT_EVIDENCE`` is mapped into the acceptance evidence vocabulary

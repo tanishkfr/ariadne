@@ -566,23 +566,38 @@ def verify_task(
     visible lie in the record rather than an invisible one.
 
     ``engine_validations`` carries recorded S4B worker validations the caller
-    gathered from the run: each is mapped into ``TEST`` evidence by
+    gathered from the run, and ``implementation_fingerprint`` is the current
+    implementation the validations are weighed against. Both are derived from
+    the run state through the transport seam when the caller does not supply
+    them, so every door to this operation -- CLI, API, or MCP -- weighs the same
+    evidence instead of only the door that remembered to gather it. Each
+    validation is mapped into ``TEST`` evidence by
     :func:`~ariadne_engine.acceptance.integrations.from_worker_validation`, which
     refuses stale, blocked, and unevidenced records by name instead of counting
-    them. ``implementation_fingerprint`` is the current implementation the
-    validations are weighed against; when it is absent every validation is
+    them; when the fingerprint cannot be established every validation is
     refused, because a result that cannot be proven current cannot support a
-    current requirement.
+    current requirement. The pass digest binds the implementation fingerprint
+    when it is known, so a source change moves the revision.
     """
+    from . import policy as policy_module
     from .acceptance import gates as gates_module
     from .acceptance import integrations as integrations_module
 
     if not str(task_text or "").strip():
         raise contracts.ContractError("verify needs the original request text")
-    digest = str(work_digest or "").strip() or work_digest_for(task_text, work_ref)
+    transport = policy_module.tool("transport")
+    if not engine_validations:
+        engine_validations = tuple(transport.recorded_worker_validations(state))
+    if not str(implementation_fingerprint or "").strip():
+        implementation_fingerprint = str(transport.current_implementation_fingerprint(state))
+    digest = str(work_digest or "").strip()
+    if not digest:
+        ref = str(work_ref or "")
+        if implementation_fingerprint:
+            ref = (ref + "|" if ref else "") + "impl:" + implementation_fingerprint
+        digest = work_digest_for(task_text, ref)
     if not re.fullmatch(r"[0-9a-f]{16,64}", digest):
         raise contracts.ContractError("work digest must be hex 16-64 chars")
-    validation_mapping: dict[str, object] = {"recorded": [], "replayed": [], "refused": []}
     contract_record = ensure_contract(state, task_text=task_text, task_id=task_id)
     requirements = ensure_requirements(state, contract_record=contract_record, task_text=task_text)
     ensure_claims(
@@ -605,6 +620,12 @@ def verify_task(
             task_id=str(contract_record.get("task_id", "")),
             work_digest=digest,
         )
+        # The receipt must be able to say what it did with each recorded engine
+        # result -- mapped, replayed, or refused and why. A pass that silently
+        # dropped a stale record would be as misleading as one that counted it.
+        extra: dict | None = {"validation_mapping": validation_mapping}
+    else:
+        extra = None
     contract_module_active = contract_record
     pass_record = gates_module.run_pass(
         state, contract_id=str(contract_module_active.get("contract_id", "")),
@@ -615,10 +636,7 @@ def verify_task(
     receipt = create_receipt_from_pass(
         pass_record, proof_id=next_proof_id(state),
         previous_id=previous_proof_id(state),
-        # The receipt must be able to say what it did with each recorded engine
-        # result -- mapped, replayed, or refused and why. A pass that silently
-        # dropped a stale record would be as misleading as one that counted it.
-        extra={"validation_mapping": validation_mapping} if engine_validations else None,
+        extra=extra,
     )
     contracts.require_collection_capacity(state, COLLECTION)
     return store_receipt(state, receipt)

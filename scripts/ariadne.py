@@ -6755,9 +6755,18 @@ def finish_worker_validation(
     }}
     write_json(destination, record)
     if record.get("status") == "passed":
+        completed_result = {
+            "packet_id": entry["id"], "status": "passed", "artifact": str(destination),
+        }
+        # The engine's own account of the revision it just validated: the
+        # acceptance mapper compares the record file's revision claim against
+        # this engine-held value, so editing the record afterwards cannot
+        # assert a revision the validation never ran against.
+        if isinstance(record.get("validated_revision"), dict):
+            completed_result["validated_revision"] = dict(record["validated_revision"])
         EXECUTION.complete(
             state, str(validator["execution_id"]),
-            result={"packet_id": entry["id"], "status": "passed", "artifact": str(destination)},
+            result=completed_result,
             evidence=(str(destination),),
         )
         emit_event(
@@ -7134,9 +7143,11 @@ def validate_worker(args: argparse.Namespace) -> int:
     # The recorded result is bound to the exact implementation bytes the
     # commands ran against, so a later acceptance pass can prove the result is
     # still about the current tree -- or refuse it as stale once the
-    # implementation moves. It is recorded here, after the post-validation
-    # scope check, so the fingerprint describes the tree the commands ended on.
-    base_record["validated_revision"] = TRANSPORT.validated_revision(post_snapshot)
+    # implementation moves. It is attached here, after the post-validation
+    # scope check, so the fingerprint describes the tree the commands ended on;
+    # when the surface cannot be fingerprinted nothing is attached, because an
+    # unprovable record must read as unbound rather than as valid.
+    TRANSPORT.attach_validated_revision(base_record, post_snapshot)
     base_record.update({
         "status": "failed" if required_failures else "passed",
         "failure_kind": "routine" if required_failures else "none",
@@ -12310,16 +12321,14 @@ def _read_text_arg(value: str | None, what: str) -> str:
     return str(value)
 
 
-def _work_digest_for_args(
-    args: argparse.Namespace,
-    task_text: str,
-    implementation_fingerprint: str = "",
-) -> str:
-    explicit = str(getattr(args, "work_digest", "") or "").strip()
-    if explicit:
-        if not re.fullmatch(r"[0-9a-f]{16,64}", explicit):
-            raise RuntimeError_("work digest must be hex 16-64 chars")
-        return explicit
+def _work_ref_for_args(args: argparse.Namespace) -> str:
+    """The CLI's contribution to the pass revision: the named work root.
+
+    The implementation fingerprint is deliberately not composed here -- the
+    Proof Pass binds the implementation itself (``PROOF.verify_task``), so the
+    CLI, APIs and MCP doors cannot drift into weighing the same work at
+    different revisions.
+    """
     work_root = getattr(args, "work_root", None) or getattr(args, "against", None)
     # --against names the task/spec file; --work-root names the work directory.
     # When only --against is given, the digest binds task text + work root path.
@@ -12333,56 +12342,7 @@ def _work_digest_for_args(
         ref = str(root) + "|" + "|".join(names)
     elif work_root and not Path(str(work_root)).is_file():
         ref = str(work_root)
-    # The pass revision binds the implementation bytes when they are known, so
-    # a change to the implementation moves the digest and every previously
-    # recorded observation -- RUNTIME and TEST alike -- goes stale at the next
-    # pass instead of silently staying current. Without this, a re-run over a
-    # changed tree at the same digest would keep citing evidence about the old
-    # revision while looking exact.
-    if str(implementation_fingerprint or "").strip():
-        ref = (ref + "|" if ref else "") + "impl:" + str(implementation_fingerprint)
-    return PROOF.work_digest_for(task_text, ref)
-
-
-def recorded_worker_validations(state: dict) -> list[dict]:
-    """The recorded S4B validation records, bound to the packet that holds them.
-
-    Only records that pass the transport's own structural verification are
-    returned; a malformed or damaged evidence file is skipped, never guessed at,
-    so the acceptance pass can only ever weigh records the transport would also
-    accept. Whether a record is genuine and still current is decided downstream
-    by the acceptance mapper, from the engine execution and the fingerprint the
-    record names -- not here.
-    """
-    rows: list[dict] = []
-    for entry in state.get("packets") or []:
-        if not isinstance(entry, dict) or str(entry.get("stage", "")) != "S4B":
-            continue
-        packet_id = str(entry.get("id", ""))
-        record_path = Path(str(entry.get("path", ""))) / "evidence" / "validation.json"
-        if not record_path.is_file():
-            continue
-        try:
-            record = json.loads(read(record_path))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(record, dict) or TRANSPORT.worker_validation_problems(record, packet_id):
-            continue
-        rows.append({"packet_id": packet_id, "record": record})
-    return rows
-
-
-def current_implementation_fingerprint(state: dict) -> str:
-    """The implementation fingerprint of the run's project as it stands now.
-
-    Empty when the run names no existing project directory: the acceptance
-    mapper refuses fingerprint-less mappings, so an unknown surface can never
-    launder a stale validation into current evidence.
-    """
-    project = Path(str(state.get("project", "") or ""))
-    if not project.is_dir():
-        return ""
-    return TRANSPORT.implementation_fingerprint(TRANSPORT.project_git_snapshot(project))
+    return ref
 
 
 def proof_verify_command(args: argparse.Namespace) -> int:
@@ -12430,19 +12390,14 @@ def proof_verify_command(args: argparse.Namespace) -> int:
                 statements = [ln.strip() for ln in raw.splitlines() if ln.strip()]
         except json.JSONDecodeError:
             statements = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-    implementation_fingerprint = current_implementation_fingerprint(state)
-    digest = _work_digest_for_args(args, task_text, implementation_fingerprint)
-    # The engine's own validation reruns reach the acceptance ledger here: a
-    # recorded S4B validation is mapped into TEST evidence when it is genuine
-    # and still current for the implementation (decided inside the mapper).
-    engine_validations = recorded_worker_validations(state)
+    explicit_digest = str(getattr(args, "work_digest", "") or "").strip()
+    if explicit_digest and not re.fullmatch(r"[0-9a-f]{16,64}", explicit_digest):
+        raise RuntimeError_("work digest must be hex 16-64 chars")
     try:
         receipt = PROOF.verify_task(
-            state, task_text=task_text, work_ref=str(getattr(args, "work_root", "") or ""),
-            work_digest=digest, task_id=task_id,
+            state, task_text=task_text, work_ref=_work_ref_for_args(args),
+            work_digest=explicit_digest, task_id=task_id,
             completion_statements=tuple(statements),
-            engine_validations=engine_validations,
-            implementation_fingerprint=implementation_fingerprint,
         )
     except CONTRACTS.ContractError as exc:
         raise RuntimeError_(str(exc)) from exc
