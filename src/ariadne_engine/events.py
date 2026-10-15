@@ -164,6 +164,24 @@ EVENT_TYPES = (
     "task_accepted",
     "task_rejected",
     "task_blocked",
+
+    # Ariadne 2.3C vocabulary. The rendered-acceptance step of a UI task, the
+    # project-memory lifecycle, and the external-skill trust boundary all record
+    # into the same append-only log: a capture is recorded or blocked, memory
+    # entries are recorded and corrected, enforcement proposals are proposed and
+    # authorized, and an external skill is approved and installed. Each of these
+    # is a fact observed by the engine, not a claim by a worker.
+    "task_rendered",
+    "task_rendered_blocked",
+    "memory_recorded",
+    "memory_corrected",
+    "memory_captured",
+    "enforcement_proposed",
+    "enforcement_authorized",
+    "enforcement_implemented",
+    "external_skill_approved",
+    "external_skill_installed",
+    "external_skill_refused",
 )
 """The declared event vocabulary. A type outside this set is refused, so the log
 cannot accumulate an undocumented ad-hoc event name."""

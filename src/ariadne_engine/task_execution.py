@@ -384,6 +384,7 @@ TASK_STATES = (
     "repair-pending",
     "returned",
     "validated",
+    "render-pending",
     "review-pending",
     "review-failed",
     "verified",
@@ -400,6 +401,89 @@ def task_records(state: Mapping) -> list[dict]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, Mapping)]
+
+
+def rendered_required(plan: Mapping) -> bool:
+    """Whether the plan requires rendered (browser) acceptance evidence."""
+    return bool((plan.get("rendered_acceptance") or {}).get("required"))
+
+
+def _rendered_seed(plan: Mapping) -> dict:
+    """The task's rendered-acceptance ledger, seeded from the plan."""
+    declared = dict((plan.get("rendered_acceptance") or {}))
+    return {
+        "required": bool(declared.get("required")),
+        "interaction": bool(declared.get("interaction")),
+        "reasons": [str(item) for item in declared.get("reasons") or ()],
+        "capture_capability": dict(declared.get("capture_capability") or {}),
+        "evidence_sets": [],
+        "blocked_reason": "",
+        "status": "required" if declared.get("required") else "not-required",
+    }
+
+
+def record_rendered(
+    task: dict,
+    *,
+    status: str,
+    evidence_set_id: str = "",
+    capture_ids: Sequence[str] = (),
+    evidence_ids: Sequence[str] = (),
+    revision_hash: str = "",
+    render_source_digest: str = "",
+    manifest_path: str = "",
+    blocked_reason: str = "",
+) -> dict:
+    """Record one attempt at the task's rendered acceptance.
+
+    Only the engine writes this: it is what makes "the UI task was rendered and
+    seen" checkable from records instead of from a sentence in a return. A
+    capture that could not run is recorded as ``blocked`` with its reason, never
+    as a pass.
+    """
+    rendered = task.setdefault("rendered", _rendered_seed({}))
+    rendered["status"] = str(status)
+    rendered["blocked_reason"] = str(blocked_reason)
+    rendered["recorded_at"] = contracts.utc_now()
+    if evidence_set_id:
+        row = {
+            "evidence_set_id": str(evidence_set_id),
+            "capture_ids": [str(item) for item in capture_ids],
+            "evidence_ids": [str(item) for item in evidence_ids],
+            "revision_hash": str(revision_hash),
+            "render_source_digest": str(render_source_digest),
+            "manifest_path": str(manifest_path),
+            "recorded_at": contracts.utc_now(),
+        }
+        rendered.setdefault("evidence_sets", []).append(row)
+    task["updated_at"] = contracts.utc_now()
+    return rendered
+
+
+def rendered_satisfied(task: Mapping, *, revision_hash: str = "", source_digest: str = "") -> bool:
+    """Whether a passed evidence set exists for this task at the given identity.
+
+    A set recorded against a different revision does not satisfy the current one:
+    rendered evidence is bound to the implementation bytes it captured, and a
+    later repair invalidates it exactly like a stale validation. ``source_digest``
+    checks the ``render_source_digest`` recorded at capture time against the
+    implementation as it is now, which catches an edit made after the capture
+    even when no new packet exists.
+    """
+    rendered = dict(task.get("rendered") or {})
+    if not rendered.get("required"):
+        return True
+    if str(rendered.get("status")) != "captured":
+        return False
+    rows = [
+        row for row in rendered.get("evidence_sets") or ()
+        if isinstance(row, Mapping)
+    ]
+    if revision_hash:
+        rows = [row for row in rows if str(row.get("revision_hash", "")) == str(revision_hash)]
+    if source_digest:
+        rows = [row for row in rows if str(row.get("render_source_digest", "")) == str(source_digest)]
+    return bool(rows)
 
 
 def current_task(state: Mapping) -> dict | None:
@@ -481,6 +565,7 @@ def create_task(
         ],
         "attempts": [],
         "review": {},
+        "rendered": _rendered_seed(plan),
         "proof": {},
         "acceptance": {},
         "attach": dict(attach or {}),
@@ -521,6 +606,12 @@ def task_problems(record: Mapping) -> list[str]:
         if str(skill.get("state", "")) not in ("selected", "invoked", "completed", "unmet"):
             problems.append(f"skill ledger entry {skill.get('id')} has an unsupported state")
             break
+    rendered = record.get("rendered")
+    if rendered is not None:
+        if not isinstance(rendered, Mapping):
+            problems.append("task record rendered ledger is not an object")
+        elif str(rendered.get("status", "")) not in ("not-required", "required", "captured", "blocked"):
+            problems.append(f"task rendered ledger has an unsupported status: {rendered.get('status')!r}")
     return problems
 
 
@@ -892,8 +983,27 @@ def evaluate_skill_evidence(
 
 # ----------------------------------------------------------------- resume view
 
-def task_status_value(task: Mapping, *, review_required: bool) -> str:
-    """The derived state of one task from its records, nothing else."""
+def task_status_value(
+    task: Mapping,
+    *,
+    review_required: bool,
+    rendered_required: bool | None = None,
+    rendered_satisfied: bool | None = None,
+) -> str:
+    """The derived state of one task from its records, nothing else.
+
+    ``rendered_required``/``rendered_satisfied`` default to the task's own
+    rendered ledger, so callers that only know about review keep working: a UI
+    task with a validated attempt and no captures derives ``render-pending``,
+    and no caller has to remember to ask.
+    """
+    rendered = dict(task.get("rendered") or {})
+    if rendered_required is None:
+        rendered_required = bool(rendered.get("required"))
+    if rendered_satisfied is None:
+        rendered_satisfied = (
+            True if not rendered_required else str(rendered.get("status")) == "captured"
+        )
     acceptance = dict(task.get("acceptance") or {})
     if str(acceptance.get("outcome")) == "accepted":
         return "accepted"
@@ -918,6 +1028,8 @@ def task_status_value(task: Mapping, *, review_required: bool) -> str:
     if str(latest.get("state")) == "returned":
         return "returned"
     if str(latest.get("state")) == "validated":
+        if rendered_required and not rendered_satisfied:
+            return "render-pending"
         return "review-pending" if review_required else "validated"
     if str(latest.get("state")) == "failed":
         validation = dict(latest.get("validation") or {})
@@ -929,6 +1041,8 @@ def task_status_value(task: Mapping, *, review_required: bool) -> str:
             str(item.get("outcome")) == "validated" for item in attempts_desc if item is not latest
         )
         if earlier_validated:
+            if rendered_required and not rendered_satisfied:
+                return "render-pending"
             return "validated"
         return "repair-pending" if validation.get("retryable") else "blocked"
     return "prepared"
@@ -949,6 +1063,7 @@ def continuation_point(task: Mapping, *, review_required: bool) -> str:
         "repair-pending": "prepare the bounded repair attempt (task-repair) from the recorded validation failure",
         "returned": "run Ariadne's independent validation (task-validate) before anything else",
         "validated": "run Ariadne Proof Pass against the original request (task-verify)",
+        "render-pending": "capture the required browser-rendered acceptance evidence (task-render) against this revision",
         "review-pending": "obtain the required independent review (task-review) before completion",
         "review-failed": "inspect the review findings and repair within the bounded budget",
         "verified": "the engine is done; the human acceptance decision remains (task-accept)",
@@ -985,6 +1100,9 @@ __all__ = [
     "find_task_for_packet",
     "create_task",
     "task_problems",
+    "rendered_required",
+    "record_rendered",
+    "rendered_satisfied",
     "attempt_for",
     "open_attempt",
     "prepare_attempt",

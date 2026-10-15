@@ -133,6 +133,27 @@ DESIGN_EVIDENCE = ("ui", "ux", "visual", "design", "interface", "layout", "typog
                    "responsive", "colour", "color", "animation", "spacing")
 """Signals that a task carries a design obligation, whatever its family."""
 
+RENDERED_SURFACE_EVIDENCE = (
+    "modal", "dialog", "popup", "overlay", "dropdown", "menu", "toolbar", "navbar", "sidebar",
+    "panel", "page", "screen", "view", "form", "button", "widget", "dashboard", "component",
+    "editor", "canvas", "carousel", "gallery", "landing", "hero", "banner",
+    "css", "html", "jsx", "tsx", "frontend", "web app", "website",
+)
+"""Request signals that name a surface a browser actually paints.
+
+A rendered defect ("the modal is clipped") names no design vocabulary, so the
+design-token list alone would miss it. These tokens are the second detector: when
+one is present in a writing task, an unrendered implementation cannot be called
+visually verified.
+"""
+
+RENDERED_FILE_SUFFIXES = (".html", ".css", ".scss", ".sass", ".less", ".jsx", ".tsx", ".vue", ".svelte", ".astro")
+
+RENDERED_MODES = ("auto", "required", "off")
+
+INTERACTION_EVIDENCE = ("interaction", "click", "hover", "drag", "animation", "animate", "transition",
+                        "toggle", "carousel", "accordion", "open", "close", "keyboard", "focus")
+
 WRITE_EVIDENCE = ("fix", "implement", "add ", "build", "create", "change", "update", "repair",
                   "refactor", "rename", "migrate", "replace", "remove", "optimise", "optimize")
 DEPLOY_EVIDENCE = ("deploy", "ship", "publish", "release to production", "push to production")
@@ -576,6 +597,91 @@ def _detected_validation(project: Path, evidence: Mapping) -> list[str]:
     return detected
 
 
+def _rendered_acceptance(
+    *,
+    request: str,
+    scope: Sequence[str],
+    frame: Mapping,
+    workflow_family: str,
+    design_obligation: bool,
+    declared: str,
+    capture_capability: Mapping | None,
+    render_target: Mapping | None = None,
+) -> dict:
+    """Whether this task must carry rendered (browser) acceptance evidence.
+
+    Detection is deterministic and recorded: the request's own words, the declared
+    scope's file kinds, and the design obligation, each with its evidence. The
+    capture capability is never assumed: it is whatever the caller probed, and an
+    unavailable capability is reported as a gap here so a later "visually verified"
+    claim has nowhere to hide.
+    """
+    mode = str(declared or "auto").strip().lower() or "auto"
+    if mode not in RENDERED_MODES:
+        raise TaskPlanError(f"unknown rendered-acceptance mode: {mode!r}")
+    reasons: list[str] = []
+    if mode == "off":
+        return {
+            "mode": mode,
+            "required": False,
+            "reasons": ["rendered acceptance was explicitly turned off for this task"],
+            "interaction": False,
+            "capture_capability": dict(capture_capability or {"status": "UNKNOWN", "detail": "not probed"}),
+            "obligation": "none",
+        }
+    if workflow_family != WORKFLOW_TASK or bool(frame.get("read_only")):
+        return {
+            "mode": mode,
+            "required": False,
+            "reasons": [
+                "rendered acceptance applies to bounded writing tasks; this task is "
+                + ("read-only" if frame.get("read_only") else f"a {workflow_family or 'non-task'} workflow")
+            ],
+            "interaction": False,
+            "capture_capability": dict(capture_capability or {"status": "UNKNOWN", "detail": "not probed"}),
+            "obligation": "none",
+        }
+    surface_hits = _matches(RENDERED_SURFACE_EVIDENCE, request)
+    scope_hits = [
+        str(item) for item in scope
+        if str(item).lower().endswith(RENDERED_FILE_SUFFIXES)
+    ]
+    if design_obligation:
+        reasons.append("the task carries a design obligation")
+    if surface_hits:
+        reasons.append("the request names a rendered surface: " + ", ".join(surface_hits[:5]))
+    if scope_hits:
+        reasons.append("the declared scope includes rendered files: " + ", ".join(scope_hits[:4]))
+    if mode == "required":
+        required = True
+        reasons.append("rendered acceptance was explicitly required")
+    else:
+        required = bool(reasons)
+    interaction = required and (
+        bool(_matches(INTERACTION_EVIDENCE, request)) or design_obligation
+    )
+    capability = dict(capture_capability or {"status": "UNKNOWN", "detail": "not probed"})
+    result = {
+        "mode": mode,
+        "required": required,
+        "reasons": reasons or ["no rendered surface is named by the request or the scope"],
+        "interaction": bool(interaction),
+        "capture_capability": capability,
+        "obligation": "browser-render" if required else "none",
+    }
+    if required:
+        target = dict(render_target or {})
+        result["target"] = {
+            "route": str(target.get("route", "") or "/"),
+            "serve_dir": str(target.get("serve_dir", "")),
+            "actions": [
+                dict(item) if isinstance(item, Mapping) else {"kind": "click", "selector": str(item)}
+                for item in target.get("actions") or ()
+            ],
+        }
+    return result
+
+
 def plan(
     *,
     request: str,
@@ -590,6 +696,11 @@ def plan(
     dependencies: Sequence[str] = (),
     declared_capabilities: Mapping | Sequence | None = None,
     explicit_skills: Sequence[str] = (),
+    declared_rendered: str = "",
+    capture_capability: Mapping | None = None,
+    render_target: Mapping | None = None,
+    approved_external: Sequence[str] = (),
+    skill_registry: Mapping | None = None,
     task_id: str = "",
     run_id: str = "",
 ) -> dict:
@@ -673,6 +784,8 @@ def plan(
         plan={**execution_path, "write_authorization": write_authorization},
         host=host,
         explicit=explicit_skills,
+        approved_external=tuple(str(item) for item in approved_external),
+        registry=skill_registry,
         run_id=run_id,
         task_id=task_id,
     )
@@ -681,10 +794,30 @@ def plan(
         raise TaskPlanError("the skill selection is malformed: " + "; ".join(selection_problems))
 
     protected = _protected_scope(scope, frame)
+    rendered_acceptance = _rendered_acceptance(
+        request=request,
+        scope=scope,
+        frame=frame,
+        workflow_family=str(workflow["family"]),
+        design_obligation=design_obligation,
+        declared=declared_rendered,
+        capture_capability=capture_capability,
+        render_target=render_target,
+    )
     questions = _questions_for(
         frame, scope=scope, validation=validation, workflow=workflow,
     )
     gaps = [dict(item) for item in selection.get("gaps") or []]
+    if rendered_acceptance["required"] and str(
+        (rendered_acceptance.get("capture_capability") or {}).get("status", "")
+    ) == "UNAVAILABLE":
+        gaps.append({
+            "capability": "capture",
+            "skill": "visual-qa",
+            "reason": "this task requires browser-rendered acceptance evidence, but the capture "
+                      "capability is unavailable: "
+                      + str((rendered_acceptance.get("capture_capability") or {}).get("detail", "no detail")),
+        })
     if selection.get("status") == "refused":
         gaps.append({
             "capability": "skill-selection",
@@ -749,6 +882,7 @@ def plan(
             "requirement": "at least one required command before a worker packet is prepared",
         },
         "dependencies": [str(item) for item in dependencies],
+        "rendered_acceptance": rendered_acceptance,
         "write_authorization": write_authorization,
         "approvals": {
             "gates_ahead": gates_ahead,
@@ -878,6 +1012,36 @@ def task_contract(
             "the permitted scope, waive a validation row, or grant anything."
         )
         repair_section = "\n".join(lines) + "\n"
+    rendered = dict(plan_record.get("rendered_acceptance") or {})
+    rendered_section = ""
+    if rendered.get("required"):
+        capability = dict(rendered.get("capture_capability") or {})
+        lines = [
+            "## Rendered acceptance",
+            "",
+            "> This task changes what renders, so an unrendered implementation cannot be",
+            "> called visually verified. Ariadne will capture the real surface through its",
+            "> rendered-evidence pipeline after validation, bind the captures to this task's",
+            "> revision, and require the independent review to see them before Proof Pass.",
+            "",
+            "**Required:** browser-rendered evidence captured by the engine (not by the worker).",
+            f"**Interaction evidence:** {'required' if rendered.get('interaction') else 'not required'}",
+            "**Capture capability at preparation:** "
+            + _single_line(f"{capability.get('status', 'UNKNOWN')} — {capability.get('detail', '')}"),
+        ]
+        if str(capability.get("status", "")) == "UNAVAILABLE":
+            lines.append(
+                "**Warning:** the capture capability is unavailable in this environment; the task "
+                "cannot reach verified visual acceptance here and will report that requirement as "
+                "unresolved rather than claim visual success."
+            )
+        lines.append("")
+        lines.append(
+            "The worker's job is the implementation and its own honest local checks; the rendered "
+            "captures and their critique are Ariadne's, and a claim of visual success in the return "
+            "is not evidence."
+        )
+        rendered_section = "\n".join(lines) + "\n"
     scope_rows = "\n".join(
         f"| {_single_line(path)} | {_single_line(actions)} | {_single_line(reason)} |"
         for path, actions, reason in scope
@@ -939,7 +1103,7 @@ directories are never permitted here.
 | Check | Command | Required | Expected |
 |---|---|---|---|
 {validation_rows}
-{methods_section}{repair_section}"""
+{rendered_section}{methods_section}{repair_section}"""
 
 
 def plan_problems(record: Mapping) -> list[str]:
@@ -979,6 +1143,17 @@ def plan_problems(record: Mapping) -> list[str]:
     raw_skills = record.get("skills")
     if not isinstance(raw_skills, Mapping):
         problems.append("task plan has no skill selection")
+    rendered = record.get("rendered_acceptance")
+    if rendered is not None:
+        if not isinstance(rendered, Mapping):
+            problems.append("task plan rendered_acceptance is not an object")
+        else:
+            if str(rendered.get("mode", "")) not in RENDERED_MODES:
+                problems.append(f"task plan names an unknown rendered mode: {rendered.get('mode')!r}")
+            if not isinstance(rendered.get("required"), bool):
+                problems.append("task plan rendered_acceptance does not state whether rendering is required")
+            if rendered.get("required") and not rendered.get("reasons"):
+                problems.append("a required rendered acceptance names no reason")
     approvals = record.get("approvals") or {}
     if not isinstance(approvals, Mapping):
         problems.append("task plan has no approval view")
@@ -1033,6 +1208,11 @@ __all__ = [
     "ACTION_VOCABULARY",
     "ACTION_EVIDENCE",
     "FAMILY_EVIDENCE",
+    "DESIGN_EVIDENCE",
+    "RENDERED_SURFACE_EVIDENCE",
+    "RENDERED_FILE_SUFFIXES",
+    "RENDERED_MODES",
+    "INTERACTION_EVIDENCE",
     "OVERLAP_RESOLUTIONS",
     "TaskPlanError",
     "inspect_project",

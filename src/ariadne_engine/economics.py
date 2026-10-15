@@ -1032,6 +1032,121 @@ def decision_layer_cost(
     }
 
 
+def skill_effectiveness(state: Mapping) -> dict:
+    """Measured skill selection and execution for the tasks this run records (Ariadne 2.3C).
+
+    Every number here is arithmetic over records the engine already wrote: the
+    plan's selection, the task's method ledger, validation commands, attempt
+    counts, and review findings. What was not measured stays ``UNKNOWN`` — in
+    particular provider cost and token usage, which no local record supplies.
+
+    The point of the report is the difference between the columns: a skill
+    *selected* and never *invoked* is overhead a smaller plan would not carry,
+    and a task whose selection is empty is evidence the selector can choose no
+    additional skills when none applies.
+    """
+    plans: dict[str, dict] = {}
+    for record in state.get("task_plans") or ():
+        if isinstance(record, Mapping) and str(record.get("task_id", "")).strip():
+            plans[str(record["task_id"])] = dict(record)
+    tasks: list[dict] = []
+    per_skill: dict[str, dict] = {}
+
+    def bucket(skill_id: str) -> dict:
+        return per_skill.setdefault(str(skill_id), {
+            "selected": 0, "invoked": 0, "completed": 0, "unmet": 0,
+            "tasks": 0, "validation_failures": 0, "repairs": 0, "review_findings": 0,
+            "elapsed_seconds": 0.0, "provider_cost": "UNKNOWN", "measurements": {
+                "provider_cost": False, "elapsed_seconds": False,
+            },
+        })
+
+    for task in state.get("tasks") or ():
+        if not isinstance(task, Mapping):
+            continue
+        task_id = str(task.get("task_id", ""))
+        plan = plans.get(task_id, {})
+        selection = dict((plan.get("skills") or {})) if plan else {}
+        attempts = [item for item in task.get("attempts") or () if isinstance(item, Mapping)]
+        ledger = [item for item in task.get("skills") or () if isinstance(item, Mapping)]
+        review = dict(task.get("review") or {})
+        elapsed = 0.0
+        elapsed_measured = False
+        validation_failures = 0
+        for attempt in attempts:
+            validation = dict(attempt.get("validation") or {})
+            if str(validation.get("status")) in ("failed", "blocked"):
+                validation_failures += 1
+            duration = validation.get("duration_seconds")
+            try:
+                value = float(duration)
+                if value > 0:
+                    elapsed += value
+                    elapsed_measured = True
+            except (TypeError, ValueError):
+                pass
+        selected_ids = [str(item.get("id", "")) for item in selection.get("selected") or ()]
+        for skill_id in selected_ids:
+            row = bucket(skill_id)
+            row["selected"] += 1
+            row["tasks"] += 1
+        for entry in ledger:
+            row = bucket(str(entry.get("id", "")))
+            state_value = str(entry.get("state", "selected"))
+            if state_value in ("invoked", "completed", "unmet"):
+                row[state_value] += 1 if state_value in row else 0
+            row["validation_failures"] += validation_failures if state_value != "selected" else 0
+            row["repairs"] += max(0, len(attempts) - 1) if state_value != "selected" else 0
+            row["review_findings"] += len(review.get("findings") or ())
+            if elapsed_measured:
+                row["elapsed_seconds"] += round(elapsed, 3)
+                row["measurements"]["elapsed_seconds"] = True
+        tasks.append({
+            "task_id": task_id,
+            "intent": str(task.get("intent", "")),
+            "status": str(task.get("status", "")),
+            "selected": selected_ids,
+            "selection_count": len(selected_ids),
+            "invoked": [str(item.get("id")) for item in ledger if str(item.get("state")) == "invoked"],
+            "completed": [str(item.get("id")) for item in ledger if str(item.get("state")) == "completed"],
+            "unmet": [str(item.get("id")) for item in ledger if str(item.get("state")) == "unmet"],
+            "attempts": len(attempts),
+            "repairs": max(0, len(attempts) - 1),
+            "validation_failures": validation_failures,
+            "review_findings": len(review.get("findings") or ()),
+            "rendered": {
+                "required": bool((task.get("rendered") or {}).get("required")),
+                "status": str((task.get("rendered") or {}).get("status", "")),
+            },
+            "elapsed_seconds": round(elapsed, 3) if elapsed_measured else "UNKNOWN",
+            "provider_cost": "UNKNOWN",
+            "measurements": {
+                "elapsed_seconds": elapsed_measured,
+                "provider_cost": False,
+                "tokens": False,
+            },
+        })
+    tasks.sort(key=lambda item: item["task_id"])
+    total_selected = sum(len(item["selected"]) for item in tasks)
+    return {
+        "tasks": tasks,
+        "totals": {
+            "tasks": len(tasks),
+            "selected_skills": total_selected,
+            "selected_per_task": round(total_selected / len(tasks), 2) if tasks else 0.0,
+            "minimal_tasks": len([item for item in tasks if not item["selected"]]),
+            "skills": len(per_skill),
+        },
+        "per_skill": dict(sorted(per_skill.items())),
+        "unknowns": ["provider tokens", "provider cost"],
+        "note": (
+            "measured from task records and plans only; token usage and provider cost stay UNKNOWN "
+            "unless a provider-linked execution recorded them, and they are never estimated from "
+            "character counts"
+        ),
+    }
+
+
 def summarise(state: Mapping) -> dict:
     """Run-level economics: execution totals, task count and measured coverage."""
     tree_tasks = sorted({str(record.get("task_id", "")) for record in execution.executions(state)})
@@ -1079,5 +1194,6 @@ __all__ = [
     "plan_batches",
     "decision_economics",
     "decision_layer_cost",
+    "skill_effectiveness",
     "summarise",
 ]

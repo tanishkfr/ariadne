@@ -71,6 +71,7 @@ def from_rendered_evidence_set(
     contract_id: str,
     contract_revision: str,
     task_id: str = "",
+    work_digest: str = "",
 ) -> list[dict]:
     """Turn one AR-222D rendered evidence set into acceptance evidence items.
 
@@ -78,16 +79,30 @@ def from_rendered_evidence_set(
     requirement the set names. Nothing about the capture is edited: its artefact digest,
     its viewport and its reviewer identity are carried across unchanged, because a
     migration that tidied its input would be indistinguishable from falsifying it.
+
+    ``work_digest`` overrides the revision the mapped items bind to. The default is
+    the set's own ``render_source_digest`` -- the implementation bytes that were
+    actually captured -- and a caller may pass its own revision identity when the
+    set should be weighed inside a pass over a different work record. The rendered
+    digest is kept in the observation either way, so the override cannot erase
+    what was rendered.
     """
     from . import evidence as evidence_module
 
     created: list[dict] = []
-    work_digest = str(evidence_set.get("render_source_digest", ""))
-    if not work_digest:
+    render_digest = str(evidence_set.get("render_source_digest", ""))
+    bound_digest = str(work_digest or "").strip() or render_digest
+    if not bound_digest:
         raise ContractError(
             "a rendered evidence set with no work digest cannot be mapped; evidence bound to no "
             "revision can never establish a current requirement"
         )
+    if bound_digest != render_digest:
+        # The override binds the items to the caller's revision; the render digest
+        # stays visible so a reader can still trace the exact implementation bytes.
+        suffix = f" (render_source_digest {render_digest[:12]})" if render_digest else ""
+    else:
+        suffix = ""
     requirement_ids = [str(item) for item in evidence_set.get("requirement_ids") or ()]
     if not requirement_ids:
         observations = evidence_set.get("captures") or ()
@@ -99,6 +114,18 @@ def from_rendered_evidence_set(
         return created
     artifact = evidence_set.get("artifact") if isinstance(
         evidence_set.get("artifact"), Mapping) else {}
+    if not artifact:
+        # A real AR-222 set has no single top-level artifact: its captures each own
+        # one. The first validated capture is the re-readable artefact the
+        # acceptance ledger cites, so the mapping never has to claim an observation
+        # that points at nothing.
+        for capture in evidence_set.get("captures") or ():
+            if isinstance(capture, Mapping) and str(capture.get("artifact_path", "")).strip():
+                artifact = {
+                    "path": str(capture.get("artifact_path", "")),
+                    "sha256": str(capture.get("digest", "")),
+                }
+                break
     observations = evidence_set.get("observations") or evidence_set.get("summary") or ()
     if isinstance(observations, str):
         observations = [observations]
@@ -108,6 +135,7 @@ def from_rendered_evidence_set(
                 f"rendered capture at viewport {capture.get('viewport', '')}"
             ]
     text = "; ".join(str(item) for item in observations) or "rendered evidence set captured"
+    text = text + suffix
     stance = str(evidence_set.get("stance", "") or _stance_from_status(evidence_set))
     for requirement_id in requirement_ids:
         created.append(evidence_module.record(
@@ -126,7 +154,7 @@ def from_rendered_evidence_set(
             requirement_ids=[requirement_id],
             artifact_path=str(artifact.get("path", "")),
             artifact_sha256=str(artifact.get("sha256", "")),
-            work_digest=work_digest,
+            work_digest=bound_digest,
             contract_revision=contract_revision,
             contract_id=contract_id,
             task_id=task_id,

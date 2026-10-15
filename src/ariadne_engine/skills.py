@@ -628,9 +628,13 @@ def select_skills(
                 "reasons": [item["reason"] for item in gaps],
             })
             continue
+        externally_approved = (
+            str(entry.get("source")) == EXTERNAL_SOURCE and skill_id in approved
+        )
         chosen_by_rule = (
             mandatory
             or skill_id in requested
+            or externally_approved
             or _default_selected(skill_id, entry, elevated=elevated, review_retained=review_retained)
         )
         if not chosen_by_rule:
@@ -644,7 +648,11 @@ def select_skills(
         reason = (
             "mandatory for this intent family" if mandatory
             else "explicitly requested" if skill_id in requested
-            else _default_reason(skill_id, entry, elevated=elevated, review_retained=review_retained)
+            else (
+                "approved external skill whose declared families match this task"
+                if externally_approved
+                else _default_reason(skill_id, entry, elevated=elevated, review_retained=review_retained)
+            )
         )
         selected[skill_id] = {
             "id": skill_id,

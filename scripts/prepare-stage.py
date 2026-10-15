@@ -1558,6 +1558,33 @@ def plan_task_sources(plan: dict, project: Path, args: argparse.Namespace) -> li
     request_path = Path(str(getattr(args, "task_request", "") or "")).resolve()
     add("user request", request_path, "project-task-request", "project", required=True,
         declared_name="user request")
+    memory_path = Path(str(getattr(args, "task_memory", "") or ""))
+    if str(getattr(args, "task_memory", "") or "").strip() and memory_path.is_file():
+        # The project-memory briefing is a bounded project source: it exists only
+        # when relevant recorded facts matched this task, and it is data for the
+        # worker, never instructions and never policy. Its absence is normal and
+        # is reported as an omission, not a failure.
+        add(
+            "project memory briefing", memory_path, "project-task-memory", "project",
+            required=False, removable=True, deliverable=True,
+            absent_reason="no relevant project memory was recorded for this task",
+            selection_reason="no project memory matched this task's family or scope",
+        )
+    external_skill_docs = [
+        Path(str(item)) for item in (getattr(args, "task_external_skills", None) or ())
+    ]
+    for document in external_skill_docs:
+        if not document.is_file():
+            continue
+        # An approved external method document. It was trust-scanned when it was
+        # loaded from the managed store; it reaches the packet as a method, never
+        # as policy, and its approval is recorded in the plan the packet names.
+        add(
+            f"external skill method ({document.name})", document, "project-task-external-skill",
+            "conditional", required=True, removable=False, deliverable=True,
+            declared_name=document.name,
+            selection_reason="the plan selected this approved external skill for the task's family",
+        )
     for name in TASK_STAGES[TASK_PACKET_STAGE]["canonical_inputs"]:
         add(name, ROOT / name, "canonical", "canonical", required=True, declared_name=name)
 
