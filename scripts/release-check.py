@@ -198,12 +198,24 @@ def check_benchmarks(*, skip: bool) -> dict:
             timeout=3600,
         )
         summary_line = ""
+        failing_cases: list[str] = []
         for row in result.stdout.splitlines():
             if row.startswith("summary:"):
                 summary_line = row
+                continue
+            tokens = row.split()
+            # A failing case must be nameable from the gate's own record: the
+            # results directory is temporary, so "fail: 1" without the case name
+            # leaves nothing to investigate after the fact. The status column is
+            # the second token of a case row.
+            if len(tokens) >= 2 and tokens[1] == "fail":
+                failing_cases.append(tokens[0])
         if result.returncode == 0 and "'fail': 0" in summary_line:
             return {"status": "PASS", "detail": summary_line or tail(result.stdout, 2)}
-        return {"status": "FAIL", "detail": summary_line or tail(result.stdout + result.stderr, 4)}
+        detail = summary_line or tail(result.stdout + result.stderr, 4)
+        if failing_cases:
+            detail = f"{detail}; failed: {', '.join(failing_cases[:6])}"
+        return {"status": "FAIL", "detail": detail}
     finally:
         shutil.rmtree(results_dir, ignore_errors=True)
 
