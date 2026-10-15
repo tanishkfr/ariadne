@@ -129,7 +129,11 @@ def write_surface(root: Path, *, html: str, css: str) -> Path:
     return root
 
 
-BASIC_CSS = ":root{--accent:#4f7cff}\nbody{margin:0;font-family:sans-serif;background:#0b0d11;color:#e6e9ef}\n"
+BASIC_CSS = (
+    ":root{--accent:#4f7cff}\n"
+    "body{margin:0;font-family:sans-serif;background:#0b0d11;color:#e6e9ef}\n"
+    ".btn--primary:focus-visible{outline:2px solid #9ecbff;outline-offset:2px}\n"
+)
 
 BASIC_HTML = (
     "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
@@ -641,6 +645,16 @@ def a_real_browser_renders_and_inspects_when_one_is_available():
             assert inspected["region_counts"][".panel"] == 2, inspected["region_counts"]
             assert inspected["ready_state"] == "complete", inspected["ready_state"]
             assert not inspected["horizontal_overflow"], "the surface must fit its viewport"
+            # A control styled only through :focus-visible must be reported as
+            # ringed. The audit focuses programmatically, and a programmatic
+            # focus() would never match :focus-visible, so before the keyboard
+            # intent was declared every such control was reported ringless and
+            # a reviewer was told the design had a focus defect it did not have.
+            primary = [
+                row for row in inspected["focus_samples"]
+                if "btn--primary" in str(row.get("cls", ""))
+            ]
+            assert primary and primary[0]["ring"] is True, inspected["focus_samples"]
             performed = renderer.perform_state({"kind": "focus", "selector": ".btn--primary"})
             assert performed["steps"], "an interaction must actually be performed"
             # A design decision made for reduced motion is only closed by a
@@ -738,6 +752,17 @@ def emulated_media_is_bounded_to_declared_states():
         "not one of",
     )
     raises(lambda: safety.safe_action({"kind": "emulate_media"}), "at least one media feature")
+    filled = safety.safe_action({"kind": "fill", "selector": "#prompt-input", "value": "weather for mars"})
+    assert filled["value"] == "weather for mars"
+    raises(lambda: safety.safe_action({"kind": "fill", "value": "x"}), "needs the field")
+    raises(
+        lambda: safety.safe_action({"kind": "fill", "selector": "#prompt-input", "value": "x" * 401}),
+        "bounded to 400",
+    )
+    raises(
+        lambda: safety.safe_action({"kind": "fill", "selector": "#prompt-input", "value": "line\nbreak"}),
+        "control character",
+    )
 
 
 @case

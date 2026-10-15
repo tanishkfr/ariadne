@@ -433,6 +433,9 @@ class ChromiumRenderAdapter(RenderAdapter):
             elif kind == "click" and selector:
                 page.click(selector)
                 steps.append(f"clicked {selector}")
+            elif kind == "fill" and selector:
+                page.fill(selector, str(action.get("value", "")))
+                steps.append(f"filled {selector}")
             elif kind == "press":
                 key = str(action.get("key", ""))
                 if selector:
@@ -637,7 +640,12 @@ INSPECT_SCRIPT = """
   const focusSamples = [];
   const noRing = [];
   for (const node of Array.from(focusable).slice(0, 40)) {
-    node.focus();
+    // Focus with keyboard intent when the browser supports declaring it:
+    // a plain programmatic focus() does not put the browser in keyboard
+    // modality, so :focus-visible rules do not match and a surface styled
+    // only through :focus-visible would be reported as ringless by an audit
+    // that cannot see its own limitation. Chromium honours {focusVisible:true}.
+    try { node.focus({ focusVisible: true }); } catch (err) { node.focus(); }
     const style = window.getComputedStyle(node);
     const outline = style.outlineStyle;
     const hasOutline = outline && outline !== 'none' && parseFloat(style.outlineWidth || '0') > 0;
