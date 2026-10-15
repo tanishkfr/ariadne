@@ -7646,12 +7646,24 @@ def record_acceptance(args: argparse.Namespace) -> int:
 
 
 def creative_plan(args: argparse.Namespace) -> int:
-    """Create the hidden skill/research plan after S1 has produced the brief."""
+    """Create the hidden skill/research plan: at S1 normally, or once, late, with the gap recorded.
+
+    Creative planning belongs immediately after the project brief, and that stays
+    the intended order. A run that reached a later boundary without one used to be
+    dead-ended here with no legitimate path forward (found by the AR-2.3C
+    end-to-end acceptance run, where the operator advanced past the brief before
+    recording the plan). Refusing a *replacement* ledger is still absolute, and a
+    late plan cannot pretend it was timely: the lateness, the stage it was
+    recorded at, and the reason are stored inside the ledger itself.
+    """
     run_root, state = resolve_and_load(args)
     entry, packet = current_packet(state, allow_project_drift=True)
     project = Path(state["project"])
+    late = False
     if entry["stage"] != "S1":
-        raise RuntimeError_("Creative planning belongs immediately after the project brief")
+        if CREATIVE.ledger_path(project).exists():
+            raise RuntimeError_("Creative planning is already recorded; update evidence instead of replacing it")
+        late = True
     if CREATIVE.ledger_path(project).exists():
         raise RuntimeError_("Creative planning is already recorded; update evidence instead of replacing it")
     for name in ("PROJECT.md", "AGENTS.md"):
@@ -7663,6 +7675,16 @@ def creative_plan(args: argparse.Namespace) -> int:
     try:
         assessment = json.loads(read(source))
         ledger = CREATIVE.create_ledger(project, assessment)
+        if late:
+            ledger["late_planning"] = {
+                "recorded_at_stage": str(entry["stage"]),
+                "recorded_at": now(),
+                "reason": (
+                    "the run advanced past the project brief before the creative plan was recorded; "
+                    "the plan is recorded late and flagged rather than hidden, and no earlier boundary "
+                    "is rewritten"
+                ),
+            }
         CREATIVE.record_skill_event(ledger, {
             "skill": "intake",
             "state": "invoked",

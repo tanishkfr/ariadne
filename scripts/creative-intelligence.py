@@ -933,13 +933,26 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
                     f"skill history has invalid transition: {skill.get('name')} {previous} -> {state}"
                 )
             previous = state
+        # Artifact digests are checked as the latest record per path, never by
+        # rewriting history: a refinement recorded by a later event (a re-`used`
+        # after the direction stage's own validation demanded a fuller DESIGN.md,
+        # for instance) supersedes the earlier digest, while the full history
+        # stays in the ledger as the audit trail. An artifact changed after the
+        # *latest* recorded event still fails, and an artifact with no later
+        # record still fails -- the rule that an unrecorded edit is unproven
+        # evidence is untouched.
+        latest_artifacts: dict[str, tuple[dict, str]] = {}
         for event in history:
-            if event.get("evidence"):
-                problems.extend(_artifact_problems(event["evidence"], f"{skill.get('name')} invocation"))
-            if event.get("output"):
-                problems.extend(_artifact_problems(event["output"], f"{skill.get('name')} output"))
-            if event.get("downstream"):
-                problems.extend(_artifact_problems(event["downstream"], f"{skill.get('name')} downstream"))
+            for key, label in (
+                ("evidence", f"{skill.get('name')} invocation"),
+                ("output", f"{skill.get('name')} output"),
+                ("downstream", f"{skill.get('name')} downstream"),
+            ):
+                record = event.get(key)
+                if record:
+                    latest_artifacts[str(record.get("path", ""))] = (record, label)
+        for record, label in latest_artifacts.values():
+            problems.extend(_artifact_problems(record, label))
     references = ledger.get("references", [])
     reference_ids = [item.get("id") for item in references]
     if len(reference_ids) != len(set(reference_ids)):
@@ -992,9 +1005,19 @@ def ledger_problems(project: Path, ledger: dict) -> list[str]:
     for decision in decisions:
         if schema_version == SCHEMA_VERSION and decision.get("claim_status") not in CLAIM_STATUSES:
             problems.append(f"decision has invalid claim status: {decision.get('id')}")
-        problems.extend(_artifact_problems(decision.get("artifact", {}), f"decision {decision.get('id')}"))
+        # A decision is a fact about a *decision*, anchored in an artifact, not a
+        # claim that the artifact can never move again. Its standing check is
+        # therefore that the artifact still exists and still contains the anchor
+        # text the decision was recorded against -- the same check performed at
+        # record time -- while the digest captured at record time stays in the
+        # ledger as the audit trail. A decision whose anchor disappeared, or whose
+        # artifact vanished, still fails; a living stage document (the direction
+        # that the direction stage's own validation keeps demanding more of) no
+        # longer dead-ends the run.
         artifact_path = Path(str(decision.get("artifact", {}).get("path", "")))
-        if artifact_path.is_file() and decision.get("artifact_anchor") not in artifact_path.read_text(encoding="utf-8"):
+        if not artifact_path.is_file():
+            problems.append(f"decision artifact is missing: {decision.get('id')}")
+        elif decision.get("artifact_anchor") not in artifact_path.read_text(encoding="utf-8"):
             problems.append(f"decision anchor disappeared from downstream artifact: {decision.get('id')}")
         for reference_id in decision.get("reference_ids", []):
             reference = next((item for item in references if item.get("id") == reference_id), None)
