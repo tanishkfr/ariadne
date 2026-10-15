@@ -56,13 +56,22 @@ enough that one broken layout cannot take the run down."""
 MAX_CAPTURE_FILENAME = 96
 MAX_TARGET_ID_LENGTH = 64
 
-INTERACTION_ACTIONS = ("hover", "focus", "click", "press", "select", "navigate", "set_viewport", "evaluate_readonly")
+INTERACTION_ACTIONS = (
+    "hover", "focus", "click", "press", "select", "navigate", "set_viewport",
+    "emulate_media", "evaluate_readonly",
+)
 """The interaction vocabulary a capture plan may request.
 
 ``evaluate_readonly`` is deliberately the only script-shaped action and it is
 read-only by name and by contract: an interaction descriptor that wanted to execute
 arbitrary code in the page would reintroduce the exact capability this design
 forbids, so there is no verb for it.
+
+``emulate_media`` lets a plan exercise the media states a design decision was made
+for -- reduced motion above all -- through the browser's own emulation rather than
+by hoping the capture host happens to be configured that way. It changes only what
+``matchMedia`` reports for the captured page, and it is bounded to the two states a
+decision can name.
 """
 
 READONLY_EVALUATE = re.compile(
@@ -158,6 +167,20 @@ def safe_action(descriptor: Mapping) -> dict:
                 "refused rather than passed to the browser"
             )
         value["key"] = key
+    if kind == "emulate_media":
+        for field, allowed in (
+            ("reduced_motion", ("reduce", "no-preference")),
+            ("color_scheme", ("dark", "light", "no-preference")),
+        ):
+            value[field] = str(value.get(field, "") or "")
+            if value[field] and value[field] not in allowed:
+                raise ContractError(
+                    f"emulated {field} {value[field]!r} is not one of {', '.join(allowed)}"
+                )
+        if not (value["reduced_motion"] or value["color_scheme"]):
+            raise ContractError(
+                "an emulated media state must name at least one media feature to emulate"
+            )
     if kind == "evaluate_readonly":
         expression = str(value.get("expression", "") or "")
         if not READONLY_EVALUATE.match(expression):

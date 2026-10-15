@@ -449,6 +449,21 @@ class ChromiumRenderAdapter(RenderAdapter):
             elif kind == "set_viewport":
                 self.set_viewport(dict(action.get("viewport") or {}))
                 steps.append("viewport set")
+            elif kind == "emulate_media":
+                options = {
+                    key: str(action[key])
+                    for key in ("reduced_motion", "color_scheme")
+                    if action.get(key)
+                }
+                try:
+                    page.emulate_media(**options)
+                except Exception as exc:  # noqa: BLE001
+                    raise CaptureFailed(
+                        f"CAPTURE_FAILED: the media state {options} could not be emulated: {exc}"
+                    ) from exc
+                steps.append(
+                    "emulated media " + ", ".join(f"{key}={item}" for key, item in sorted(options.items()))
+                )
             elif kind == "evaluate_readonly":
                 value = page.evaluate(f"() => ({action['expression']})")
                 steps.append(f"read {action['expression']} = {json.dumps(value, default=str)[:200]}")

@@ -643,6 +643,14 @@ def a_real_browser_renders_and_inspects_when_one_is_available():
             assert not inspected["horizontal_overflow"], "the surface must fit its viewport"
             performed = renderer.perform_state({"kind": "focus", "selector": ".btn--primary"})
             assert performed["steps"], "an interaction must actually be performed"
+            # A design decision made for reduced motion is only closed by a
+            # capture that actually renders under it: emulation, not hope.
+            emulated = renderer.perform_state({"kind": "emulate_media", "reduced_motion": "reduce"})
+            assert any("reduced_motion=reduce" in step for step in emulated["steps"]), emulated
+            under_reduction = renderer.inspect(selectors=[".workspace"])
+            assert under_reduction["prefers_reduced_motion"] is True, under_reduction
+            restored = renderer.perform_state({"kind": "emulate_media", "reduced_motion": "no-preference"})
+            assert any("reduced_motion=no-preference" in step for step in restored["steps"]), restored
             out = root / "shot.png"
             captured = renderer.capture(out)
             assert out.read_bytes().startswith(adapter.PNG_MAGIC if hasattr(adapter, "PNG_MAGIC") else b"\x89PNG\r\n\x1a\n")
@@ -714,6 +722,22 @@ def an_interaction_descriptor_cannot_carry_code():
         "kind": "evaluate_readonly", "expression": "document.body.dataset.state",
     })["expression"] == "document.body.dataset.state"
     raises(lambda: safety.safe_action({"kind": "press", "key": "Enter; rm -rf /"}), "single key name")
+
+
+@case
+def emulated_media_is_bounded_to_declared_states():
+    """The emulated media vocabulary is exactly the states a decision may name."""
+    assert safety.safe_action(
+        {"kind": "emulate_media", "reduced_motion": "reduce"}
+    )["reduced_motion"] == "reduce"
+    assert safety.safe_action(
+        {"kind": "emulate_media", "color_scheme": "dark"}
+    )["color_scheme"] == "dark"
+    raises(
+        lambda: safety.safe_action({"kind": "emulate_media", "reduced_motion": "obliterate"}),
+        "not one of",
+    )
+    raises(lambda: safety.safe_action({"kind": "emulate_media"}), "at least one media feature")
 
 
 @case
