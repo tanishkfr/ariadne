@@ -1719,7 +1719,10 @@ def self_test_agent_security():
         ("component research cannot lose its instruction boundary",
          bool(check_agent_security_texts(mutate(
              "skills/component-research.md",
-             "[PRIVACY-POLICY.md](../PRIVACY-POLICY.md)",
+             # The privacy policy moved under docs/policies during the
+             # documentation reorganisation; this source names its real path so
+             # the control can find it (a control that cannot run is not a control).
+             "[PRIVACY-POLICY.md](../docs/policies/PRIVACY-POLICY.md)",
              "the source README"
          )))),
     ]
