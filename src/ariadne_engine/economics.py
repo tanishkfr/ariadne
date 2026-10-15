@@ -1046,9 +1046,14 @@ def skill_effectiveness(state: Mapping) -> dict:
     additional skills when none applies.
     """
     plans: dict[str, dict] = {}
+    plans_by_id: dict[str, dict] = {}
     for record in state.get("task_plans") or ():
-        if isinstance(record, Mapping) and str(record.get("task_id", "")).strip():
-            plans[str(record["task_id"])] = dict(record)
+        if isinstance(record, Mapping):
+            row = dict(record)
+            if str(row.get("task_id", "")).strip():
+                plans[str(row["task_id"])] = row
+            if str(row.get("plan_id", "")).strip():
+                plans_by_id[str(row["plan_id"])] = row
     tasks: list[dict] = []
     per_skill: dict[str, dict] = {}
 
@@ -1065,7 +1070,11 @@ def skill_effectiveness(state: Mapping) -> dict:
         if not isinstance(task, Mapping):
             continue
         task_id = str(task.get("task_id", ""))
-        plan = plans.get(task_id, {})
+        plan = (
+            plans.get(task_id)
+            or plans_by_id.get(str(task.get("plan_id", "")))
+            or {}
+        )
         selection = dict((plan.get("skills") or {})) if plan else {}
         attempts = [item for item in task.get("attempts") or () if isinstance(item, Mapping)]
         ledger = [item for item in task.get("skills") or () if isinstance(item, Mapping)]
