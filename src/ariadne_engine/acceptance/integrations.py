@@ -18,6 +18,15 @@ Three mappings, each carrying the provenance it derived:
     An AR-203 verification record becomes acceptance evidence bound to the work digest and
     dependency set it already carries, reusing AR-203's own four-state freshness.
 
+``from_worker_validation``
+    One engine-recorded S4B worker validation becomes ``TEST`` evidence per requirement,
+    bound to the recorded validator execution, the packet that holds the record, the
+    executed commands and their results, and the implementation fingerprint the commands
+    ran against. A result whose implementation fingerprint is not the current one is
+    refused as stale; a record without an engine validator execution is refused as a
+    claim. Passing checks satisfy the requirement's own declared ``TEST`` policy
+    position and nothing more -- the mapper records an observation and never a verdict.
+
 ``from_design_requirement``
     An AR-202D ``design_requirements`` closure record becomes a requirement definition, with
     ``DESIGN_REQUIREMENT_EVIDENCE`` (``source`` / ``rendered`` / ``behavioural``) mapped
@@ -34,6 +43,7 @@ never from the lineage alone.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Mapping, Sequence
 
 from .. import contracts
@@ -43,6 +53,7 @@ MAPPED_FROM = {
     "RENDERED_EVIDENCE_SET": "MAPPED_FROM_AR222_EVIDENCE_SET",
     "VERIFICATION_RECORD": "MAPPED_FROM_AR203_VERIFICATION",
     "DESIGN_REQUIREMENT": "MAPPED_FROM_AR202D_REQUIREMENT",
+    "WORKER_VALIDATION": "MAPPED_FROM_ENGINE_WORKER_VALIDATION",
 }
 """How a mapped record says where it came from.
 
@@ -232,13 +243,207 @@ def from_verification_record(
     ]
 
 
-def from_design_requirements(
+def _worker_validation_refusal(
+    state: Mapping[str, Any],
+    record: Mapping[str, Any],
+    *,
+    implementation_fingerprint: str,
+) -> str:
+    """Why one recorded worker validation cannot become TEST evidence, or ''.
+
+    Every refusal names the fact that failed. Each check exists because the
+    short-circuit it prevents was real: a worker-authored file that looks like a
+    validation record, a record from a different implementation revision, a
+    result whose engine execution is missing or failed, and a command list that
+    never actually passed the required checks.
+    """
+    from .. import provenance
+
+    if not isinstance(record, Mapping) or not record:
+        return "no validation record to map"
+    if str(record.get("kind", "")) != "worker-validation":
+        return "the record does not declare itself a worker validation"
+    if record.get("independent") is not True:
+        return "the record is not marked independent"
+    if str(record.get("status", "")) != "passed":
+        return f"the recorded validation status is {record.get('status', 'unrecorded')!r}, not a pass"
+    scope = record.get("scope") if isinstance(record.get("scope"), Mapping) else {}
+    if str(scope.get("status", "")) != "within-contract":
+        return f"the recorded scope is {scope.get('status', 'unrecorded')!r}, not within-contract"
+    if str(record.get("failure_kind", "")) != "none":
+        return f"the record carries failure kind {record.get('failure_kind', 'unrecorded')!r}"
+    commands = [row for row in record.get("commands") or () if isinstance(row, Mapping)]
+    required = [row for row in commands if row.get("required")]
+    if not required:
+        return "the record names no required validation commands"
+    failed = [str(row.get("id", "")) for row in required if str(row.get("status", "")) != "passed"]
+    if failed:
+        return "a required validation command did not pass: " + ", ".join(failed)
+    execution_id = ""
+    execution_block = record.get("execution") if isinstance(record.get("execution"), Mapping) else {}
+    execution_id = str(execution_block.get("execution_id", ""))
+    if not execution_id:
+        return "the record names no validator execution"
+    execution = provenance.execution(state, execution_id)
+    if execution is None:
+        return (
+            f"the named validator execution {execution_id} is not an engine-created execution in this "
+            "run; a record nothing executed is a claim, not evidence"
+        )
+    if str(execution.get("role", "")) != "validator":
+        return f"execution {execution_id} has role {execution.get('role', 'unrecorded')!r}, not validator"
+    if str(execution.get("adapter", "")) != "scripts/ariadne.py:validate-worker":
+        return f"execution {execution_id} was not produced by the worker-validation adapter"
+    if str(execution.get("state", "")) != "COMPLETED":
+        return f"execution {execution_id} is {execution.get('state', 'unrecorded')!r}, not COMPLETED"
+    result = execution.get("result") if isinstance(execution.get("result"), Mapping) else {}
+    if str(result.get("status", "")) != "passed":
+        return f"execution {execution_id} completed without a passed result"
+    revision = execution.get("revision") if isinstance(execution.get("revision"), Mapping) else {}
+    project = str(revision.get("project", ""))
+    state_project = str(state.get("project", ""))
+    if not project or not state_project:
+        return "the execution carries no project revision binding"
+    if os.path.normcase(os.path.abspath(project)) != os.path.normcase(os.path.abspath(state_project)):
+        return "the validator execution belongs to a different project than this run"
+    recorded = str(
+        (record.get("validated_revision") or {}).get("implementation_fingerprint", "")
+        if isinstance(record.get("validated_revision"), Mapping) else ""
+    )
+    if not recorded:
+        return (
+            "the record predates validated-revision binding, so the result cannot be proven current "
+            "for any implementation revision"
+        )
+    if not str(implementation_fingerprint or "").strip():
+        return "the acceptance pass could not establish the current implementation fingerprint"
+    if recorded != str(implementation_fingerprint):
+        return (
+            "the validated implementation fingerprint does not match the current implementation; the "
+            "recorded commands ran against a different revision and the result is stale"
+        )
+    return ""
+
+
+def from_worker_validation(
     state: dict,
     *,
+    validations: Sequence[Mapping[str, Any]],
+    implementation_fingerprint: str,
     contract_id: str,
+    contract_revision: str,
+    requirements: Sequence[Mapping[str, Any]],
     task_id: str = "",
-    kind: str = "FUNCTIONAL",
-) -> list[dict]:
+    work_digest: str,
+) -> dict:
+    """Map engine-recorded S4B validations into ``TEST`` acceptance evidence.
+
+    One genuinely engine-executed, still-current validation becomes one ``TEST``
+    item per requirement. The observation names the packet, the validator
+    execution, each executed required command with its exit code, and the
+    implementation fingerprint the commands ran against -- built only from the
+    record's own fields, so an overstatement would be a visible lie in the record
+    rather than an invisible one.
+
+    The mapper records an observation; it never writes a verdict. What a passing
+    check is worth is the requirement's own declared evidence policy: a ``TEST``
+    marked ``REQUIRED`` is satisfied by it, a ``TEST`` marked ``INSUFFICIENT_ALONE``
+    is not, and a requirement with other unmet required kinds stays unmet however
+    many commands passed. Stale, blocked, failed, missing-execution and
+    fingerprint-less records are refused by name and mapped to nothing.
+
+    Returns a summary rather than only evidence rows, because a refusal is a
+    fact the caller must be able to show: ``recorded``, ``replayed`` (current
+    evidence for the same packet and execution already exists) and ``refused``.
+    """
+    from . import evidence as evidence_module
+
+    if not str(work_digest or "").strip():
+        raise ContractError("mapped validation evidence must be bound to the work revision it is weighed at")
+    requirement_ids = [
+        str(req.get("requirement_id", ""))
+        for req in requirements
+        if str(req.get("requirement_id", ""))
+    ]
+    if not requirement_ids:
+        raise ContractError("mapped validation evidence must name at least one requirement")
+    summary: dict[str, Any] = {"recorded": [], "replayed": [], "refused": []}
+    for item in validations:
+        packet_id = str((item or {}).get("packet_id", ""))
+        record = (item or {}).get("record")
+        refusal = _worker_validation_refusal(
+            state, record if isinstance(record, Mapping) else {},
+            implementation_fingerprint=implementation_fingerprint,
+        )
+        if refusal:
+            summary["refused"].append({"packet_id": packet_id, "reason": refusal})
+            continue
+        execution_id = str((record.get("execution") or {}).get("execution_id", ""))
+        current = evidence_module.current(
+            state, work_digest=work_digest, contract_revision=contract_revision,
+        )
+        already = {
+            str(requirement_id)
+            for row in current
+            if str(row.get("kind", "")) == "TEST"
+            and str(row.get("source_record_id", "")) == packet_id
+            and str(row.get("producer_execution", "")) == execution_id
+            for requirement_id in row.get("requirement_ids") or ()
+        }
+        passed_required = [
+            row for row in record.get("commands") or ()
+            if isinstance(row, Mapping) and row.get("required") and str(row.get("status", "")) == "passed"
+        ]
+        command_text = "; ".join(
+            f"{row.get('check') or row.get('id')}: {row.get('command')} "
+            f"(exit {row.get('returncode')}, {row.get('status')})"
+            for row in passed_required
+        )
+        optional_failures = [
+            str(row.get("id", "")) for row in record.get("commands") or ()
+            if isinstance(row, Mapping) and not row.get("required") and str(row.get("status", "")) != "passed"
+        ]
+        fingerprint = str(
+            (record.get("validated_revision") or {}).get("implementation_fingerprint", "")
+        )
+        observation = (
+            f"engine reran the contract's required checks and recorded the results: {command_text} "
+            f"-- packet {packet_id}, validator execution {execution_id}, implementation fingerprint "
+            f"{fingerprint[:12]}"
+        )
+        if optional_failures:
+            observation += f"; optional checks not passing: {', '.join(optional_failures)}"
+        for requirement_id in requirement_ids:
+            if requirement_id in already:
+                summary["replayed"].append({
+                    "packet_id": packet_id, "requirement_id": requirement_id,
+                    "reason": "current TEST evidence for this packet and execution already exists",
+                })
+                continue
+            summary["recorded"].append(evidence_module.record(
+                state,
+                kind="TEST",
+                stance="SUPPORTS",
+                producer="ar-224-verify",
+                producer_role="engine",
+                producer_execution=execution_id,
+                observation=observation,
+                requirement_ids=[requirement_id],
+                source_record_id=packet_id,
+                source_kind="ENGINE_RECORD",
+                work_digest=work_digest,
+                contract_revision=contract_revision,
+                contract_id=contract_id,
+                task_id=task_id,
+                notes=(
+                    f"{MAPPED_FROM['WORKER_VALIDATION']} {packet_id}/evidence/validation.json; "
+                    f"implementation fingerprint {fingerprint}"
+                ),
+            ))
+    return summary
+
+
+
     """Create requirement definitions from AR-202D design-requirement closure records.
 
     ``DESIGN_REQUIREMENT_EVIDENCE`` is mapped into the acceptance evidence vocabulary
@@ -265,10 +470,10 @@ def from_design_requirements(
             origin="DERIVED",
             blocking=False,
             evidence_policy={
-                "authoritative": [],
-                "required": [mapped],
-                "supporting": [],
-                "insufficient_alone": list(requirements_module.INSUFFICIENT_ALONE),
+                "AUTHORITATIVE": [],
+                "REQUIRED": [mapped],
+                "SUPPORTING": [],
+                "INSUFFICIENT_ALONE": list(requirements_module.INSUFFICIENT_ALONE),
             },
             task_id=task_id,
             rationale=f"{MAPPED_FROM['DESIGN_REQUIREMENT']} {row.get('record_id', '')}",
@@ -382,4 +587,5 @@ __all__ = [
     "from_design_requirements",
     "from_rendered_evidence_set",
     "from_verification_record",
+    "from_worker_validation",
 ]

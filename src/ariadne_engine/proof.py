@@ -547,6 +547,8 @@ def verify_task(
     require_independent_review: bool = False,
     evidence_kinds: Sequence[str] | None = None,
     evidence_observation: str = "",
+    engine_validations: Sequence[Mapping[str, Any]] = (),
+    implementation_fingerprint: str = "",
 ) -> dict:
     """Outcome-oriented verify: request + work in, Proof Receipt out.
 
@@ -557,8 +559,18 @@ def verify_task(
     T1 task whose contract commands the engine itself reran) record those kinds;
     the observation text is stored verbatim, so an overstatement would be a
     visible lie in the record rather than an invisible one.
+
+    ``engine_validations`` carries recorded S4B worker validations the caller
+    gathered from the run: each is mapped into ``TEST`` evidence by
+    :func:`~ariadne_engine.acceptance.integrations.from_worker_validation`, which
+    refuses stale, blocked, and unevidenced records by name instead of counting
+    them. ``implementation_fingerprint`` is the current implementation the
+    validations are weighed against; when it is absent every validation is
+    refused, because a result that cannot be proven current cannot support a
+    current requirement.
     """
     from .acceptance import gates as gates_module
+    from .acceptance import integrations as integrations_module
 
     if not str(task_text or "").strip():
         raise contracts.ContractError("verify needs the original request text")
@@ -576,6 +588,17 @@ def verify_task(
         state, contract_record=contract_record, requirements=requirements, work_digest=digest,
         observation=str(evidence_observation or ""), kinds=evidence_kinds,
     )
+    if engine_validations:
+        integrations_module.from_worker_validation(
+            state,
+            validations=list(engine_validations),
+            implementation_fingerprint=str(implementation_fingerprint or ""),
+            contract_id=str(contract_record.get("contract_id", "")),
+            contract_revision=str(contract_record.get("revision", "1")),
+            requirements=requirements,
+            task_id=str(contract_record.get("task_id", "")),
+            work_digest=digest,
+        )
     contract_module_active = contract_record
     pass_record = gates_module.run_pass(
         state, contract_id=str(contract_module_active.get("contract_id", "")),

@@ -679,6 +679,66 @@ def worker_scope_check(
     }
 
 
+IMPLEMENTATION_FINGERPRINT_EXCLUDES = (
+    ".ariadne/**",
+    "dist/**",
+    "QA.md",
+    "AGENTS.md",
+    *RUNTIME_EVIDENCE_PATTERNS,
+    *VALIDATION_CACHE_PATTERNS,
+)
+"""Paths excluded from the validated-implementation fingerprint.
+
+The fingerprint binds a validation result to the implementation bytes the
+validation commands actually ran against, so it deliberately excludes what
+those commands do not measure and what Ariadne's own lifecycle writes after
+validation: the run's own evidence directory (``.ariadne/``), derived build
+output (``dist/``), the interpreter caches every running of the commands
+writes, and the worker-recorded governance documents that the review ingest and
+stage closure update (``QA.md``, ``AGENTS.md``). A change to any excluded path
+does not invalidate the result; a change to any *other* tracked or untracked
+project file does. Including the ledgers would make every validation stale the
+moment the run records anything, which would train everyone to ignore it."""
+
+
+def implementation_fingerprint(snapshot: dict) -> str:
+    """The deterministic fingerprint of the validated implementation surface.
+
+    Built from ``project_git_snapshot`` entries as ``path|status|exists|sha256``
+    lines, so it is re-computable from any later snapshot of the same tree. A
+    file the snapshot could not read (a sensitive path whose bytes are never
+    read) contributes its path and status but not its content: the fingerprint
+    still moves when the read set changes, and never leaks secret bytes.
+    """
+    entries = [
+        entry for entry in snapshot.get("entries", [])
+        if isinstance(entry, dict)
+        and str(entry.get("path", ""))
+        and not any(
+            fnmatch.fnmatch(str(entry.get("path", "")), pattern)
+            for pattern in IMPLEMENTATION_FINGERPRINT_EXCLUDES
+        )
+    ]
+    payload = "\n".join(
+        "|".join([
+            str(entry.get("path", "")),
+            str(entry.get("status", "")),
+            "1" if entry.get("exists") else "0",
+            str(entry.get("sha256") or ""),
+        ])
+        for entry in sorted(entries, key=lambda item: str(item.get("path", "")))
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def validated_revision(snapshot: dict) -> dict:
+    """The revision identity recorded alongside one validation result."""
+    return {
+        "head": str(snapshot.get("head", "") or "unknown"),
+        "implementation_fingerprint": implementation_fingerprint(snapshot),
+    }
+
+
 def worker_scope_patterns(worker: dict | None, packet_ids: tuple | list = ()) -> list[str]:
     """The one canonical, authorization-aware permitted-scope representation.
 
@@ -852,6 +912,17 @@ def worker_validation_problems(value: dict, packet_id: str | None = None) -> lis
     for field in ("usage", "cost"):
         if field not in value:
             problems.append(f"worker validation evidence is missing {field}; unknown must be explicit")
+    # ``validated_revision`` is optional for records written before it existed
+    # (the 2.3 epoch); when present it must be well-formed, because a malformed
+    # revision binding would silently disable the staleness gate downstream.
+    if "validated_revision" in value:
+        revision = value.get("validated_revision")
+        if not isinstance(revision, dict):
+            problems.append("worker validation evidence has an invalid validated_revision")
+        else:
+            fingerprint = str(revision.get("implementation_fingerprint", ""))
+            if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+                problems.append("worker validation evidence has an invalid implementation fingerprint")
     return problems
 
 
