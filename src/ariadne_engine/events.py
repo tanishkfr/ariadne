@@ -182,6 +182,12 @@ EVENT_TYPES = (
     "external_skill_approved",
     "external_skill_installed",
     "external_skill_refused",
+
+    # 2.3C-R. An authorization refusal is resolved by a recorded human decision
+    # on the authorization side (ADR-0212), and the one authorized re-entry is
+    # spent by the attempt it created. Both are engine-observed facts.
+    "authorization_resolved",
+    "authorization_resolution_consumed",
 )
 """The declared event vocabulary. A type outside this set is refused, so the log
 cannot accumulate an undocumented ad-hoc event name."""

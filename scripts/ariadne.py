@@ -8868,6 +8868,170 @@ def record_note(args: argparse.Namespace) -> int:
     return 0
 
 
+def resolve_authorization(args: argparse.Namespace) -> int:
+    """Record the human authorization that resolves one blocked worker boundary.
+
+    An authorization refusal is a stop, not a routing input (ADR-0212). This is
+    its only resolution surface: the human decides, once, by recorded identity,
+    that the contract has been reconciled and the boundary may be re-entered.
+    The decision is bound to exactly one recorded refusal and one contract
+    revision, verifies against the live repository that the reconciled contract
+    actually covers every refused path and every current deviation from the
+    attempt's baseline, permits exactly one new attempt, and leaves the refusal,
+    the failed attempt, and its evidence untouched in history.
+    """
+    run_root, state = resolve_and_load(args)
+    entry, packet = current_packet(state, allow_project_drift=True)
+    if entry["stage"] != "S4B":
+        raise RuntimeError_(
+            "Authorization resolution is currently defined for the S4B implementation boundary only"
+        )
+    identity = str(getattr(args, "identity", "") or "").strip()
+    if not identity or re.search(r"[\r\n]", identity):
+        raise RuntimeError_("A recorded human authorization needs the authorising identity on one line")
+    failures = [item for item in (state.get("failures") or []) if isinstance(item, dict)]
+    if not failures:
+        raise RuntimeError_("There is no recorded worker failure to resolve")
+    failure = failures[-1]
+    if str(failure.get("class", "")) != "AUTHORIZATION_FAILURE":
+        raise RuntimeError_(
+            "The last recorded failure is not an authorization refusal; routine repair and "
+            "escalation policy govern that boundary instead"
+        )
+    if str(failure.get("failure_id", "")) != str(getattr(args, "failure", "") or ""):
+        raise RuntimeError_(
+            f"Name the exact refusal being resolved: the recorded failure is "
+            f"{failure.get('failure_id', 'unknown')}"
+        )
+    if isinstance(failure.get("resolution"), dict):
+        raise RuntimeError_("That authorization refusal already has a recorded resolution")
+    if str(failure.get("task_id", "")) != entry["id"]:
+        raise RuntimeError_("The recorded refusal belongs to a different boundary than the current packet")
+
+    project = Path(state["project"])
+    handoff_path = project / "HANDOFF.md"
+    if not handoff_path.is_file():
+        raise RuntimeError_("The S4B contract is missing; there is nothing reconciled to authorize")
+    handoff_text = read(handoff_path)
+    contract_problems = TRANSPORT.worker_contract_problems(handoff_text)
+    contract_problems.extend(TRANSPORT.worker_plan_scope_problems(handoff_text, stage="S4B"))
+    if contract_problems:
+        raise RuntimeError_(
+            "The current contract is not reconciled, so there is nothing to authorize: "
+            + "; ".join(contract_problems)
+        )
+
+    evidence_paths = [Path(str(item)) for item in (failure.get("evidence") or []) if str(item)]
+    validation_record = next(
+        (path for path in evidence_paths if path.is_file() and path.name == "validation.json"),
+        None,
+    )
+    if validation_record is None:
+        raise RuntimeError_("The refusal's validation evidence is missing; never resolve an unrecorded refusal")
+    try:
+        validation = json.loads(read(validation_record))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError_(f"The refusal's validation evidence is malformed: {exc}") from exc
+    refused_paths = [str(item) for item in ((validation.get("scope") or {}).get("outside") or [])]
+
+    contract = TRANSPORT.worker_contract(handoff_text)
+    permitted = [
+        str(row[0]).strip("`").replace("\\", "/")
+        for row in contract.get("scope_rows", []) if row and str(row[0]).strip()
+    ]
+    manifest = worker_manifest(packet)
+    baseline = manifest.get("project_baseline")
+    if not isinstance(baseline, dict):
+        raise RuntimeError_("The current attempt has no baseline to compare the repository against")
+    current = TRANSPORT.project_git_snapshot(project)
+    refreshed_baseline, _ = TRANSPORT.refresh_baseline_contract_documents(baseline, current)
+    patterns = TRANSPORT.worker_scope_patterns(
+        {"scope": [{"path": path} for path in permitted]},
+        [entry["id"]]
+        + [
+            recorded.get("id")
+            for recorded in state.get("packets") or []
+            if isinstance(recorded, dict) and recorded.get("id")
+        ],
+    )
+    uncovered = [
+        path for path in refused_paths if not TRANSPORT.scope_covers_path(path, patterns)
+    ]
+    if uncovered:
+        raise RuntimeError_(
+            "The reconciled contract does not cover the refused paths; resolve only a fully "
+            "covered boundary. Uncovered: " + ", ".join(uncovered)
+        )
+    scope = TRANSPORT.worker_scope_check(refreshed_baseline, current, patterns, project)
+    if scope["status"] != "within-contract":
+        residual = (
+            scope.get("outside") or scope.get("sensitive") or scope.get("immutable")
+            or ["repository state changed"]
+        )
+        raise RuntimeError_(
+            f"The reconciled contract does not fully cover the repository state "
+            f"({scope['status']}): " + ", ".join(str(item) for item in residual)
+        )
+
+    resolution = {
+        "resolution_id": CONTRACTS.new_record_id("res"),
+        "failure_id": str(failure.get("failure_id", "")),
+        "task_id": entry["id"],
+        "identity": identity,
+        "note": str(getattr(args, "note", "") or "").strip(),
+        "recorded_at": now(),
+        "contract_sha256": sha256(handoff_path),
+        "covered_paths": refused_paths,
+        "evidence": str(validation_record),
+    }
+    failure["resolution"] = resolution
+    emit_event(
+        run_root, "authorization_resolved", state=state, task_id=entry["id"], stage="S4B",
+        resolution=resolution["resolution_id"], failure=resolution["failure_id"],
+        identity=identity, contract=resolution["contract_sha256"][:12],
+    )
+    state["updated_at"] = now()
+    state["next"] = (
+        "Prepare the authorized S4B re-entry (advance --retry) under the reconciled contract; "
+        "the resolution permits exactly one new attempt."
+    )
+    write_state(run_root, state)
+    append_log(
+        run_root,
+        "Authorization refusal resolved by human decision",
+        "An authorization refusal is a stop; only the human can decide that a reconciled contract may re-enter the boundary.",
+        (
+            f"{resolution['resolution_id']}: {resolution['failure_id']} resolved by {identity}; "
+            f"contract {resolution['contract_sha256'][:12]}; refused paths now covered: "
+            f"{', '.join(refused_paths) or 'none'}. The failed attempt and its evidence remain in place."
+        ),
+        [str(validation_record)],
+        "The resolution is bound to one contract revision and permits exactly one new attempt.",
+        state["next"],
+    )
+    print(
+        f"Recorded. Authorization {resolution['resolution_id']} resolves {resolution['failure_id']} "
+        "for one new attempt under the reconciled contract."
+    )
+    print(f"From you: nothing right now. Next: {state['next']}")
+    return 0
+
+
+def consume_authorization_resolution(state: dict, boundary_id: str, packet_id: str) -> dict | None:
+    """Spend the one recorded human authorization on the attempt it just created.
+
+    One resolution, one new attempt: once the authorized packet exists, the
+    resolution records which attempt consumed it, and a further re-entry needs a
+    new human decision rather than a retry.
+    """
+    resolution = POLICY.authorization_resolution(state, boundary_id)
+    if resolution is None or str(resolution.get("consumed_by", "")):
+        return None
+    resolution["consumed_by"] = str(packet_id)
+    resolution["consumed_at"] = now()
+    return resolution
+
+
 def preserved_s3_parameters(packet: Path) -> tuple[str, str, str]:
     manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
     delivered_paths = {
@@ -9029,7 +9193,10 @@ def advance(args: argparse.Namespace) -> int:
                     validation_value.get("failure_kind", "routine"),
                     int((state.get("worker") or {}).get("repair_attempts", 0)),
                 )
-                if outcome["retryable"]:
+                resolution = POLICY.authorization_resolution(state, entry["id"])
+                if outcome["retryable"] or (
+                    resolution is not None and not str(resolution.get("consumed_by", ""))
+                ):
                     return prepare_next(argparse.Namespace(
                         run_root=str(run_root), project=None, stage=None, retry=True,
                         provider=None, worker_role=None, escalate=False,
@@ -9051,7 +9218,10 @@ def advance(args: argparse.Namespace) -> int:
                     validation_value.get("failure_kind", "routine"),
                     int((state.get("worker") or {}).get("repair_attempts", 0)),
                 )
-                if outcome["retryable"]:
+                resolution = POLICY.authorization_resolution(state, entry["id"])
+                if outcome["retryable"] or (
+                    resolution is not None and not str(resolution.get("consumed_by", ""))
+                ):
                     return prepare_next(argparse.Namespace(
                         run_root=str(run_root), project=None, stage=None, retry=True,
                         provider=None, worker_role=None, escalate=False,
@@ -9464,6 +9634,14 @@ def prepare_next(args: argparse.Namespace) -> int:
             retry_problems = POLICY.retry_problems(state, parent)
             if retry_problems:
                 raise RuntimeError_(" ".join(retry_problems))
+            resolution = POLICY.authorization_resolution(state, entry["id"])
+            if resolution is not None:
+                current_contract = sha256(handoff_path) if handoff_path.is_file() else ""
+                if current_contract != str(resolution.get("contract_sha256", "")):
+                    raise RuntimeError_(
+                        "The handoff contract changed after the recorded authorization resolution; "
+                        "record a new resolution for the renewed contract."
+                    )
         # AR-202 T5: the worker role is an executable routing decision, not an index lookup.
         routing_decision = ROUTING.route(
             state, stage=stage, characterisation=characterisation, task_id=packet_id,
@@ -9632,6 +9810,14 @@ def prepare_next(args: argparse.Namespace) -> int:
     )
     # AR-202 T2: the engine creates the execution identity for the boundary it
     # just prepared, before any worker or session can claim one.
+    if stage == "S4B" and args.retry:
+        consumed_resolution = consume_authorization_resolution(state, entry["id"], packet_id)
+        if consumed_resolution is not None:
+            emit_event(
+                run_root, "authorization_resolution_consumed", state=state, task_id=packet_id,
+                stage=stage, resolution=consumed_resolution["resolution_id"],
+                failure=str(consumed_resolution.get("failure_id", "")),
+            )
     requested_identity = {
         "provider": str(packet_provider or ""),
         "model": str((state.get("provider_preflight") or {}).get("model", "") or ""),
@@ -9819,7 +10005,7 @@ def skill_contract_problems(
     for token in (
         "scripts/ariadne.py", "discover --project", "provider preflight",
         "handoff-readiness", "ariadne.py advance", "record-note",
-        "restart-direction",
+        "restart-direction", "resolve-authorization",
         "ingest-return", "validate-worker", "ingest-review", "record-acceptance",
         "worker-telemetry.jsonl", "same-stage retry", "--adopt-existing",
         "creative-plan", "record-creative", "creative-check",
@@ -11224,6 +11410,227 @@ def self_test() -> int:
             "two project histories remain isolated",
             discover_run_roots(project) == [run_root.resolve()]
             and discover_run_roots(auto_project) == [auto_run.resolve()],
+        )
+
+        # --- Authorization refusal resolution (2.3C-R) ----------------------
+        # An out-of-scope refusal is an absolute stop; resolve-authorization is
+        # the only surface that records the human's decision to re-enter a
+        # reconciled boundary, and it verifies the reconciliation against the
+        # live repository before it records anything.
+        auth_project = workspace / "auth-project"
+        auth_project.mkdir()
+        subprocess.run(["git", "init"], cwd=auth_project, capture_output=True, text=True)
+        (auth_project / "src" / "app").mkdir(parents=True)
+        (auth_project / "src" / "app" / "page.tsx").write_text("fixture\n", encoding="utf-8")
+        (auth_project / "tooling").mkdir()
+        (auth_project / "tooling" / "harness.mjs").write_text("fixture harness\n", encoding="utf-8")
+        auth_run = workspace / "auth-run"
+        start(argparse.Namespace(
+            project=str(auth_project), run_root=str(auth_run), run_id="auth",
+            request="Fixture: resolve an out-of-scope refusal.", request_file=None,
+            reasoner=None, adopt_existing=True, synthetic_validation=True,
+        ))
+        (auth_project / "QA.md").write_text("# QA\n", encoding="utf-8")
+        (auth_project / "HANDOFF.md").write_text(filled_handoff(), encoding="utf-8")
+        # The re-entry runs the same derived post-G1 trace machinery as a live
+        # boundary: reuse the fixture project's approved documents and record
+        # the project-scoped creative evidence through the real commands.
+        for name in ("PROJECT.md", "DESIGN.md", "AGENTS.md"):
+            (auth_project / name).write_text(read(project / name), encoding="utf-8")
+        auth_assessment = workspace / "auth-assessment.json"
+        write_json(auth_assessment, CREATIVE.low_assessment())
+        creative_plan(argparse.Namespace(
+            run_root=str(auth_run), project=None, input=str(auth_assessment)
+        ))
+        auth_direction_note = auth_project / ".ariadne" / "creative" / "design-direction.md"
+        auth_direction_note.parent.mkdir(parents=True, exist_ok=True)
+        auth_direction_note.write_text(
+            "# Direction note\n\nA speaking line makes sound visible through one typographic gesture.\n",
+            encoding="utf-8",
+        )
+        auth_direction_invocation = auth_project / ".ariadne" / "creative" / "design-direction-invocation.md"
+        auth_direction_invocation.write_text(
+            "# Design direction work log\n\nFixture record of the S3 direction work.\n",
+            encoding="utf-8",
+        )
+        auth_direction_events = workspace / "auth-direction-events.json"
+        write_json(auth_direction_events, {"events": [
+            {"type": "skill", "skill": "design-direction", "state": "invoked",
+             "evidence_path": str(auth_direction_invocation)},
+            {"type": "skill", "skill": "design-direction", "state": "completed",
+             "output_path": str(auth_direction_note),
+             "result": "Direction selected and recorded for the G1 decision.",
+             "usefulness": "useful"},
+            {"type": "direction", "id": "direction-a",
+             "thesis": "A speaking line makes sound visible through one typographic gesture.",
+             "mechanism": "A single line crosses a listening boundary.",
+             "experience": "The page answers only while someone speaks.",
+             "status": "selected"},
+        ]})
+        record_creative(argparse.Namespace(
+            run_root=str(auth_run), project=None, input=str(auth_direction_events)
+        ))
+        auth_packet = auth_run / "auth-S4B"
+        (auth_packet / "evidence").mkdir(parents=True)
+        auth_validation = auth_packet / "evidence" / "validation.json"
+        auth_return_target = (auth_project / ".ariadne" / "returns" / "auth-S4B.md").resolve()
+        packet_text = (
+            "ARIADNE S4B STAGE PACKET\n"
+            f"Write the complete marked return handoff verbatim to: {auth_return_target}\n"
+        )
+        (auth_packet / TRANSPORT.PACKET_NAME).write_text(packet_text, encoding="utf-8")
+        baseline = TRANSPORT.project_git_snapshot(auth_project)
+        write_json(auth_packet / TRANSPORT.MANIFEST_NAME, {
+            "schema_version": TRANSPORT.SCHEMA_VERSION,
+            "packet_id": "auth-S4B",
+            "stage": "S4B",
+            "project": str(auth_project),
+            "packet_file": TRANSPORT.PACKET_NAME,
+            "packet_sha256": sha256(auth_packet / TRANSPORT.PACKET_NAME),
+            "sources": [],
+            "adopt_existing": False,
+            "return_target": str(auth_return_target),
+            # The blocked attempt's baseline describes the repository before the
+            # harness file appeared; recreate that fact honestly.
+            "project_baseline": {
+                **baseline,
+                "entries": [
+                    item for item in baseline["entries"]
+                    if item["path"] != "tooling/harness.mjs"
+                ],
+            },
+            "worker": {
+                "task_id": "auth-S4B",
+                "role": "bulk",
+                "attempt": 1,
+                "repair_limit": 2,
+                "scope": [{"path": "src/**"}, {"path": "QA.md"}, {"path": "AGENTS.md"}],
+                "contract_sha256": sha256(auth_project / "HANDOFF.md"),
+            },
+        })
+        write_json(auth_validation, {
+            "schema_version": TRANSPORT.WORKER_VALIDATION_SCHEMA,
+            "kind": "worker-validation",
+            "packet_id": "auth-S4B",
+            "stage": "S4B",
+            "status": "blocked",
+            "independent": True,
+            "failure_kind": "out-of-scope",
+            "commands": [],
+            "usage": "unknown",
+            "cost": "unknown",
+            "scope": {"status": "out-of-scope", "outside": ["tooling/harness.mjs"]},
+        })
+        auth_state = load_state(auth_run)
+        auth_state["packets"] = [{"id": "auth-S4B", "stage": "S4B", "path": str(auth_packet)}]
+        auth_state["failures"] = [{
+            "class": "AUTHORIZATION_FAILURE",
+            "task_id": "auth-S4B",
+            "failure_id": "fail-fixture-1",
+            "evidence": [str(auth_validation)],
+        }]
+        auth_state["worker"] = {
+            "validation_state": "BLOCKED", "attempt": 1, "repair_limit": 2, "task_id": "auth-S4B",
+        }
+        write_state(auth_run, auth_state)
+
+        def auth_args(**values) -> argparse.Namespace:
+            defaults = dict(
+                run_root=str(auth_run), project=None, identity="fixture-owner",
+                failure="fail-fixture-1", note="Fixture: the contract was reconciled.",
+                migrate=False, stage=None, retry=True, provider=None, worker_role=None,
+                escalate=False, references_file=None, motion=None, assets=None,
+                target=None, lenses=None, synthetic_validation=True,
+            )
+            defaults.update(values)
+            return argparse.Namespace(**defaults)
+
+        try:
+            resolve_authorization(auth_args(failure="fail-wrong"))
+            wrong_failure_allowed = True
+        except RuntimeError_:
+            wrong_failure_allowed = False
+        case("resolving a refusal requires naming the exact recorded failure", not wrong_failure_allowed)
+
+        try:
+            resolve_authorization(auth_args())
+            uncovered_contract_allowed = True
+        except RuntimeError_ as exc:
+            uncovered_contract_allowed = (
+                "does not cover the refused paths" in str(exc) and "tooling/harness.mjs" in str(exc)
+            )
+        case(
+            "a contract that does not cover the refused path is not a reconciliation",
+            uncovered_contract_allowed is True,
+        )
+
+        (auth_project / "HANDOFF.md").write_text(
+            filled_handoff().replace(
+                "| AGENTS.md | read / edit | stage state |\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+        try:
+            resolve_authorization(auth_args())
+            unreconciled_allowed = True
+        except RuntimeError_ as exc:
+            message = str(exc)
+            unreconciled_allowed = (
+                "AGENTS.md" in message
+                and ("not reconciled" in message or "stale or damaged" in message)
+            )
+        case(
+            "a contract its own stage cannot complete is not a reconciliation",
+            unreconciled_allowed is True,
+        )
+
+        reconciled_handoff = filled_handoff().replace(
+            "| src/** | read / edit / create | implementation fixture |",
+            "| src/** | read / edit / create | implementation fixture |\n"
+            "| tooling/** | read / edit / create | reconciled after the blocked attempt |",
+        )
+        (auth_project / "HANDOFF.md").write_text(reconciled_handoff, encoding="utf-8")
+        resolve_authorization(auth_args())
+        resolved_value = load_state(auth_run)["failures"][-1]["resolution"]
+        case(
+            "a reconciled, fully covered boundary records the identity-bound human authorization",
+            resolved_value["identity"] == "fixture-owner"
+            and resolved_value["failure_id"] == "fail-fixture-1"
+            and resolved_value["contract_sha256"] == sha256(auth_project / "HANDOFF.md")
+            and resolved_value["covered_paths"] == ["tooling/harness.mjs"],
+        )
+        try:
+            resolve_authorization(auth_args())
+            double_resolution_allowed = True
+        except RuntimeError_ as exc:
+            double_resolution_allowed = "already" in str(exc)
+        case("one refusal cannot be resolved twice", double_resolution_allowed is True)
+
+        (auth_project / "HANDOFF.md").write_text(reconciled_handoff + "\n", encoding="utf-8")
+        try:
+            prepare_next(auth_args())
+            contract_drift_allowed = True
+        except RuntimeError_ as exc:
+            contract_drift_allowed = "changed after the recorded authorization resolution" in str(exc)
+        case("the resolution is bound to the contract revision it authorized", contract_drift_allowed)
+
+        (auth_project / "HANDOFF.md").write_text(reconciled_handoff, encoding="utf-8")
+        prepare_next(auth_args())
+        consumed_state = load_state(auth_run)
+        consumed_entry, consumed_packet = current_packet(consumed_state)
+        consumed_resolution = consumed_state["failures"][-1]["resolution"]
+        consumed_manifest = json.loads(read(consumed_packet / TRANSPORT.MANIFEST_NAME))
+        case(
+            "the authorized re-entry prepares a fresh child attempt and spends the resolution",
+            consumed_entry["stage"] == "S4B"
+            and consumed_manifest["parent_id"] == "auth-S4B"
+            and consumed_resolution.get("consumed_by") == consumed_entry["id"]
+            and consumed_manifest["worker"]["baseline_refreshed"] == ["HANDOFF.md"],
+        )
+        case(
+            "the re-entered contract verifies with the authorization bound into the packet",
+            not TRANSPORT.verify_packet(consumed_packet),
         )
 
         # Model routing intelligence scenarios
@@ -13279,6 +13686,15 @@ def parser() -> argparse.ArgumentParser:
     restart_p.add_argument("--reason", required=True)
     restart_p.add_argument("--synthetic-validation", action="store_true", help=argparse.SUPPRESS)
 
+    resolve_p = sub.add_parser(
+        "resolve-authorization",
+        help="record the human decision that resolves one blocked worker boundary",
+    )
+    run_selector(resolve_p)
+    resolve_p.add_argument("--identity", required=True, help="the human identity making this decision")
+    resolve_p.add_argument("--failure", required=True, help="the exact recorded failure id being resolved")
+    resolve_p.add_argument("--note", help="the human's reason, recorded verbatim")
+
     advance_p = sub.add_parser(
         "advance", help="record obvious same-session outputs and continue routine work"
     )
@@ -13770,6 +14186,7 @@ def main() -> int:
             "record-intervention": record_intervention,
             "record-note": record_note,
             "restart-direction": restart_direction,
+            "resolve-authorization": resolve_authorization,
             "advance": advance,
             "prepare-next": ENGINE_API.prepare_next,
             "execution-status": execution_status_command,

@@ -335,6 +335,38 @@ def policy_checks(engine, root: Path) -> None:
     allowed, _ = policy.repair_allowed(ready_state)
     check("a failed routine result may use the remaining budget", allowed)
 
+    boundary = root / "s4b-boundary"
+    boundary.mkdir(parents=True, exist_ok=True)
+    resolution = {"resolution_id": "res-1", "failure_id": "fail-1", "identity": "owner",
+                  "contract_sha256": "a" * 64}
+    resolved_state = base_state(
+        worker={"lifecycle": "escalation-required", "attempt": 1, "repair_limit": 2,
+                "validation_state": "BLOCKED"},
+        failures=[{"class": "AUTHORIZATION_FAILURE", "task_id": boundary.name,
+                   "failure_id": "fail-1", "resolution": resolution}],
+    )
+    check("a recorded resolution permits the one authorized re-entry despite the blocked result",
+          policy.retry_problems(resolved_state, boundary) == [])
+    consumed_state = base_state(
+        worker={"lifecycle": "escalation-required", "attempt": 1, "repair_limit": 2,
+                "validation_state": "BLOCKED"},
+        failures=[{"class": "AUTHORIZATION_FAILURE", "task_id": boundary.name,
+                   "failure_id": "fail-1",
+                   "resolution": {**resolution, "consumed_by": "s4b-boundary-C1"}}],
+    )
+    problems = policy.retry_problems(consumed_state, boundary)
+    check("the resolution is spent by the attempt it authorized",
+          any("already consumed" in item for item in problems))
+    unmatched_state = base_state(
+        worker={"lifecycle": "escalation-required", "attempt": 1, "repair_limit": 2,
+                "validation_state": "BLOCKED"},
+        failures=[{"class": "AUTHORIZATION_FAILURE", "task_id": "some-other-boundary",
+                   "failure_id": "fail-1", "resolution": resolution}],
+    )
+    problems = policy.retry_problems(unmatched_state, boundary)
+    check("a resolution for another boundary does not unblock this one",
+          any("blocked" in item for item in problems))
+
     stage_state = base_state(
         packets=[{"id": "p", "stage": "S3", "path": str(root / "packet")}],
         creative_evidence_required=True,
@@ -523,6 +555,7 @@ def failure_checks(engine) -> None:
 
 def routing_checks(engine, root: Path) -> None:
     routing = engine.routing
+    policy = engine.policy
     project = root / "routing-project"
     project.mkdir(parents=True, exist_ok=True)
     light = routing.characterize(
@@ -573,6 +606,36 @@ def routing_checks(engine, root: Path) -> None:
     check("an authorization failure is never routed around",
           blocked["status"] == "blocked" and blocked["rule"] == "policy-excluded"
           and "never continues around an authorization refusal" in blocked["reason"])
+    resolved = base_state(failures=[{
+        "class": "AUTHORIZATION_FAILURE", "task_id": "t-S4B", "failure_id": "fail-1",
+        "resolution": {
+            "resolution_id": "res-1", "failure_id": "fail-1", "identity": "owner",
+            "contract_sha256": "a" * 64,
+        },
+    }])
+    resolved_route = routing.route(resolved, stage="S4B", characterisation=light, task_id="t-S4B",
+                                   declared_role="bulk")
+    check("a recorded human resolution lets routing choose how the authorized work is done",
+          resolved_route["status"] == "selected" and resolved_route["chosen"]["id"] == "bulk"
+          and resolved_route.get("resolved_authorization", {}).get("resolution_id") == "res-1")
+    mismatched = base_state(failures=[{
+        "class": "AUTHORIZATION_FAILURE", "task_id": "t-S4B", "failure_id": "fail-1",
+        "resolution": {"resolution_id": "res-1", "failure_id": "fail-OTHER", "identity": "owner"},
+    }])
+    check("a resolution for a different refusal leaves the stop absolute",
+          routing.route(mismatched, stage="S4B", characterisation=light, task_id="t-S4B",
+                        declared_role="bulk")["status"] == "blocked")
+    anonymous = base_state(failures=[{
+        "class": "AUTHORIZATION_FAILURE", "task_id": "t-S4B", "failure_id": "fail-1",
+        "resolution": {"resolution_id": "res-1", "failure_id": "fail-1", "identity": ""},
+    }])
+    check("a resolution without a recorded identity is not a human decision",
+          routing.route(anonymous, stage="S4B", characterisation=light, task_id="t-S4B",
+                        declared_role="bulk")["status"] == "blocked")
+    check("the resolution accessor names the resolved rejection but never invents one",
+          policy.authorization_resolution(resolved, "t-S4B")["failure_id"] == "fail-1"
+          and policy.authorization_resolution(authorization, "t-S4B") is None
+          and policy.authorization_resolution(resolved, "other-task") is None)
     timed_out = base_state(failures=[{
         "class": "TIMEOUT", "task_id": "t-S4B", "retry_allowed": True, "strategy": "bulk",
     }])

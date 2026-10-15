@@ -886,12 +886,31 @@ def route(
     }
 
     if last_class in NEVER_ROUTE_AROUND:
-        decision["rule"] = "policy-excluded"
-        decision["reason"] = (
-            f"the last failure is {last_class}; routing never continues around an authorization refusal"
-        )
-        decision["status"] = "blocked"
-        return decision
+        resolution = last.get("resolution") if isinstance(last.get("resolution"), dict) else None
+        if (
+            resolution
+            and str(resolution.get("resolution_id", ""))
+            and str(resolution.get("identity", ""))
+            and str(resolution.get("failure_id", "")) == str(last.get("failure_id", ""))
+        ):
+            # The authorization side moved: the human resolved exactly this
+            # refusal with a recorded, identity-bound decision. The refusal
+            # stays in history; routing may again choose *how* the authorized
+            # work is done (ADR-0212). A turn-off or mismatched resolution
+            # leaves the stop absolute below.
+            decision["resolved_authorization"] = {
+                "resolution_id": str(resolution.get("resolution_id", "")),
+                "failure_id": str(last.get("failure_id", "")),
+                "identity": str(resolution.get("identity", "")),
+                "consumed_by": str(resolution.get("consumed_by", "") or ""),
+            }
+        else:
+            decision["rule"] = "policy-excluded"
+            decision["reason"] = (
+                f"the last failure is {last_class}; routing never continues around an authorization refusal"
+            )
+            decision["status"] = "blocked"
+            return decision
 
     if stage in WORKER_STAGE_BOUNDARIES:
         candidates = _worker_candidates(required)

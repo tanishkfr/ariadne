@@ -56,6 +56,14 @@ The worker never edits these directly: the runtime's ``record-creative`` and
 ``record-operations`` commands do. Without this, a run could not record the skill
 and operations evidence that the S5 continuation precondition requires, and the
 worker contract would be failing the runtime's own evidence writes."""
+CONTRACT_DOCUMENT_PATHS = ("handoff.md", "design.md")
+"""Contract documents that are immutable for the duration of a worker attempt.
+
+A reconciliation between boundaries edits HANDOFF.md deliberately (that edit is
+the authorization change itself, and the retry packet's contract hash binds the
+reconciled document). When a same-stage retry re-bases these entries at the
+current facts, the immutable rule still catches any change made after
+preparation."""
 WORKER_STAGE_REQUIRED_OUTPUTS = {"S4B": ("QA.md", "AGENTS.md")}
 """Outputs a worker stage must produce for its own continuation to be possible.
 
@@ -624,7 +632,10 @@ def worker_scope_check(
             commit_error = comparison.stderr.strip() or "could not inspect committed changes"
     all_changed = sorted(set(changed) | set(committed))
     sensitive = [path for path in all_changed if worker_sensitive_path(path)]
-    immutable = [path for path in all_changed if path.replace("\\", "/").lower() in {"handoff.md", "design.md"}]
+    immutable = [
+        path for path in all_changed
+        if path.replace("\\", "/").lower() in set(CONTRACT_DOCUMENT_PATHS)
+    ]
     outside = [
         path for path in all_changed
         if not any(worker_path_matches(path, pattern) for pattern in patterns)
@@ -744,6 +755,43 @@ def worker_plan_scope_problems(handoff_text: str, stage: str = "S4B") -> list[st
                 f"the {stage} stage requires {path} to be produced, but the permitted files and systems table does not cover it"
             )
     return problems
+
+
+def refresh_baseline_contract_documents(baseline: dict, current: dict) -> tuple[dict, list[str]]:
+    """Re-point a baseline's contract-document entries at the current facts.
+
+    Used exactly when the contract was deliberately reconciled between
+    boundaries (preparing a same-stage S4B retry, or resolving an authorization
+    refusal): the reconciliation edit of HANDOFF.md is the authorization change
+    itself, not worker tampering, so it must not read as a repository conflict.
+    Every other baseline entry is untouched, and any change to these documents
+    after this refresh is still caught by the immutable rule and by the contract
+    hash bound into the packet.
+    """
+    if not isinstance(baseline, dict) or not isinstance(current, dict):
+        return baseline, []
+    entries = [item for item in (baseline.get("entries") or []) if isinstance(item, dict)]
+    current_by_path = {
+        str(item.get("path", "")): item
+        for item in (current.get("entries") or [])
+        if isinstance(item, dict)
+    }
+    refreshed_entries = []
+    refreshed_paths: list[str] = []
+    for entry in entries:
+        path = str(entry.get("path", ""))
+        if path.replace("\\", "/").lower() in set(CONTRACT_DOCUMENT_PATHS):
+            fresh = current_by_path.get(path)
+            if fresh is not None and fresh != entry:
+                refreshed_entries.append(copy.deepcopy(fresh))
+                refreshed_paths.append(path)
+                continue
+        refreshed_entries.append(entry)
+    if not refreshed_paths:
+        return baseline, []
+    refreshed = copy.deepcopy(baseline)
+    refreshed["entries"] = refreshed_entries
+    return refreshed, refreshed_paths
 
 
 def worker_validation_problems(value: dict, packet_id: str | None = None) -> list[str]:
@@ -2062,7 +2110,13 @@ def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
         except (TypeError, ValueError):
             attempt = 1
         inherited_baseline = parent.get("project_baseline") if parent and parent.get("stage") == "S4B" else None
-        project_baseline = inherited_baseline if isinstance(inherited_baseline, dict) else project_git_snapshot(project)
+        baseline_refreshed: list[str] = []
+        if isinstance(inherited_baseline, dict):
+            project_baseline, baseline_refreshed = refresh_baseline_contract_documents(
+                inherited_baseline, project_git_snapshot(project)
+            )
+        else:
+            project_baseline = project_git_snapshot(project)
         commands = validation_commands(handoff_text)
         retry_context = worker_retry_context(
             parent, parent_evidence_path, parent_evidence_kind
@@ -2073,6 +2127,7 @@ def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
             "attempt": attempt,
             "repair_limit": MAX_ROUTINE_REPAIRS,
             "contract_sha256": sha256_file(handoff_path),
+            "baseline_refreshed": baseline_refreshed,
             "objective": contract["objective"],
             "scope": [
                 {"path": row[0].strip("`"), "actions": row[1], "reason": row[2]}

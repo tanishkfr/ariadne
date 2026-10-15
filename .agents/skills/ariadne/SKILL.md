@@ -273,6 +273,18 @@ The recovery-level commands are `ariadne.py operations-plan`,
 `ariadne.py record-operations`, and `ariadne.py operations-check`; normal
 progression should use `ariadne.py advance` wherever it can derive the action.
 
+An authorization refusal at S4B (a worker change the recorded contract did not
+allow, or a contract that under-declared what its own stage required) is an
+absolute stop: routing never continues around it, and blocked results never
+enter routine repair. Resolution is a human decision on the authorization side:
+after the contract is reconciled on disk, `ariadne.py resolve-authorization
+--identity <who> --failure <recorded failure id>` verifies that the reconciled
+table covers every refused path and the repository's current state, records the
+decision bound to one contract revision, and permits exactly one new attempt
+(`ariadne.py advance`); the failed attempt and its evidence remain untouched.
+Never resolve on the user's behalf, never resolve without their explicit
+decision, and never edit an approval or resolution record.
+
 After implementation returns, inspect the recorded files and run the applicable
 local checks from the delivered QA policy before independent review. Fix work
 retained in the orchestrator when it is within the approved handoff. For work
