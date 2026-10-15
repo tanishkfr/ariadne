@@ -239,10 +239,31 @@ for line in prompt.splitlines():
 
 changed = []
 tests = "not run"
-if mode == "fix":
+attempt_match = re.search(r"(?m)^Attempt: (\d+)", prompt)
+attempt = int(attempt_match.group(1)) if attempt_match else 1
+effective_mode = mode
+if mode == "staged":
+    # Attempt 1 satisfies the text validation while leaving the interaction dead;
+    # attempt 2 applies the real fix. This is how the suite exercises the
+    # rendered-acceptance repair path with an honest failing capture.
+    effective_mode = "fix-text-only" if attempt <= 1 else "fix"
+if effective_mode == "fix-text-only":
     html = project / "app.html"
     if html.is_file():
-        html.write_text(html.read_text(encoding="utf-8").replace("BROKEN", "FIXED"), encoding="utf-8")
+        text = html.read_text(encoding="utf-8")
+        text = text.replace("BROKEN", "FIXED")
+        text = text.replace("document.getElementById('generate').addEventListener('click', function () {",
+                            "document.getElementById('generate').addEventListener('noop-disabled', function () {")
+        html.write_text(text, encoding="utf-8")
+        changed.append("app.html")
+    tests = "pass"
+if effective_mode == "fix":
+    html = project / "app.html"
+    if html.is_file():
+        text = html.read_text(encoding="utf-8")
+        text = text.replace("BROKEN", "FIXED")
+        text = text.replace("addEventListener('noop-disabled'", "addEventListener('click'")
+        html.write_text(text, encoding="utf-8")
         changed.append("app.html")
     module = project / "export.py"
     if module.is_file():
@@ -283,7 +304,7 @@ block = f"""BEGIN ARIADNE RETURN HANDOFF
 
 ## What was built
 
-The fixture worker applied its deterministic {mode} change and nothing else.
+The fixture worker applied its deterministic {effective_mode} change and nothing else.
 
 ## Files changed
 
@@ -1038,6 +1059,41 @@ def memory_correction_and_proposals_flow_through_the_cli():
         assert stored["status"] == "corrected"
         code, text = run_cli("memory-proposals", "--project", str(project))
         assert code == 0, text
+
+
+@case
+def rendered_failure_enters_bounded_repair_and_recapture_succeeds():
+    require_pytest()
+    probe = capture_probe()
+    if probe["status"] != "AVAILABLE":
+        raise SkipCase("browser capture capability unavailable: " + probe["detail"])
+    with workspace() as base:
+        project = make_ui_project(base)
+        code, text = run_cli(
+            "task-start", "--project", str(project), "--request", UI_REQUEST,
+            "--scope", UI_SCOPE, "--validate", UI_VALIDATE,
+            "--render-serve-dir", ".", "--render-route", "app.html",
+            "--render-action", "click:#generate=generated",
+        )
+        assert code == 0, text
+        run_root = run_root_for(project)
+        code, text = run_worker_task(project, base, "staged", extra=("--timeout", "900"))
+        assert code == 0, text
+        state = state_of(run_root)
+        task = current_task(state)
+        attempts = task["attempts"]
+        assert len(attempts) >= 2, "the failed rendered acceptance must have entered bounded repair"
+        assert attempts[0]["state"] == "validated", attempts[0]
+        assert task["rendered"]["status"] == "captured", task["rendered"]
+        rows = task["rendered"]["evidence_sets"]
+        assert rows, task["rendered"]
+        assert rows[-1]["revision_hash"] != attempts[0]["packet_id"], (
+            "the captured evidence must be bound to the repaired revision, not the failed one"
+        )
+        assert task["proof"], "the repaired, recaptured task proceeds to Proof Pass"
+        repair_packet = run_root / str(attempts[1]["packet_id"])
+        contract = (repair_packet / "packet.txt").read_text(encoding="utf-8")
+        assert "rendered-acceptance" in contract, "the repair contract names the rendered failure"
 
 
 # ---------------------------------------------------------------- runner

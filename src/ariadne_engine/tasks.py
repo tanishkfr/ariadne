@@ -671,14 +671,25 @@ def _rendered_acceptance(
     }
     if required:
         target = dict(render_target or {})
+        actions = [
+            dict(item) if isinstance(item, Mapping) else {"kind": "click", "selector": str(item)}
+            for item in target.get("actions") or ()
+        ]
         result["target"] = {
             "route": str(target.get("route", "") or "/"),
             "serve_dir": str(target.get("serve_dir", "")),
-            "actions": [
-                dict(item) if isinstance(item, Mapping) else {"kind": "click", "selector": str(item)}
-                for item in target.get("actions") or ()
-            ],
+            "actions": actions,
+            "expect": [str(item) for item in target.get("expect") or ()],
         }
+        if actions and not result["interaction"]:
+            # The operator declared an interaction to capture; a plan that then
+            # photographs only the default state would file the interaction's name
+            # on the default's picture.
+            result["interaction"] = True
+            result["reasons"] = list(result["reasons"]) + [
+                "an interaction was declared for capture: "
+                + ", ".join(str(item.get("selector") or item.get("kind")) for item in actions[:3])
+            ]
     return result
 
 

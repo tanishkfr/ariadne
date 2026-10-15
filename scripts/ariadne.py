@@ -2041,11 +2041,15 @@ def build_task_plan(args: argparse.Namespace) -> tuple[Path, dict, list[Path]]:
     render_actions = []
     for raw in getattr(args, "render_action", None) or ():
         text = str(raw)
+        effect = []
+        if "=" in text:
+            text, _, effect_text = text.partition("=")
+            effect = [item.strip() for item in effect_text.split(",") if item.strip()]
         if ":" in text:
             kind, _, selector = text.partition(":")
-            render_actions.append({"kind": kind.strip(), "selector": selector.strip()})
+            render_actions.append({"kind": kind.strip(), "selector": selector.strip(), "expect": effect})
         else:
-            render_actions.append({"kind": "click", "selector": text.strip()})
+            render_actions.append({"kind": "click", "selector": text.strip(), "expect": effect})
     plan = TASKS.plan(
         request=request,
         project=project,
@@ -2065,6 +2069,7 @@ def build_task_plan(args: argparse.Namespace) -> tuple[Path, dict, list[Path]]:
             "route": str(getattr(args, "render_route", "") or "/"),
             "serve_dir": str(getattr(args, "render_serve_dir", "") or ""),
             "actions": render_actions,
+            "expect": [str(item) for item in (getattr(args, "render_expect", None) or ())],
         },
         approved_external=external["approved"],
         skill_registry=registry,
@@ -2260,6 +2265,7 @@ def prepare_task_boundary(
     parent_packet: str = "",
     attach: dict | None = None,
     contract_text: str | None = None,
+    retry_context_override: Mapping | None = None,
 ) -> tuple[dict, Path, dict]:
     """Prepare one T1 packet inside an existing run and record every decision.
 
@@ -2271,7 +2277,11 @@ def prepare_task_boundary(
     """
     role = str(getattr(args, "worker_role", None) or "bulk")
     retry_context = None
-    if retry:
+    if retry_context_override:
+        # A rendered-acceptance failure has no failed validation to quote; the
+        # caller supplies the engine-recorded capture outcome instead.
+        retry_context = dict(retry_context_override)
+    elif retry:
         parent_dir = Path(str(parent_packet or "")).resolve()
         if not parent_dir.is_dir():
             raise RuntimeError_("a bounded repair attempt needs the parent packet directory")
@@ -3679,6 +3689,23 @@ def finish_task_validation(
     }
 
 
+def rendered_failure_repairable(task: Mapping) -> bool:
+    """Whether a blocked rendered acceptance describes repairable implementation.
+
+    A capture that ran and failed (a missing interaction effect, an incomplete
+    set) is a finding about the revision the worker produced, so the bounded
+    repair path applies. A capture that could not run at all (no browser, no
+    declared surface) is an environment fact the worker cannot fix, and sending
+    it back to the worker would waste the repair budget and teach it to argue
+    with its tools.
+    """
+    rendered = dict(task.get("rendered") or {})
+    if str(rendered.get("status")) != "blocked":
+        return False
+    reason = str(rendered.get("blocked_reason", ""))
+    return reason.startswith(("CAPTURE_FAILED", "CAPTURE_INCOMPLETE"))
+
+
 def prepare_repair_attempt(
     run_root: Path,
     state: dict,
@@ -3690,23 +3717,30 @@ def prepare_repair_attempt(
     """Prepare one bounded repair attempt linked to the settled attempt.
 
     Called by ``task-repair`` and by automatic continuation after a retryable
-    validation failure. The bounded repair budget and the blocked-return rules
-    come from ``policy.repair_allowed``; review failures may also trigger repair,
-    because a failed review is a finding about the same revision.
+    validation failure or a failed rendered acceptance. The bounded repair
+    budget and the blocked-return rules come from ``policy.repair_allowed``;
+    review failures and rendered-acceptance failures may also trigger repair,
+    because both are findings about the same revision.
     """
     entry, packet = current_packet(state, allow_project_drift=True)
     if entry["stage"] != "T1":
         raise RuntimeError_("A bounded repair attempt belongs to a T1 task boundary")
     task, attempt = _current_task_binding(state, entry)
-    if str(attempt.get("state")) != "failed":
+    rendered = dict(task.get("rendered") or {})
+    rendered_failed = (
+        str(attempt.get("state")) == "validated"
+        and str(rendered.get("packet_id", "")) == str(entry["id"])
+        and rendered_failure_repairable(task)
+    )
+    if str(attempt.get("state")) != "failed" and not rendered_failed:
         raise RuntimeError_(
-            "A repair attempt is prepared after a failed attempt, not after a "
-            f"{attempt.get('state')} one."
+            "A repair attempt is prepared after a failed attempt or a failed rendered "
+            f"acceptance, not after a {attempt.get('state')} one."
         )
     validation = dict(attempt.get("validation") or {})
     review = dict(task.get("review") or {})
     review_failed = str(review.get("outcome")) == "failed" and str(review.get("packet_id", "")) == str(entry["id"])
-    if not validation.get("retryable") and not review_failed and not escalate:
+    if not validation.get("retryable") and not review_failed and not rendered_failed and not escalate:
         manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
         worker_manifest = manifest.get("worker") or {}
         try:
@@ -3740,6 +3774,31 @@ def prepare_repair_attempt(
     # written beside the packet (create-only) as the bounded evidence a retry
     # may continue from; nothing is invented about what the worker produced.
     evidence_dir = packet / "evidence"
+    if rendered_failed:
+        # The engine's own record of the failed capture is the bounded evidence a
+        # repair continues from; it is written create-only and never overwritten.
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        if not (evidence_dir / "rendered-acceptance.json").is_file():
+            write_json(
+                evidence_dir / "rendered-acceptance.json",
+                {
+                    "schema_version": 1,
+                    "kind": "rendered-acceptance",
+                    "recorded_at": now(),
+                    "packet_id": entry["id"],
+                    "status": "blocked",
+                    "failure_kind": "rendered-acceptance",
+                    "failure_reason": str(rendered.get("blocked_reason", ""))[:400],
+                    "evidence_sets": [
+                        str(row.get("evidence_set_id", "")) for row in rendered.get("evidence_sets") or ()
+                        if isinstance(row, Mapping)
+                    ],
+                    "provenance": (
+                        "engine-recorded rendered-acceptance outcome from the browser capture; "
+                        "no visual success is claimed and nothing is inferred beyond the capture record"
+                    ),
+                },
+            )
     has_evidence = any(
         (evidence_dir / name).is_file()
         for name in ("validation.json", "return-handoff.md", "attempt-outcome.json")
@@ -3772,6 +3831,17 @@ def prepare_repair_attempt(
         attempt=attempt_number,
         retry=True,
         parent_packet=str(packet),
+        retry_context_override=(
+            {
+                "parent_task_id": str(entry["id"]),
+                "status": "rendered-acceptance-failed",
+                "failure_kind": "rendered-acceptance",
+                "failure_reason": str(rendered.get("blocked_reason", ""))[:400],
+                "failed_checks": [str(rendered.get("blocked_reason", ""))[:200]],
+                "outside": [],
+            }
+            if rendered_failed else None
+        ),
     )
     emit_event(
         run_root, "task_repair_prepared", state=state, task_id=entry_new["id"], stage="T1",
@@ -3871,19 +3941,27 @@ def _render_targets(rendered: dict, *, request: str) -> list[dict]:
 
     Each target carries its materiality basis: the requirement for the surface's
     own viewport, and the declared interaction for each requested action. No
-    target exists because nobody objected to it.
+    target exists because nobody objected to it. An expectation rides on the
+    target it belongs to: the route's own content on the surface target, and the
+    interaction's *effect* on the interaction target, so a dead handler fails the
+    capture that claims its effect.
     """
     target = dict(rendered.get("target") or {})
     route = str(target.get("route", "") or "/")
     basis = [{"basis": "REQUIREMENT", "reason": f"the task request names a rendered surface: {request[:140]}"}]
-    rows = [RENDEREDC.plan.viewport_state(
+    surface_expect = [str(item) for item in target.get("expect") or ()]
+    surface = RENDEREDC.plan.viewport_state(
         route=route, state="default", basis=basis,
         notes="the task's primary surface at the primary viewport",
-    )]
+    )
+    if surface_expect:
+        surface["expected_content"] = surface_expect
+    rows = [surface]
     for index, action in enumerate(target.get("actions") or (), start=1):
         descriptor = dict(action) if isinstance(action, Mapping) else {"kind": "click", "selector": str(action)}
         kind = str(descriptor.pop("kind", "click") or "click")
-        rows.append(RENDEREDC.plan.interaction_state(
+        expect = [str(item) for item in descriptor.pop("expect", []) or []]
+        row = RENDEREDC.plan.interaction_state(
             route=route,
             state=f"interaction-{index}-{kind}",
             action={"kind": kind, **descriptor},
@@ -3892,7 +3970,10 @@ def _render_targets(rendered: dict, *, request: str) -> list[dict]:
                 "reason": f"the task declares this interaction as required evidence ({kind} {descriptor.get('selector', '')})",
             }],
             notes="declared interaction capture",
-        ))
+        )
+        if expect:
+            row["expected_content"] = expect
+        rows.append(row)
     return rows
 
 
@@ -3987,7 +4068,7 @@ def _run_task_render(
             "RENDER_CAPABILITY_UNAVAILABLE: this task requires browser-rendered acceptance evidence, "
             "and no usable browser capture capability exists here: " + str(reason)
         )
-        TASKX.record_rendered(task, status="blocked", blocked_reason=blocked_reason)
+        TASKX.record_rendered(task, status="blocked", packet_id=str(entry["id"]), blocked_reason=blocked_reason)
         emit_event(
             run_root, "task_rendered_blocked", state=state, task_id=entry["id"], stage="T1",
             reason=blocked_reason[:300],
@@ -4012,7 +4093,7 @@ def _run_task_render(
         serve_dir = _project_serve_dir(project, rendered)
     except RuntimeError_ as error:
         blocked_reason = f"RENDER_SURFACE_UNAVAILABLE: {error}"
-        TASKX.record_rendered(task, status="blocked", blocked_reason=blocked_reason)
+        TASKX.record_rendered(task, status="blocked", packet_id=str(entry["id"]), blocked_reason=blocked_reason)
         emit_event(
             run_root, "task_rendered_blocked", state=state, task_id=entry["id"], stage="T1",
             reason=blocked_reason[:300],
@@ -4078,7 +4159,7 @@ def _run_task_render(
             detail="the browser capture could not complete; no rendered evidence was recorded",
         )
         blocked_reason = f"CAPTURE_FAILED: {error}"
-        TASKX.record_rendered(task, status="blocked", blocked_reason=blocked_reason)
+        TASKX.record_rendered(task, status="blocked", packet_id=str(entry["id"]), blocked_reason=blocked_reason)
         emit_event(
             run_root, "task_rendered_blocked", state=state, task_id=entry["id"], stage="T1",
             reason=blocked_reason[:300],
@@ -4109,7 +4190,7 @@ def _run_task_render(
             detail="the capture set is incomplete; a partial render cannot prove the whole requirement",
         )
         blocked_reason = f"CAPTURE_INCOMPLETE ({manifest.get('status')}): {skipped[:400]}"
-        TASKX.record_rendered(task, status="blocked", blocked_reason=blocked_reason)
+        TASKX.record_rendered(task, status="blocked", packet_id=str(entry["id"]), blocked_reason=blocked_reason)
         emit_event(
             run_root, "task_rendered_blocked", state=state, task_id=entry["id"], stage="T1",
             reason=blocked_reason[:300],
@@ -4129,6 +4210,7 @@ def _run_task_render(
     TASKX.record_rendered(
         task,
         status="captured",
+        packet_id=str(entry["id"]),
         evidence_set_id=str(manifest.get("evidence_set_id", "")),
         capture_ids=[str(row.get("capture_id", "")) for row in captures],
         evidence_ids=[str(row.get("evidence_id", "")) for row in records],
@@ -4655,6 +4737,11 @@ def task_run_progress(state: dict, run_root: Path, args: argparse.Namespace, att
                 result, code = _run_task_render(run_root, state, entry, packet, task, plan, rendered, args)
                 print(str(result.get("summary", "")))
                 if code != 0:
+                    if rendered_failure_repairable(task) and getattr(args, "auto", True):
+                        max_attempts = max(1, int(getattr(args, "max_attempts", 3) or 3))
+                        if attempts_run < max_attempts:
+                            prepare_repair_attempt(run_root, state, args=args)
+                            return 1, "the rendered acceptance failed; a bounded repair attempt is prepared"
                     return code, str(result.get("summary", "the rendered acceptance requirement is unresolved"))
                 task, attempt = _current_task_binding(state, entry)
         review_required = TASKX.review_is_required(plan)
@@ -5732,6 +5819,13 @@ def task_advance(run_root: Path, state: dict, args: argparse.Namespace) -> int:
             except Exception:  # noqa: BLE001 - an unreadable source is an unsatisfied capture
                 current_digest = ""
             if not TASKX.rendered_satisfied(task, revision_hash=task_revision, source_digest=current_digest):
+                if rendered_failure_repairable(task):
+                    entry_new, output, _task_record = prepare_repair_attempt(run_root, state, args=args)
+                    print(
+                        "Next: the required rendered acceptance failed on this revision; bounded repair "
+                        f"attempt {entry_new['id']} is prepared ({output})."
+                    )
+                    return 0
                 print(
                     "Next: this task requires browser-rendered acceptance evidence for this revision; "
                     "capture it with `ariadne.py task-render`."
@@ -12731,6 +12825,8 @@ def parser() -> argparse.ArgumentParser:
                             help="project-relative static directory to serve for rendered captures")
         target.add_argument("--render-action", action="append",
                             help="an interaction to capture, e.g. click:#generate; repeatable")
+        target.add_argument("--render-expect", action="append",
+                            help="text the captured surface must contain (after declared interactions); repeatable")
         target.add_argument("--skill-catalog", action="append",
                             help="a trusted external skill catalogue to inspect; repeatable, read-only")
         target.add_argument("--approved-external", action="append",

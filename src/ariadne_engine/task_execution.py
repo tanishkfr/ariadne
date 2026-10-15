@@ -426,6 +426,7 @@ def record_rendered(
     task: dict,
     *,
     status: str,
+    packet_id: str = "",
     evidence_set_id: str = "",
     capture_ids: Sequence[str] = (),
     evidence_ids: Sequence[str] = (),
@@ -439,11 +440,14 @@ def record_rendered(
     Only the engine writes this: it is what makes "the UI task was rendered and
     seen" checkable from records instead of from a sentence in a return. A
     capture that could not run is recorded as ``blocked`` with its reason, never
-    as a pass.
+    as a pass. The record names the packet whose revision it tried to render, so
+    a later repair can tell whether the failure describes the attempt it is
+    repairing.
     """
     rendered = task.setdefault("rendered", _rendered_seed({}))
     rendered["status"] = str(status)
     rendered["blocked_reason"] = str(blocked_reason)
+    rendered["packet_id"] = str(packet_id or rendered.get("packet_id", ""))
     rendered["recorded_at"] = contracts.utc_now()
     if evidence_set_id:
         row = {
