@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -328,6 +330,192 @@ class DeclaredObserverAdapter(CaptureAdapter):
         )
 
 
+class ChromiumCaptureAdapter(CaptureAdapter):
+    """The AR-222 browser pipeline as a capture adapter for the design workflow.
+
+    AR-222 ships a real Chromium render adapter and wires it to the bounded task
+    flow (``ariadne.py task-render``). The design workflow's own capture events
+    could reach no real browser at all -- the offline fixture proves the
+    workflow but is not a browser, and a declared observer is capped at RENDERED
+    by design -- so a project with a browser sitting right there could never
+    close a rendered requirement as verified. This bridge exposes *the same*
+    pipeline: one adapter, no second browser implementation, no new dependency
+    (Playwright remains optional and never imported at module load; an
+    unavailable browser is reported, not worked around).
+
+    A capture happens only when an operator names this adapter in an explicit
+    capture event: nothing starts a browser implicitly. Every artifact is bound
+    to the project's render-source digest, and the re-production contract holds:
+    re-capturing the same spec in an independent engine execution must be
+    byte-identical, which is why the artifact bytes never contain timestamps.
+    """
+
+    id = "chromium-render"
+    method = "browser-render"
+
+    def __init__(self, project: Path, run_root: Path) -> None:
+        self.project = Path(project).resolve()
+        self.run_root = Path(run_root).resolve()
+
+    def _probe(self):
+        from .rendered_critique import adapter as render_adapter
+
+        return render_adapter.probe_playwright()
+
+    def available(self) -> tuple[bool, str]:
+        probe = self._probe()
+        if not probe.available:
+            return False, probe.reason or "playwright is not importable here"
+        if not probe.extra.get("browser_executable_present"):
+            return False, probe.reason or "no chromium-family browser binary was found"
+        return True, ""
+
+    def capabilities(self) -> tuple[str, ...]:
+        return ("screenshot", "measurement", "interaction", "console")
+
+    def capability_record(self) -> dict:
+        available, reason = self.available()
+        return {
+            "id": self.id,
+            "available": bool(available),
+            "reason": str(reason),
+            "capabilities": list(self.capabilities()),
+            "method": self.method,
+        }
+
+    def serve_dir(self, requested: str = "") -> Path:
+        """The static surface to serve: the project's own tree and nowhere else."""
+        raw = str(requested or "").strip()
+        if raw:
+            base = (self.project / raw).resolve()
+        elif (self.project / "dist").is_dir():
+            base = (self.project / "dist").resolve()
+        else:
+            base = self.project.resolve()
+        inside = base == self.project.resolve() or str(base).startswith(str(self.project.resolve()) + os.sep)
+        if not inside:
+            raise ContractError(
+                f"the capture serve directory {raw or base.name!r} resolves outside the project; "
+                "a design capture may only render the project's own surface"
+            )
+        if not base.is_dir():
+            raise ContractError(f"the capture serve directory {base} does not exist; build the surface first")
+        return base
+
+    def capture(self, spec: Mapping) -> CaptureArtifact:
+        from .rendered_critique import adapter as render_adapter
+        from .rendered_critique import source as render_source
+
+        available, reason = self.available()
+        if not available:
+            raise ContractError(f"chromium capture is unavailable here: {reason}")
+        probe = self._probe()
+        kind = str(spec.get("kind", "screenshot") or "screenshot")
+        if kind not in self.capabilities():
+            raise ContractError(f"the chromium adapter cannot produce {kind!r}")
+        route = str(spec.get("route", "/") or "/")
+        viewport = dict(spec.get("viewport") or {})
+        width = int(viewport.get("width", 0) or 0)
+        if width <= 0:
+            raise ContractError("a browser capture needs a positive viewport width")
+        viewport.setdefault("height", 900)
+        actions = [dict(item) for item in (spec.get("actions") or []) if isinstance(item, Mapping)]
+        selectors = [str(item) for item in (spec.get("selectors") or []) if str(item).strip()]
+        settle_ms = max(0, int(spec.get("settle_ms", 900) or 0))
+        full_page = bool(spec.get("full_page", True))
+        serve = self.serve_dir(str(spec.get("serve_dir", "") or ""))
+        binding = render_source.bind(self.project)
+        source_digest = str(binding.get("render_source_digest", ""))
+        subdir = str(spec.get("subdir", "") or "").strip()
+        directory = capture_root(self.run_root) / f"design-{_slug(route)}-{width}"
+        if subdir:
+            directory = directory / _slug(subdir)
+        directory.mkdir(parents=True, exist_ok=True)
+        server = render_adapter.LocalServer(serve)
+        adapters = render_adapter.select_adapters(
+            self.run_root, launch_command=["python", "--version"], allow_hosts=["127.0.0.1"],
+        )
+        browser = adapters["chromium-render"]
+        base_url = server.start()
+        steps: list[dict] = []
+        try:
+            browser.launch()
+            browser.set_viewport(viewport)
+            browser.navigate(base_url.rstrip("/") + "/" + route.lstrip("/"))
+            theme = str(spec.get("theme", "") or "")
+            if theme:
+                browser.set_theme(theme)
+            for action in actions:
+                steps.append(browser.perform_state(action))
+            if settle_ms:
+                time.sleep(settle_ms / 1000.0)
+            report = browser.inspect(selectors)
+            # The ephemeral loopback port is engine noise: two identical captures
+            # must reproduce byte-for-byte, and a port number is not a fact about
+            # what rendered. The logical route is recorded instead.
+            report["url"] = "http://127.0.0.1/" + route.lstrip("/")
+            if kind == "screenshot":
+                target = directory / "screenshot.png"
+                captured = browser.capture(target, full_page=full_page)
+                path = Path(str(captured["path"]))
+                digest = str(captured["sha256"])
+                observation = str(spec.get("observation", "") or "")
+                extra: dict = {"route": route, "bytes": int(captured.get("bytes", 0) or 0)}
+            else:
+                if kind == "interaction":
+                    payload = {"route": route, "actions": steps, "report": report}
+                elif kind == "measurement":
+                    payload = {"route": route, "report": report, "actions": steps}
+                else:  # console
+                    payload = {
+                        "route": route,
+                        "console": report.get("console", []),
+                        "page_errors": report.get("page_errors", []),
+                    }
+                data = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+                target = directory / f"{kind}.json"
+                target.write_text(data, encoding="utf-8")
+                digest = hashlib.sha256(data.encode("utf-8")).hexdigest()
+                path = target
+                observation = str(spec.get("observation", "") or "")
+                extra = {"route": route, "actions_performed": len(steps)}
+        finally:
+            browser.shutdown()
+            server.shutdown()
+        environment = {
+            "kind": "browser-render",
+            "engine": str(probe.engine),
+            "browser": str(probe.browser),
+            "version": str(probe.version),
+            "platform": str(probe.platform),
+            "loopback": True,
+            "render_source_digest": source_digest,
+        }
+        manifest = path.parent / MANIFEST_NAME
+        manifest.write_text(
+            json.dumps({
+                "adapter": self.id,
+                "route": route,
+                "kind": kind,
+                "viewport": viewport,
+                "artifact": {"path": str(path.resolve()), "sha256": digest},
+                "environment": {
+                    "kind": "browser-render",
+                    "engine": str(probe.engine),
+                    "browser": str(probe.browser),
+                    "version": str(probe.version),
+                    "render_source_digest": source_digest,
+                },
+                "recorded_at": contracts.utc_now(),
+            }, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return CaptureArtifact(
+            kind=kind, path=str(path.resolve()), sha256=digest, viewport=viewport,
+            environment=environment, method=self.method, observation=observation, extra=extra,
+        )
+
+
 class LocalBrowserAdapter(CaptureAdapter):
     """A local browser capture capability, declared but not exercised here.
 
@@ -357,11 +545,17 @@ class LocalBrowserAdapter(CaptureAdapter):
 
 
 def default_adapters(run_root: Path, *, fixture: Mapping | None = None,
-                     declared_observer: Mapping | None = None) -> dict[str, CaptureAdapter]:
+                     declared_observer: Mapping | None = None,
+                     project: Path | None = None) -> dict[str, CaptureAdapter]:
     adapters: list[CaptureAdapter] = [
         LocalBrowserAdapter(),
         DeclaredObserverAdapter(**dict(declared_observer or {})),
     ]
+    if project is not None:
+        # Only the design workflow knows the project a capture belongs to, so the
+        # real browser bridge exists where a surface can be named -- tests and
+        # task flows construct their adapters without it and see no change.
+        adapters.insert(0, ChromiumCaptureAdapter(project, run_root))
     if fixture is not None:
         adapters.insert(0, OfflineFixtureAdapter(run_root, fixture))
     return {adapter.id: adapter for adapter in adapters}
@@ -1033,6 +1227,7 @@ __all__ = [
     "CaptureAdapter",
     "OfflineFixtureAdapter",
     "DeclaredObserverAdapter",
+    "ChromiumCaptureAdapter",
     "LocalBrowserAdapter",
     "default_adapters",
     "capability_matrix",

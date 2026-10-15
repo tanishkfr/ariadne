@@ -7937,6 +7937,7 @@ def design_adapters(state: dict, project: Path, fixture: dict) -> tuple[dict, di
         run_root,
         fixture=fixture.get("capture"),
         declared_observer=fixture.get("declared_observer"),
+        project=project,
     )
     return reference_adapters, capture_adapters
 
@@ -8425,11 +8426,14 @@ def record_design(args: argparse.Namespace) -> int:
             )
             if execution_problems:
                 raise RuntimeError_("design verification execution rejected: " + "; ".join(execution_problems))
-            reproduced = adapter.capture(spec)
+            # The re-produced artifact must be a different file than the original
+            # capture -- re-hashing one file is not re-production -- so the
+            # re-capture writes under its own subdirectory of the capture root.
+            reproduced = adapter.capture({**spec, "subdir": "reproduced"})
             record_value = RENDER.verify(
                 state, evidence_id,
                 verification_execution=str(verification_execution.get("execution_id", "")),
-                reproduced_sha256=reproduced.sha256,
+                reproduced_artifact={"path": reproduced.path, "sha256": reproduced.sha256},
                 method=f"independent re-capture by {adapter.id}",
                 tolerance=str(event.get("tolerance", "exact") or "exact"),
             )

@@ -710,6 +710,38 @@ INSPECT_SCRIPT = """
     regionCounts[selector] = count;
     regionCounts[selector + ' (visible)'] = visible;
   }
+  const styleSamples = {};
+  for (const selector of wanted) {
+    let target = null;
+    try {
+      for (const node of Array.from(document.querySelectorAll(selector))) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) { target = node; break; }
+      }
+    } catch (error) {
+      styleSamples[selector] = { error: 'invalid selector' };
+      continue;
+    }
+    if (!target) { continue; }
+    const style = window.getComputedStyle(target);
+    const rect = target.getBoundingClientRect();
+    styleSamples[selector] = {
+      tag: (target.tagName || '').toLowerCase(),
+      font_family: style.fontFamily,
+      font_size: style.fontSize,
+      font_weight: style.fontWeight,
+      line_height: style.lineHeight,
+      letter_spacing: style.letterSpacing,
+      text_transform: style.textTransform,
+      color: style.color,
+      background_color: style.backgroundColor,
+      display: style.display,
+      rect: {
+        x: Math.round(rect.x), y: Math.round(rect.y),
+        w: Math.round(rect.width), h: Math.round(rect.height),
+      },
+    };
+  }
   return {
     url: location.href,
     title: document.title || '',
@@ -731,6 +763,7 @@ INSPECT_SCRIPT = """
     clipped_elements: clipped,
     headings: headings,
     region_counts: regionCounts,
+    style_samples: styleSamples,
     prefers_reduced_motion: prefersReduced,
     transition_duration: duration,
     ready_state: document.readyState,

@@ -1009,6 +1009,47 @@ def record_social_learning(ledger: dict, event: dict) -> None:
     })
 
 
+def rederive_requirements(project: Path, ledger: dict, event: dict) -> None:
+    """Re-derive requirement anchors after an authorized document reconciliation.
+
+    The trace's ``design_source`` records where each approved decision lives,
+    together with the document's digest at derivation time. A deliberately
+    reconciled contract -- an authorized edit to HANDOFF.md between boundaries --
+    invalidates those digests without changing the decisions, and this ledger
+    cannot be replaced ("do not replace its evidence"). This event re-derives
+    exactly the anchors from the current documents: identities, kinds and
+    decisions must be unchanged (a different set or decision is a new trace and
+    is refused), and each previous anchor is kept as recorded history.
+    """
+    reason = str(event.get("reason", "") or "").strip()
+    if not reason:
+        raise OperationsError("re-anchoring the trace needs the reconciliation reason it answers")
+    fresh = derive_requirements(project)
+    existing = [row for row in (ledger.get("requirements") or []) if isinstance(row, dict)]
+    if [
+        (row.get("id"), row.get("kind"), row.get("decision")) for row in existing
+    ] != [
+        (row.get("id"), row.get("kind"), row.get("decision")) for row in fresh
+    ]:
+        raise OperationsError(
+            "the current documents derive a different requirement set or decision; that is a new "
+            "trace, not a re-anchoring, and this ledger's evidence cannot be replaced"
+        )
+    revisions = []
+    for row, current in zip(existing, fresh):
+        if row.get("design_source") == current.get("design_source"):
+            continue
+        revisions.append({
+            "requirement_id": row.get("id"),
+            "previous": row.get("design_source"),
+            "current": current.get("design_source"),
+            "reason": reason,
+            "recorded_at": now(),
+        })
+        row["design_source"] = current["design_source"]
+    ledger.setdefault("requirement_revisions", []).extend(revisions)
+
+
 def apply_event(project: Path, ledger: dict, event: dict) -> None:
     event_type = str(event.get("type", "")).strip()
     if event_type == "implementation":
@@ -1019,6 +1060,8 @@ def apply_event(project: Path, ledger: dict, event: dict) -> None:
         record_drift(ledger, event)
     elif event_type == "creative-review":
         record_creative_review(ledger, event)
+    elif event_type == "rederive-requirements":
+        rederive_requirements(project, ledger, event)
     elif event_type == "social-strategy":
         record_social_strategy(project, ledger, event)
     elif event_type == "social-result":
@@ -1376,6 +1419,60 @@ def self_test() -> int:
             "unverified evidence cannot satisfy an observed visual target",
             "visual result is not observed: design-thesis at 375px"
             in project_problems(project, "visual"),
+        )
+
+        # 2.3C-R: a deliberately reconciled contract re-anchors its trace instead
+        # of replacing it, and nothing else may masquerade as a re-anchoring.
+        reconciled = fixture_project(workspace / "reconciled")
+        reconciled_ledger = create_ledger(reconciled)
+        (reconciled / "HANDOFF.md").write_text(
+            (reconciled / "HANDOFF.md").read_text(encoding="utf-8").replace(
+                "| Motion | continuity, 360ms |",
+                "| Motion | continuity, 360ms |\n"
+                "| Permitted files | tooling/** reconciled between boundaries |",
+            ),
+            encoding="utf-8",
+        )
+        case(
+            "a reconciled contract makes the trace anchors stale before anything mistakes them for wrong",
+            any(
+                "artifact changed after evidence was recorded" in problem
+                for problem in ledger_problems(reconciled, reconciled_ledger)
+            ),
+        )
+        apply_event(reconciled, reconciled_ledger, {
+            "type": "rederive-requirements", "reason": "the permitted-files table was reconciled",
+        })
+        case(
+            "re-anchoring follows the reconciliation, keeps identities, and records history",
+            not ledger_problems(reconciled, reconciled_ledger)
+            and {row["requirement_id"] for row in reconciled_ledger["requirement_revisions"]}
+            == {"fixed-typography", "fixed-palette", "fixed-grid", "fixed-motion"}
+            and all(row.get("reason") for row in reconciled_ledger["requirement_revisions"]),
+        )
+        try:
+            apply_event(reconciled, reconciled_ledger, {"type": "rederive-requirements", "reason": ""})
+            reasonless_reanchor_blocked = False
+        except OperationsError:
+            reasonless_reanchor_blocked = True
+        case("re-anchoring without the reconciliation reason is refused", reasonless_reanchor_blocked)
+        (reconciled / "DESIGN.md").write_text(
+            (reconciled / "DESIGN.md").read_text(encoding="utf-8").replace(
+                "A red thread makes every archive fragment part of one remembered route.",
+                "A different thesis entirely.",
+            ),
+            encoding="utf-8",
+        )
+        try:
+            apply_event(reconciled, reconciled_ledger, {
+                "type": "rederive-requirements", "reason": "a new thesis",
+            })
+            changed_decision_reanchor_blocked = False
+        except OperationsError:
+            changed_decision_reanchor_blocked = True
+        case(
+            "a changed requirement set cannot masquerade as a re-anchoring",
+            changed_decision_reanchor_blocked,
         )
 
         unlocked = fixture_project(workspace / "unlocked")
