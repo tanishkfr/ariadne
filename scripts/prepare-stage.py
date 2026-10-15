@@ -56,6 +56,25 @@ The worker never edits these directly: the runtime's ``record-creative`` and
 ``record-operations`` commands do. Without this, a run could not record the skill
 and operations evidence that the S5 continuation precondition requires, and the
 worker contract would be failing the runtime's own evidence writes."""
+VALIDATION_CACHE_PATTERNS = (
+    "*__pycache__/**",
+    "*.pyc",
+    ".pytest_cache/**",
+    "*/.pytest_cache/**",
+    ".mypy_cache/**",
+    "*/.mypy_cache/**",
+)
+"""Interpreter and test-runner caches, treated as engine-neutral during validation.
+
+The contract's own permitted actions include running the declared validation
+commands, and every interpreter executing them writes these files -- the worker
+does it and Ariadne's own independent rerun does it just as unavoidably. They are
+not implementation and carry no design meaning (a repository that ignores them
+never even sees them; the 2.3B fixtures all shipped a .gitignore for exactly this
+reason, which is why the bare-repository case went unnoticed). Refusing them
+would refuse the contract's own instructions, and this widens nothing else:
+source files, build outputs, documents, configuration, and every other new path
+remain exactly as the declared authorization says."""
 CONTRACT_DOCUMENT_PATHS = ("handoff.md", "design.md")
 """Contract documents that are immutable for the duration of a worker attempt.
 
@@ -667,9 +686,10 @@ def worker_scope_patterns(worker: dict | None, packet_ids: tuple | list = ()) ->
     copied from the approved contract at preparation time and is bound into the
     packet manifest (and summarised in the hash-covered packet text). Appended
     items are engine-owned, never worker-granted: the structured return files the
-    transport instructs the worker to write, and Ariadne's own evidence ledgers.
-    Every scope check in the runtime interprets exactly this list; nothing in it
-    widens the declared contract.
+    transport instructs the worker to write, Ariadne's own evidence ledgers, and
+    the interpreter caches the contract's own validation commands unavoidably
+    write. Every scope check in the runtime interprets exactly this list;
+    nothing in it widens the declared contract.
     """
     patterns: list[str] = []
 
@@ -685,6 +705,8 @@ def worker_scope_patterns(worker: dict | None, packet_ids: tuple | list = ()) ->
         if str(packet_id or "").strip():
             add(f".ariadne/returns/{str(packet_id).strip()}.md")
     for pattern in RUNTIME_EVIDENCE_PATTERNS:
+        add(pattern)
+    for pattern in VALIDATION_CACHE_PATTERNS:
         add(pattern)
     return patterns
 
@@ -2842,7 +2864,8 @@ def self_test() -> int:
     canonical_patterns = worker_scope_patterns({"scope": [{"path": "src/**"}]}, ["P1"])
     case(
         "the canonical scope representation adds only engine-owned transport entries",
-        canonical_patterns == ["src/**", ".ariadne/returns/P1.md", *RUNTIME_EVIDENCE_PATTERNS],
+        canonical_patterns
+        == ["src/**", ".ariadne/returns/P1.md", *RUNTIME_EVIDENCE_PATTERNS, *VALIDATION_CACHE_PATTERNS],
     )
     case(
         "the canonical scope representation grants no project root, wildcard root, or sensitive path",
@@ -2861,8 +2884,9 @@ def self_test() -> int:
         ]
         == ["src/**", "docs/**"]
         and len(worker_scope_patterns({"scope": [{"path": "src/**"}, {"path": "docs/**"}]}))
-        == 2 + len(RUNTIME_EVIDENCE_PATTERNS),
+        == 2 + len(RUNTIME_EVIDENCE_PATTERNS) + len(VALIDATION_CACHE_PATTERNS),
     )
+    scope_fixture = worker_scope_patterns({"scope": [{"path": "rounding.py"}]})
 
     def scope_status(paths: list[str], patterns: list[str]) -> str:
         return worker_scope_check(
@@ -2878,6 +2902,19 @@ def self_test() -> int:
             patterns,
         )["status"]
 
+    case(
+        "the interpreter caches the contract's own test commands write are engine-neutral",
+        scope_status(["__pycache__/rounding.cpython-311.pyc"], scope_fixture) == "within-contract"
+        and scope_status(["tests/__pycache__/test_rounding.cpython-311.pyc"], scope_fixture)
+        == "within-contract"
+        and scope_status([".pytest_cache/v/cache/nodeids"], scope_fixture) == "within-contract",
+    )
+    case(
+        "cache-looking paths that are not interpreter caches stay out of scope",
+        scope_status(["pycache/rounding.txt"], scope_fixture) == "out-of-scope"
+        and scope_status(["hidden.pyc.txt"], scope_fixture) == "out-of-scope"
+        and scope_status(["generated/site.js"], scope_fixture) == "out-of-scope",
+    )
     case(
         "declared .gitignore is within contract; undeclared .gitignore is refused",
         scope_status([".gitignore"], ["index.html", ".gitignore"]) == "within-contract"

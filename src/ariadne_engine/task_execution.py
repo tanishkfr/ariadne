@@ -118,7 +118,11 @@ WORKER_ADAPTERS: dict[str, dict] = {
         title="Codex CLI",
         kind=CLI_HARNESS,
         command="codex",
-        argv=("exec", "--full-auto", "-"),
+        # Codex CLI 0.160 dropped the historical --full-auto shorthand (and exec
+        # never prompts anyway); the explicit sandbox flag is the supported
+        # spelling, and a non-interactive exec already answers approval with
+        # "never". The prompt is still read from stdin via the trailing dash.
+        argv=("exec", "--sandbox", "workspace-write", "-"),
         capabilities=("read", "search", "edit", "shell", "implementation", "implementation-repair", "escalation"),
         preference=2,
         note="headless invocation of the installed Codex CLI",

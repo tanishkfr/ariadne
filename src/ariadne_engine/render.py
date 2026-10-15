@@ -427,7 +427,16 @@ class ChromiumCaptureAdapter(CaptureAdapter):
         binding = render_source.bind(self.project)
         source_digest = str(binding.get("render_source_digest", ""))
         subdir = str(spec.get("subdir", "") or "").strip()
-        directory = capture_root(self.run_root) / f"design-{_slug(route)}-{width}"
+        # One directory per capture identity: two captures of the same route and
+        # viewport (say, an interaction transcript and a motion transcript) must
+        # never share an artifact path, or the second overwrites the first and the
+        # engine rightly reports the first record's artifact as changed. An
+        # explicit spec label names it; otherwise the canonical spec does.
+        label = str(spec.get("label", "") or "").strip()
+        if not label:
+            canonical = json.dumps(spec, sort_keys=True, default=str).encode("utf-8")
+            label = "spec-" + hashlib.sha256(canonical).hexdigest()[:10]
+        directory = capture_root(self.run_root) / f"design-{_slug(route)}-{width}-{_slug(label)}"
         if subdir:
             directory = directory / _slug(subdir)
         directory.mkdir(parents=True, exist_ok=True)
@@ -474,7 +483,9 @@ class ChromiumCaptureAdapter(CaptureAdapter):
                     }
                 data = json.dumps(payload, indent=2, sort_keys=True) + "\n"
                 target = directory / f"{kind}.json"
-                target.write_text(data, encoding="utf-8")
+                # Bytes, not text: text-mode writes translate newlines on Windows and the
+                # file would no longer hash to what the adapter declared.
+                target.write_bytes(data.encode("utf-8"))
                 digest = hashlib.sha256(data.encode("utf-8")).hexdigest()
                 path = target
                 observation = str(spec.get("observation", "") or "")
@@ -492,23 +503,24 @@ class ChromiumCaptureAdapter(CaptureAdapter):
             "render_source_digest": source_digest,
         }
         manifest = path.parent / MANIFEST_NAME
-        manifest.write_text(
-            json.dumps({
-                "adapter": self.id,
-                "route": route,
-                "kind": kind,
-                "viewport": viewport,
-                "artifact": {"path": str(path.resolve()), "sha256": digest},
-                "environment": {
-                    "kind": "browser-render",
-                    "engine": str(probe.engine),
-                    "browser": str(probe.browser),
-                    "version": str(probe.version),
-                    "render_source_digest": source_digest,
-                },
-                "recorded_at": contracts.utc_now(),
-            }, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        manifest.write_bytes(
+            (
+                json.dumps({
+                    "adapter": self.id,
+                    "route": route,
+                    "kind": kind,
+                    "viewport": viewport,
+                    "artifact": {"path": str(path.resolve()), "sha256": digest},
+                    "environment": {
+                        "kind": "browser-render",
+                        "engine": str(probe.engine),
+                        "browser": str(probe.browser),
+                        "version": str(probe.version),
+                        "render_source_digest": source_digest,
+                    },
+                    "recorded_at": contracts.utc_now(),
+                }, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
         )
         return CaptureArtifact(
             kind=kind, path=str(path.resolve()), sha256=digest, viewport=viewport,

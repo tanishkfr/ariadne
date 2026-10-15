@@ -464,7 +464,11 @@ class ChromiumRenderAdapter(RenderAdapter):
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            raw = page.screenshot(full_page=bool(full_page))
+            # The text caret blinks, so a focused input would make two captures of
+            # the same surface differ by a few bytes and re-production would fail on
+            # a coin flip. The caret is browser chrome, not content: hidden, the
+            # capture is a fact about the page rather than about blink phase.
+            raw = page.screenshot(full_page=bool(full_page), caret="hide")
         except Exception as exc:  # noqa: BLE001
             raise CaptureFailed(f"CAPTURE_FAILED: no image could be produced: {exc}") from exc
         if not raw:
