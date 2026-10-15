@@ -128,6 +128,13 @@ def check_engine_suites() -> dict:
         ("decision runtime", "test-decision-runtime.py", 1800),
         ("decision mutations", "test-decision-mutations.py", 1800),
         ("runtime mutations", "test-decision-runtime-mutations.py", 1800),
+        # AR-2.3A/2.3B/2.3C: universal entry, task execution, and the external
+        # skill / project memory / T1 rendered-acceptance capabilities. The live
+        # cases inside them record honest skips when a browser or harness is
+        # absent, so the suites themselves always execute here.
+        ("universal entry (2.3A)", "test-ar225.py", 1800),
+        ("task execution (2.3B)", "test-ar23b.py", 3600),
+        ("2.3C capabilities", "test-ar23c.py", 3600),
         # AR-221 grounded design execution. The suite runs the real vertical slice -
         # a real tsc, a real build, a real test suite on a real fixture - so it is
         # slower than the others and gets a longer allowance rather than being

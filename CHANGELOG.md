@@ -61,6 +61,70 @@ creative-workflow compatibility, and parallel-run state safety.
 
 ---
 
+## 2.3 development (AR-231) - NOT RELEASED
+
+VERSION remains **2.2.0** until release readiness is established; the 2.3C
+acceptance run left two blockers (below) and no release is claimed.
+
+### Universal skills, persistent intelligence, and the trust boundary
+
+**The lesson.** 2.3A could interpret any request and 2.3B could execute it with a
+real worker, but three gaps kept the system from being *portable and extensible*:
+a UI task could pass text validation while the rendered surface was broken; every
+task re-derived project knowledge that had already been learned; and there was no
+safe way to extend Ariadne with outside skills. All three are closed by extending
+the systems that already own those responsibilities.
+
+- **riadne_engine/external_skills.py** (new): metadata-first discovery of
+  explicitly trusted catalogues, digest-pinned human approvals, a copy-only
+  install store, a load-time instruction trust scan, and a merged registry that
+  still refuses unapproved entries at selection. Nothing is executed during
+  discovery; nothing is installed without a matching approval digest; a native id
+  is never shadowed.
+- **riadne_engine/memory.py** (new): derived cross-task memory inside the
+  existing run state. Evidence-anchored entries, occurrence counting for genuine
+  repeats, revision-staleness for implementation-shaped facts, bounded retrieval
+  emitted as data (never instructions), correction that keeps history, and the
+  mistake-to-enforcement proposals (a repeated failure becomes a proposed
+  regression test; implementation still requires a human or a covering task).
+- **riadne_engine/tasks.py / 	ask_execution.py**: UI tasks now detect a
+  browser-rendered acceptance obligation and carry it into the contract; the new
+  
+ender-pending lifecycle state refuses to call an unrendered implementation
+  visually verified, and a failed *rendered* acceptance enters the same bounded
+  repair budget a failed validation does.
+- **riadne.py task-render**: the engine's own AR-222 capture step for T1 UI
+  tasks — real Chromium via the existing rendered-critique pipeline, captures
+  bound to the implementation revision, recorder evidence mapped into the
+  acceptance ledger, and honest blocking (recorded, not faked) when no browser is
+  available.
+- **riadne.py skills-* and memory-***: the operator surface for the trust
+  boundary and the memory store; economics --skills reports measured
+  skill-level effectiveness with unknowns left UNKNOWN.
+- **stronger: creative-plan** may now be recorded once, late, with the lateness
+  flagged inside the ledger (found by the 2.3C acceptance run, where advancing
+  past the brief dead-ended the run); creative-ledger artifact digests are
+  checked latest-per-path and decisions by anchor presence, so a stage document
+  can be refined without rewriting history.
+- **scripts/test-ar23c.py** (new, 22 cases): the suite for the above, including
+  adversarial poisoned skill descriptions and instructions, poisoned memory,
+  stale digests, and a live browser case that fails a staged interaction defect,
+  repairs it inside the budget, and recaptures fresh evidence.
+
+### 2.3C acceptance-run blockers (unresolved)
+
+1. The full generative-UI website run reached S4B with the site built,
+   browser-verified, captured and critiqued, but its independent worker
+   validation classified the boundary **out-of-scope**: the packet's recorded
+   permitted-files contract under-declared files the handoff's own plan named.
+   Blocked results cannot enter routine repair, and escalation needs a provider
+   this environment does not have. Proof Pass over the original request therefore
+   reports PARTIAL with TEST evidence outstanding.
+2. No third-party CLI harness could be executed live (claude and gemini are
+   installed but unauthenticated; codex/cursor/opencode are absent). Harness
+   discovery and failure classification are verified live; a genuine external
+   execution remains environment-blocked.
+
 ## 2.3 development (AR-225) — NOT RELEASED
 
 `VERSION` remains **2.2.0** until release readiness is established. AR-225 is

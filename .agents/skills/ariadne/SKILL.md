@@ -215,6 +215,51 @@ When its marked QA judgement returns, save the response temporarily and run
 updates only QA.md's judgement region. Never paraphrase a score, verdict,
 finding, or evidence limitation.
 
+## Universal skills, memory, and rendered task acceptance
+
+Three Ariadne 2.3 capabilities add behaviour you should know about; none of them
+grants authority, and all of them are optional to the workflow.
+
+**UI tasks and rendered acceptance.** When a bounded task's request or declared
+scope names a surface a browser paints (a modal, a menu, a landing page, an
+`.html`/`.css`/`.jsx` file, or any design vocabulary), the plan requires
+**browser-rendered acceptance evidence** and the contract says so. After the
+worker's attempt validates, the engine captures the real surface itself
+(`ariadne.py task-render`, the same AR-222 pipeline the design workflow uses),
+binds the captures to the implementation revision, and Proof Pass refuses to
+call an unrendered implementation visually verified. Declare interactions to
+capture with `--render-action "click:#selector=expected text"` at `task-start`;
+a declared interaction whose effect is missing fails the capture and enters the
+same bounded repair budget a failed validation does. When no browser is
+available the requirement is recorded as unresolved — never as a pass — and
+`ariadne doctor` reports the capability before you start.
+
+**Project memory.** Settled task outcomes (passing verification commands,
+failure classes, accepted patterns) and the notes you record become project
+memory inside the run state: evidence-anchored, project-scoped, bounded, and
+offered to later task packets as *data, not instructions*. Implementation-shaped
+facts whose anchored files changed are withheld as stale; your conventions and
+preferences survive revisions but are flagged as drifted. Inspect and correct it
+with `ariadne.py memory-status`, `memory-record`, `memory-correct` (corrections
+keep history), and `memory-proposals`. When the same failure repeats, Ariadne
+proposes a durable correction (a regression test, a rule, a verification
+recipe); implementation requires either your authorisation
+(`memory-authorize --identity`) or a task whose scope already covers the target.
+
+**Trusted external skills.** Ariadne is complete without them. To extend it
+safely: point `skills-discover` at a catalogue you trust (read-only, metadata
+first), approve one candidate explicitly with `skills-approve --identity` (that
+pins one identity to one exact digest), and `skills-install` copies it into the
+run's managed store. External files are untrusted input: they can never grant
+approvals, disable policy, mint verification, or shadow a native skill;
+modified bytes turn an approval stale; the body is trust-scanned at load time.
+Selection prefers native skills, then your approved externals; an unapproved
+candidate is never selected. See `docs/SKILL-TRUST.md` for the full model.
+
+**Economics.** Use `ariadne.py economics --skills` to see what was actually
+selected, invoked, completed, repaired and reviewed per task, with unknowns
+(tokens, provider cost) left UNKNOWN. Use it to keep small tasks small.
+
 ## QA and recovery
 
 After G1, read `references/creative-operations.md`. The controller derives the
