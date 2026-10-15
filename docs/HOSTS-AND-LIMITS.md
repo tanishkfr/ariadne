@@ -72,20 +72,43 @@ declared observer still exists and is still capped at RENDERED by design.
    covers every refused path and the repository's current deviation, and it
    permits exactly one new attempt. Without a human decision the boundary stays
    blocked by design.
-2. **Proof Pass needs engine-rerun TEST evidence at project level.** The engine
-   does not yet record its own S4B validation reruns as project-level acceptance
-   evidence, so a project that built and validated cleanly still shows
-   `PARTIAL / TEST outstanding` (`VP-0004` over the generative-UI original
-   request is the live example). That is the correct conservative reading, not a
-   bug, and it is the largest remaining wiring gap.
+2. **Proof Pass TEST evidence is wired to the engine's own validation reruns
+   (2.3C-R acceptance pass).** The worker validation record now carries a
+   `validated_revision` fingerprint of the exact implementation bytes the
+   commands ran against, and the acceptance mapper
+   (`integrations.from_worker_validation`) turns one genuine, still-current
+   record into `TEST` evidence per requirement — refusing failed, blocked,
+   unevidenced, foreign-project and stale records by name, on the receipt's own
+   `validation_mapping`. The Proof Pass binds its revision to the implementation
+   fingerprint, so a source change moves the digest and earlier observations go
+   stale at the next pass instead of silently staying current. Two boundaries
+   remain, both conservative:
+   - **A validation recorded before this wiring predates its revision binding
+     and is refused, not guessed at.** `VP-0005` over the generative-UI original
+     request is the live example: the recorded `genui-lab-S4B-C1` rerun is named
+     and refused as unprovable-against-the-current-revision, so `PARTIAL / TEST
+     outstanding` is now an accounting entry rather than silence.
+   - **A post-review corrective iteration cannot re-record S4B validation in the
+     current lifecycle.** `validate-worker` is one-shot per attempt and bound to
+     the S4B boundary, and the stage table has no route back to S4B from S5, so
+     the review's `Fix and re-review` loop runs with captures and QA evidence
+     but without a fresh engine TEST record; the second independent review also
+     cannot be ingested after the first (`reviewed -> reviewed` is not in the
+     worker lifecycle table). Both are the largest remaining acceptance gaps.
 3. **Review independence is mechanical, plus whatever the environment offers.**
    The engine binds reviewer identities to separate executions parented onto the
-   implementer's. The 2.3C-R S5 review ran in a fresh isolated external Codex CLI
-   session with no build context — a genuinely separate execution — and the
-   review's own limitation (its sandbox could not launch a browser, so rendered
-   behaviour remains unverified *by the reviewer*) is recorded in its judgement.
-   When one agent plays both roles, independence is protocol-level; record that
-   limitation when it applies.
+   implementer's, and the independence ladder is honest about what a record can
+   prove (2.3C-R acceptance pass): `DISTINCT_PROVIDER` is granted only when the
+   *provider-observed* provider/model differs on both sides, so two executions
+   on the same provider carrying different requested or declared labels stay
+   `DISTINCT_RUNTIME` instead of being mislabelled as distinct providers. The
+   2.3C-R S5 review ran in a fresh isolated external Codex CLI session with no
+   build context — a genuinely separate execution — and the review's own
+   limitation (its sandbox could not launch a browser, so rendered behaviour
+   remains unverified *by the reviewer*) is recorded in its judgement; the
+   later engagements were supplied revision-bound engine captures and stated
+   what they could verify firsthand. When one agent plays both roles,
+   independence is protocol-level; record that limitation when it applies.
 4. **External skill bodies are scanned, not sandboxed.** The trust scan refuses
    known dangerous classes; a sufficiently creative hostile document could still
    be misleading prose. That is why approval is per-digest, per-identity, and

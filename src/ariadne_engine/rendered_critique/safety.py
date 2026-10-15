@@ -57,7 +57,7 @@ MAX_CAPTURE_FILENAME = 96
 MAX_TARGET_ID_LENGTH = 64
 
 INTERACTION_ACTIONS = (
-    "hover", "focus", "click", "press", "select", "navigate", "set_viewport",
+    "hover", "focus", "click", "fill", "press", "select", "navigate", "set_viewport",
     "emulate_media", "evaluate_readonly",
 )
 """The interaction vocabulary a capture plan may request.
@@ -72,6 +72,10 @@ for -- reduced motion above all -- through the browser's own emulation rather th
 by hoping the capture host happens to be configured that way. It changes only what
 ``matchMedia`` reports for the captured page, and it is bounded to the two states a
 decision can name.
+
+``fill`` types a bounded literal into a field, so a state that is only reachable
+through the interface's own input -- an unknown-prompt fallback above all -- can be
+captured as the interface's response to real input rather than asserted in prose.
 """
 
 READONLY_EVALUATE = re.compile(
@@ -167,6 +171,15 @@ def safe_action(descriptor: Mapping) -> dict:
                 "refused rather than passed to the browser"
             )
         value["key"] = key
+    if kind == "fill":
+        if not selector:
+            raise ContractError("a fill action needs the field it types into")
+        filled = str(value.get("value", "") or "")
+        if len(filled) > 400:
+            raise ContractError("a fill action is bounded to 400 characters")
+        if any(token in filled for token in ("\n", "\r", "\x00")):
+            raise ContractError("a fill action containing a control character is refused")
+        value["value"] = filled
     if kind == "emulate_media":
         for field, allowed in (
             ("reduced_motion", ("reduce", "no-preference")),

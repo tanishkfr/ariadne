@@ -198,6 +198,71 @@ proof the closure holds.
   reorganisation renamed the privacy policy's path inside its mutation source;
   it now fails loudly if the source goes missing again.
 
+### 2.3C-R final acceptance pass: the receipt accounts for the engine's own tests
+
+**The lesson.** A gate that omits a fact and a gate that rejects a fact look
+identical from outside: both say nothing. The closure's largest recorded gap —
+`PARTIAL / TEST outstanding` over a project whose checks the engine itself had
+rerun and passed — was not a missing check but a missing *sentence*: nothing
+carried the rerun from the packet to the acceptance ledger, and nothing could
+even say it had been left out. This pass wires the sentence end to end, then
+uses the freed-up run to prove the wiring and to close the review loop the
+machine can actually carry.
+
+- **The engine's validation reruns reach the acceptance ledger.** A worker
+  validation record now carries `validated_revision`, a fingerprint of the
+  exact implementation bytes the recorded commands ran against (evidence
+  ledgers, derived build output, caches and the governance documents Ariadne's
+  own commands rewrite afterwards are excluded — anything else moves it). At
+  Proof Pass, `integrations.from_worker_validation` maps a genuine, current
+  record into `TEST` evidence bound to the validator execution, the packet, the
+  executed commands and their exit codes, and refuses failed, blocked,
+  unevidenced, foreign-project and stale records *by name*. The pass revision
+  binds the implementation, so a source change moves the digest and earlier
+  observations go stale at the next pass instead of silently staying current.
+  The mapper records observations and never verdicts: what a passing check is
+  worth stays the requirement's own declared evidence policy, and the
+  anti-cheat controls in `scripts/test-ar23d.py` prove TEST alone promotes
+  nothing.
+- **The receipt says what it did with each recorded result.** `validation_mapping`
+  (recorded / replayed / refused-with-reason) rides on the receipt, merged
+  before the digest so the receipt still binds its own contents; on the
+  generative-UI run, `VP-0005` now names both recorded validations and why it
+  refused them instead of staying silent.
+- **Independence stops overstating.** `DISTINCT_PROVIDER` was granted whenever
+  reviewer and implementer carried different non-empty labels — including
+  requested and declared ones, which are the operator's expectation and the
+  worker's own prose. The contract defines the level as a *provider-observed*
+  difference; two executions on the same provider with different labels now
+  stay `DISTINCT_RUNTIME`, equal provider observations stay there too, and only
+  the provider-observed channel raises the level.
+- **Captures can reach the states the decisions were made for.** `emulate_media`
+  exercises reduced motion through the browser's own emulation (the creative
+  review's recorded highest-value improvement), `fill` reaches states only
+  reachable through the interface's own input (the unknown-prompt fallback),
+  and both are bounded at the descriptor boundary like every other verb. The
+  focus audit no longer probes with a bare programmatic `focus()` — which never
+  matches `:focus-visible` and so reported correctly-styled controls as ringless
+  — it declares keyboard intent where the engine supports it.
+- **The acceptance project ran the loop the machine can carry.** Two focused
+  iterations answered two rounds of independent review: the example-chip hover
+  defect found by real browser interaction (ink-on-ink), the reduced-motion and
+  1920 states left unexercised, a missing-resource 404, and the focus-audit
+  false negative — each fixed at the source, re-captured, re-produced
+  byte-for-byte by the engine, and re-recorded through the operations ledger
+  (a new bounded `implementation-revision` re-anchor keeps a corrected
+  implementation's trace honest without replacing its history). Two further
+  fresh isolated Codex engagements reviewed the corrected revisions from
+  supplied code plus revision-bound engine captures and said plainly what they
+  verified firsthand (no live browser in their sandbox). Their remaining asks
+  are direction questions — fallback variation, wide-screen composition, prompt
+  copy, card consequences, proof strip — which belong to the human G3
+  conversation, not to a silent drift of locked decisions. `VP-0005` states
+  `NOT_ACCEPTED` with both requirements `PARTIAL` and each refusal named: the
+  pre-wiring validation cannot be proven against the corrected revision, and
+  the current lifecycle cannot re-record one after a review (recorded in
+  HOSTS-AND-LIMITS). Nothing was invented to change that outcome.
+
 ## 2.3 development (AR-225) — NOT RELEASED
 
 `VERSION` remains **2.2.0** until release readiness is established. AR-225 is
