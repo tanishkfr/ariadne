@@ -1,10 +1,11 @@
 # Ariadne 2.3.0
 
-Ariadne 2.3.0 is the **release candidate** for Ariadne 2.3 — Universal Entry,
-End-to-End Execution, Portable Intelligence. It is prepared and verified and
-**not yet published**: public naming, tagging, pushing and publishing require the
-explicit human authorization described in [RELEASING.md](RELEASING.md), and that
-authorization has not been granted.
+Ariadne 2.3.0 is the stable release of Ariadne 2.3 — Universal Entry,
+End-to-End Execution, Portable Intelligence, published unchanged in behavior
+from the fully verified candidate after the complete release gate passed on
+the tagged commit and the built artifacts were checked against their manifest.
+Install from the immutable stable wheel below, run `python -m ariadne doctor`,
+and verify work with `ariadne verify` from the installed release.
 
 What 2.3 turns the engine into:
 
@@ -33,14 +34,15 @@ What 2.3 turns the engine into:
   S5 with its review in a fresh isolated external session. See
   [CHANGELOG.md](CHANGELOG.md).
 
-Verification for this candidate: the complete release gate is green on the
-candidate commit — engine core 585/585, Decision Runtime 510/510, all mutation
+Verification for this release: the complete release gate is green on the
+tagged commit — engine core 585/585, Decision Runtime 510/510, all mutation
 suites caught every seeded fault, the AR-225/AR-230/AR-23C suites, the AR-220/
 AR-221/AR-222 design suites plus their mutation and adversarial runs, release
 tests 97/97, distribution lifecycle 55/55, runtime-bundle checks 21/21, the
-release benchmark subset 89/89, and wheel installation 14/14. The wheel, runtime
-bundle, descriptor, release notes and checksums build reproducibly from the
-tagged source once authorization is given.
+release benchmark subset 89/89, and wheel installation 14/14. All twelve gate
+checks executed with nothing skipped, and the seven published artifacts are
+verified against the release manifest. The wheel, runtime bundle, descriptor,
+release notes and checksums build reproducibly from the tagged source commit.
 
 What this release refuses to claim: identical to 2.2 — no bug-free code, no
 certified correctness, no full sandbox, and no native macOS/Linux verification
@@ -48,7 +50,14 @@ certified correctness, no full sandbox, and no native macOS/Linux verification
 matrix and the reproducible verification procedure), plus the explicitly
 recorded 2.3C-R limitations (project-level Proof Pass TEST wiring; the design
 capture bridge requires a working browser and reproduces only what the
-environment reproduces).
+environment reproduces). The original generative-UI acceptance run closed its
+review stage, but its project acceptance remains PARTIAL at the human G3
+boundary: two requirements wait on engine TEST records the current lifecycle
+cannot re-record, and the gate remains the human's to close. Worker adapters
+beyond the invoking session are declared here rather than verified: executable
+discovery is proven, and live execution requires a host that is installed and
+authenticated; the full matrix is in
+[docs/HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md).
 
 # Ariadne 2.2.0
 

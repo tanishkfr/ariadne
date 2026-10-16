@@ -9,14 +9,53 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.3.0 — 2026-10-16 · PUBLIC RELEASE
 
+Ariadne now takes the task as it arrives. A request no longer has to be a
+project: the engine interprets it, discovers the real state of the work, and
+either opens a bounded task pipeline or the creative project pipeline — then
+carries the task through execution, validation and proof instead of stopping
+at a prepared packet.
+
+What a user can see:
+
+- **Universal entry.** `$ariadne` reads the request in ordinary language,
+  discovers what exists, and routes to a bounded task or a creative project,
+  selecting the native skills the work needs (AR-225).
+- **End-to-end execution.** `ariadne.py task-run` selects a worker adapter
+  from measured facts, ingests the structured return through the strict
+  handoff path, reruns the contract's checks independently, repairs inside
+  budget, and closes with a Proof Receipt (AR-230).
+- **Portable intelligence with a boundary.** Evidence-anchored memory inside
+  the run state, metadata-first external skills with digest-pinned human
+  approvals and a load-time instruction scan, and rendered acceptance for T1
+  UI tasks through the real browser pipeline (AR-231).
+- **The closure pass.** S4B scope is checked against the plan before a worker
+  runs, an authorization refusal is resolvable only by a recorded human
+  decision, and the design workflow's captures can use the engine's own
+  Chromium pipeline with byte-for-byte re-production verification (2.3C-R).
+
+Verified by the complete release gate on the tagged commit: twelve gate
+checks, none skipped; engine core 585/585; Decision Runtime 510/510; every
+mutation suite caught its seeded faults; release tests 97/97; distribution
+lifecycle 55/55; runtime bundle 21/21; release benchmarks 89/89; wheel install
+14/14; and the seven published artifacts verified against the manifest.
+
+Stated plainly, what stays open: the recorded generative-UI acceptance run is
+PARTIAL at the human G3 boundary; a corrected revision after a review cannot
+re-record S4B validation, and a second review cannot be ingested, in the
+current lifecycle; native macOS and Linux acceptance was not executed; worker
+adapters other than the invoking session need a host that is installed and
+authenticated; and the design capture bridge needs a working browser. The
+full matrix is in [HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md).
+
+---
 ## 2.3 development (AR-230) — RELEASE CANDIDATE 2.3.0
 
 2.3 is prepared as release candidate **2.3.0** on the
-`v2/2.3b-end-to-end-execution` branch. Publication (tag, push, release) awaits
-explicit human authorization per [RELEASING.md](RELEASING.md) and has not been
-granted; until then no stable release is claimed and the 2.2 stable release
-remains the published one.
+`v2/2.3b-end-to-end-execution` branch. Publication (tag, push, release) required
+explicit human authorization per [RELEASING.md](RELEASING.md); the authorization
+was granted for 2.3.0, and the release is published as recorded above.
 
 ### End-to-end task execution: selection is not doing the work
 
@@ -65,10 +104,9 @@ creative-workflow compatibility, and parallel-run state safety.
 
 ## 2.3 development (AR-231) — RELEASE CANDIDATE 2.3.0
 
-Shipped as part of release candidate **2.3.0** (see the note at the AR-230
-section: publication awaits explicit human authorization). The 2.3C
-acceptance-run blockers below were closed by the 2.3C-R release closure in the
-same candidate.
+Shipped in release candidate **2.3.0** and published as the stable release
+recorded above. The 2.3C acceptance-run blockers below were closed by the
+2.3C-R release closure in the same candidate.
 
 ### Universal skills, persistent intelligence, and the trust boundary
 
