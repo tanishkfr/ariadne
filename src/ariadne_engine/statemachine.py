@@ -32,6 +32,8 @@ from .contracts import ContractError, InvalidTransition, PolicyRefusal
 
 STAGE_TRANSITIONS: frozenset[tuple[str | None, str | None]] = frozenset({
     (None, "S1"),
+    (None, "T1"),        # the universal task entry prepares a bounded task packet
+    ("T1", "T1"),        # a same-stage task retry prepares a new linked child
     ("S1", "S1"),        # reasoner retry: a new linked child at the same boundary
     ("S1", "S2"),
     ("S1", "S3"),
@@ -46,6 +48,7 @@ STAGE_TRANSITIONS: frozenset[tuple[str | None, str | None]] = frozenset({
     ("S5", "S5"),        # re-prepared review boundary
     ("S5", "S6"),
     ("S6", None),
+    ("S6", "T1"),        # a bounded follow-up task attaches to a completed project run
 })
 
 # ------------------------------------------------------ worker lifecycle table
@@ -66,6 +69,12 @@ WORKER_LIFECYCLE_TRANSITIONS: frozenset[tuple[str, str]] = frozenset({
     (escalation_required, baseline),         # escalation: stronger worker attempt
     (validation_pending, baseline),          # a fresh attempt after a complete return
     (repair_or_escalation, baseline),        # a fresh attempt after a partial return
+    # A new bounded task may attach to a run whose previous task already reached a
+    # settled worker lifecycle; the new task's first attempt starts from baseline.
+    (validated, baseline),
+    (reviewed, baseline),
+    (accepted, baseline),
+    (rejected, baseline),
     (baseline, validated),
     (baseline, routine_repair),
     (baseline, escalation_required),

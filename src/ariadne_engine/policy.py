@@ -881,6 +881,30 @@ def repair_allowed(state: dict) -> tuple[bool, str]:
     return True, ""
 
 
+def authorization_resolution(state: dict, packet_id: str) -> dict | None:
+    """The recorded human authorization that resolved this boundary's refusal.
+
+    An authorization refusal is resolved only by an explicit recorded human
+    decision (``resolve-authorization``): identity-bound, bound to exactly one
+    failure, and permitting exactly one new attempt. Until that record exists,
+    nothing here changes: the refusal remains an absolute stop.
+    """
+    failures = [item for item in (state.get("failures") or []) if isinstance(item, dict)]
+    if not failures or not packet_id:
+        return None
+    last = failures[-1]
+    resolution = last.get("resolution") if isinstance(last.get("resolution"), dict) else None
+    if not resolution:
+        return None
+    if not str(resolution.get("resolution_id", "")) or not str(resolution.get("identity", "")):
+        return None
+    if str(resolution.get("failure_id", "")) != str(last.get("failure_id", "")):
+        return None
+    if str(last.get("task_id", "")) != str(packet_id):
+        return None
+    return resolution
+
+
 def retry_problems(state: dict, packet: Path) -> list[str]:
     """Preconditions for repeating the current S4B boundary."""
     problems: list[str] = []
@@ -891,6 +915,17 @@ def retry_problems(state: dict, packet: Path) -> list[str]:
             "Routine worker retry is not permitted after a blocked return. "
             "Inspect the recorded conflict and use --escalate with a stronger worker role."
         )
+        return problems
+    resolution = authorization_resolution(state, Path(packet).name)
+    if resolution is not None:
+        # The bounded repair budget does not apply: this is not a routine retry,
+        # it is the one re-entry the human authorized for a reconciled refusal.
+        consumed_by = str(resolution.get("consumed_by", "") or "")
+        if consumed_by:
+            problems.append(
+                f"the recorded authorization resolution was already consumed by attempt {consumed_by}; "
+                "a further re-entry needs a new human decision, not a retry."
+            )
         return problems
     allowed, reason = repair_allowed(state)
     if not allowed:

@@ -405,6 +405,55 @@ def record_implementation(ledger: dict, event: dict) -> None:
     ledger.setdefault("implementations", []).append(row)
 
 
+def record_implementation_revision(ledger: dict, event: dict) -> None:
+    """Re-anchor one implementation mapping after an authorized focused iteration.
+
+    The creative review loop demands a focused implementation iteration when a
+    review says ``iteration: yes``, and that iteration changes the file a mapping
+    was recorded against -- after which the digest check reports, correctly, that
+    the artifact changed after evidence was recorded. The decision did not change:
+    the same requirement is still implemented by the same anchored excerpt in the
+    same file. This event re-derives exactly that anchor from the current file,
+    keeps the previous record as recorded history, and refuses a different
+    requirement, a missing mapping, an unchanged file, or a missing reason.
+    Nothing else may masquerade as a re-anchoring.
+    """
+    requirement_id = str(event.get("requirement_id", "")).strip()
+    reason = str(event.get("reason", "") or "").strip()
+    if not reason:
+        raise OperationsError("re-anchoring an implementation needs the correction it answers")
+    matches = [
+        item for item in ledger.get("implementations", [])
+        if item.get("requirement_id") == requirement_id
+    ]
+    if len(matches) != 1:
+        raise OperationsError(
+            f"no implementation mapping to re-anchor for {requirement_id or '?'}"
+        )
+    row = matches[0]
+    previous = row.get("source")
+    if not isinstance(previous, dict) or not previous.get("path"):
+        raise OperationsError("the implementation mapping has no recorded source to re-anchor")
+    anchor = previous.get("anchor")
+    fresh = evidence_record(
+        Path(str(previous["path"])),
+        str(anchor).strip() if anchor else None,
+        ledger_project(ledger),
+    )
+    if fresh == previous:
+        raise OperationsError(
+            "the recorded implementation source is unchanged; nothing to re-anchor"
+        )
+    ledger.setdefault("implementation_revisions", []).append({
+        "requirement_id": requirement_id,
+        "previous": dict(previous),
+        "current": fresh,
+        "reason": reason,
+        "recorded_at": now(),
+    })
+    row["source"] = fresh
+
+
 def record_visual_evidence(ledger: dict, event: dict) -> None:
     evidence_id = str(event.get("id", "")).strip()
     if not evidence_id or any(item.get("id") == evidence_id for item in ledger.get("visual_evidence", [])):
@@ -1009,16 +1058,61 @@ def record_social_learning(ledger: dict, event: dict) -> None:
     })
 
 
+def rederive_requirements(project: Path, ledger: dict, event: dict) -> None:
+    """Re-derive requirement anchors after an authorized document reconciliation.
+
+    The trace's ``design_source`` records where each approved decision lives,
+    together with the document's digest at derivation time. A deliberately
+    reconciled contract -- an authorized edit to HANDOFF.md between boundaries --
+    invalidates those digests without changing the decisions, and this ledger
+    cannot be replaced ("do not replace its evidence"). This event re-derives
+    exactly the anchors from the current documents: identities, kinds and
+    decisions must be unchanged (a different set or decision is a new trace and
+    is refused), and each previous anchor is kept as recorded history.
+    """
+    reason = str(event.get("reason", "") or "").strip()
+    if not reason:
+        raise OperationsError("re-anchoring the trace needs the reconciliation reason it answers")
+    fresh = derive_requirements(project)
+    existing = [row for row in (ledger.get("requirements") or []) if isinstance(row, dict)]
+    if [
+        (row.get("id"), row.get("kind"), row.get("decision")) for row in existing
+    ] != [
+        (row.get("id"), row.get("kind"), row.get("decision")) for row in fresh
+    ]:
+        raise OperationsError(
+            "the current documents derive a different requirement set or decision; that is a new "
+            "trace, not a re-anchoring, and this ledger's evidence cannot be replaced"
+        )
+    revisions = []
+    for row, current in zip(existing, fresh):
+        if row.get("design_source") == current.get("design_source"):
+            continue
+        revisions.append({
+            "requirement_id": row.get("id"),
+            "previous": row.get("design_source"),
+            "current": current.get("design_source"),
+            "reason": reason,
+            "recorded_at": now(),
+        })
+        row["design_source"] = current["design_source"]
+    ledger.setdefault("requirement_revisions", []).extend(revisions)
+
+
 def apply_event(project: Path, ledger: dict, event: dict) -> None:
     event_type = str(event.get("type", "")).strip()
     if event_type == "implementation":
         record_implementation(ledger, event)
+    elif event_type == "implementation-revision":
+        record_implementation_revision(ledger, event)
     elif event_type == "visual-evidence":
         record_visual_evidence(ledger, event)
     elif event_type == "drift":
         record_drift(ledger, event)
     elif event_type == "creative-review":
         record_creative_review(ledger, event)
+    elif event_type == "rederive-requirements":
+        rederive_requirements(project, ledger, event)
     elif event_type == "social-strategy":
         record_social_strategy(project, ledger, event)
     elif event_type == "social-result":
@@ -1376,6 +1470,138 @@ def self_test() -> int:
             "unverified evidence cannot satisfy an observed visual target",
             "visual result is not observed: design-thesis at 375px"
             in project_problems(project, "visual"),
+        )
+
+        # 2.3C-R: a deliberately reconciled contract re-anchors its trace instead
+        # of replacing it, and nothing else may masquerade as a re-anchoring.
+        reconciled = fixture_project(workspace / "reconciled")
+        reconciled_ledger = create_ledger(reconciled)
+        (reconciled / "HANDOFF.md").write_text(
+            (reconciled / "HANDOFF.md").read_text(encoding="utf-8").replace(
+                "| Motion | continuity, 360ms |",
+                "| Motion | continuity, 360ms |\n"
+                "| Permitted files | tooling/** reconciled between boundaries |",
+            ),
+            encoding="utf-8",
+        )
+        case(
+            "a reconciled contract makes the trace anchors stale before anything mistakes them for wrong",
+            any(
+                "artifact changed after evidence was recorded" in problem
+                for problem in ledger_problems(reconciled, reconciled_ledger)
+            ),
+        )
+        apply_event(reconciled, reconciled_ledger, {
+            "type": "rederive-requirements", "reason": "the permitted-files table was reconciled",
+        })
+        case(
+            "re-anchoring follows the reconciliation, keeps identities, and records history",
+            not ledger_problems(reconciled, reconciled_ledger)
+            and {row["requirement_id"] for row in reconciled_ledger["requirement_revisions"]}
+            == {"fixed-typography", "fixed-palette", "fixed-grid", "fixed-motion"}
+            and all(row.get("reason") for row in reconciled_ledger["requirement_revisions"]),
+        )
+        try:
+            apply_event(reconciled, reconciled_ledger, {"type": "rederive-requirements", "reason": ""})
+            reasonless_reanchor_blocked = False
+        except OperationsError:
+            reasonless_reanchor_blocked = True
+        case("re-anchoring without the reconciliation reason is refused", reasonless_reanchor_blocked)
+        (reconciled / "DESIGN.md").write_text(
+            (reconciled / "DESIGN.md").read_text(encoding="utf-8").replace(
+                "A red thread makes every archive fragment part of one remembered route.",
+                "A different thesis entirely.",
+            ),
+            encoding="utf-8",
+        )
+        try:
+            apply_event(reconciled, reconciled_ledger, {
+                "type": "rederive-requirements", "reason": "a new thesis",
+            })
+            changed_decision_reanchor_blocked = False
+        except OperationsError:
+            changed_decision_reanchor_blocked = True
+        case(
+            "a changed requirement set cannot masquerade as a re-anchoring",
+            changed_decision_reanchor_blocked,
+        )
+
+        # 2.3D: the review loop's focused implementation iteration changes a
+        # mapped file; that is a re-anchoring of the same decision, not a
+        # replacement of the trace, and the two must never be confusable.
+        iterated = fixture_project(workspace / "iterated")
+        (iterated / "styles.css").write_text(
+            ":root { --motion: 360ms; }\n@media (prefers-reduced-motion: reduce) { * { animation: none; } }\n",
+            encoding="utf-8",
+        )
+        iterated_ledger = create_ledger(iterated)
+        record_implementation(iterated_ledger, {
+            "requirement_id": "fixed-motion", "status": "implemented",
+            "summary": "The rule-draw collapses under reduced motion.",
+            "source_path": str(iterated / "styles.css"),
+            "source_anchor": "prefers-reduced-motion",
+        })
+        save_ledger(iterated, iterated_ledger)
+        (iterated / "styles.css").write_text(
+            (iterated / "styles.css").read_text(encoding="utf-8")
+            + ".chip:hover { background: var(--paper); }\n",
+            encoding="utf-8",
+        )
+        case(
+            "a focused iteration makes the implementation anchor stale before anything mistakes it for wrong",
+            any(
+                "artifact changed after evidence was recorded" in problem
+                for problem in ledger_problems(iterated, iterated_ledger)
+            ),
+        )
+        try:
+            apply_event(iterated, iterated_ledger, {
+                "type": "implementation-revision", "requirement_id": "fixed-motion", "reason": "",
+            })
+            reasonless_implementation_reanchor = False
+        except OperationsError:
+            reasonless_implementation_reanchor = True
+        case(
+            "re-anchoring an implementation without the correction reason is refused",
+            reasonless_implementation_reanchor,
+        )
+        apply_event(iterated, iterated_ledger, {
+            "type": "implementation-revision", "requirement_id": "fixed-motion",
+            "reason": "the focused iteration corrected the chip hover surface",
+        })
+        save_ledger(iterated, iterated_ledger)
+        case(
+            "re-anchoring follows the focused iteration, keeps the decision, and records history",
+            not ledger_problems(iterated, iterated_ledger)
+            and [row["requirement_id"] for row in iterated_ledger["implementation_revisions"]]
+            == ["fixed-motion"]
+            and iterated_ledger["implementation_revisions"][0]["reason"]
+            and iterated_ledger["implementation_revisions"][0]["previous"]
+            != iterated_ledger["implementation_revisions"][0]["current"],
+        )
+        try:
+            apply_event(iterated, iterated_ledger, {
+                "type": "implementation-revision", "requirement_id": "fixed-motion",
+                "reason": "a second re-anchor of an unchanged file",
+            })
+            unchanged_implementation_reanchor = False
+        except OperationsError:
+            unchanged_implementation_reanchor = True
+        case(
+            "re-anchoring an unchanged implementation is refused",
+            unchanged_implementation_reanchor,
+        )
+        try:
+            apply_event(iterated, iterated_ledger, {
+                "type": "implementation-revision", "requirement_id": "no-such-requirement",
+                "reason": "x",
+            })
+            unknown_implementation_reanchor = False
+        except OperationsError:
+            unknown_implementation_reanchor = True
+        case(
+            "re-anchoring a requirement with no implementation mapping is refused",
+            unknown_implementation_reanchor,
         )
 
         unlocked = fixture_project(workspace / "unlocked")

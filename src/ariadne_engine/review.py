@@ -193,8 +193,21 @@ def independence_level(
     other = provenance.identity_claims(implementer)
     reviewer_identity = (observed.get("provider", {}).get("value", ""), observed.get("model", {}).get("value", ""))
     implementer_identity = (other.get("provider", {}).get("value", ""), other.get("model", {}).get("value", ""))
+    # ``DISTINCT_PROVIDER`` is the level the contract defines as "the
+    # provider-observed provider/model differs". A ``REQUESTED`` value is the
+    # operator's expectation and a ``DECLARED`` value is the worker's own prose;
+    # neither establishes what a runtime actually was. Two executions on the same
+    # provider routinely carry different requested labels, so promoting label
+    # differences would mislabel same-provider executions as distinct providers.
+    # Only the provider-observed channel can establish this level.
+    provider_observed = all(
+        claims.get(field, {}).get("level") == "PROVIDER_OBSERVED"
+        for claims in (observed, other)
+        for field in ("provider", "model")
+    )
     if (
-        all(item and item != "UNKNOWN" for item in reviewer_identity + implementer_identity)
+        provider_observed
+        and all(item and item != "UNKNOWN" for item in reviewer_identity + implementer_identity)
         and reviewer_identity != implementer_identity
     ):
         level = "DISTINCT_PROVIDER"

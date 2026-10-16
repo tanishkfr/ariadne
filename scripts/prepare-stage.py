@@ -56,6 +56,43 @@ The worker never edits these directly: the runtime's ``record-creative`` and
 ``record-operations`` commands do. Without this, a run could not record the skill
 and operations evidence that the S5 continuation precondition requires, and the
 worker contract would be failing the runtime's own evidence writes."""
+VALIDATION_CACHE_PATTERNS = (
+    "*__pycache__/**",
+    "*.pyc",
+    ".pytest_cache/**",
+    "*/.pytest_cache/**",
+    ".mypy_cache/**",
+    "*/.mypy_cache/**",
+)
+"""Interpreter and test-runner caches, treated as engine-neutral during validation.
+
+The contract's own permitted actions include running the declared validation
+commands, and every interpreter executing them writes these files -- the worker
+does it and Ariadne's own independent rerun does it just as unavoidably. They are
+not implementation and carry no design meaning (a repository that ignores them
+never even sees them; the 2.3B fixtures all shipped a .gitignore for exactly this
+reason, which is why the bare-repository case went unnoticed). Refusing them
+would refuse the contract's own instructions, and this widens nothing else:
+source files, build outputs, documents, configuration, and every other new path
+remain exactly as the declared authorization says."""
+CONTRACT_DOCUMENT_PATHS = ("handoff.md", "design.md")
+"""Contract documents that are immutable for the duration of a worker attempt.
+
+A reconciliation between boundaries edits HANDOFF.md deliberately (that edit is
+the authorization change itself, and the retry packet's contract hash binds the
+reconciled document). When a same-stage retry re-bases these entries at the
+current facts, the immutable rule still catches any change made after
+preparation."""
+WORKER_STAGE_REQUIRED_OUTPUTS = {"S4B": ("QA.md", "AGENTS.md")}
+"""Outputs a worker stage must produce for its own continuation to be possible.
+
+The S5 boundary refuses a project without executed QA.md mechanical evidence
+(``check_project_boundary`` below), and the canonical S4B prompt instructs the
+worker to create or fill QA.md and to update AGENTS.md's ``## Current state``
+before finishing. A permitted-files table that does not cover a required output
+means the stage cannot complete as declared, so preparation refuses the contract
+up front instead of letting the worker discover the gap at validation time (the
+2.3C acceptance run's S4B block)."""
 WRITING_INTENTS = (
     "CREATIVE", "ACADEMIC", "SCIENTIFIC", "HUMAN-DRAFT TRANSFORMATION", "SOCIAL"
 )
@@ -65,6 +102,11 @@ WRITING_GUIDANCE = {
     "SCIENTIFIC": "skills/writing-scientific.md",
     "HUMAN-DRAFT TRANSFORMATION": "skills/writing-transformation.md",
 }
+
+
+def stage_spec(stage: str) -> dict:
+    """The declaration for a stage in either packet family, or an empty spec."""
+    return STAGES.get(str(stage)) or TASK_STAGES.get(str(stage)) or {}
 
 
 def load_reasoners():
@@ -191,6 +233,43 @@ STAGES = {
 }
 
 
+TASK_PACKET_STAGE = "T1"
+WORKER_PACKET_STAGES = ("S4B", "T1")
+"""Stages that carry a bounded worker contract and a structured return target.
+
+``T1`` is the Ariadne 2.3A lightweight task boundary: the same worker packet
+machinery the creative S4B stage uses, prepared for one bounded engineering
+outcome instead of a design-to-implementation handoff. The creative stage table
+above is unchanged; this is a separate packet family with its own contract check,
+so neither can drift into the other silently.
+"""
+
+TASK_STAGES = {
+    "T1": {
+        "prompt": "prompts/task-kickoff.md",
+        "block": 0,
+        "project_inputs": [],
+        "optional_project_inputs": [],
+        "canonical_inputs": [
+            "docs/policies/QA-POLICY.md",
+            "templates/RETURN-HANDOFF.md",
+        ],
+        "conditional_inputs": [],
+        "allowed_parents": ["T1"],
+        "forbidden_inputs": [
+            "unrelated project documents",
+            "earlier chat history",
+            "design direction documents",
+        ],
+        "provider": "implementation-worker",
+    },
+}
+"""The lightweight task packet family. Deliberately one stage: a task is one
+bounded implementation boundary, and a task that needs a multi-stage creative
+pipeline is routed to the full project workflow instead.
+"""
+
+
 class PacketError(RuntimeError):
     pass
 
@@ -240,7 +319,7 @@ def fenced_blocks(text: str) -> list[str]:
 
 
 def prompt_block(stage: str) -> tuple[str, Path]:
-    spec = STAGES[stage]
+    spec = stage_spec(stage)
     path = ROOT / spec["prompt"]
     blocks = fenced_blocks(read(path))
     index = spec["block"]
@@ -572,7 +651,10 @@ def worker_scope_check(
             commit_error = comparison.stderr.strip() or "could not inspect committed changes"
     all_changed = sorted(set(changed) | set(committed))
     sensitive = [path for path in all_changed if worker_sensitive_path(path)]
-    immutable = [path for path in all_changed if path.replace("\\", "/").lower() in {"handoff.md", "design.md"}]
+    immutable = [
+        path for path in all_changed
+        if path.replace("\\", "/").lower() in set(CONTRACT_DOCUMENT_PATHS)
+    ]
     outside = [
         path for path in all_changed
         if not any(worker_path_matches(path, pattern) for pattern in patterns)
@@ -597,6 +679,273 @@ def worker_scope_check(
     }
 
 
+IMPLEMENTATION_FINGERPRINT_EXCLUDES = (
+    ".ariadne/**",
+    "dist/**",
+    "QA.md",
+    "AGENTS.md",
+    *RUNTIME_EVIDENCE_PATTERNS,
+    *VALIDATION_CACHE_PATTERNS,
+)
+"""Paths excluded from the validated-implementation fingerprint.
+
+The fingerprint binds a validation result to the implementation bytes the
+validation commands actually ran against, so it deliberately excludes what
+those commands do not measure and what Ariadne's own lifecycle writes after
+validation: the run's own evidence directory (``.ariadne/``), derived build
+output (``dist/``), the interpreter caches every running of the commands
+writes, and the worker-recorded governance documents that the review ingest and
+stage closure update (``QA.md``, ``AGENTS.md``). A change to any excluded path
+does not invalidate the result; a change to any *other* tracked or untracked
+project file does. Including the ledgers would make every validation stale the
+moment the run records anything, which would train everyone to ignore it."""
+
+
+def implementation_fingerprint(snapshot: dict) -> str:
+    """The deterministic fingerprint of the validated implementation surface.
+
+    Built from the snapshot's commit head plus every ``project_git_snapshot``
+    entry as ``path|status|exists|sha256`` lines, so it is re-computable from
+    any later snapshot of the same tree. The head is part of the payload
+    because the entry list is only the *dirty* set: without it, a validation
+    recorded on a clean tree and a later commit (also a clean tree) would
+    collapse to the same value, and the staleness gate would fail open for
+    committed changes. A file the snapshot could not read (a sensitive path
+    whose bytes are never read) contributes its path and status but not its
+    content: the fingerprint still moves when the read set changes, and never
+    leaks secret bytes. A snapshot the transport could not inspect renders the
+    fingerprint unknown (an empty string) rather than silently equal to a real
+    one, so the mapper refuses instead of guessing.
+    """
+    if str(snapshot.get("state", "")) not in ("clean", "dirty"):
+        return ""
+    entries = [
+        entry for entry in snapshot.get("entries", [])
+        if isinstance(entry, dict)
+        and str(entry.get("path", ""))
+        and not any(
+            fnmatch.fnmatch(str(entry.get("path", "")), pattern)
+            for pattern in IMPLEMENTATION_FINGERPRINT_EXCLUDES
+        )
+    ]
+    payload = "\n".join(
+        ["head|" + str(snapshot.get("head", ""))]
+        + [
+            "|".join([
+                str(entry.get("path", "")),
+                str(entry.get("status", "")),
+                "1" if entry.get("exists") else "0",
+                str(entry.get("sha256") or ""),
+            ])
+            for entry in sorted(entries, key=lambda item: str(item.get("path", "")))
+        ]
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def validated_revision(snapshot: dict) -> dict:
+    """The revision identity recorded alongside one validation result."""
+    return {
+        "head": str(snapshot.get("head", "") or "unknown"),
+        "implementation_fingerprint": implementation_fingerprint(snapshot),
+    }
+
+
+def attach_validated_revision(record: dict, snapshot: dict) -> dict:
+    """Bind one validation record to the implementation bytes it ran against.
+
+    The one producer of the ``validated_revision`` field: it attaches the
+    revision when the implementation surface could be fingerprinted, and
+    attaches nothing when it could not, because a record that cannot be proven
+    current must read as unbound rather than as valid. Kept as one function so
+    the producer's write and the acceptance mapper's refusal checks reference
+    the same shape.
+    """
+    revision = validated_revision(snapshot)
+    if revision["implementation_fingerprint"]:
+        record["validated_revision"] = revision
+    return record
+
+
+def current_implementation_fingerprint(state: dict) -> str:
+    """The implementation fingerprint of the run's project as it stands now.
+
+    Empty when the run names no existing project directory or the snapshot
+    cannot be inspected: the acceptance mapper refuses fingerprint-less
+    mappings, so an unknown surface can never launder a stale validation into
+    current evidence.
+    """
+    project = Path(str(state.get("project", "") or ""))
+    if not project.is_dir():
+        return ""
+    return implementation_fingerprint(project_git_snapshot(project))
+
+
+def recorded_worker_validations(state: dict) -> list[dict]:
+    """The recorded S4B validation records, bound to the packet that holds them.
+
+    Only records that pass the transport's own structural verification are
+    returned; a malformed or damaged evidence file is skipped, never guessed at,
+    so the acceptance pass can only ever weigh records the transport would also
+    accept. Whether a record is genuine and still current is decided downstream
+    by the acceptance mapper, from the engine execution and the revision
+    binding the record names -- not here.
+    """
+    rows: list[dict] = []
+    for entry in state.get("packets") or []:
+        if not isinstance(entry, dict) or str(entry.get("stage", "")) != "S4B":
+            continue
+        packet_id = str(entry.get("id", ""))
+        record_path = Path(str(entry.get("path", ""))) / "evidence" / "validation.json"
+        if not record_path.is_file():
+            continue
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict) or worker_validation_problems(record, packet_id):
+            continue
+        rows.append({"packet_id": packet_id, "record": record})
+    return rows
+
+
+def worker_scope_patterns(worker: dict | None, packet_ids: tuple | list = ()) -> list[str]:
+    """The one canonical, authorization-aware permitted-scope representation.
+
+    The authorization is the prepared packet's ``worker.scope`` table, which was
+    copied from the approved contract at preparation time and is bound into the
+    packet manifest (and summarised in the hash-covered packet text). Appended
+    items are engine-owned, never worker-granted: the structured return files the
+    transport instructs the worker to write, Ariadne's own evidence ledgers, and
+    the interpreter caches the contract's own validation commands unavoidably
+    write. Every scope check in the runtime interprets exactly this list;
+    nothing in it widens the declared contract.
+    """
+    patterns: list[str] = []
+
+    def add(value: str) -> None:
+        value = str(value or "").strip()
+        if value and value not in patterns:
+            patterns.append(value)
+
+    rows = (worker or {}).get("scope") if isinstance(worker, dict) else None
+    for row in rows or ():
+        add(row.get("path", "") if isinstance(row, dict) else row)
+    for packet_id in packet_ids:
+        if str(packet_id or "").strip():
+            add(f".ariadne/returns/{str(packet_id).strip()}.md")
+    for pattern in RUNTIME_EVIDENCE_PATTERNS:
+        add(pattern)
+    for pattern in VALIDATION_CACHE_PATTERNS:
+        add(pattern)
+    return patterns
+
+
+def worker_plan_paths(handoff_text: str) -> list[str]:
+    """The files a handoff's implementation plan declares it will write.
+
+    The structured ``## Files to create`` table is the plan's file declaration.
+    Prose elsewhere is deliberately not parsed: a half-read sentence is not a
+    contract, and a plan must not widen its own permissions by mentioning extra
+    files in passing.
+    """
+    rows = markdown_table_rows(markdown_section(handoff_text, "Files to create"))
+    paths = []
+    for row in rows:
+        if not row:
+            continue
+        path = row[0].strip().strip("`").replace("\\", "/")
+        if not path or path.lower() in ("path", "file", "path / glob"):
+            continue
+        if re.search(r"<[^>]+>", path):
+            continue
+        paths.append(path)
+    return paths
+
+
+def scope_covers_path(path: str, patterns: list[str]) -> bool:
+    """Whether one permitted-scope pattern set covers a concrete plan path."""
+    candidate = str(path or "").replace("\\", "/").strip().strip("`").rstrip("/")
+    if not candidate:
+        return False
+    for pattern in patterns:
+        if worker_path_matches(candidate, pattern):
+            return True
+        # A plan row may name the directory a tree pattern permits ("tests" is
+        # covered by "tests/**"); the directory itself is the narrowest case of
+        # the same authorization, not a widening of it.
+        root = str(pattern).replace("\\", "/").split("*", 1)[0].strip().rstrip("/")
+        if root and (candidate == root or candidate.startswith(root + "/")):
+            return True
+    return False
+
+
+def worker_plan_scope_problems(handoff_text: str, stage: str = "S4B") -> list[str]:
+    """Plan/permitted-table disagreement, detected before any worker runs.
+
+    The permitted files and systems table is the authorization. A plan cannot
+    grant itself permissions merely by naming additional files: every
+    plan-declared path must already be covered, every stage-required output must
+    already be covered, and any disagreement is an explicit refusal the caller
+    turns into a reconciliation request. Nothing here ever widens the contract.
+    """
+    contract = worker_contract(handoff_text)
+    permitted = [
+        row[0].strip("`").replace("\\", "/")
+        for row in contract["scope_rows"]
+        if row and row[0].strip()
+    ]
+    problems = []
+    for path in worker_plan_paths(handoff_text):
+        if not scope_covers_path(path, permitted):
+            problems.append(
+                f"the plan names {path}, which the permitted files and systems table does not cover"
+            )
+    for path in WORKER_STAGE_REQUIRED_OUTPUTS.get(str(stage or "").upper(), ()):
+        if not scope_covers_path(path, permitted):
+            problems.append(
+                f"the {stage} stage requires {path} to be produced, but the permitted files and systems table does not cover it"
+            )
+    return problems
+
+
+def refresh_baseline_contract_documents(baseline: dict, current: dict) -> tuple[dict, list[str]]:
+    """Re-point a baseline's contract-document entries at the current facts.
+
+    Used exactly when the contract was deliberately reconciled between
+    boundaries (preparing a same-stage S4B retry, or resolving an authorization
+    refusal): the reconciliation edit of HANDOFF.md is the authorization change
+    itself, not worker tampering, so it must not read as a repository conflict.
+    Every other baseline entry is untouched, and any change to these documents
+    after this refresh is still caught by the immutable rule and by the contract
+    hash bound into the packet.
+    """
+    if not isinstance(baseline, dict) or not isinstance(current, dict):
+        return baseline, []
+    entries = [item for item in (baseline.get("entries") or []) if isinstance(item, dict)]
+    current_by_path = {
+        str(item.get("path", "")): item
+        for item in (current.get("entries") or [])
+        if isinstance(item, dict)
+    }
+    refreshed_entries = []
+    refreshed_paths: list[str] = []
+    for entry in entries:
+        path = str(entry.get("path", ""))
+        if path.replace("\\", "/").lower() in set(CONTRACT_DOCUMENT_PATHS):
+            fresh = current_by_path.get(path)
+            if fresh is not None and fresh != entry:
+                refreshed_entries.append(copy.deepcopy(fresh))
+                refreshed_paths.append(path)
+                continue
+        refreshed_entries.append(entry)
+    if not refreshed_paths:
+        return baseline, []
+    refreshed = copy.deepcopy(baseline)
+    refreshed["entries"] = refreshed_entries
+    return refreshed, refreshed_paths
+
+
 def worker_validation_problems(value: dict, packet_id: str | None = None) -> list[str]:
     problems = []
     if not isinstance(value, dict):
@@ -607,7 +956,7 @@ def worker_validation_problems(value: dict, packet_id: str | None = None) -> lis
         problems.append("worker validation evidence has wrong kind")
     if packet_id and value.get("packet_id") != packet_id:
         problems.append("worker validation evidence has wrong packet ID")
-    if value.get("stage") != "S4B":
+    if value.get("stage") not in WORKER_PACKET_STAGES:
         problems.append("worker validation evidence has wrong stage")
     if value.get("status") not in ("passed", "failed", "blocked"):
         problems.append("worker validation evidence has invalid status")
@@ -633,6 +982,17 @@ def worker_validation_problems(value: dict, packet_id: str | None = None) -> lis
     for field in ("usage", "cost"):
         if field not in value:
             problems.append(f"worker validation evidence is missing {field}; unknown must be explicit")
+    # ``validated_revision`` is optional for records written before it existed
+    # (the 2.3 epoch); when present it must be well-formed, because a malformed
+    # revision binding would silently disable the staleness gate downstream.
+    if "validated_revision" in value:
+        revision = value.get("validated_revision")
+        if not isinstance(revision, dict):
+            problems.append("worker validation evidence has an invalid validated_revision")
+        else:
+            fingerprint = str(revision.get("implementation_fingerprint", ""))
+            if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+                problems.append("worker validation evidence has an invalid implementation fingerprint")
     return problems
 
 
@@ -671,7 +1031,7 @@ def extract_review_values(project_text: str) -> dict[str, str]:
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) < 3 or cells[0].lower() == "pattern" or "<" in cells[0]:
             continue
-        accepted.append(f"- {cells[0]} — {cells[1]} ({cells[2]})")
+        accepted.append(f"- {cells[0]} â€” {cells[1]} ({cells[2]})")
 
     return {
         "intent": intent,
@@ -764,7 +1124,7 @@ def worker_retry_context(
     """Carry only bounded repair clues forward; never replay an old transcript."""
     if (
         not parent
-        or parent.get("stage") != "S4B"
+        or parent.get("stage") not in WORKER_PACKET_STAGES
         or evidence_path is None
         or not evidence_path.is_file()
     ):
@@ -797,6 +1157,18 @@ def worker_retry_context(
             "failed_checks": failed_checks[:VALIDATION_COMMAND_LIMIT],
             "changed": [compact_worker_text(path, 240) for path in changed_paths[:20]],
             "outside": [compact_worker_text(path, 240) for path in outside_paths[:20]],
+        }
+    if evidence_kind == "attempt-outcome":
+        try:
+            outcome = json.loads(read(evidence_path))
+        except (OSError, json.JSONDecodeError):
+            return {**context, "status": "unreadable", "failure_reason": "prior attempt outcome could not be read"}
+        return {
+            **context,
+            "status": outcome.get("status", "unknown"),
+            "failure_kind": outcome.get("failure_kind", "unknown"),
+            "failure_reason": compact_worker_text(outcome.get("failure_reason")),
+            "note": compact_worker_text(outcome.get("provenance", "")),
         }
     if evidence_kind == "structured-return-handoff":
         try:
@@ -936,6 +1308,31 @@ def parameterise_prompt(stage: str, block: str, args: argparse.Namespace) -> tup
                 "content_sha256": sha256_text(read(project_path)),
                 "delivered": False,
             }
+        )
+    elif stage == TASK_PACKET_STAGE:
+        plan = load_task_plan(args)
+        if plan.get("schema_version") != SCHEMA_VERSION:
+            raise PacketError("the task plan schema version is unsupported")
+        frame = plan.get("frame") if isinstance(plan.get("frame"), dict) else {}
+        workflow = plan.get("workflow") if isinstance(plan.get("workflow"), dict) else {}
+        if str(workflow.get("family")) != "task":
+            raise PacketError(
+                "a task packet may only be prepared for a task workflow; this plan routes to "
+                + str(workflow.get("family") or "nothing")
+            )
+        if str(plan.get("status")) != "ready":
+            raise PacketError("the task plan is not ready; resolve its questions or blockers first")
+        if str(plan.get("write_authorization")) == "none":
+            raise PacketError("a read-only task needs no worker packet")
+        block = replace_line(block, "OBJECTIVE:", str(plan.get("request", "")).strip())
+        block = replace_line(
+            block, "INTENT FAMILY:",
+            f"{frame.get('family', '')} ({frame.get('confidence', 'LOW')} confidence, "
+            f"{frame.get('family_source', 'not-observed')})",
+        )
+        block = replace_line(
+            block, "EXECUTION PATH:",
+            str((plan.get("path") or {}).get("path", "standard")),
         )
     return block, derived
 
@@ -1252,7 +1649,7 @@ def plan_sources(stage: str, project: Path, args: argparse.Namespace) -> list[di
         add(
             name, project / name, "project-runtime", "optional", required=False, removable=True,
             absent_reason="OPTIONAL_NOT_SELECTED", declared_name=name,
-            selection_reason=f"{name} absent — legacy creative provenance remains explicitly untracked",
+            selection_reason=f"{name} absent â€” legacy creative provenance remains explicitly untracked",
             requires="creative" if name.endswith("creative-evidence.json") else "",
         )
     for name in spec["canonical_inputs"]:
@@ -1293,7 +1690,7 @@ def plan_sources(stage: str, project: Path, args: argparse.Namespace) -> list[di
             "canonical-selected-capability", "conditional",
             required=component_selected, removable=not component_selected,
             absent_reason="DEPENDENCY_OF_INCLUDED_SOURCE" if not component_selected else "MISSING",
-            selection_reason="references/capabilities.json not needed — component research was not selected",
+            selection_reason="references/capabilities.json not needed â€” component research was not selected",
             selectable=component_selected, declared_name="references/capabilities.json",
             deliverable=component_selected,
         )
@@ -1304,7 +1701,7 @@ def plan_sources(stage: str, project: Path, args: argparse.Namespace) -> list[di
             "RESEARCH.md", research, "project", "conditional",
             required=research.exists(), removable=not research.exists(),
             absent_reason="MISSING", declared_name="RESEARCH.md",
-            selection_reason="RESEARCH.md absent — no S2 output to carry",
+            selection_reason="RESEARCH.md absent â€” no S2 output to carry",
         )
         for choice, name in ((args.motion, "DESIGN-MOTION.md"), (args.assets, "DESIGN-ASSETS.md")):
             selected = choice == "yes"
@@ -1312,7 +1709,7 @@ def plan_sources(stage: str, project: Path, args: argparse.Namespace) -> list[di
                 name, ROOT / name, "canonical", "conditional",
                 required=selected, removable=not selected,
                 absent_reason="OPTIONAL_NOT_SELECTED", declared_name=name,
-                selection_reason=f"{name} not triggered — explicitly declared no",
+                selection_reason=f"{name} not triggered â€” explicitly declared no",
                 selectable=selected, deliverable=selected,
             )
         restart_context = getattr(args, "restart_context", None)
@@ -1351,6 +1748,21 @@ def resolve_sources(
     recorded hashes of a candidate it still delivers. A plan that tries to omit a
     required source is refused, so adaptive context can never weaken a packet.
     """
+    return materialise_sources(
+        plan_sources(stage, project, args), context_plan=context_plan,
+    )
+
+
+def materialise_sources(
+    candidates: list[dict],
+    context_plan: dict | None = None,
+) -> tuple[list[dict], list[str]]:
+    """Turn candidate declarations into delivered sources under a context plan.
+
+    One implementation for every packet family, so the adaptive-context rules
+    (omit only what the family declared removable; reuse only recorded hashes;
+    never add a source) hold identically for a stage packet and a task packet.
+    """
     plan = context_plan if isinstance(context_plan, dict) else {}
     omissions = {str(key): str(value) for key, value in (plan.get("omit") or {}).items()}
     reuse = {str(key): value for key, value in (plan.get("reuse") or {}).items()}
@@ -1359,7 +1771,7 @@ def resolve_sources(
     omitted: list[str] = []
     seen_content: dict[str, str] = {}
 
-    for candidate in plan_sources(stage, project, args):
+    for candidate in candidates:
         path_id = str(candidate["path"])
         source_path = Path(str(candidate["source_path"]))
         bucket = str(candidate["bucket"])
@@ -1367,7 +1779,7 @@ def resolve_sources(
         if not candidate["exists"]:
             if required and bucket in ("project", "canonical"):
                 name = str(candidate.get("declared_name") or path_id)
-                raise PacketError(f"{stage} required {bucket} input is missing: {name}")
+                raise PacketError(f"required {bucket} input is missing: {name}")
             omitted.append(omission_message(candidate, str(candidate.get("absent_reason", "MISSING"))))
             continue
         if path_id in omissions:
@@ -1401,8 +1813,164 @@ def resolve_sources(
     return sources, omitted
 
 
+def load_task_plan(args: argparse.Namespace) -> dict:
+    """Read the engine-produced task plan a task packet is prepared from."""
+    path = Path(str(getattr(args, "task_plan", "") or "")).resolve()
+    if not path.is_file():
+        raise PacketError("a task packet requires --task-plan produced by the runtime")
+    try:
+        plan = json.loads(read(path))
+    except json.JSONDecodeError as exc:
+        raise PacketError("the task plan is malformed") from exc
+    if not isinstance(plan, dict):
+        raise PacketError("the task plan is not an object")
+    return plan
+
+
+TASK_SCOPE_SOURCE_LIMIT = 10
+"""Literal scope files a task packet will deliver; a glob scope is the worker's
+own read surface, not a delivery list."""
+
+
+def plan_task_sources(plan: dict, project: Path, args: argparse.Namespace) -> list[dict]:
+    """Candidate context sources for one task packet, without reading their content.
+
+    The candidate shape and the omission rules are the ones the stage transport
+    already uses, so the adaptive context decision and the cache work unchanged.
+    A candidate is added here only from something the plan actually declared: the
+    task contract, the verbatim request, the canonical QA and return-handoff
+    contracts, the *selected* skill methods, and the literal files the permitted
+    scope names.
+    """
+    project = Path(project)
+    candidates: list[dict] = []
+
+    def add(label: str, path: Path, kind: str, bucket: str, *, required: bool, removable: bool = False,
+            absent_reason: str = "", selection_reason: str = "", selectable: bool = False,
+            requires: str = "", declared_name: str = "", deliverable: bool | None = None) -> None:
+        path = Path(path)
+        deliverable = path.is_file() if deliverable is None else (bool(deliverable) and path.is_file())
+        candidates.append({
+            "label": label,
+            "path": (
+                str(path.resolve())
+                if kind.startswith(("project", "continuation", "writing"))
+                else str(path)
+            ),
+            "source_path": str(path),
+            "declared_name": declared_name,
+            "kind": kind,
+            "bucket": bucket,
+            "required": required,
+            "removable": removable or not required,
+            "exists": deliverable,
+            "absent_reason": absent_reason,
+            "selection_reason": selection_reason,
+            "selectable": selectable,
+            "requires": requires,
+        })
+
+    contract_path = Path(str(getattr(args, "task_contract", "") or "")).resolve()
+    add("task contract", contract_path, "project-task-contract", "project", required=True,
+        declared_name="task contract")
+    request_path = Path(str(getattr(args, "task_request", "") or "")).resolve()
+    add("user request", request_path, "project-task-request", "project", required=True,
+        declared_name="user request")
+    memory_path = Path(str(getattr(args, "task_memory", "") or ""))
+    if str(getattr(args, "task_memory", "") or "").strip() and memory_path.is_file():
+        # The project-memory briefing is a bounded project source: it exists only
+        # when relevant recorded facts matched this task, and it is data for the
+        # worker, never instructions and never policy. Its absence is normal and
+        # is reported as an omission, not a failure.
+        add(
+            "project memory briefing", memory_path, "project-task-memory", "project",
+            required=False, removable=True, deliverable=True,
+            absent_reason="no relevant project memory was recorded for this task",
+            selection_reason="no project memory matched this task's family or scope",
+        )
+    external_skill_docs = [
+        Path(str(item)) for item in (getattr(args, "task_external_skills", None) or ())
+    ]
+    for document in external_skill_docs:
+        if not document.is_file():
+            continue
+        # An approved external method document. It was trust-scanned when it was
+        # loaded from the managed store; it reaches the packet as a method, never
+        # as policy, and its approval is recorded in the plan the packet names.
+        add(
+            f"external skill method ({document.name})", document, "project-task-external-skill",
+            "conditional", required=True, removable=False, deliverable=True,
+            declared_name=document.name,
+            selection_reason="the plan selected this approved external skill for the task's family",
+        )
+    for name in TASK_STAGES[TASK_PACKET_STAGE]["canonical_inputs"]:
+        add(name, ROOT / name, "canonical", "canonical", required=True, declared_name=name)
+
+    selected = (plan.get("skills") or {}).get("selected") or []
+    for entry in selected:
+        for document in entry.get("documents") or []:
+            name = str(document)
+            mandatory = bool(entry.get("mandatory"))
+            add(
+                f"{name} (selected method for {entry.get('id')})", ROOT / name,
+                "canonical-selected-skill", "conditional",
+                required=mandatory, removable=not mandatory,
+                absent_reason="MISSING",
+                selection_reason=f"{name} was not selected for this task's intent family",
+                selectable=True, deliverable=True, declared_name=name,
+            )
+
+    delivered_scope = 0
+    for raw in ((plan.get("scope") or {}).get("declared") or []):
+        text = str(raw)
+        if any(character in text for character in "*?[]"):
+            continue
+        path = Path(text)
+        target = path if path.is_absolute() else (project / path)
+        target = target.resolve()
+        if not is_within(target, project):
+            continue
+        if not target.is_file():
+            continue
+        if delivered_scope >= TASK_SCOPE_SOURCE_LIMIT:
+            continue
+        delivered_scope += 1
+        add(
+            f"permitted scope file {text}", target, "project-scope-file", "conditional",
+            required=False, removable=True, absent_reason="OPTIONAL_NOT_SELECTED",
+            selection_reason=f"{text} is a permitted scope path the worker will read in place",
+            selectable=False, declared_name=text,
+        )
+    return candidates
+
+
+def task_stage_contract_problems(specs: dict | None = None) -> list[str]:
+    """The task packet family's own structure guard, held to the same rules."""
+    values = specs or TASK_STAGES
+    problems: list[str] = []
+    if list(values) != [TASK_PACKET_STAGE]:
+        problems.append(f"task packet stage list drift: expected ['{TASK_PACKET_STAGE}'], found {list(values)}")
+        return problems
+    spec = values[TASK_PACKET_STAGE]
+    prompt_path = ROOT / spec.get("prompt", "")
+    if not prompt_path.is_file():
+        problems.append(f"{TASK_PACKET_STAGE} packet prompt missing: {spec.get('prompt')}")
+    elif len(fenced_blocks(read(prompt_path))) <= spec.get("block", -1):
+        problems.append(f"{TASK_PACKET_STAGE} packet prompt block is unavailable")
+    for source in spec.get("canonical_inputs", []):
+        if not (ROOT / source).is_file():
+            problems.append(f"{TASK_PACKET_STAGE} packet canonical source missing: {source}")
+    if spec.get("provider") != "implementation-worker":
+        problems.append("task packet provider default must stay worker-agnostic")
+    if spec.get("allowed_parents") != [TASK_PACKET_STAGE]:
+        problems.append("task packet must allow only a linked same-stage retry as its parent")
+    if "templates/RETURN-HANDOFF.md" not in spec.get("canonical_inputs", []):
+        problems.append("task packet must deliver the canonical return-handoff template")
+    return problems
+
+
 def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
-    if parent.get("stage") == "S4B":
+    if parent.get("stage") in WORKER_PACKET_STAGES:
         validation = parent_dir / "evidence" / "validation.json"
         if validation.is_file():
             try:
@@ -1413,10 +1981,23 @@ def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
             if problems:
                 raise PacketError("parent worker validation is malformed: " + "; ".join(problems))
             return validation, "worker-validation"
+    if parent.get("stage") in WORKER_PACKET_STAGES:
+        # An attempt that was interrupted before any return (a lost worker, an
+        # abandoned execution) still carries its engine-recorded outcome; that is
+        # the bounded evidence a repair attempt continues from.
+        outcome = parent_dir / "evidence" / "attempt-outcome.json"
+        if outcome.is_file():
+            try:
+                value = json.loads(read(outcome))
+            except (json.JSONDecodeError, OSError) as exc:
+                raise PacketError(f"parent attempt outcome is malformed: {exc}") from exc
+            if not isinstance(value, dict) or not value.get("status") or not value.get("failure_kind"):
+                raise PacketError("parent attempt outcome is malformed: status and failure_kind are required")
+            return outcome, "attempt-outcome"
     transcript = parent_dir / parent.get("expected_transcript", "evidence/transcript.md")
     if transcript.is_file():
         return transcript, "verbatim-transcript"
-    if parent.get("stage") == "S4B":
+    if parent.get("stage") in WORKER_PACKET_STAGES:
         returned = parent_dir / "evidence" / "return-handoff.md"
         if returned.is_file():
             problems = return_handoff_problems(read(returned))
@@ -1519,7 +2100,7 @@ def build_packet(
         f"ARIADNE {stage} STAGE PACKET",
         f"Packet ID: {packet_id}",
         f"Provider: {provider}",
-        "Status: PREPARED ONLY — THE STAGE HAS NOT RUN",
+        "Status: PREPARED ONLY â€” THE STAGE HAS NOT RUN",
         "",
         "TRANSPORT NOTICE",
         "This packet is a generated transport artifact. The named source files remain canonical.",
@@ -1529,7 +2110,7 @@ def build_packet(
         lines.extend(
             [
                 f"Ariadne source commit: {git_head()}",
-                f"Parent packet: {parent['packet_id'] if parent else 'none — initial stage'}",
+                f"Parent packet: {parent['packet_id'] if parent else 'none â€” initial stage'}",
             ]
         )
     else:
@@ -1540,9 +2121,9 @@ def build_packet(
                 "QA evidence, build history, implementation details, or prior conversation.",
             ]
         )
-    if stage == "S4B":
+    if stage in WORKER_PACKET_STAGES:
         if return_target is None or not worker:
-            raise PacketError("S4B transport requires a unique return target")
+            raise PacketError(f"{stage} transport requires a unique return target")
         lines.extend(
             [
                 "",
@@ -1570,7 +2151,11 @@ def build_packet(
                 f"Required validation: {required_checks}",
                 "Lifecycle: baseline -> implementation -> validation -> routine repair -> validation -> result/checkpoint",
                 f"Baseline repository HEAD: {baseline_head}",
-                "Ariadne independently validates this result before preparing S5. Do not treat a worker self-report as acceptance.",
+                (
+                    "Ariadne independently validates this result before preparing S5. Do not treat a worker self-report as acceptance."
+                    if stage == "S4B"
+                    else "Ariadne independently validates this result against the task contract. Do not treat a worker self-report as acceptance."
+                ),
                 "Stop and report a conflict, invariant risk, dangerous action, or out-of-scope requirement; do not improvise around it.",
             ]
         )
@@ -1669,6 +2254,15 @@ def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
         contract_problems = worker_contract_problems(handoff_text)
         if contract_problems:
             raise PacketError("HANDOFF.md worker contract is incomplete: " + "; ".join(contract_problems))
+        scope_problems = worker_plan_scope_problems(handoff_text, stage="S4B")
+        if scope_problems:
+            raise PacketError(
+                "S4B plan/packet scope disagreement detected before worker execution: "
+                + "; ".join(scope_problems)
+                + ". Reconcile the plan and the permitted files and systems table (an explicit "
+                "authorization change), then prepare the packet again; a plan cannot widen its "
+                "own permissions."
+            )
         contract = worker_contract(handoff_text)
         role = (getattr(args, "worker_role", None) or contract["worker_role"]).strip().lower()
         if role not in WORKER_ROLES:
@@ -1679,7 +2273,13 @@ def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
         except (TypeError, ValueError):
             attempt = 1
         inherited_baseline = parent.get("project_baseline") if parent and parent.get("stage") == "S4B" else None
-        project_baseline = inherited_baseline if isinstance(inherited_baseline, dict) else project_git_snapshot(project)
+        baseline_refreshed: list[str] = []
+        if isinstance(inherited_baseline, dict):
+            project_baseline, baseline_refreshed = refresh_baseline_contract_documents(
+                inherited_baseline, project_git_snapshot(project)
+            )
+        else:
+            project_baseline = project_git_snapshot(project)
         commands = validation_commands(handoff_text)
         retry_context = worker_retry_context(
             parent, parent_evidence_path, parent_evidence_kind
@@ -1690,6 +2290,7 @@ def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
             "attempt": attempt,
             "repair_limit": MAX_ROUTINE_REPAIRS,
             "contract_sha256": sha256_file(handoff_path),
+            "baseline_refreshed": baseline_refreshed,
             "objective": contract["objective"],
             "scope": [
                 {"path": row[0].strip("`"), "actions": row[1], "reason": row[2]}
@@ -1763,15 +2364,15 @@ def prepare(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
         source_rows.append(
             f"| `{entry['label']}` | {delivery} | `{entry['source_sha256']}` | `{entry['path']}` |"
         )
-    record = f"""# {packet_id} — {stage} prepared continuation
+    record = f"""# {packet_id} â€” {stage} prepared continuation
 
 **Packet ID:** `{packet_id}`
 **Stage:** `{stage}`
 **Provider:** `{provider}`
-**Parent:** `{manifest['parent_id'] or 'none — initial stage'}`
+**Parent:** `{manifest['parent_id'] or 'none â€” initial stage'}`
 **Ariadne commit:** `{manifest['ariadne_commit']}`
 **Project:** `{project}`
-**Status:** `PREPARED — NOT RUN`
+**Status:** `PREPARED â€” NOT RUN`
 **Result:** `unfilled until the stage actually runs`
 
 ## Prepared transport
@@ -1809,6 +2410,225 @@ No stage events have been recorded. Preparation is not execution.
     return output
 
 
+def prepare_task(args: argparse.Namespace, context_plan: dict | None = None) -> Path:
+    """Build one lightweight task packet (stage ``T1``) from an engine task plan.
+
+    This mirrors :func:`prepare` for the task family: same packet layout, same
+    manifest schema, same hashing and verification, same context-plan contract.
+    What differs is where the bounded contract comes from â€” a task plan and its
+    generated contract instead of a project ``HANDOFF.md`` â€” and that the packet
+    delivers only the selected method documents, never a design context.
+    """
+    stage = TASK_PACKET_STAGE
+    plan = load_task_plan(args)
+    output = Path(args.output).resolve()
+    project = Path(args.project).resolve()
+    packet_id = args.packet_id or output.name
+    validate_packet_id(packet_id)
+    if output.exists():
+        raise PacketError(f"refusing to overwrite existing packet/continuation: {output}")
+    if is_within(output, project):
+        raise PacketError("packet output may not live inside the project repository")
+    if is_within(output, ROOT) and not args.synthetic_validation:
+        raise PacketError(
+            "project transport may contain private material; output inside Ariadne requires "
+            "--synthetic-validation and is reserved for synthetic validation"
+        )
+    if not project.is_dir():
+        raise PacketError(f"project directory does not exist: {project}")
+    contract_path = Path(str(getattr(args, "task_contract", "") or "")).resolve()
+    if not contract_path.is_file():
+        raise PacketError("the task contract is missing from the run")
+    contract_text = read(contract_path)
+    contract_problems = worker_contract_problems(contract_text)
+    if contract_problems:
+        raise PacketError("the task contract is incomplete: " + "; ".join(contract_problems))
+
+    block, prompt_path = prompt_block(stage)
+    block, derived = parameterise_prompt(stage, block, args)
+    prompt = source_entry(
+        f"current {stage} prompt block", prompt_path, "canonical-prompt", block
+    )
+    candidates = plan_task_sources(plan, project, args)
+    sources, omitted = materialise_sources(candidates, context_plan=context_plan)
+    sources.extend(derived)
+
+    provider = str(args.provider or TASK_STAGES[stage]["provider"]).strip()
+    if not provider or re.search(r"[\r\n]", provider):
+        raise PacketError("implementation provider identity must be a non-empty single line")
+    contract = worker_contract(contract_text)
+    role = (getattr(args, "worker_role", None) or contract["worker_role"]).strip().lower()
+    if role not in WORKER_ROLES:
+        raise PacketError(f"unsupported implementation worker role: {role or 'missing'}")
+    try:
+        attempt = max(1, int(getattr(args, "attempt", 1) or 1))
+    except (TypeError, ValueError):
+        attempt = 1
+    commands = validation_commands(contract_text)
+    parent_record: dict | None = None
+    parent_manifest_path: Path | None = None
+    parent_evidence_path: Path | None = None
+    parent_evidence_kind: str | None = None
+    parent_arg = str(getattr(args, "parent_packet", "") or "").strip()
+    if parent_arg or bool(getattr(args, "retry", False)):
+        if not parent_arg:
+            raise PacketError("a task retry requires the parent packet directory (--parent-packet)")
+        parent_dir = Path(parent_arg).resolve()
+        if not parent_dir.is_dir():
+            raise PacketError(f"the parent packet directory does not exist: {parent_dir}")
+        parent_manifest_path = parent_dir / MANIFEST_NAME
+        if not parent_manifest_path.is_file():
+            raise PacketError("the parent packet has no manifest")
+        parent_record = json.loads(read(parent_manifest_path))
+        if str(parent_record.get("stage")) not in TASK_STAGES[TASK_PACKET_STAGE]["allowed_parents"]:
+            raise PacketError(
+                f"a task packet may only retry a linked task packet, not {parent_record.get('stage')!r}"
+            )
+        parent_evidence_path, parent_evidence_kind = parent_evidence(parent_record, parent_dir)
+    worker = {
+        "task_id": packet_id,
+        "role": role,
+        "attempt": attempt,
+        "repair_limit": MAX_ROUTINE_REPAIRS,
+        "contract_sha256": sha256_file(contract_path),
+        "objective": contract["objective"],
+        "scope": [
+            {"path": row[0].strip("`"), "actions": row[1], "reason": row[2]}
+            for row in contract["scope_rows"] if len(row) >= 3
+        ],
+        "validation_commands": [
+            {key: value for key, value in command.items() if key != "argv"}
+            for command in commands
+        ],
+        "retry_context": worker_retry_context(parent_record, parent_evidence_path, parent_evidence_kind),
+    }
+    project_baseline = project_git_snapshot(project)
+    return_target = (project / ".ariadne" / "returns" / f"{packet_id}.md").resolve()
+    packet_text = build_packet(
+        stage, packet_id, provider, prompt, sources, None, omitted, return_target,
+        worker, project_baseline,
+    )
+
+    output.mkdir(parents=True)
+    evidence = output / "evidence"
+    evidence.mkdir()
+    packet_path = output / PACKET_NAME
+    packet_path.write_text(packet_text, encoding="utf-8")
+
+    serial_sources = []
+    for entry in [prompt] + sources:
+        serial_sources.append({key: value for key, value in entry.items() if key != "content"})
+    frame = plan.get("frame") if isinstance(plan.get("frame"), dict) else {}
+    selection = plan.get("skills") if isinstance(plan.get("skills"), dict) else {}
+    manifest = {
+        "schema_version": SCHEMA_VERSION,
+        "packet_id": packet_id,
+        "stage": stage,
+        "provider": provider,
+        "worker": worker,
+        "project_baseline": project_baseline,
+        "ariadne_commit": git_head(),
+        "project": str(project),
+        "parent_id": str(parent_record.get("packet_id", "")) if parent_record else None,
+        "parent_manifest": str(parent_manifest_path) if parent_manifest_path else None,
+        "parent_manifest_sha256": sha256_file(parent_manifest_path) if parent_manifest_path else None,
+        "parent_evidence": str(parent_evidence_path) if parent_evidence_path else None,
+        "parent_evidence_kind": parent_evidence_kind,
+        "parent_evidence_sha256": sha256_file(parent_evidence_path) if parent_evidence_path else None,
+        "retry": bool(getattr(args, "retry", False)),
+        "adopt_existing": False,
+        "packet_file": PACKET_NAME,
+        "packet_sha256": sha256_file(packet_path),
+        "expected_transcript": "evidence/transcript.md",
+        "return_target": str(return_target),
+        "task_contract": str(contract_path),
+        "task": {
+            "plan_id": str(plan.get("plan_id", "")),
+            "intent": str(frame.get("family", "")),
+            "intent_confidence": str(frame.get("confidence", "")),
+            "workflow": "task",
+            "execution_path": str((plan.get("path") or {}).get("path", "")),
+            "write_authorization": str(plan.get("write_authorization", "")),
+            "skills_selected": [
+                str(item.get("id")) for item in selection.get("selected") or []
+            ],
+            "skills_documents": [
+                str(document)
+                for item in selection.get("selected") or []
+                for document in item.get("documents") or []
+            ],
+            "gates_ahead": [
+                str(item) for item in ((plan.get("approvals") or {}).get("gates_ahead") or [])
+            ],
+        },
+        "sources": serial_sources,
+        "omitted_conditionals": omitted,
+        "forbidden_inputs": TASK_STAGES[stage]["forbidden_inputs"],
+    }
+    if isinstance(context_plan, dict) and context_plan:
+        manifest["context_decision"] = {
+            "decision_id": str(context_plan.get("decision_id", "")),
+            "policy_version": str(context_plan.get("policy_version", "")),
+            "omit": {str(key): str(value) for key, value in (context_plan.get("omit") or {}).items()},
+            "reuse": sorted(str(key) for key in (context_plan.get("reuse") or {})),
+            "deduplicate": bool(context_plan.get("deduplicate", False)),
+        }
+    (output / MANIFEST_NAME).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    source_rows = []
+    for entry in serial_sources:
+        delivery = "derived only" if not entry.get("delivered", True) else "yes"
+        source_rows.append(
+            f"| `{entry['label']}` | {delivery} | `{entry['source_sha256']}` | `{entry['path']}` |"
+        )
+    record = f"""# {packet_id} â€” {stage} prepared task
+
+**Packet ID:** `{packet_id}`
+**Stage:** `{stage}`
+**Provider:** `{provider}`
+**Parent:** `{parent_record.get('packet_id') if parent_record else 'none — task boundary'}`
+**Ariadne commit:** `{manifest['ariadne_commit']}`
+**Project:** `{project}`
+**Status:** `PREPARED â€” NOT RUN`
+**Result:** `unfilled until the task actually runs`
+
+## Prepared transport
+
+- Paste packet: [`{PACKET_NAME}`]({PACKET_NAME})
+- Machine-readable provenance: [`{MANIFEST_NAME}`]({MANIFEST_NAME})
+- Expected verbatim transcript: `evidence/transcript.md`
+- Structured return target: `{return_target}`
+
+| Input | Delivered? | Source SHA-256 | Source |
+|---|---|---|---|
+{os.linesep.join(source_rows)}
+
+## Boundaries
+
+- Canonical sources remain canonical; this directory is transport and evidence only.
+- The task contract is bounded by its permitted scope; nothing outside it may change.
+- No gate is approved by preparation.
+- Independent validation remains Ariadne's, not the worker's self-report.
+
+## Events
+
+No task events have been recorded. Preparation is not execution.
+"""
+    (output / RECORD_NAME).write_text(record, encoding="utf-8")
+    (evidence / "_README.md").write_text(
+        f"# {packet_id} evidence\n\nThe task has not run. Save the provider's verbatim "
+        "transcript as `transcript.md` here. Do not rewrite parent evidence.\n",
+        encoding="utf-8",
+    )
+
+    problems = verify_packet(output)
+    if problems:
+        raise PacketError("generated task packet failed verification: " + "; ".join(problems))
+    return output
+
+
 def resolve_source_path(entry: dict, manifest: dict) -> Path:
     if entry["kind"].startswith(("project", "continuation", "writing")):
         return Path(entry["path"])
@@ -1829,7 +2649,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
     stage = manifest.get("stage")
     if manifest.get("schema_version") != SCHEMA_VERSION:
         problems.append("wrong manifest schema version")
-    if stage not in STAGES:
+    if stage not in STAGES and stage not in TASK_STAGES:
         problems.append(f"wrong or unknown stage: {stage}")
         return problems
     packet_path = packet_dir / manifest.get("packet_file", PACKET_NAME)
@@ -1838,36 +2658,47 @@ def verify_packet(packet_dir: Path) -> list[str]:
         return problems
     packet = read(packet_path)
     if sha256_file(packet_path) != manifest.get("packet_sha256"):
-        problems.append("packet hash mismatch — packet changed after preparation")
+        problems.append("packet hash mismatch â€” packet changed after preparation")
     if f"ARIADNE {stage} STAGE PACKET" not in packet.splitlines()[:2]:
         problems.append("packet stage header does not match manifest stage")
-    if stage == "S4B":
+    if stage in WORKER_PACKET_STAGES:
         worker = manifest.get("worker")
         if not isinstance(worker, dict):
-            problems.append("S4B packet is missing its worker contract manifest")
+            problems.append(f"{stage} packet is missing its worker contract manifest")
         else:
             if worker.get("task_id") != manifest.get("packet_id"):
-                problems.append("S4B worker task ID does not match packet ID")
+                problems.append(f"{stage} worker task ID does not match packet ID")
             if worker.get("role") not in WORKER_ROLES:
-                problems.append("S4B worker role is unsupported or missing")
+                problems.append(f"{stage} worker role is unsupported or missing")
             try:
                 attempt = int(worker.get("attempt"))
             except (TypeError, ValueError):
                 attempt = 0
             if attempt < 1:
-                problems.append("S4B worker attempt must be a positive integer")
+                problems.append(f"{stage} worker attempt must be a positive integer")
             try:
                 repair_limit = int(worker.get("repair_limit"))
             except (TypeError, ValueError):
                 repair_limit = -1
             if repair_limit < 0 or repair_limit > MAX_ROUTINE_REPAIRS:
-                problems.append("S4B worker repair limit is outside the safe bound")
+                problems.append(f"{stage} worker repair limit is outside the safe bound")
             if not isinstance(manifest.get("project_baseline"), dict):
-                problems.append("S4B packet is missing its repository baseline")
+                problems.append(f"{stage} packet is missing its repository baseline")
             project_path = Path(manifest.get("project", ""))
-            handoff_path = project_path / "HANDOFF.md"
-            if handoff_path.is_file():
-                problems.extend(worker_contract_problems(read(handoff_path)))
+            if stage == "S4B":
+                handoff_path = project_path / "HANDOFF.md"
+                if handoff_path.is_file():
+                    problems.extend(worker_contract_problems(read(handoff_path)))
+                    problems.extend(worker_plan_scope_problems(read(handoff_path), stage="S4B"))
+            else:
+                contract_path = Path(str(manifest.get("task_contract", "")))
+                if not contract_path.is_file():
+                    problems.append("T1 packet is missing its task contract")
+                else:
+                    problems.extend(worker_contract_problems(read(contract_path)))
+                    worker_record = manifest.get("worker") or {}
+                    if worker_record.get("contract_sha256") and sha256_file(contract_path) != worker_record.get("contract_sha256"):
+                        problems.append("T1 task contract changed after packet preparation")
     adopt_existing = manifest.get("adopt_existing", False)
     if not isinstance(adopt_existing, bool):
         problems.append("adopt_existing manifest field must be boolean")
@@ -1919,7 +2750,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
             problems.append("S5 packet source set is not the canonical isolated pair")
 
     return_target = manifest.get("return_target")
-    if stage == "S4B":
+    if stage in WORKER_PACKET_STAGES:
         expected_target = (
             Path(manifest.get("project", ""))
             / ".ariadne"
@@ -1927,18 +2758,18 @@ def verify_packet(packet_dir: Path) -> list[str]:
             / f"{manifest.get('packet_id')}.md"
         ).resolve()
         if not return_target:
-            problems.append("S4B packet is missing its structured return target")
+            problems.append(f"{stage} packet is missing its structured return target")
         else:
             actual_target = Path(return_target).resolve()
             if actual_target != expected_target:
-                problems.append("S4B structured return target does not match its packet ID")
+                problems.append(f"{stage} structured return target does not match its packet ID")
             if not is_within(actual_target, Path(manifest.get("project", "")) / ".ariadne" / "returns"):
-                problems.append("S4B structured return target escapes the project return directory")
+                problems.append(f"{stage} structured return target escapes the project return directory")
             target_line = f"Write the complete marked return handoff verbatim to: {actual_target}"
             if packet.count(target_line) != 1:
-                problems.append("S4B packet return target is missing or duplicated")
+                problems.append(f"{stage} packet return target is missing or duplicated")
     elif return_target is not None:
-        problems.append("non-S4B packet declares an unexpected structured return target")
+        problems.append("non-worker packet declares an unexpected structured return target")
 
     parent_manifest = manifest.get("parent_manifest")
     if parent_manifest:
@@ -1951,7 +2782,7 @@ def verify_packet(packet_dir: Path) -> list[str]:
             parent = json.loads(read(parent_path))
             if parent.get("packet_id") != manifest.get("parent_id"):
                 problems.append("wrong continuation parent ID")
-            if parent.get("stage") not in STAGES[stage]["allowed_parents"]:
+            if parent.get("stage") not in stage_spec(stage).get("allowed_parents", []):
                 problems.append("wrong continuation parent stage")
         parent_evidence = Path(manifest.get("parent_evidence", ""))
         if not parent_evidence.is_file():
@@ -2026,6 +2857,7 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         "templates/RESEARCH.md",
     ]:
         problems.append("S2 packet must deliver research, privacy, and output contracts")
+    problems.extend(task_stage_contract_problems())
     s3 = specs.get("S3", {})
     for source in (
         "docs/policies/DESIGN-TASTE.md", "docs/policies/PRIVACY-POLICY.md",
@@ -2090,13 +2922,161 @@ def self_test() -> int:
     changed["S1"]["allowed_parents"] = []
     case("missing S1 resume parent contract fails", bool(repository_contract_problems(changed)))
     changed = copy.deepcopy(STAGES)
-    changed["S2"]["canonical_inputs"].remove("PRIVACY-POLICY.md")
+    # The negative control removes the privacy boundary by its real path. It
+    # named the bare filename after the privacy policy moved under docs/policies,
+    # so the case raised instead of testing anything; a negative control that
+    # cannot run is a gate that is not being enforced.
+    changed["S2"]["canonical_inputs"].remove("docs/policies/PRIVACY-POLICY.md")
     case("missing S2 privacy boundary fails", bool(repository_contract_problems(changed)))
     changed = copy.deepcopy(STAGES)
     changed["S3"]["conditional_inputs"].remove(
         "selected-skill:skills/component-research.md"
     )
     case("missing selected S3 skill transport fails", bool(repository_contract_problems(changed)))
+
+    # --- The permitted-scope authorization contract -------------------------
+    # The 2.3C acceptance run's S4B block: the plan and the permitted table
+    # agreed, the worker did what the stage required, and validation refused
+    # the stage-required QA output the table never declared. This contract is
+    # reconstructed verbatim from the recorded packet (genui-lab-S4B).
+    recorded_2_3c_contract = (
+        "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n"
+        "## Files to create\n\n"
+        "| Path | Purpose |\n|---|---|\n"
+        "| index.html | shell markup |\n"
+        "| styles.css | token system |\n"
+        "| app.js | deterministic generator |\n"
+        "| build.py | dist build |\n"
+        "| tests/test_site.py | validation suite |\n"
+        "| README.md | instructions |\n\n"
+        "## Worker execution contract\n\n"
+        "**Worker role:** bulk\n\n"
+        "### Permitted files and systems\n\n"
+        "| Path / glob | Actions | Reason |\n|---|---|---|\n"
+        "| index.html | edit, create | markup |\n"
+        "| styles.css | edit, create | styles |\n"
+        "| app.js | edit, create | behavior |\n"
+        "| build.py | edit, create | build |\n"
+        "| tests/test_site.py | edit, create | tests |\n"
+        "| README.md | edit, create | docs |\n"
+        "| dist/** | create | output |\n"
+    )
+    reproduction = worker_plan_scope_problems(recorded_2_3c_contract, stage="S4B")
+    case(
+        "the recorded 2.3C under-declared S4B contract is refused before a worker runs",
+        any("QA.md" in problem for problem in reproduction)
+        and any("AGENTS.md" in problem for problem in reproduction),
+    )
+    case(
+        "the recorded contract's plan files are all covered (only the stage outputs were under-declared)",
+        not any("plan names" in problem for problem in reproduction),
+    )
+    case(
+        "declaring the stage outputs clears the refusal",
+        not worker_plan_scope_problems(
+            recorded_2_3c_contract.replace(
+                "| dist/** | create | output |",
+                "| dist/** | create | output |\n"
+                "| QA.md | edit, create | mechanical QA record |\n"
+                "| AGENTS.md | read, edit | stage-state update |",
+            ),
+            stage="S4B",
+        ),
+    )
+    plan_creep = worker_plan_scope_problems(
+        recorded_2_3c_contract.replace(
+            "| README.md | instructions |",
+            "| README.md | instructions |\n| generator.js | split the generator for node testing |",
+        ),
+        stage="S4B",
+    )
+    case(
+        "a plan naming an undeclared file is a refusal, not a permission (adversarial: plan creep)",
+        any("generator.js" in problem and "does not cover" in problem for problem in plan_creep),
+    )
+    case(
+        "a new file is covered by a declared tree, not by its own existence",
+        scope_covers_path("tests/generator_check.mjs", ["tests/**"])
+        and not scope_covers_path("tests/generator_check.mjs", ["tests/test_site.py"])
+        and not scope_covers_path(".gitignore", ["index.html", "src/**"])
+        and not scope_covers_path("build/site.js", ["dist/**"])
+        and scope_covers_path("dist", ["dist/**"]),
+    )
+    canonical_patterns = worker_scope_patterns({"scope": [{"path": "src/**"}]}, ["P1"])
+    case(
+        "the canonical scope representation adds only engine-owned transport entries",
+        canonical_patterns
+        == ["src/**", ".ariadne/returns/P1.md", *RUNTIME_EVIDENCE_PATTERNS, *VALIDATION_CACHE_PATTERNS],
+    )
+    case(
+        "the canonical scope representation grants no project root, wildcard root, or sensitive path",
+        not any(
+            pattern in ("*", "**", "**/*", ".", "./", "/") or worker_sensitive_path(pattern)
+            for pattern in worker_scope_patterns(
+                {"scope": [{"path": "src/**"}, {"path": "QA.md"}]},
+                ["P1", "P1-C1"],
+            )
+        ),
+    )
+    case(
+        "the manifest scope is the authorization and nothing is silently appended to it",
+        worker_scope_patterns({"scope": [{"path": "src/**"}, {"path": "docs/**"}]})[
+            :2
+        ]
+        == ["src/**", "docs/**"]
+        and len(worker_scope_patterns({"scope": [{"path": "src/**"}, {"path": "docs/**"}]}))
+        == 2 + len(RUNTIME_EVIDENCE_PATTERNS) + len(VALIDATION_CACHE_PATTERNS),
+    )
+    scope_fixture = worker_scope_patterns({"scope": [{"path": "rounding.py"}]})
+
+    def scope_status(paths: list[str], patterns: list[str]) -> str:
+        return worker_scope_check(
+            {"state": "clean", "head": "h", "entries": []},
+            {
+                "state": "dirty",
+                "head": "h",
+                "entries": [
+                    {"path": path, "status": "??", "exists": True, "sha256": "x"}
+                    for path in paths
+                ],
+            },
+            patterns,
+        )["status"]
+
+    case(
+        "the interpreter caches the contract's own test commands write are engine-neutral",
+        scope_status(["__pycache__/rounding.cpython-311.pyc"], scope_fixture) == "within-contract"
+        and scope_status(["tests/__pycache__/test_rounding.cpython-311.pyc"], scope_fixture)
+        == "within-contract"
+        and scope_status([".pytest_cache/v/cache/nodeids"], scope_fixture) == "within-contract",
+    )
+    case(
+        "cache-looking paths that are not interpreter caches stay out of scope",
+        scope_status(["pycache/rounding.txt"], scope_fixture) == "out-of-scope"
+        and scope_status(["hidden.pyc.txt"], scope_fixture) == "out-of-scope"
+        and scope_status(["generated/site.js"], scope_fixture) == "out-of-scope",
+    )
+    case(
+        "declared .gitignore is within contract; undeclared .gitignore is refused",
+        scope_status([".gitignore"], ["index.html", ".gitignore"]) == "within-contract"
+        and scope_status([".gitignore"], ["index.html"]) == "out-of-scope",
+    )
+    case(
+        "a declared tests/** tree covers a new harness file; a named test file does not",
+        scope_status(["tests/generator_check.mjs"], ["tests/**"]) == "within-contract"
+        and scope_status(["tests/generator_check.mjs"], ["tests/test_site.py"]) == "out-of-scope",
+    )
+    case(
+        "declared generated output is within contract; an undeclared output directory is refused",
+        scope_status(["dist/site.js"], ["dist/**"]) == "within-contract"
+        and scope_status(["build/site.js"], ["dist/**"]) == "out-of-scope",
+    )
+    case(
+        "the declared QA record is within contract; undeclared QA artifacts are refused",
+        scope_status(["QA.md"], ["QA.md"]) == "within-contract"
+        and scope_status([".ariadne/qa/desktop.png"], [".ariadne/creative-evidence.json"])
+        == "out-of-scope",
+    )
 
     with self_test_workspace() as sandbox:
         project = sandbox / "project"
@@ -2293,7 +3273,7 @@ def self_test() -> int:
             "# Rejected S3 direction context\n\n"
             "**Human reason:** The organising concept is too generic.\n\n"
             "===== BEGIN REJECTED DESIGN.md =====\n"
-            "# DESIGN\n\n**Status:** draft — awaiting G1\n"
+            "# DESIGN\n\n**Status:** draft â€” awaiting G1\n"
             "===== END REJECTED DESIGN.md =====\n",
             encoding="utf-8",
         )
@@ -2389,7 +3369,14 @@ def self_test() -> int:
         )
         packet_path.write_text(packet_original, encoding="utf-8")
         manifest_path.write_text(manifest_original, encoding="utf-8")
-        broken_packet = re.sub(r"(?ms)^===== BEGIN DESIGN-TASTE.md.*?^===== END DESIGN-TASTE.md =====\n?", "", packet_original)
+        # The canonical design-taste source moved under docs/policies during the
+        # documentation reorganisation. These controls name its real path now, so
+        # the section can actually be found, removed, and detected again.
+        canonical_name = "docs/policies/DESIGN-TASTE.md"
+        broken_packet = re.sub(
+            rf"(?ms)^===== BEGIN {re.escape(canonical_name)}.*?^===== END {re.escape(canonical_name)} =====\n?",
+            "", packet_original,
+        )
         packet_path.write_text(broken_packet, encoding="utf-8")
         manifest = json.loads(manifest_original)
         manifest["packet_sha256"] = sha256_file(packet_path)
@@ -2399,7 +3386,7 @@ def self_test() -> int:
         manifest_path.write_text(manifest_original, encoding="utf-8")
 
         manifest = json.loads(manifest_original)
-        canonical = next(source for source in manifest["sources"] if source["path"] == "DESIGN-TASTE.md")
+        canonical = next(source for source in manifest["sources"] if source["path"] == canonical_name)
         canonical["source_sha256"] = "0" * 64
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         case(
@@ -2409,7 +3396,7 @@ def self_test() -> int:
         manifest_path.write_text(manifest_original, encoding="utf-8")
 
         manifest = json.loads(manifest_original)
-        canonical = next(source for source in manifest["sources"] if source["path"] == "DESIGN-TASTE.md")
+        canonical = next(source for source in manifest["sources"] if source["path"] == canonical_name)
         original_header = section_header(canonical)
         canonical["source_sha256"] = "0" * 64
         fallback_header = section_header(canonical)
@@ -2431,7 +3418,7 @@ def self_test() -> int:
 
         packet_path.write_text(packet_original, encoding="utf-8")
         manifest = json.loads(manifest_original)
-        canonical = next(source for source in manifest["sources"] if source["path"] == "DESIGN-TASTE.md")
+        canonical = next(source for source in manifest["sources"] if source["path"] == canonical_name)
         canonical["delivered_content_sha256"] = "0" * 64
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         case(
@@ -2485,6 +3472,9 @@ def self_test() -> int:
         (project / "HANDOFF.md").write_text(
             "# HANDOFF\n\n**G1 approved:** 2026-08-22\n\n"
             "## Dependencies to install\n\nNone.\n\n"
+            "## Files to create\n\n"
+            "| Path | Purpose |\n|---|---|\n"
+            "| src/app.js | the fixture implementation |\n\n"
             "## Worker execution contract\n\n"
             "**Worker role:** bulk\n\n"
             "**Objective:** Build the approved fixture.\n\n"
@@ -2498,7 +3488,9 @@ def self_test() -> int:
             "**Routine repair limit:** 2\n\n"
             "### Permitted files and systems\n\n"
             "| Path / glob | Actions | Reason |\n|---|---|---|\n"
-            "| src/** | read / edit / create | fixture implementation |\n\n"
+            "| src/** | read / edit / create | fixture implementation |\n"
+            "| QA.md | read / edit / create | the mechanical QA record this boundary produces |\n"
+            "| AGENTS.md | read / edit | the stage-state update the S4B prompt requires |\n\n"
             "## Validation commands\n\n"
             "| Check | Command | Required | Expected |\n|---|---|---|---|\n"
             "| diff hygiene | `git diff --check` | yes | exit code 0 |\n",
@@ -2559,6 +3551,119 @@ def self_test() -> int:
             "provider identity is not used as a core implementation policy",
             claude_reasoner_misroute_blocked is False,
         )
+        # --- plan/packet scope consistency, at the preparation boundary -------
+        fixture_handoff = read(project / "HANDOFF.md")
+
+        def prepare_refusal(output_name: str) -> tuple[str | None, Path]:
+            target = sandbox / output_name
+            try:
+                prepare(ns(stage="S4B", project=str(project), output=str(target), parent=str(s4a_dir)))
+                return None, target
+            except PacketError as exc:
+                return str(exc), target
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| QA.md | read / edit / create | the mechanical QA record this boundary produces |\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-UNDER-DECLARED")
+        case(
+            "an S4B contract that never declares its stage-required QA output is refused before a worker runs",
+            refusal is not None
+            and "plan/packet scope disagreement" in refusal
+            and "QA.md" in refusal,
+        )
+        case(
+            "the refused contract leaves no packet behind and no worker can run against it",
+            not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/app.js | the fixture implementation |",
+                "| src/app.js | the fixture implementation |\n| deploy.py | the deployment helper the plan names |",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-PLAN-CREEP")
+        case(
+            "a plan cannot grant itself an undeclared file (mutation: plan names deploy.py)",
+            refusal is not None and "deploy.py" in refusal and "does not cover" in refusal
+            and not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/app.js | the fixture implementation |",
+                "| src/app.js | the fixture implementation |\n| deploy.py | the deployment helper the plan names |",
+            ).replace(
+                "| src/** | read / edit / create | fixture implementation |",
+                "| src/** | read / edit / create | fixture implementation |\n"
+                "| deploy.py | edit, create | reconciled: the plan names it and the table now authorizes it |",
+            ),
+            encoding="utf-8",
+        )
+        reconciled_dir = sandbox / "R1-S4B-RECONCILED"
+        prepare(ns(stage="S4B", project=str(project), output=str(reconciled_dir), parent=str(s4a_dir)))
+        reconciled_manifest = json.loads(read(reconciled_dir / MANIFEST_NAME))
+        case(
+            "an explicitly reconciled table prepares, and the packet hash binds the authorized scope",
+            not verify_packet(reconciled_dir)
+            and [row["path"] for row in reconciled_manifest["worker"]["scope"]]
+            == ["src/**", "deploy.py", "QA.md", "AGENTS.md"]
+            and "Permitted scope: src/**, deploy.py, QA.md, AGENTS.md" in read(reconciled_dir / PACKET_NAME),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/app.js | the fixture implementation |",
+                "| src/app.js | the fixture implementation |\n| .env | credentials the plan claims to need |",
+            ).replace(
+                "| src/** | read / edit / create | fixture implementation |",
+                "| src/** | read / edit / create | fixture implementation |\n"
+                "| .env | edit, create | the plan and the table agree on a sensitive path |",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-SENSITIVE")
+        case(
+            "plan and table collusion on a sensitive path is still refused",
+            refusal is not None and "sensitive" in refusal and not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| src/** | read / edit / create | fixture implementation |",
+                "| ** | read / edit / create | every path the plan might want |",
+            ),
+            encoding="utf-8",
+        )
+        refusal, refused_dir = prepare_refusal("R1-S4B-WILDCARD")
+        case(
+            "a wildcard-root authorization is refused, never an unconditional allowlist",
+            refusal is not None and "too broad" in refusal and not refused_dir.exists(),
+        )
+
+        (project / "HANDOFF.md").write_text(
+            fixture_handoff.replace(
+                "| QA.md | read / edit / create | the mechanical QA record this boundary produces |\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+        case(
+            "verification detects a live handoff that under-declares after preparation",
+            any("does not cover" in problem for problem in verify_packet(s4b_dir)),
+        )
+        (project / "HANDOFF.md").write_text(fixture_handoff, encoding="utf-8")
+        case(
+            "the restored contract verifies again (positive control)",
+            not verify_packet(s4b_dir),
+        )
+
         s4b_manifest_path = s4b_dir / MANIFEST_NAME
         s4b_manifest_original = read(s4b_manifest_path)
         malformed_return_target = json.loads(s4b_manifest_original)
@@ -2701,6 +3806,19 @@ def parser() -> argparse.ArgumentParser:
 
     verify_parser = sub.add_parser("verify", help="verify source parity and packet structure")
     verify_parser.add_argument("--packet-dir", required=True)
+    task_parser = sub.add_parser("prepare-task", help="prepare one lightweight task packet from an engine task plan")
+    task_parser.add_argument("--task-plan", required=True, help="path to the plan JSON produced by the runtime")
+    task_parser.add_argument("--task-contract", required=True, help="path to the bounded task contract")
+    task_parser.add_argument("--task-request", required=True, help="path to the verbatim user request")
+    task_parser.add_argument("--project", required=True)
+    task_parser.add_argument("--output", required=True)
+    task_parser.add_argument("--packet-id", required=True)
+    task_parser.add_argument("--provider")
+    task_parser.add_argument("--worker-role", choices=list(WORKER_ROLES))
+    task_parser.add_argument("--attempt", type=int, default=1)
+    task_parser.add_argument("--retry", action="store_true")
+    task_parser.add_argument("--parent-packet", help="the parent T1 packet directory a repair attempt continues")
+    task_parser.add_argument("--synthetic-validation", action="store_true")
     writing_parser = sub.add_parser("prepare-writing", help="prepare a minimal writing draft, review, or revision packet")
     writing_parser.add_argument("--phase", required=True, choices=["draft", "review", "revise"])
     writing_parser.add_argument("--intent", required=True, choices=list(WRITING_INTENTS))
@@ -2738,6 +3856,14 @@ def main() -> int:
                     print(f"      {problem}")
                 return 1
             print("PASS  packet structure, parent, and source parity verified")
+            return 0
+        if args.command == "prepare-task":
+            output = prepare_task(args)
+            print(f"PREPARED  {output}")
+            print(f"PACKET    {output / PACKET_NAME}")
+            print(f"MANIFEST  {output / MANIFEST_NAME}")
+            print(f"EVIDENCE  {output / 'evidence' / 'transcript.md'}")
+            print("NEXT      Paste packet.txt into the selected implementation worker session.")
             return 0
         if args.command == "prepare-writing":
             if args.phase in ("review", "revise") and not args.draft_file:

@@ -1,6 +1,6 @@
 ---
 name: ariadne
-description: Start, run, resume, or recover an Ariadne creative-production project from an ordinary-language brief. Use when the user invokes Ariadne, asks to build a website/app/game/content project through Ariadne, or returns to an existing Ariadne project. Do not use for unrelated repository maintenance or a one-off code edit.
+description: Start, run, resume, or recover an Ariadne project or everyday engineering task from an ordinary-language brief. Use when the user invokes Ariadne, asks to build a website/app/game/content project through Ariadne, asks for a feature, bug fix, refactor, performance change, audit, or verification of existing work, or returns to an existing Ariadne project. Do not use for unrelated repository maintenance or an edit the user has not asked Ariadne to run or verify.
 ---
 
 # Ariadne
@@ -26,6 +26,63 @@ version, file hashes and this managed skill agree, and `scripts/ariadne.py`,
 the three files are the minimum check. If validation fails, stop with one
 action: run `ariadne install` to repair it. Do not reconstruct policies from
 this skill or from conversation history.
+
+## Any request: task or project
+
+`$ariadne` accepts everyday engineering requests as well as creative projects.
+Interpret first, then act:
+
+1. If a run already records this project, resume it as in the section below.
+2. Otherwise run `python <root>/scripts/ariadne.py task-plan --project <project>
+   --request "<the user's words>"` before starting anything. It writes nothing,
+   and it returns the interpretation frame, the workflow family, the execution
+   path, the selected native skills, and the gates ahead.
+3. Follow the plan's `Next` line:
+   - **task** — run `ariadne.py task-start` with the same request, plus
+     `--scope <path>` for every permitted file, directory, or narrow glob and
+     `--validate "<command>"` for every bounded validation command. These two
+     are part of the bounded worker contract; never invent them. The prepared T1
+     packet is the work surface, and its selected skill methods are inside it.
+     Then carry the task through its lifecycle without making the user operate
+     packet machinery:
+     - `ariadne.py task-run` chooses a compatible worker adapter (the invoking
+       session, an installed CLI harness, or a deliberate `--adapter` /
+       `--worker-command`), records the preflight, runs the attempt, ingests the
+       return, reruns the contract's checks independently, and repairs inside
+       the bounded budget before Proof Pass.
+     - To perform the packet yourself, bind it first with
+       `task-run --adapter host-session`, do the work in this session, write the
+       marked return handoff to the transport target the packet names, and
+       record it with `task-return --input <file> --adapter host-session`. The
+       return must carry the `Methods applied` section: one line per selected
+       method, saying what was actually done and observed.
+     - When the plan retains the independent review, use `task-review` — prepare
+       the request, then ingest a judgement from a genuinely distinct
+       `--identity`. Proof Pass follows automatically; `task-status` is the
+       resume briefing. `task-accept` records the human decision and is never
+       run on the human's behalf.
+   - **project** — start the full creative workflow with `ariadne.py start` as
+     described below. Do not run `task-start` for a project: a new direction
+     needs the design-intelligence stages and the human G1 decision.
+   - **resume** — run `status --project <project>` and continue from its next
+     action.
+   - **unresolved** — ask the one question the plan names, then re-run
+     `task-plan`. Do not guess a workflow.
+   - **read-only** — perform the investigation in this session; no worker packet
+     and no write authorisation are needed.
+4. A settled follow-up request against a project Ariadne already records
+   attaches as a new bounded task inside that history: `task-start` does this
+   without a second run, and refuses while an attempt is still open or while the
+   creative workflow is mid-flight. Only pass `--intent`, `--action`, or
+   `--object` when you have actually
+   interpreted the user's words; declarations are recorded as user-declared and
+   outrank the token evidence. Never pass them to force a workflow the request
+   does not support.
+
+Task boundaries keep every existing rule: dependencies still stop at G2, work
+that leaves the machine still stops at G4, and acceptance remains the human G3
+decision. `task-plan` and `task-start` never grant anything; a selected skill is
+a method, not a permission.
 
 ## Start or resume
 
@@ -158,6 +215,51 @@ When its marked QA judgement returns, save the response temporarily and run
 updates only QA.md's judgement region. Never paraphrase a score, verdict,
 finding, or evidence limitation.
 
+## Universal skills, memory, and rendered task acceptance
+
+Three Ariadne 2.3 capabilities add behaviour you should know about; none of them
+grants authority, and all of them are optional to the workflow.
+
+**UI tasks and rendered acceptance.** When a bounded task's request or declared
+scope names a surface a browser paints (a modal, a menu, a landing page, an
+`.html`/`.css`/`.jsx` file, or any design vocabulary), the plan requires
+**browser-rendered acceptance evidence** and the contract says so. After the
+worker's attempt validates, the engine captures the real surface itself
+(`ariadne.py task-render`, the same AR-222 pipeline the design workflow uses),
+binds the captures to the implementation revision, and Proof Pass refuses to
+call an unrendered implementation visually verified. Declare interactions to
+capture with `--render-action "click:#selector=expected text"` at `task-start`;
+a declared interaction whose effect is missing fails the capture and enters the
+same bounded repair budget a failed validation does. When no browser is
+available the requirement is recorded as unresolved — never as a pass — and
+`ariadne doctor` reports the capability before you start.
+
+**Project memory.** Settled task outcomes (passing verification commands,
+failure classes, accepted patterns) and the notes you record become project
+memory inside the run state: evidence-anchored, project-scoped, bounded, and
+offered to later task packets as *data, not instructions*. Implementation-shaped
+facts whose anchored files changed are withheld as stale; your conventions and
+preferences survive revisions but are flagged as drifted. Inspect and correct it
+with `ariadne.py memory-status`, `memory-record`, `memory-correct` (corrections
+keep history), and `memory-proposals`. When the same failure repeats, Ariadne
+proposes a durable correction (a regression test, a rule, a verification
+recipe); implementation requires either your authorisation
+(`memory-authorize --identity`) or a task whose scope already covers the target.
+
+**Trusted external skills.** Ariadne is complete without them. To extend it
+safely: point `skills-discover` at a catalogue you trust (read-only, metadata
+first), approve one candidate explicitly with `skills-approve --identity` (that
+pins one identity to one exact digest), and `skills-install` copies it into the
+run's managed store. External files are untrusted input: they can never grant
+approvals, disable policy, mint verification, or shadow a native skill;
+modified bytes turn an approval stale; the body is trust-scanned at load time.
+Selection prefers native skills, then your approved externals; an unapproved
+candidate is never selected. See `docs/SKILL-TRUST.md` for the full model.
+
+**Economics.** Use `ariadne.py economics --skills` to see what was actually
+selected, invoked, completed, repaired and reviewed per task, with unknowns
+(tokens, provider cost) left UNKNOWN. Use it to keep small tasks small.
+
 ## QA and recovery
 
 After G1, read `references/creative-operations.md`. The controller derives the
@@ -170,6 +272,18 @@ packet and never grant G3.
 The recovery-level commands are `ariadne.py operations-plan`,
 `ariadne.py record-operations`, and `ariadne.py operations-check`; normal
 progression should use `ariadne.py advance` wherever it can derive the action.
+
+An authorization refusal at S4B (a worker change the recorded contract did not
+allow, or a contract that under-declared what its own stage required) is an
+absolute stop: routing never continues around it, and blocked results never
+enter routine repair. Resolution is a human decision on the authorization side:
+after the contract is reconciled on disk, `ariadne.py resolve-authorization
+--identity <who> --failure <recorded failure id>` verifies that the reconciled
+table covers every refused path and the repository's current state, records the
+decision bound to one contract revision, and permits exactly one new attempt
+(`ariadne.py advance`); the failed attempt and its evidence remain untouched.
+Never resolve on the user's behalf, never resolve without their explicit
+decision, and never edit an approval or resolution record.
 
 After implementation returns, inspect the recorded files and run the applicable
 local checks from the delivered QA policy before independent review. Fix work

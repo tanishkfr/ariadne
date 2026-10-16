@@ -128,6 +128,13 @@ def check_engine_suites() -> dict:
         ("decision runtime", "test-decision-runtime.py", 1800),
         ("decision mutations", "test-decision-mutations.py", 1800),
         ("runtime mutations", "test-decision-runtime-mutations.py", 1800),
+        # AR-2.3A/2.3B/2.3C: universal entry, task execution, and the external
+        # skill / project memory / T1 rendered-acceptance capabilities. The live
+        # cases inside them record honest skips when a browser or harness is
+        # absent, so the suites themselves always execute here.
+        ("universal entry (2.3A)", "test-ar225.py", 1800),
+        ("task execution (2.3B)", "test-ar23b.py", 3600),
+        ("2.3C capabilities", "test-ar23c.py", 3600),
         # AR-221 grounded design execution. The suite runs the real vertical slice -
         # a real tsc, a real build, a real test suite on a real fixture - so it is
         # slower than the others and gets a longer allowance rather than being
@@ -191,12 +198,24 @@ def check_benchmarks(*, skip: bool) -> dict:
             timeout=3600,
         )
         summary_line = ""
+        failing_cases: list[str] = []
         for row in result.stdout.splitlines():
             if row.startswith("summary:"):
                 summary_line = row
+                continue
+            tokens = row.split()
+            # A failing case must be nameable from the gate's own record: the
+            # results directory is temporary, so "fail: 1" without the case name
+            # leaves nothing to investigate after the fact. The status column is
+            # the second token of a case row.
+            if len(tokens) >= 2 and tokens[1] == "fail":
+                failing_cases.append(tokens[0])
         if result.returncode == 0 and "'fail': 0" in summary_line:
             return {"status": "PASS", "detail": summary_line or tail(result.stdout, 2)}
-        return {"status": "FAIL", "detail": summary_line or tail(result.stdout + result.stderr, 4)}
+        detail = summary_line or tail(result.stdout + result.stderr, 4)
+        if failing_cases:
+            detail = f"{detail}; failed: {', '.join(failing_cases[:6])}"
+        return {"status": "FAIL", "detail": detail}
     finally:
         shutil.rmtree(results_dir, ignore_errors=True)
 

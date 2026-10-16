@@ -433,6 +433,9 @@ class ChromiumRenderAdapter(RenderAdapter):
             elif kind == "click" and selector:
                 page.click(selector)
                 steps.append(f"clicked {selector}")
+            elif kind == "fill" and selector:
+                page.fill(selector, str(action.get("value", "")))
+                steps.append(f"filled {selector}")
             elif kind == "press":
                 key = str(action.get("key", ""))
                 if selector:
@@ -449,6 +452,21 @@ class ChromiumRenderAdapter(RenderAdapter):
             elif kind == "set_viewport":
                 self.set_viewport(dict(action.get("viewport") or {}))
                 steps.append("viewport set")
+            elif kind == "emulate_media":
+                options = {
+                    key: str(action[key])
+                    for key in ("reduced_motion", "color_scheme")
+                    if action.get(key)
+                }
+                try:
+                    page.emulate_media(**options)
+                except Exception as exc:  # noqa: BLE001
+                    raise CaptureFailed(
+                        f"CAPTURE_FAILED: the media state {options} could not be emulated: {exc}"
+                    ) from exc
+                steps.append(
+                    "emulated media " + ", ".join(f"{key}={item}" for key, item in sorted(options.items()))
+                )
             elif kind == "evaluate_readonly":
                 value = page.evaluate(f"() => ({action['expression']})")
                 steps.append(f"read {action['expression']} = {json.dumps(value, default=str)[:200]}")
@@ -464,7 +482,11 @@ class ChromiumRenderAdapter(RenderAdapter):
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            raw = page.screenshot(full_page=bool(full_page))
+            # The text caret blinks, so a focused input would make two captures of
+            # the same surface differ by a few bytes and re-production would fail on
+            # a coin flip. The caret is browser chrome, not content: hidden, the
+            # capture is a fact about the page rather than about blink phase.
+            raw = page.screenshot(full_page=bool(full_page), caret="hide")
         except Exception as exc:  # noqa: BLE001
             raise CaptureFailed(f"CAPTURE_FAILED: no image could be produced: {exc}") from exc
         if not raw:
@@ -618,7 +640,12 @@ INSPECT_SCRIPT = """
   const focusSamples = [];
   const noRing = [];
   for (const node of Array.from(focusable).slice(0, 40)) {
-    node.focus();
+    // Focus with keyboard intent when the browser supports declaring it:
+    // a plain programmatic focus() does not put the browser in keyboard
+    // modality, so :focus-visible rules do not match and a surface styled
+    // only through :focus-visible would be reported as ringless by an audit
+    // that cannot see its own limitation. Chromium honours {focusVisible:true}.
+    try { node.focus({ focusVisible: true }); } catch (err) { node.focus(); }
     const style = window.getComputedStyle(node);
     const outline = style.outlineStyle;
     const hasOutline = outline && outline !== 'none' && parseFloat(style.outlineWidth || '0') > 0;
@@ -710,6 +737,38 @@ INSPECT_SCRIPT = """
     regionCounts[selector] = count;
     regionCounts[selector + ' (visible)'] = visible;
   }
+  const styleSamples = {};
+  for (const selector of wanted) {
+    let target = null;
+    try {
+      for (const node of Array.from(document.querySelectorAll(selector))) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) { target = node; break; }
+      }
+    } catch (error) {
+      styleSamples[selector] = { error: 'invalid selector' };
+      continue;
+    }
+    if (!target) { continue; }
+    const style = window.getComputedStyle(target);
+    const rect = target.getBoundingClientRect();
+    styleSamples[selector] = {
+      tag: (target.tagName || '').toLowerCase(),
+      font_family: style.fontFamily,
+      font_size: style.fontSize,
+      font_weight: style.fontWeight,
+      line_height: style.lineHeight,
+      letter_spacing: style.letterSpacing,
+      text_transform: style.textTransform,
+      color: style.color,
+      background_color: style.backgroundColor,
+      display: style.display,
+      rect: {
+        x: Math.round(rect.x), y: Math.round(rect.y),
+        w: Math.round(rect.width), h: Math.round(rect.height),
+      },
+    };
+  }
   return {
     url: location.href,
     title: document.title || '',
@@ -731,6 +790,7 @@ INSPECT_SCRIPT = """
     clipped_elements: clipped,
     headings: headings,
     region_counts: regionCounts,
+    style_samples: styleSamples,
     prefers_reduced_motion: prefersReduced,
     transition_duration: duration,
     ready_state: document.readyState,

@@ -52,6 +52,14 @@ WORKER_ROLE_CAPABILITIES = {
 WORKER_CAPABILITY_IDS = ("implementation", "implementation-repair", "escalation")
 """Capability ids that describe an implementation worker rather than a reasoner."""
 
+WORKER_STAGE_BOUNDARIES = ("S4B", "T1")
+"""Boundaries that select an implementation worker role.
+
+``S4B`` is the creative implementation stage; ``T1`` is the Ariadne 2.3A
+lightweight task boundary. Both are bounded worker boundaries, so both go through
+the same worker-role policy below rather than a second router.
+"""
+
 DESIGN_CAPABILITY_IDS = (
     "reference-discovery",
     "reference-content",
@@ -421,12 +429,12 @@ def stage_requirements(stage: str, characterisation: Mapping) -> list[dict]:
     implementation boundary always demands implementation capability.
     """
     declared = [dict(item) for item in (characterisation.get("required_capabilities") or [])]
-    if stage == "S4B":
+    if stage in WORKER_STAGE_BOUNDARIES:
         required = [item for item in declared if str(item.get("id")) in WORKER_CAPABILITY_IDS]
         if "implementation" not in {str(item.get("id")) for item in required}:
             required.insert(0, {
                 "id": "implementation", "source": "rule-derived",
-                "evidence": "stage S4B implements a bounded handoff",
+                "evidence": f"stage {stage} implements a bounded handoff",
             })
         return required
     capability = REASONING_STAGE_CAPABILITY.get(stage)
@@ -542,8 +550,16 @@ def characterize(
     operations=None,
     request: str | None = None,
     dependencies: tuple[str, ...] = (),
+    boundary: str = "",
 ) -> dict:
-    """Derive the smallest useful, evidence-named task characterisation."""
+    """Derive the smallest useful, evidence-named task characterisation.
+
+    ``boundary`` optionally replaces the stage-derived capability requirement
+    with one the universal task entry declared (``task-implementation`` or
+    ``read-only-investigation``). Everything else — difficulty, stakes,
+    uncertainty, validation and review needs — is computed exactly as it is for
+    a stage boundary, so the task entry reuses this engine rather than growing a
+    second characterisation."""
     project = Path(project)
     text = str(request if request is not None else state.get("request", "") or "")
     tokens = _request_tokens(text)
@@ -633,13 +649,33 @@ def characterize(
 
     # ------------------------------------------------- required capabilities
     required: list[dict] = []
-    if stage in REASONING_STAGE_CAPABILITY:
+    if boundary == "read-only-investigation":
+        required.extend([
+            {"id": "read", "source": "rule-derived", "evidence": "the interpreted intent is read-only"},
+            {"id": "search", "source": "rule-derived", "evidence": "the interpreted intent is read-only"},
+        ])
+    elif boundary == "task-implementation":
+        required.append({"id": "implementation", "source": "rule-derived", "evidence": "the task implements a bounded outcome"})
+        needs_repair = LEVEL_ORDER[difficulty] >= LEVEL_ORDER["MEDIUM"] or LEVEL_ORDER[stakes] >= LEVEL_ORDER["HIGH"]
+        if needs_repair:
+            required.append({
+                "id": "implementation-repair",
+                "source": "rule-derived",
+                "evidence": f"difficulty {difficulty} / stakes {stakes} require a repair-capable worker",
+            })
+        if prior_task_failures:
+            required.append({
+                "id": "escalation",
+                "source": "runtime-observed",
+                "evidence": f"{len(prior_task_failures)} recorded failure(s) for this task",
+            })
+    elif stage in REASONING_STAGE_CAPABILITY:
         required.append({
             "id": REASONING_STAGE_CAPABILITY[stage],
             "source": "rule-derived",
             "evidence": f"stage {stage} reasoning work",
         })
-    if stage == "S4B":
+    elif stage == "S4B":
         required.append({"id": "implementation", "source": "rule-derived", "evidence": "stage S4B implements a bounded handoff"})
         needs_repair = LEVEL_ORDER[difficulty] >= LEVEL_ORDER["MEDIUM"] or LEVEL_ORDER[stakes] >= LEVEL_ORDER["HIGH"]
         if needs_repair:
@@ -723,6 +759,8 @@ def characterize(
         "policy_version": contracts.POLICY_VERSION,
         "recorded_at": contracts.utc_now(),
     }
+    if boundary:
+        record["boundary"] = str(boundary)
     if record["prior_failures"]:
         record["difficulty"]["source"] = "runtime-observed"
         record["stakes"]["source"] = "runtime-observed" if not stakes_evidence else record["stakes"]["source"]
@@ -848,14 +886,33 @@ def route(
     }
 
     if last_class in NEVER_ROUTE_AROUND:
-        decision["rule"] = "policy-excluded"
-        decision["reason"] = (
-            f"the last failure is {last_class}; routing never continues around an authorization refusal"
-        )
-        decision["status"] = "blocked"
-        return decision
+        resolution = last.get("resolution") if isinstance(last.get("resolution"), dict) else None
+        if (
+            resolution
+            and str(resolution.get("resolution_id", ""))
+            and str(resolution.get("identity", ""))
+            and str(resolution.get("failure_id", "")) == str(last.get("failure_id", ""))
+        ):
+            # The authorization side moved: the human resolved exactly this
+            # refusal with a recorded, identity-bound decision. The refusal
+            # stays in history; routing may again choose *how* the authorized
+            # work is done (ADR-0212). A turn-off or mismatched resolution
+            # leaves the stop absolute below.
+            decision["resolved_authorization"] = {
+                "resolution_id": str(resolution.get("resolution_id", "")),
+                "failure_id": str(last.get("failure_id", "")),
+                "identity": str(resolution.get("identity", "")),
+                "consumed_by": str(resolution.get("consumed_by", "") or ""),
+            }
+        else:
+            decision["rule"] = "policy-excluded"
+            decision["reason"] = (
+                f"the last failure is {last_class}; routing never continues around an authorization refusal"
+            )
+            decision["status"] = "blocked"
+            return decision
 
-    if stage == "S4B":
+    if stage in WORKER_STAGE_BOUNDARIES:
         candidates = _worker_candidates(required)
         order = {role: index for index, role in enumerate(("bulk", "strong", "senior-reasoning"))}
         declared = str(declared_role or (characterisation.get("declared") or {}).get("worker_role", "") or "")
@@ -1094,6 +1151,7 @@ __all__ = [
     "REASONING_STAGE_CAPABILITY",
     "WORKER_ROLE_CAPABILITIES",
     "WORKER_CAPABILITY_IDS",
+    "WORKER_STAGE_BOUNDARIES",
     "DESIGN_CAPABILITY_IDS",
     "EVIDENCE_CAPABILITY_SOURCES",
     "evidence_vocabulary_problems",

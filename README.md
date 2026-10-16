@@ -58,6 +58,10 @@ You do not need to know the internals to use Ariadne, and none of the vocabulary
 
 Ariadne routes a task by its difficulty, its stakes, the capabilities actually available and the evidence already recorded, instead of applying one workflow to every request.
 
+### Universal task entry
+
+Ask for a bug fix, a feature, a refactor, or an audit and Ariadne interprets the request, discovers the project, and opens a lightweight task workflow instead of a creative project. It also selects the native engineering skills the task needs — root-cause investigation, blast-radius analysis, behaviour tests, adversarial review, performance investigation and the rest. A small fix does not generate a whole creative project, and a new website still receives the design-direction workflow and the human G1 gate.
+
 ### Decision Intelligence
 
 Closed judgments are answered by bounded decision providers that return a value inside a declared option set. A deterministic provider ships in the box and needs no paid API, so the default path works offline.
@@ -108,7 +112,7 @@ Ariadne installs from immutable GitHub release artifacts. It is not published to
 Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.2.0/ariadne-2.2.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.3.0/ariadne-2.3.0-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 (or py -m ariadne install)
@@ -346,7 +350,7 @@ These are stated precisely in [TRUST.md](docs/guides/TRUST.md).
 - [Quick start](docs/guides/QUICKSTART.md) · [Installation](docs/guides/INSTALL.md) · [Getting started](docs/guides/GETTING-STARTED.md)
 - [Updates and rollback](docs/guides/UPDATE.md) · [Troubleshooting](docs/guides/TROUBLESHOOTING.md)
 - [Python and CLI API](docs/v2/AR-205/06-RELEASE-API.md) · [Integration protocol](docs/v2/AR-205/04-INTEGRATION-CONTRACT.md)
-- [Architecture](docs/v2/AR-200/03-ARCHITECTURE.md) · [Workflow](docs/policies/WORKFLOW.md) · [Router](docs/policies/ROUTER.md)
+- [Architecture](docs/v2/AR-200/03-ARCHITECTURE.md) · [Workflow](docs/policies/WORKFLOW.md) · [Router](docs/policies/ROUTER.md) · [Task routing](docs/policies/TASK-ROUTING.md)
 - [Decision Intelligence](docs/v2/AR-205D/01-DECISION-COMPILER.md) · [Decision Graph](docs/v2/AR-205D/02-DECISION-GRAPH.md)
 - [Design Intelligence](docs/v2/AR-202D/02-REFERENCE-INTELLIGENCE.md) · [Design direction](docs/v2/AR-202D/04-DESIGN-DIRECTION.md) · [Design taste](docs/policies/DESIGN-TASTE.md)
 - [Trust boundaries](docs/guides/TRUST.md) · [Privacy](docs/policies/PRIVACY-POLICY.md) · [Model routing](docs/policies/MODEL-ROUTING.md)

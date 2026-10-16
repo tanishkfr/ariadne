@@ -211,6 +211,7 @@ SUITE_FLOORS: dict[str, int] = {
     "scripts/test-ar224.py": 35,
     "scripts/test-ar224-adversarial.py": 20,
     "scripts/test-ar224-mutations.py": 18,
+    "scripts/test-ar225.py": 45,
 }
 
 

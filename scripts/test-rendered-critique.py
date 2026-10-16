@@ -29,6 +29,7 @@ on purpose. They are tests, not claims about the real vertical slice.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 import sys
@@ -78,6 +79,36 @@ def raises(fn, *fragments: str) -> str:
     raise AssertionError("expected a refusal and none was raised")
 
 
+def cleanup_tree(path: Path) -> None:
+    """Remove a temp tree, retrying briefly around Windows handle races.
+
+    Nothing in the product deletes a directory a browser was serving -- captures
+    are evidence and stay put. Only a test does, and on Windows a just-exited
+    browser or server can hold that directory as its working directory for a
+    moment longer than its exit code suggests. The retry is bounded; a tree that
+    still survives is a real failure, not a race.
+    """
+    import time
+
+    for attempt in range(6):
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError:
+            if attempt == 5:
+                raise
+            time.sleep(0.5 * (attempt + 1))
+
+
+@contextlib.contextmanager
+def resilient_directory():
+    directory = Path(tempfile.mkdtemp(prefix="ar222-case-"))
+    try:
+        yield directory
+    finally:
+        cleanup_tree(directory)
+
+
 def make_state() -> dict:
     state: dict = {"run_id": contracts.new_record_id("run"), "schema_version": contracts.SCHEMA_RECORD, "engine": {}}
     return state
@@ -98,7 +129,11 @@ def write_surface(root: Path, *, html: str, css: str) -> Path:
     return root
 
 
-BASIC_CSS = ":root{--accent:#4f7cff}\nbody{margin:0;font-family:sans-serif;background:#0b0d11;color:#e6e9ef}\n"
+BASIC_CSS = (
+    ":root{--accent:#4f7cff}\n"
+    "body{margin:0;font-family:sans-serif;background:#0b0d11;color:#e6e9ef}\n"
+    ".btn--primary:focus-visible{outline:2px solid #9ecbff;outline-offset:2px}\n"
+)
 
 BASIC_HTML = (
     "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
@@ -610,8 +645,26 @@ def a_real_browser_renders_and_inspects_when_one_is_available():
             assert inspected["region_counts"][".panel"] == 2, inspected["region_counts"]
             assert inspected["ready_state"] == "complete", inspected["ready_state"]
             assert not inspected["horizontal_overflow"], "the surface must fit its viewport"
+            # A control styled only through :focus-visible must be reported as
+            # ringed. The audit focuses programmatically, and a programmatic
+            # focus() would never match :focus-visible, so before the keyboard
+            # intent was declared every such control was reported ringless and
+            # a reviewer was told the design had a focus defect it did not have.
+            primary = [
+                row for row in inspected["focus_samples"]
+                if "btn--primary" in str(row.get("cls", ""))
+            ]
+            assert primary and primary[0]["ring"] is True, inspected["focus_samples"]
             performed = renderer.perform_state({"kind": "focus", "selector": ".btn--primary"})
             assert performed["steps"], "an interaction must actually be performed"
+            # A design decision made for reduced motion is only closed by a
+            # capture that actually renders under it: emulation, not hope.
+            emulated = renderer.perform_state({"kind": "emulate_media", "reduced_motion": "reduce"})
+            assert any("reduced_motion=reduce" in step for step in emulated["steps"]), emulated
+            under_reduction = renderer.inspect(selectors=[".workspace"])
+            assert under_reduction["prefers_reduced_motion"] is True, under_reduction
+            restored = renderer.perform_state({"kind": "emulate_media", "reduced_motion": "no-preference"})
+            assert any("reduced_motion=no-preference" in step for step in restored["steps"]), restored
             out = root / "shot.png"
             captured = renderer.capture(out)
             assert out.read_bytes().startswith(adapter.PNG_MAGIC if hasattr(adapter, "PNG_MAGIC") else b"\x89PNG\r\n\x1a\n")
@@ -683,6 +736,33 @@ def an_interaction_descriptor_cannot_carry_code():
         "kind": "evaluate_readonly", "expression": "document.body.dataset.state",
     })["expression"] == "document.body.dataset.state"
     raises(lambda: safety.safe_action({"kind": "press", "key": "Enter; rm -rf /"}), "single key name")
+
+
+@case
+def emulated_media_is_bounded_to_declared_states():
+    """The emulated media vocabulary is exactly the states a decision may name."""
+    assert safety.safe_action(
+        {"kind": "emulate_media", "reduced_motion": "reduce"}
+    )["reduced_motion"] == "reduce"
+    assert safety.safe_action(
+        {"kind": "emulate_media", "color_scheme": "dark"}
+    )["color_scheme"] == "dark"
+    raises(
+        lambda: safety.safe_action({"kind": "emulate_media", "reduced_motion": "obliterate"}),
+        "not one of",
+    )
+    raises(lambda: safety.safe_action({"kind": "emulate_media"}), "at least one media feature")
+    filled = safety.safe_action({"kind": "fill", "selector": "#prompt-input", "value": "weather for mars"})
+    assert filled["value"] == "weather for mars"
+    raises(lambda: safety.safe_action({"kind": "fill", "value": "x"}), "needs the field")
+    raises(
+        lambda: safety.safe_action({"kind": "fill", "selector": "#prompt-input", "value": "x" * 401}),
+        "bounded to 400",
+    )
+    raises(
+        lambda: safety.safe_action({"kind": "fill", "selector": "#prompt-input", "value": "line\nbreak"}),
+        "control character",
+    )
 
 
 @case
@@ -2055,6 +2135,168 @@ def a_surface_server_that_cannot_start_is_refused_rather_than_captured_blank():
         missing = Path(directory) / "not-there"
         server = adapter.LocalServer(missing)
         raises(lambda: server.start(), "surface to render does not exist")
+
+
+# ------------------------------- the design browser bridge (2.3C-R closure)
+
+@case
+def the_design_browser_bridge_exists_only_where_a_project_surface_does():
+    """The bridge is the same pipeline, exposed only where a surface can be named.
+
+    Adapters built without a project (the engine's own tests, task flows) must
+    see exactly the set they saw before; the bridge appears only for the design
+    workflow, and it reports its capability rather than assuming a browser.
+    """
+    from ariadne_engine import render as render_module
+
+    with resilient_directory() as root:
+        project = write_surface(root / "project", html=BASIC_HTML, css=BASIC_CSS)
+        run_root = root / "run-root"
+        run_root.mkdir()
+        assert "chromium-render" not in render_module.default_adapters(run_root), (
+            "no project, no named surface, no browser bridge"
+        )
+        with_project = render_module.default_adapters(run_root, project=project)
+        bridge = with_project["chromium-render"]
+        probe = adapter.probe_playwright()
+        available, _reason = bridge.available()
+        assert available == (probe.available and bool(probe.extra.get("browser_executable_present"))), (
+            "the bridge reports the probe's answer, it does not assume one"
+        )
+        assert bridge.capability_record()["method"] == "browser-render"
+        raises(lambda: bridge.serve_dir(".."), "outside the project")
+
+
+@case
+def the_design_browser_bridge_captures_with_manifest_provenance():
+    """A capture arrives with the provenance record.record demands of browser renders."""
+    from ariadne_engine import render as render_module
+
+    probe = adapter.probe_playwright()
+    if not (probe.available and probe.extra.get("browser_executable_present")):
+        return
+    import hashlib
+
+    with resilient_directory() as root:
+        project = write_surface(root / "project", html=BASIC_HTML, css=BASIC_CSS)
+        run_root = root / "run-root"
+        run_root.mkdir()
+        bridge = render_module.ChromiumCaptureAdapter(project, run_root)
+        artifact = bridge.capture({
+            "kind": "screenshot", "route": "/", "viewport": {"width": 640, "height": 480},
+            "selectors": [".panel", ".btn"], "settle_ms": 0,
+        })
+        path = Path(artifact.path)
+        assert path.is_file() and path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"), (
+            "a screenshot capture produces a real PNG"
+        )
+        assert artifact.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+        manifest = json.loads((path.parent / render_module.MANIFEST_NAME).read_text(encoding="utf-8"))
+        assert manifest["artifact"]["sha256"] == artifact.sha256, (
+            "the manifest must record the digest being claimed"
+        )
+        assert manifest["artifact"]["path"] == str(path.resolve())
+        assert manifest["adapter"] == "chromium-render"
+        assert str(artifact.environment.get("browser", "")), (
+            "a browser render must name the browser that produced it"
+        )
+        assert str(artifact.environment.get("render_source_digest", "")), (
+            "a browser render must carry the source digest it was bound to"
+        )
+
+
+@case
+def browser_render_evidence_reproduces_byte_for_byte_and_verifies():
+    """The chain the S5 observation gate needs, end to end with the real browser.
+
+    Capture, record, independent re-capture by a different engine execution, and
+    verification; then the closure the gate asks for, at the state the engine
+    will actually accept. Without byte-for-byte reproduction, verified closures
+    are unreachable and a real project cannot leave S5.
+    """
+    from ariadne_engine import design as design_module
+    from ariadne_engine import render as render_module
+
+    probe = adapter.probe_playwright()
+    if not (probe.available and probe.extra.get("browser_executable_present")):
+        return
+    with resilient_directory() as root:
+        project = write_surface(root / "project", html=BASIC_HTML, css=BASIC_CSS)
+        run_root = root / "run-root"
+        run_root.mkdir()
+        bridge = render_module.ChromiumCaptureAdapter(project, run_root)
+        spec = {"kind": "screenshot", "route": "/", "viewport": {"width": 640, "height": 480}, "settle_ms": 0}
+        first = bridge.capture(spec)
+        reproduced = bridge.capture({**spec, "subdir": "reproduced"})
+        assert first.sha256 == reproduced.sha256, (
+            "the same capture spec must reproduce byte for byte on this engine; otherwise "
+            "verified is unreachable no matter how honest the recording"
+        )
+        assert Path(first.path) != Path(reproduced.path), (
+            "re-production is a different file; re-hashing one file is not re-production"
+        )
+        state = make_state()
+        state["run_root"] = str(run_root)
+        capture_execution = make_execution(state, role="validator")
+        evidence_record = render_module.record(
+            state, task_id="fixture", revision_hash="a" * 64,
+            artifact=first, adapter="chromium-render", capture_execution=capture_execution,
+        )
+        assert evidence_record["state"] == "RENDERED"
+        verification_execution = make_execution(state, role="validator")
+        verified = render_module.verify(
+            state, evidence_record["evidence_id"],
+            verification_execution=verification_execution,
+            reproduced_artifact={"path": reproduced.path, "sha256": reproduced.sha256},
+            method="independent re-capture by chromium-render",
+        )
+        assert verified["state"] == "VERIFIED", f"expected VERIFIED, got {verified['state']!r}"
+        closure = design_module.record_requirement(
+            state,
+            requirement_id="fixed-palette",
+            evidence_kind="rendered",
+            task_id="fixture",
+            decision={"summary": "the palette holds in the render", "basis": "DESIGN.md"},
+            implementation={"status": "implemented", "summary": "token system in styles.css"},
+            evidence_ids=[evidence_record["evidence_id"]],
+            state_name="verified",
+            revision_hash="a" * 64,
+        )
+        assert closure["state"] == "verified", (
+            "re-produced browser evidence closes a rendered requirement as verified"
+        )
+
+
+@case
+def design_measurements_are_reproducible_and_carry_style_samples():
+    """Measurement evidence: deterministic bytes, and computed styles in the artifact.
+
+    Typography and palette claims are measurements; the sampled computed styles
+    make the artifact carry the actual rendered values rather than a prose claim.
+    """
+    from ariadne_engine import render as render_module
+
+    probe = adapter.probe_playwright()
+    if not (probe.available and probe.extra.get("browser_executable_present")):
+        return
+    with resilient_directory() as root:
+        project = write_surface(root / "project", html=BASIC_HTML, css=BASIC_CSS)
+        run_root = root / "run-root"
+        run_root.mkdir()
+        bridge = render_module.ChromiumCaptureAdapter(project, run_root)
+        spec = {
+            "kind": "measurement", "route": "/", "viewport": {"width": 640, "height": 480},
+            "selectors": [".panel"], "settle_ms": 0,
+        }
+        first = bridge.capture(spec)
+        reproduced = bridge.capture({**spec, "subdir": "reproduced"})
+        assert first.sha256 == reproduced.sha256, "measurement artifacts reproduce byte for byte"
+        payload = json.loads(Path(first.path).read_text(encoding="utf-8"))
+        samples = payload["report"]["style_samples"]
+        assert "font_family" in samples.get(".panel", {}), (
+            "a measurement samples the computed styles it claims to have measured"
+        )
+        assert samples[".panel"]["font_family"]
 
 
 def run() -> int:

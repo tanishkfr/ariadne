@@ -238,6 +238,78 @@ def create(
         raise ContractError("a capture plan must name the implementation plan it renders")
     if not direction_id:
         raise ContractError("a capture plan must name the approved direction it checks against")
+    return _assemble(
+        implementation_plan_id=implementation_plan_id,
+        direction_id=direction_id,
+        binding=binding,
+        target_surface=target_surface,
+        launch_command=launch_command,
+        targets=targets,
+        browser_requirements=browser_requirements,
+        budget=budget,
+        required_evidence=required_evidence,
+        notes=notes,
+    )
+
+
+def create_for_task(
+    *,
+    task_id: str,
+    request: str,
+    binding: Mapping,
+    target_surface: str,
+    launch_command: Sequence[str],
+    targets: Sequence[Mapping],
+    browser_requirements: Mapping | None = None,
+    budget: Mapping | None = None,
+    required_evidence: Sequence[str] = (),
+    notes: str = "",
+) -> dict:
+    """A bounded capture plan for one lightweight task (Ariadne 2.3C).
+
+    A T1 task has no creative direction and no implementation plan: its approved
+    basis is the original request itself. This constructor names exactly that
+    (``task:<id>`` / ``task-request:<id>``) instead of borrowing a direction id
+    that does not exist, so nothing downstream can mistake a task capture for a
+    capture checked against an approved direction — that comparison stays the
+    independent task review's job, and the rendered-critique verdict
+    (``RENDERED_DIRECTION_CONFORMANT``) remains unavailable without a real
+    approved direction.
+    """
+    if not str(task_id).strip():
+        raise ContractError("a task capture plan must name the task it serves")
+    if not str(request).strip():
+        raise ContractError(
+            "a task capture plan must name the original request; an unrequested screenshot "
+            "is not rendered evidence"
+        )
+    return _assemble(
+        implementation_plan_id=f"task:{task_id}",
+        direction_id=f"task-request:{task_id}",
+        binding=binding,
+        target_surface=target_surface,
+        launch_command=launch_command,
+        targets=targets,
+        browser_requirements=browser_requirements,
+        budget=budget,
+        required_evidence=required_evidence,
+        notes=notes or f"task capture for {request[:160]}",
+    )
+
+
+def _assemble(
+    *,
+    implementation_plan_id: str,
+    direction_id: str,
+    binding: Mapping,
+    target_surface: str,
+    launch_command: Sequence[str],
+    targets: Sequence[Mapping],
+    browser_requirements: Mapping | None,
+    budget: Mapping | None,
+    required_evidence: Sequence[str],
+    notes: str,
+) -> dict:
     digest = str(binding.get("render_source_digest", ""))
     if not contracts._is_sha256(digest):
         raise ContractError(
@@ -360,6 +432,7 @@ __all__ = [
     "responsive_viewports",
     "capture_budget",
     "create",
+    "create_for_task",
     "counts",
     "planned_capture_total",
     "skipped_targets",

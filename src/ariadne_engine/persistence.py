@@ -105,6 +105,18 @@ stays readable by any reader that ignores unknown keys. An artifact record is a
 *reference* to durable evidence, never the evidence itself.
 """
 
+MEMORY_COLLECTIONS = (
+    "memory_entries",
+    "memory_proposals",
+)
+"""AR-2.3C project-memory collections kept in the run state.
+
+The memory store lives inside the existing run state on purpose: it is derived
+from (and cites) the evidence that is already there — task records, validations,
+notes, events — so it creates no second source of truth. A run state written by
+an earlier milestone has none of them and stays readable and continuable.
+"""
+
 MIGRATION_HISTORY_LIMIT = 20
 
 _LOGGER: Callable[[Path, dict], None] | None = None
@@ -177,6 +189,8 @@ def write_state(run_root: Path, state: dict) -> None:
         state.setdefault(name, [])
     for name in ECONOMICS_COLLECTIONS:
         state.setdefault(name, [])
+    for name in MEMORY_COLLECTIONS:
+        state.setdefault(name, [])
     engine = state.setdefault("engine", {})
     if isinstance(engine, dict):
         engine.update({
@@ -224,7 +238,7 @@ def state_problems(state: dict) -> list[str]:
                 break
     for name in (
         "approvals", "migration_history", "transitions", "notes", "human_interventions",
-        *ADAPTIVE_COLLECTIONS, *ECONOMICS_COLLECTIONS,
+        *ADAPTIVE_COLLECTIONS, *ECONOMICS_COLLECTIONS, *MEMORY_COLLECTIONS,
     ):
         value = state.get(name)
         if value is not None and not isinstance(value, list):

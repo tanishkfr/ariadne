@@ -41,13 +41,15 @@ from harness import mutation_ledger, test_inventory  # noqa: E402
 
 AR222D_SUITES = ("test-ar222d", "test-ar222d-mutations", "test-ar222d-adversarial")
 
-#: Suites whose output the inventory check reads. Only the AR-222D suites and the AR-222
-#: rendered-critique suite are named here; the full regression is ``scripts/check.py``'s job
-#: and duplicating it here would create two places to forget to update.
+#: Suites whose output the inventory check reads. The AR-222D suites, the AR-222
+#: rendered-critique suite, and the AR-225 task-entry suite are named here so their
+#: recorded floors are actually enforced; the full regression is ``scripts/check.py``'s
+#: job and duplicating it here would create two places to forget to update.
 INVENTORY_SUITES = (
     "test-ar222d",
     "test-rendered-critique",
     "test-rendered-critique-adversarial",
+    "test-ar225",
 )
 
 

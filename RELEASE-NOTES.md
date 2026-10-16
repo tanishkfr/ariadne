@@ -1,3 +1,64 @@
+# Ariadne 2.3.0
+
+Ariadne 2.3.0 is the stable release of Ariadne 2.3 — Universal Entry,
+End-to-End Execution, Portable Intelligence, published unchanged in behavior
+from the fully verified candidate after the complete release gate passed on
+the tagged commit and the built artifacts were checked against their manifest.
+Install from the immutable stable wheel below, run `python -m ariadne doctor`,
+and verify work with `ariadne verify` from the installed release.
+
+What 2.3 turns the engine into:
+
+- **Universal task entry.** A request no longer has to be a project.
+  `$ariadne` interprets it, discovers the real project state, and selects a
+  bounded task pipeline or the creative project pipeline (AR-225).
+- **End-to-end execution.** `ariadne.py task-run` selects a worker adapter from
+  measured facts, launches it (a discovered CLI harness — Codex, Claude Code,
+  Cursor, OpenCode — the invoking session, or a custom local command), ingests
+  the structured return through the same strict path an S4B handoff uses,
+  reruns the contract's required checks independently, repairs inside the
+  existing budget, and finishes with a Proof Receipt (AR-230). A harness that
+  cannot authenticate is refused as a provider failure; it is never counted as
+  a pass.
+- **Portable intelligence and a trust boundary.** Evidence-anchored cross-task
+  memory inside the existing run state, metadata-first external skills with
+  digest-pinned human approvals and a load-time instruction trust scan, and
+  rendered (browser) acceptance for UI tasks through the real AR-222 capture
+  pipeline (AR-231).
+- **The 2.3C-R closure.** S4B permitted scope is checked against the handoff's
+  own plan before a worker runs; an authorization refusal is resolved only by a
+  recorded, identity-bound human decision that verifies the reconciled contract
+  covers everything the attempt needs; the design workflow's capture events can
+  use the engine's own Chromium pipeline with byte-for-byte re-production
+  verification; and the original generative-UI acceptance run completed through
+  S5 with its review in a fresh isolated external session. See
+  [CHANGELOG.md](CHANGELOG.md).
+
+Verification for this release: the complete release gate is green on the
+tagged commit — engine core 585/585, Decision Runtime 510/510, all mutation
+suites caught every seeded fault, the AR-225/AR-230/AR-23C suites, the AR-220/
+AR-221/AR-222 design suites plus their mutation and adversarial runs, release
+tests 97/97, distribution lifecycle 55/55, runtime-bundle checks 21/21, the
+release benchmark subset 89/89, and wheel installation 14/14. All twelve gate
+checks executed with nothing skipped, and the seven published artifacts are
+verified against the release manifest. The wheel, runtime bundle, descriptor,
+release notes and checksums build reproducibly from the tagged source commit.
+
+What this release refuses to claim: identical to 2.2 — no bug-free code, no
+certified correctness, no full sandbox, and no native macOS/Linux verification
+(see [docs/HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md) for the platform
+matrix and the reproducible verification procedure), plus the explicitly
+recorded 2.3C-R limitations (project-level Proof Pass TEST wiring; the design
+capture bridge requires a working browser and reproduces only what the
+environment reproduces). The original generative-UI acceptance run closed its
+review stage, but its project acceptance remains PARTIAL at the human G3
+boundary: two requirements wait on engine TEST records the current lifecycle
+cannot re-record, and the gate remains the human's to close. Worker adapters
+beyond the invoking session are declared here rather than verified: executable
+discovery is proven, and live execution requires a host that is installed and
+authenticated; the full matrix is in
+[docs/HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md).
+
 # Ariadne 2.2.0
 
 Ariadne 2.2.0 is the stable release of Ariadne 2.2 — Proof & Grounding,

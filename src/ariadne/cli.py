@@ -1022,7 +1022,73 @@ def doctor(
     elif project is None:
         checks.append(("ok", "Project", "No project requested; installed product only"))
     checks.extend(decision_runtime_checks(current))
+    checks.extend(capability_checks(current))
     return (2 if any(status_value == "problem" for status_value, _, _ in checks) else 0), checks
+
+
+# Capability rows report what this *environment* can actually do, so a user learns
+# before starting a task that, say, browser-rendered acceptance is unavailable here
+# rather than discovering it when Proof Pass refuses a visual claim. Every row is a
+# probe with no side effects; a capability that is absent is a fact, not a problem:
+# Ariadne remains fully usable without a browser or any particular harness, and only
+# genuine breakage earns a "problem".
+
+HARNESS_PROBE_ORDER = ("claude-code", "codex", "cursor", "opencode")
+
+
+def capability_checks(current) -> list[tuple[str, str, str]]:
+    """The 2.3C capability rows: browser capture and worker harnesses."""
+    engine_api, why = _load_installed_engine(current)
+    if engine_api is None:
+        return [("warning", "Capabilities", f"{why}; capability probes were skipped")]
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        rows: list[tuple[str, str, str]] = []
+        try:
+            from ariadne_engine.rendered_critique import adapter as render_adapter
+
+            probe = render_adapter.probe_playwright()
+            if probe.available and probe.extra.get("browser_executable_present"):
+                rows.append((
+                    "ok", "Browser capture",
+                    f"{probe.browser} via {probe.engine} {probe.version} "
+                    "(task-render can capture real rendered evidence)",
+                ))
+            else:
+                reason = probe.reason or "no chromium-family browser binary was found"
+                rows.append((
+                    "warning", "Browser capture",
+                    f"unavailable: {reason}; UI tasks will report the rendered requirement as "
+                    "unresolved instead of claiming visual success",
+                ))
+        except Exception as exc:  # noqa: BLE001
+            rows.append(("warning", "Browser capture", f"could not be probed: {exc}"))
+        try:
+            from ariadne_engine import task_execution as task_mod
+
+            registry = task_mod.adapter_registry()
+            found: list[str] = []
+            missing: list[str] = []
+            for adapter_id in HARNESS_PROBE_ORDER:
+                adapter = dict(registry.get(adapter_id) or {})
+                command = str(adapter.get("command", "")).strip()
+                if not command or str(adapter.get("kind")) != task_mod.CLI_HARNESS:
+                    continue
+                available, _detail = task_mod.executable_available(command)
+                (found if available else missing).append(f"{adapter_id} ({command})")
+            detail = (
+                ("installed: " + ", ".join(found) if found else "no CLI harness is installed")
+                + ("; not found: " + ", ".join(missing) if missing else "")
+                + "; the invoking session can always perform packets, and a custom harness can "
+                "be declared per task"
+            )
+            rows.append(("ok", "Worker harnesses", detail))
+        except Exception as exc:  # noqa: BLE001
+            rows.append(("warning", "Worker harnesses", f"could not be probed: {exc}"))
+        return rows
+    finally:
+        sys.dont_write_bytecode = previous
 
 
 # The Decision Runtime is optional. Its absence is the shipped default and must never

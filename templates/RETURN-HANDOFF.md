@@ -71,6 +71,15 @@
 Do not mark Ariadne result as passed. Ariadne fills that state from its
 independent validation record.
 
+## Methods applied
+
+One bullet per selected method: `- <method-id>: <what was done and what was
+observed>`, or `- <method-id>: not used - <why>`. A T1 task's return is refused
+when a selected method is missing from this report; the engine records a method
+as completed only from evidence it can observe itself.
+
+- <method-id>: <steps taken, and what the run showed>
+
 ## Safety and scope
 
 **Scope status:** within-contract / out-of-scope / dangerous-action / repository-conflict / not checked

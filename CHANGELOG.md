@@ -9,6 +9,342 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.3.0 — 2026-10-16 · PUBLIC RELEASE
+
+Ariadne now takes the task as it arrives. A request no longer has to be a
+project: the engine interprets it, discovers the real state of the work, and
+either opens a bounded task pipeline or the creative project pipeline — then
+carries the task through execution, validation and proof instead of stopping
+at a prepared packet.
+
+What a user can see:
+
+- **Universal entry.** `$ariadne` reads the request in ordinary language,
+  discovers what exists, and routes to a bounded task or a creative project,
+  selecting the native skills the work needs (AR-225).
+- **End-to-end execution.** `ariadne.py task-run` selects a worker adapter
+  from measured facts, ingests the structured return through the strict
+  handoff path, reruns the contract's checks independently, repairs inside
+  budget, and closes with a Proof Receipt (AR-230).
+- **Portable intelligence with a boundary.** Evidence-anchored memory inside
+  the run state, metadata-first external skills with digest-pinned human
+  approvals and a load-time instruction scan, and rendered acceptance for T1
+  UI tasks through the real browser pipeline (AR-231).
+- **The closure pass.** S4B scope is checked against the plan before a worker
+  runs, an authorization refusal is resolvable only by a recorded human
+  decision, and the design workflow's captures can use the engine's own
+  Chromium pipeline with byte-for-byte re-production verification (2.3C-R).
+
+Verified by the complete release gate on the tagged commit: twelve gate
+checks, none skipped; engine core 585/585; Decision Runtime 510/510; every
+mutation suite caught its seeded faults; release tests 97/97; distribution
+lifecycle 55/55; runtime bundle 21/21; release benchmarks 89/89; wheel install
+14/14; and the seven published artifacts verified against the manifest.
+
+Stated plainly, what stays open: the recorded generative-UI acceptance run is
+PARTIAL at the human G3 boundary; a corrected revision after a review cannot
+re-record S4B validation, and a second review cannot be ingested, in the
+current lifecycle; native macOS and Linux acceptance was not executed; worker
+adapters other than the invoking session need a host that is installed and
+authenticated; and the design capture bridge needs a working browser. The
+full matrix is in [HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md).
+
+---
+## 2.3 development (AR-230) — RELEASE CANDIDATE 2.3.0
+
+2.3 is prepared as release candidate **2.3.0** on the
+`v2/2.3b-end-to-end-execution` branch. Publication (tag, push, release) required
+explicit human authorization per [RELEASING.md](RELEASING.md); the authorization
+was granted for 2.3.0, and the release is published as recorded above.
+
+### End-to-end task execution: selection is not doing the work
+
+**The lesson.** AR-225 could prepare a bounded T1 packet and then stopped: a
+person still had to open a worker session, paste the packet, and hand the result
+back by hand. A system that selects the right process and then waits is a
+planner, not an agent, and the gap is exactly where unverified ad-hoc edits
+re-enter. AR-230 connects the prepared boundary to real execution without
+building a second engine.
+
+- **`ariadne_engine/task_execution.py`** declares worker adapters (a discovered
+  CLI harness, the invoking session, a human-driven session, or a custom local
+  command), selects one from measured facts, and records the preflight. It owns
+  the durable task record — objective, scope, contract hash, baseline revision,
+  attempts, returns, validation, review, proof and acceptance — and the
+  skill-evidence ledger that separates a worker's report from an engine
+  observation.
+- **`ariadne.py task-run`** runs the lifecycle: select and preflight, launch the
+  adapter, ingest the structured return through the same strict path an S4B
+  handoff uses (schema, task identity, contract hash, execution revision,
+  repository scope, method report), rerun the contract's required checks
+  independently, prepare and run bounded repairs inside the existing budget,
+  hand off to the required review, and finish with Proof Pass. A harness that
+  cannot authenticate is recorded as a provider failure, never a pass.
+- **`ariadne.py task-return` / `task-validate` / `task-repair` / `task-review` /
+  `task-verify` / `task-accept` / `task-status`** are the operator and
+  invoking-session surface for the same lifecycle, including resuming after an
+  interruption (`--abandon-open` records a lost worker truthfully) and the
+  human acceptance decision, which the engine records but never mints.
+- **Follow-up tasks attach.** A settled request against a recorded project
+  becomes a new bounded task inside the same run — its own identity, contract
+  and evidence — instead of a refusal or a second history. An open attempt or a
+  mid-flight creative boundary is refused by name.
+- The `Methods applied` section in the return handoff makes the selected skills
+  influence the work: a T1 return that never reports a selected method is
+  refused, a reported method is `invoked` (worker-reported), and only an
+  observable evidence output makes it `completed`.
+
+The suite `scripts/test-ar23b.py` drives the real CLI over temporary git
+projects: worker execution and validation, attachment, resume, interruption
+recovery, stale returns, contract tampering, out-of-scope changes, bounded
+repair and its limit, reviewer independence, honest blockers, the skill ledger,
+creative-workflow compatibility, and parallel-run state safety.
+
+---
+
+## 2.3 development (AR-231) — RELEASE CANDIDATE 2.3.0
+
+Shipped in release candidate **2.3.0** and published as the stable release
+recorded above. The 2.3C acceptance-run blockers below were closed by the
+2.3C-R release closure in the same candidate.
+
+### Universal skills, persistent intelligence, and the trust boundary
+
+**The lesson.** 2.3A could interpret any request and 2.3B could execute it with a
+real worker, but three gaps kept the system from being *portable and extensible*:
+a UI task could pass text validation while the rendered surface was broken; every
+task re-derived project knowledge that had already been learned; and there was no
+safe way to extend Ariadne with outside skills. All three are closed by extending
+the systems that already own those responsibilities.
+
+- **riadne_engine/external_skills.py** (new): metadata-first discovery of
+  explicitly trusted catalogues, digest-pinned human approvals, a copy-only
+  install store, a load-time instruction trust scan, and a merged registry that
+  still refuses unapproved entries at selection. Nothing is executed during
+  discovery; nothing is installed without a matching approval digest; a native id
+  is never shadowed.
+- **riadne_engine/memory.py** (new): derived cross-task memory inside the
+  existing run state. Evidence-anchored entries, occurrence counting for genuine
+  repeats, revision-staleness for implementation-shaped facts, bounded retrieval
+  emitted as data (never instructions), correction that keeps history, and the
+  mistake-to-enforcement proposals (a repeated failure becomes a proposed
+  regression test; implementation still requires a human or a covering task).
+- **riadne_engine/tasks.py / 	ask_execution.py**: UI tasks now detect a
+  browser-rendered acceptance obligation and carry it into the contract; the new
+  
+ender-pending lifecycle state refuses to call an unrendered implementation
+  visually verified, and a failed *rendered* acceptance enters the same bounded
+  repair budget a failed validation does.
+- **riadne.py task-render**: the engine's own AR-222 capture step for T1 UI
+  tasks — real Chromium via the existing rendered-critique pipeline, captures
+  bound to the implementation revision, recorder evidence mapped into the
+  acceptance ledger, and honest blocking (recorded, not faked) when no browser is
+  available.
+- **riadne.py skills-* and memory-***: the operator surface for the trust
+  boundary and the memory store; economics --skills reports measured
+  skill-level effectiveness with unknowns left UNKNOWN.
+- **stronger: creative-plan** may now be recorded once, late, with the lateness
+  flagged inside the ledger (found by the 2.3C acceptance run, where advancing
+  past the brief dead-ended the run); creative-ledger artifact digests are
+  checked latest-per-path and decisions by anchor presence, so a stage document
+  can be refined without rewriting history.
+- **scripts/test-ar23c.py** (new, 22 cases): the suite for the above, including
+  adversarial poisoned skill descriptions and instructions, poisoned memory,
+  stale digests, and a live browser case that fails a staged interaction defect,
+  repairs it inside the budget, and recaptures fresh evidence.
+
+### 2.3C acceptance-run blockers (historical — closed by 2.3C-R below)
+
+1. The full generative-UI website run reached S4B with the site built,
+   browser-verified, captured and critiqued, but its independent worker
+   validation classified the boundary **out-of-scope**: the packet's recorded
+   permitted-files contract under-declared files the handoff's own plan named.
+   Blocked results cannot enter routine repair, and escalation needs a provider
+   this environment does not have. Proof Pass over the original request therefore
+   reports PARTIAL with TEST evidence outstanding.
+2. No third-party CLI harness could be executed live (claude and gemini are
+   installed but unauthenticated; codex/cursor/opencode are absent). Harness
+   discovery and failure classification are verified live; a genuine external
+   execution remains environment-blocked.
+
+### 2.3C-R release closure: fix the producer, not the validator
+
+**The lesson.** Every one of the four unresolved areas had the same shape one
+layer down: a stage gate demanding evidence the pipeline could not produce, and a
+contract producer whose disagreements with its own stage nobody checked. The
+cheap move each time was to relax the gate; the correct move was to fix the
+producer — and every fix surfaced a further latent gap that only real execution
+could reveal. The freed-up acceptance run, driven end to end this time, is the
+proof the closure holds.
+
+- **The S4B permitted scope is checked against the plan before a worker runs.**
+  Preparation now cross-checks the handoff's own `Files to create` declarations
+  and the stage's required outputs (`QA.md`, `AGENTS.md` — both obligations of the
+  canonical S4B prompt) against the permitted-files table; disagreement is an
+  explicit refusal naming the paths, and `verify` re-runs the same check against
+  the live handoff. `worker_scope_patterns()` is the one canonical,
+  authorization-aware scope representation every runtime check now interprets —
+  including the creative validate-worker path, which previously re-derived its
+  patterns from the mutable handoff file. The recorded 2.3C contract is carried
+  verbatim in the self-test as a permanent regression.
+- **An authorization refusal now has a resolution surface, and only a human can
+  use it.** Routing still never continues around a refusal; blocked results still
+  never enter routine repair. `ariadne.py resolve-authorization` records the
+  human's decision, identity-bound, after verifying for itself that the
+  reconciled contract is internally consistent, covers every refused path, and
+  covers the repository's current deviation from the attempt's baseline. One
+  resolution buys exactly one new attempt (`advance`); the contract revision is
+  bound by hash; a same-stage retry re-points its baseline's contract-document
+  entries at the reconciled facts (the reconciliation edit is the authorization
+  change, not worker tampering) and records which entries were refreshed.
+- **The design workflow can reach the browser pipeline it already owned.**
+  AR-222 shipped a real Chromium capture pipeline wired only to the task flow,
+  and the design workflow's own capture events could reach no browser at all
+  (fixture, declared-observer ceiling, or a stub), so the S5 observation gate —
+  which requires rendered requirements closed as `verified` — was unreachable
+  for any real project. `ChromiumCaptureAdapter` exposes the same pipeline to
+  `record-design`'s capture and verification events: byte-for-byte reproduction
+  across independent sessions is the contract (canonicalised artifacts, caret
+  hidden, ephemeral ports recorded as the logical route), the rendered-verify
+  handler now actually passes the re-produced artifact, captures carry manifest
+  provenance bound to the render-source digest, and measurements carry
+  deterministic computed-style samples. Nothing starts a browser implicitly.
+- **The live Codex run found and fixed two more integration defects.** The
+  authenticated Codex CLI (the first third-party harness this project has ever
+  executed for real) rejected the engine's historical `--full-auto` invocation
+  — the preset now uses `codex exec --sandbox workspace-write -` — and the first
+  genuinely bare (no `.gitignore`) Python repository exposed that the
+  interpreter's own caches, written by the contract's own declared test
+  commands, were classified as out-of-scope work; `VALIDATION_CACHE_PATTERNS`
+  now treats them as engine-neutral. Both defects had been invisible because
+  every previous fixture happened to paper over them.
+- **The original acceptance project resumes and completes through S5.**
+  Attempt 2 (`genui-lab-S4B-C1`) validated within-contract at the reconciled
+  contract with attempt 1 and its evidence preserved; the six approved design
+  requirements were closed `verified` over engine captures that each reproduced
+  byte-for-byte in an independent execution; the mechanical evidence was
+  re-run on the revision; and the S5 review ran in a fresh, isolated external
+  Codex session with no build context. The review returned an honest
+  "Ship with fixes" (34/50, 28/40) with its own declared limitation that its
+  sandbox could not run a browser. Proof Pass VP-0004 stands at `NOT_ACCEPTED`
+  with the two project requirements `PARTIAL`: the engine has no wiring yet that
+  records its own S4B validation reruns as project-level TEST acceptance
+  evidence, so the receipt is conservative and the human G3 decision remains —
+  exactly where an acceptance boundary belongs.
+- **One recorded sun-set lesson.** A control that cannot run is not a control:
+  `check.py --self-test` had been silently dead since the documentation
+  reorganisation renamed the privacy policy's path inside its mutation source;
+  it now fails loudly if the source goes missing again.
+
+### 2.3C-R final acceptance pass: the receipt accounts for the engine's own tests
+
+**The lesson.** A gate that omits a fact and a gate that rejects a fact look
+identical from outside: both say nothing. The closure's largest recorded gap —
+`PARTIAL / TEST outstanding` over a project whose checks the engine itself had
+rerun and passed — was not a missing check but a missing *sentence*: nothing
+carried the rerun from the packet to the acceptance ledger, and nothing could
+even say it had been left out. This pass wires the sentence end to end, then
+uses the freed-up run to prove the wiring and to close the review loop the
+machine can actually carry.
+
+- **The engine's validation reruns reach the acceptance ledger.** A worker
+  validation record now carries `validated_revision`, a fingerprint of the
+  exact implementation bytes the recorded commands ran against (evidence
+  ledgers, derived build output, caches and the governance documents Ariadne's
+  own commands rewrite afterwards are excluded — anything else moves it). At
+  Proof Pass, `integrations.from_worker_validation` maps a genuine, current
+  record into `TEST` evidence bound to the validator execution, the packet, the
+  executed commands and their exit codes, and refuses failed, blocked,
+  unevidenced, foreign-project and stale records *by name*. The pass revision
+  binds the implementation, so a source change moves the digest and earlier
+  observations go stale at the next pass instead of silently staying current.
+  The mapper records observations and never verdicts: what a passing check is
+  worth stays the requirement's own declared evidence policy, and the
+  anti-cheat controls in `scripts/test-ar23d.py` prove TEST alone promotes
+  nothing.
+- **The receipt says what it did with each recorded result.** `validation_mapping`
+  (recorded / replayed / refused-with-reason) rides on the receipt, merged
+  before the digest so the receipt still binds its own contents; on the
+  generative-UI run, `VP-0005` now names both recorded validations and why it
+  refused them instead of staying silent.
+- **Independence stops overstating.** `DISTINCT_PROVIDER` was granted whenever
+  reviewer and implementer carried different non-empty labels — including
+  requested and declared ones, which are the operator's expectation and the
+  worker's own prose. The contract defines the level as a *provider-observed*
+  difference; two executions on the same provider with different labels now
+  stay `DISTINCT_RUNTIME`, equal provider observations stay there too, and only
+  the provider-observed channel raises the level.
+- **Captures can reach the states the decisions were made for.** `emulate_media`
+  exercises reduced motion through the browser's own emulation (the creative
+  review's recorded highest-value improvement), `fill` reaches states only
+  reachable through the interface's own input (the unknown-prompt fallback),
+  and both are bounded at the descriptor boundary like every other verb. The
+  focus audit no longer probes with a bare programmatic `focus()` — which never
+  matches `:focus-visible` and so reported correctly-styled controls as ringless
+  — it declares keyboard intent where the engine supports it.
+- **The acceptance project ran the loop the machine can carry.** Two focused
+  iterations answered two rounds of independent review: the example-chip hover
+  defect found by real browser interaction (ink-on-ink), the reduced-motion and
+  1920 states left unexercised, a missing-resource 404, and the focus-audit
+  false negative — each fixed at the source, re-captured, re-produced
+  byte-for-byte by the engine, and re-recorded through the operations ledger
+  (a new bounded `implementation-revision` re-anchor keeps a corrected
+  implementation's trace honest without replacing its history). Two further
+  fresh isolated Codex engagements reviewed the corrected revisions from
+  supplied code plus revision-bound engine captures and said plainly what they
+  verified firsthand (no live browser in their sandbox). Their remaining asks
+  are direction questions — fallback variation, wide-screen composition, prompt
+  copy, card consequences, proof strip — which belong to the human G3
+  conversation, not to a silent drift of locked decisions. `VP-0005` states
+  `NOT_ACCEPTED` with both requirements `PARTIAL` and each refusal named: the
+  pre-wiring validation cannot be proven against the corrected revision, and
+  the current lifecycle cannot re-record one after a review (recorded in
+  HOSTS-AND-LIMITS). Nothing was invented to change that outcome.
+
+## 2.3 development (AR-225) — NOT RELEASED
+
+`VERSION` remains **2.2.0** until release readiness is established. AR-225 is
+development work on the `v2/2.3a-universal-entry` branch and no release is claimed.
+
+### Universal task entry: a request no longer has to be a project
+
+**The lesson.** Every route into Ariadne assumed a creative project: five modes, a
+design thesis, a direction gate. That assumption was wrong for most of what people
+actually ask a coding agent to do. "Fix the failing export" was forced to become a
+project brief or was abandoned to an unreviewed ad-hoc edit — the two worst options,
+and the second is how verified work stops being verified.
+
+AR-225 adds the entry boundary: `$ariadne` interprets the request, discovers the
+real project state, and selects one of two workflows.
+
+- **`ariadne_engine/tasks.py`** builds the interpretation frame (action, object,
+  read-only, design obligation), the workflow family, and the plan. It reuses the
+  existing characterisation and the simple/standard/complex path planner; it does
+  not replace them.
+- **`ariadne_engine/skills.py`** is the native engineering skill registry —
+  root-cause investigation, blast-radius analysis, behaviour-focused tests,
+  architecture evaluation, adversarial review, performance investigation,
+  anti-slop, and engineering reflection — with deterministic selection, reasons,
+  exclusions, capability gaps, and selected-only document loading.
+- **`T1`** is the lightweight task boundary: `ariadne.py task-plan` is read-only
+  planning; `ariadne.py task-start` prepares one bounded worker packet with the
+  same contract shape an S4B packet has. The stage transitions table gained
+  `(None, T1)` and `(T1, T1)` and nothing else.
+- **The creative workflow is unchanged.** A request that arrives as a project still
+  routes through ROUTER.md, Design Intelligence, and G1.
+
+Authority is untouched: a plan names gates, never grants one; a selected skill is
+a method, not a permission; dependencies still stop at G2; deployment still stops
+at G4; acceptance is still the human G3 decision.
+
+Two latent transport self-test defects were repaired on the way, because they made
+negative controls unrunnable: the S2 privacy control removed a filename that had
+moved under `docs/policies/`, and three canonical-source controls looked for
+`DESIGN-TASTE.md` at its pre-reorganisation path. A control that cannot run is not
+a control.
+
+---
+
 ## 2.2 development (AR-220) — NOT RELEASED
 
 `VERSION` remains **2.1.0**. The release gate ties `VERSION` to the release-notes

@@ -392,11 +392,23 @@ def execute(
             skipped.append(_skip_row(target, f"route refused: {exc}"))
             continue
         capture_id = f"capture_{index:03d}"
+        # Each capture owns its own directory. The per-artifact provenance manifest
+        # (:data:`ariadne_engine.render.MANIFEST_NAME`) is written beside its artifact
+        # and must name exactly that artifact; a plan with several targets sharing one
+        # directory would make the second capture unprovable, so the layout guarantees
+        # one artifact per manifest instead of hoping the plan has one target.
+        capture_directory = target_root / capture_id
+        # A target may carry its own expectation (an interaction's *effect*: the page
+        # after the click must show what the click was supposed to produce). The
+        # route-level expectation remains the fallback for targets that only name
+        # their route, because a surface's own content is what any valid render of it
+        # must show.
+        target_expectation = tuple(str(item) for item in (target.get("expected_content") or ()))
         try:
             row = _capture_one(
                 adapter, target=target, url=url, capture_id=capture_id,
-                directory=target_root, digest=digest,
-                expected_content=(expected_content or {}).get(route, ()),
+                directory=capture_directory, digest=digest,
+                expected_content=target_expectation or (expected_content or {}).get(route, ()),
             )
         except adapter_module.RenderCapabilityUnavailable as exc:
             failures.append({"capture_id": capture_id, "route": route, "state": state, "reason": str(exc)})

@@ -148,6 +148,46 @@ EVENT_TYPES = (
     "design_refinement_plan_created",
     "design_refinement_validated",
     "design_refinement_rerendered",
+
+    # Ariadne 2.3B task-execution vocabulary. The T1 lifecycle records its own
+    # transitions in the same append-only log rather than a second event system:
+    # a task is prepared, a worker adapter is preflighted and selected, skills
+    # are recorded from evidence, repair is prepared, and the engine's Proof
+    # Pass or the human acceptance decision settles the task.
+    "task_prepared",
+    "task_attached",
+    "task_worker_preflighted",
+    "task_worker_selected",
+    "task_skill_recorded",
+    "task_repair_prepared",
+    "task_proof_recorded",
+    "task_accepted",
+    "task_rejected",
+    "task_blocked",
+
+    # Ariadne 2.3C vocabulary. The rendered-acceptance step of a UI task, the
+    # project-memory lifecycle, and the external-skill trust boundary all record
+    # into the same append-only log: a capture is recorded or blocked, memory
+    # entries are recorded and corrected, enforcement proposals are proposed and
+    # authorized, and an external skill is approved and installed. Each of these
+    # is a fact observed by the engine, not a claim by a worker.
+    "task_rendered",
+    "task_rendered_blocked",
+    "memory_recorded",
+    "memory_corrected",
+    "memory_captured",
+    "enforcement_proposed",
+    "enforcement_authorized",
+    "enforcement_implemented",
+    "external_skill_approved",
+    "external_skill_installed",
+    "external_skill_refused",
+
+    # 2.3C-R. An authorization refusal is resolved by a recorded human decision
+    # on the authorization side (ADR-0212), and the one authorized re-entry is
+    # spent by the attempt it created. Both are engine-observed facts.
+    "authorization_resolved",
+    "authorization_resolution_consumed",
 )
 """The declared event vocabulary. A type outside this set is refused, so the log
 cannot accumulate an undocumented ad-hoc event name."""
