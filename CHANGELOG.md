@@ -64,7 +64,7 @@ Measured in this pass:
 - release subset **97/97**, engine core **586/586**, 2.4A reliability **21/21**,
   2.3B/2.3C/2.3D green, release **98/98**, distribution **55/55**, wheel install
   **14/14**, repository checks **PASS**;
-- 2.4B suite **26/26**; 2.4B mutation suite **12/12 valid, 12/12 killed**, with
+- 2.4B suite **27/27**; 2.4B mutation suite **12/12 valid, 12/12 killed**, with
   digest-verified restoration;
 - two bounded live tasks (Command Code 1.88.5 and OpenCode v2.2.5) both
   validated with `VP-0001` ACCEPTED. No token or cost figure was supplied, so

@@ -95,6 +95,8 @@ benchmark group:
 | Unpromoted evidence cannot reorder adapters | pass |
 | No authorized provider is refused | pass |
 | Promotion requires benchmark qualification, freshness and 8 samples | pass |
+| Candidate with as many failures as passes is not recommended | pass |
+| New evidence invalidates an earlier promotion digest | pass |
 
 ### Live provider probes
 

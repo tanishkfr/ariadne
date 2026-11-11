@@ -120,6 +120,7 @@ new mtime/size is a miss with an observable invalidation.
 - Cache entries are isolated by run root (two projects do not share a cache).
 - Adaptive reduction never omits the contract or a required source.
 - A request that names the optional file keeps it.
+- An empty request omits only optional scope files; the required contract remains.
 - Continuation preserves the objective, scope, validation rows, latest failure
   and unresolved review finding.
 - A continuation for a different revision is `STALE` and cannot be resumed.

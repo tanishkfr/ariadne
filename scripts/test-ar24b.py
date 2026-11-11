@@ -445,6 +445,26 @@ def unqualified_or_unpromoted_evidence_cannot_reorder_adapters():
     )
     assert promoted["apply"] is True, promoted
     assert promoted["ranking"][0] == "alt"
+    # New evidence changes the record digest; the old promotion no longer applies.
+    observe_many(state, adapter="alt", provider="p2", model="m2", count=1, validated=0, failed=1)
+    after_change = model_module.adapter_ranking(
+        state, adapters=adapters, required=("implementation",),
+        task_family="bug", baseline_adapter="base",
+    )
+    assert after_change["apply"] is False, after_change
+
+
+@case
+def a_candidate_with_as_many_failures_as_passes_is_not_recommended():
+    state = {"model_observations": []}
+    observe_many(state, adapter="broken", count=5, validated=2, failed=3)
+    # Eight samples, four validated, four failed: qualified by count, unsafe by margin.
+    observe_many(state, adapter="mixed", provider="p2", model="m2", count=8, validated=4, failed=4)
+    decision = model_module.recommend(
+        state, role="bulk-implementation", capability="implementation",
+        baseline_adapter="broken", task_family="bug",
+    )
+    assert decision["decision"] == "KEEP_BASELINE", decision
 
 
 # ----------------------------------------------------------------- context
@@ -537,6 +557,17 @@ def adaptive_reduction_omits_only_unchanged_optional_scope_and_measures_bytes():
             item["decision"] == "included"
             for item in adaptive["decisions"] if item["path"] == str(contract)
         )
+        # An empty request is allowed to omit every unnamed optional scope file,
+        # but never a required one.
+        empty_request = context_module.decide(
+            {}, stage="T1", candidates=candidates, revision_hash="r1", reduction="adaptive",
+        )
+        assert next(
+            item for item in empty_request["decisions"] if item["path"] == str(scope)
+        )["decision"] == "omitted"
+        assert next(
+            item for item in empty_request["decisions"] if item["path"] == str(contract)
+        )["decision"] == "included"
         # A request that names the file keeps it.
         named = context_module.decide(
             {"request": "fix export.py"}, stage="T1", candidates=candidates,

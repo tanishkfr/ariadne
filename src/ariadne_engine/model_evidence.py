@@ -417,9 +417,7 @@ def _capability_rows(rows: Sequence[Mapping], *, as_of: datetime) -> list[dict]:
         })
     for record in records:
         record["limitations"] = [item for item in record["limitations"] if item]
-        record["registry_digest"] = digest_text(canonical_json({
-            key: value for key, value in record.items() if key not in ("recorded_at", "registry_digest")
-        }))
+        record["registry_digest"] = _registry_digest(record)
     return records
 
 
@@ -494,8 +492,38 @@ def registry(
     }
 
 
+def _registry_digest(record: Mapping) -> str:
+    """A stable digest over the record's evidence, not the clock.
+
+    ``measurement_period.age_days`` and ``recorded_at`` change simply because the
+    registry was read again. Including them would invalidate a promotion without
+    any evidence changing, so they are excluded. Qualification, freshness,
+    counts and evidence references remain covered.
+    """
+    payload = {
+        key: value for key, value in record.items()
+        if key not in ("recorded_at", "registry_digest")
+    }
+    period = dict(payload.get("measurement_period") or {})
+    period.pop("age_days", None)
+    payload["measurement_period"] = period
+    return digest_text(canonical_json(payload))
+
+
 def _fresh(record: Mapping) -> bool:
     return str(record.get("freshness", "")) == "CURRENT"
+
+
+def _candidate_healthy(record: Mapping) -> bool:
+    """Whether an alternative's own outcomes show a positive validated margin.
+
+    A record may meet the qualification gate (four validated of five) while a
+    later run set has as many failures as passes. Such a candidate is not a safe
+    alternative merely because it is on the right side of the old threshold.
+    """
+    validated = int(record.get("validated", 0) or 0)
+    failed = int(record.get("failed_validation", 0) or 0)
+    return validated > failed
 
 
 def _qualified(record: Mapping, *, samples: int) -> bool:
@@ -529,6 +557,15 @@ def promotions(state: Mapping) -> list[dict]:
 
 
 def promoted_scope(state: Mapping, *, provider: str, model: str, capability: str, task_family: str) -> dict | None:
+    """An active, still-current promotion for exactly this identity and scope.
+
+    The promotion carries the registry digest it was granted against. If a later
+    observation changes that record's evidence, freshness or qualification, the
+    digest no longer matches and the promotion stops applying. The apply path
+    also re-checks qualification and samples, so this is a second, independent
+    check rather than the only one.
+    """
+    current_records = registry(state)["records"]
     for row in reversed(promotions(state)):
         if not row.get("active", True):
             continue
@@ -541,6 +578,20 @@ def promoted_scope(state: Mapping, *, provider: str, model: str, capability: str
         family = str(row.get("task_family", "any"))
         if family not in ("any", str(task_family)):
             continue
+        expected = str(row.get("record_digest", "") or "")
+        if expected:
+            current = next(
+                (
+                    record for record in current_records
+                    if str(record.get("provider", "")) == str(provider)
+                    and str(record.get("model", "")) == str(model)
+                    and str(record.get("capability", "")) == str(capability)
+                    and str(record.get("task_family", "any")) in ("any", str(task_family))
+                ),
+                None,
+            )
+            if current is None or str(current.get("registry_digest", "")) != expected:
+                continue
         return row
     return None
 
@@ -698,6 +749,7 @@ def recommend(
         and _fresh(row)
         and str(row.get("qualification", "")) in ("OBSERVED_QUALIFIED", "BENCHMARK_QUALIFIED")
         and int(row.get("sample_size", 0) or 0) >= MIN_QUALIFIED_SAMPLES
+        and _candidate_healthy(row)
     ]
     alternatives.sort(
         key=lambda row: (
@@ -869,6 +921,7 @@ def adapter_ranking(
         and _fresh(row)
         and int(row.get("sample_size", 0) or 0) >= MIN_APPLY_SAMPLES
         and row["qualification"] == "BENCHMARK_QUALIFIED"
+        and _candidate_healthy(row)
         and str(row.get("adapter", "")) not in excluded
         and str(row.get("model", "")) not in excluded
         and str(row.get("provider", "")) not in excluded
