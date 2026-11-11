@@ -5927,6 +5927,16 @@ def task_accept_command(args: argparse.Namespace) -> int:
             )
         if str(proof_record.get("task_id", "")) and str(proof_record.get("task_id")) != str(task.get("task_id", "")):
             raise RuntimeError_("Acceptance refused: the proof receipt belongs to another task")
+        receipt_problems = PROOF.receipt_problems(proof_record)
+        if receipt_problems:
+            # The store is append-only, but the run state is a file an operator
+            # (or a corrupted write) can edit. Existence and task identity are
+            # not integrity: the digest has to bind the receipt's contents at
+            # the moment acceptance is recorded, or a tampered verdict is proof.
+            raise RuntimeError_(
+                "Acceptance refused: the proof receipt is malformed or no longer matches its digest: "
+                + "; ".join(receipt_problems)
+            )
         stale = TASKX.validation_current_problems(
             task,
             current_fingerprint=TRANSPORT.current_implementation_fingerprint(state),

@@ -158,6 +158,15 @@ def s4b_review_correction_contract_is_bounded_and_review_authorized():
         (s5 / "evidence" / "review-record.json").write_text(json.dumps(passed), encoding="utf-8")
         state["reviews"] = [passed]
         assert policy_module.failed_review_problems(state, s5), "a passing review cannot authorize a correction"
+        # ...and the recommendation alone is not the authorization either. A
+        # passing review that happens to say "fix and re-review" has nothing to
+        # correct; only a failed outcome plus that recommendation does.
+        passed_with_correction = {**review_record, "outcome": "passed", "recommendation": "fix and re-review"}
+        (s5 / "evidence" / "review-record.json").write_text(json.dumps(passed_with_correction), encoding="utf-8")
+        state["reviews"] = [passed_with_correction]
+        assert policy_module.failed_review_problems(state, s5), (
+            "a passing review cannot authorize a correction even when it recommends one"
+        )
         (s5 / "evidence" / "review-record.json").write_text(json.dumps(review_record), encoding="utf-8")
         state["reviews"] = [review_record]
         # The correction budget is separate and bounded.
@@ -750,6 +759,39 @@ def forged_proof_receipt_in_task_state_cannot_mint_acceptance():
         )
         assert code == 1, text
         assert "receipt" in text.lower(), text
+        assert not current_task(state_of(run_root)).get("acceptance")
+
+
+@case
+def tampered_proof_receipt_cannot_mint_acceptance():
+    require_pytest()
+    with workspace() as base:
+        project = BASE.make_project(base)
+        assert BASE.start_task(project, request=BASE.HIGH_STAKES_REQUEST)[0] == 0
+        run_root = BASE.run_root_for(project)
+        assert BASE.run_task(project, base, "fix")[0] == 0
+        assert review_pass(project, base)[0] == 0
+        state = state_of(run_root)
+        task = current_task(state)
+        proof_id = task["proof"]["proof_id"]
+        receipt = next(
+            (row for row in state.get("proof_receipts") or []
+             if str(row.get("proof_id")) == str(proof_id)),
+            None,
+        )
+        assert receipt is not None, state.get("proof_receipts")
+        # Keep the id and the recorded digest, change what the receipt says.
+        receipt["acceptance_state"] = "NOT_ACCEPTED"
+        (run_root / "ariadne-run.json").write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        code, text = BASE.run_cli(
+            "task-accept", "--project", str(project),
+            "--identity", "operator", "--outcome", "accepted",
+        )
+        assert code == 1, text
+        assert "receipt" in text.lower(), text
+        assert "digest" in text.lower() or "integrity" in text.lower(), text
         assert not current_task(state_of(run_root)).get("acceptance")
 
 

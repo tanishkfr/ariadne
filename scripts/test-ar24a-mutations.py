@@ -85,23 +85,38 @@ MUTATIONS: list[dict] = [
         "id": "M02",
         "boundary": "cross-attempt evidence isolation",
         "rule": "a validation record copied from another attempt is accepted",
-        "edits": [{
-            "path": ENGINE / "task_execution.py",
-            "before": (
-                '    if str(record.get("packet_id", "")) != str(attempt.get("packet_id", "")):\n'
-                '        return False\n'
-                '    attempt_name = str(record.get("attempt_id", ""))\n'
-                '    if attempt_name and attempt_name != str(attempt.get("attempt_id", "")):\n'
-                '        return False\n'
-                '    execution = dict(record.get("execution") or {})\n'
-                '    implementing = str(execution.get("implementing_execution", ""))\n'
-                '    attempt_execution = str(attempt.get("execution_id", ""))\n'
-                '    if implementing and attempt_execution and implementing != attempt_execution:\n'
-                '        return False\n'
-                '    return True'
-            ),
-            "after": '    return True  # mutation: evidence from any attempt is accepted',
-        }],
+        "edits": [
+            {
+                "path": ENGINE / "task_execution.py",
+                "before": (
+                    '    if str(record.get("packet_id", "")) != str(attempt.get("packet_id", "")):\n'
+                    '        return False\n'
+                    '    attempt_name = str(record.get("attempt_id", ""))\n'
+                    '    if attempt_name and attempt_name != str(attempt.get("attempt_id", "")):\n'
+                    '        return False\n'
+                    '    execution = dict(record.get("execution") or {})\n'
+                    '    implementing = str(execution.get("implementing_execution", ""))\n'
+                    '    attempt_execution = str(attempt.get("execution_id", ""))\n'
+                    '    if implementing and attempt_execution and implementing != attempt_execution:\n'
+                    '        return False\n'
+                    '    return True'
+                ),
+                "after": '    return True  # mutation: evidence from any attempt is accepted',
+            },
+            {
+                "path": CLI,
+                "before": (
+                    '    problems = TRANSPORT.worker_validation_problems(value, entry["id"])\n'
+                    '    if problems:\n'
+                    '        raise RuntimeError_("Recorded validation evidence is malformed: " + "; ".join(problems))'
+                ),
+                "after": (
+                    '    problems = []  # mutation: the copied record\'s packet identity is not checked\n'
+                    '    if problems:\n'
+                    '        raise RuntimeError_("Recorded validation evidence is malformed: " + "; ".join(problems))'
+                ),
+            },
+        ],
         "tests": [test(AR24A, "cross_attempt_validation_evidence_is_refused")],
         "why": (
             "packet, attempt and implementing execution are the three identities that make a "
@@ -323,7 +338,7 @@ MUTATIONS: list[dict] = [
                 '            problems.append("proof receipt digest does not bind its contents")'
             ),
         }],
-        "tests": [test(ROOT / "scripts" / "test-ar224.py")],
+        "tests": [test(AR24A, "tampered_proof_receipt_cannot_mint_acceptance")],
         "why": (
             "the receipt digest is the integrity check, not a signature. Removing it lets a tampered "
             "verdict keep its old digest and still be read as proof."
