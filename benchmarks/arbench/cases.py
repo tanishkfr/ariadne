@@ -275,17 +275,39 @@ def suite_writing_execution(ctx: Ctx) -> Outcome:
 
 @case(id="suite.validation-run-benchmark", group="suites",
       title="Existing validation-run measurement",
-      task="Read the recorded B1 validation run through the validator's benchmark mode.",
+      task="Read a recorded validation run through the validator's benchmark mode.",
       expectation="At least one run is read and reported without error.",
       evaluation="Exit code 0 and a non-empty run table.",
       evidence_required="Run table tail.", layer="deterministic")
 def suite_validation_benchmark(ctx: Ctx) -> Outcome:
-    result = ctx.repo.script_run("validate.py", "--benchmark", timeout=300)
-    rows = len(re.findall(r"(?m)^B\d+\s", result.combined))
+    # validation/runs/ is deliberately gitignored operator evidence. Reading it
+    # made this case depend on one machine's private history: a clean checkout
+    # had no runs and reported a defect in the reader. The fixture is a real run
+    # record derived from the tracked template, in the case's own sandbox.
+    box = ctx.sandbox()
+    runs = box.root / "recorded-runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    template = ctx.repo.root / "validation" / "run-template.md"
+    record = template.read_text(encoding="utf-8")
+    values = {
+        "Run ID": "B1", "Date": "2026-11-11", "Ariadne version": "2.4.0rc1",
+        "Test": "B", "Project type": "benchmark fixture", "Mode": "product-app",
+        "Provider": "fixture", "Model": "none", "Started": "09:00",
+        "Ended": "10:00", "Result": "PASS",
+    }
+    for name, value in values.items():
+        record = re.sub(
+            rf"(?m)^\| \*\*{re.escape(name)}\*\* \|.*$",
+            f"| **{name}** | `{value}` |",
+            record,
+        )
+    (runs / "B1.md").write_text(record, encoding="utf-8")
+    result = ctx.repo.script_run("validate.py", "--benchmark", "--runs-dir", str(runs))
+    rows = len(re.findall(r"(?m)^B1\s", result.combined))
     return Outcome("pass" if result.returncode == 0 and rows >= 1 else "fail",
                    f"{rows} recorded validation run(s) read",
                    {"exit_code": result.returncode, "tail": result.tail(3),
-                    "command": " ".join(result.argv)},
+                    "runs_dir": str(runs), "command": " ".join(result.argv)},
                    {"runs": rows, "duration_seconds": result.duration_seconds, "model_calls": 0})
 
 
@@ -638,7 +660,7 @@ def lifecycle_s4b_review_correction(ctx: Ctx) -> Outcome:
 @case(id="lifecycle.s5-isolation", group="lifecycle",
       title="S5 packet is the canonical isolated pair",
       task="Validate a complete return and let the runtime prepare the review boundary.",
-      expectation="S5 delivers only the current prompt block and EVALUATION-RUBRICS.md; no project or build context.",
+      expectation="S5 delivers only the current prompt block and the canonical evaluation rubric; no project or build context.",
       evaluation="Inspect delivered source labels and forbidden kinds.",
       evidence_required="Delivered labels list and verifier result.", layer="deterministic-lifecycle")
 def lifecycle_s5_isolation(ctx: Ctx) -> Outcome:
@@ -651,10 +673,11 @@ def lifecycle_s5_isolation(ctx: Ctx) -> Outcome:
     manifest = box.manifest() if box.packets() else {}
     delivered = [s["label"] for s in manifest.get("sources", []) if s.get("delivered", True)]
     kinds = {s.get("kind") for s in manifest.get("sources", []) if s.get("delivered", True)}
+    rubric = F.document_path(ctx, "EVALUATION-RUBRICS.md")
     transport = ctx.repo.module("prepare-stage.py")
     problems = transport.verify_packet(box.current_packet())
     ok = (result.returncode == 0 and box.packets()[-1]["stage"] == "S5"
-          and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"]
+          and delivered == ["current S5 prompt block", rubric]
           and kinds <= {"canonical-prompt", "canonical"} and not problems)
     return Outcome("pass" if ok else "fail", f"S5 delivered={delivered}; verify={problems or 'clean'}",
                    {"delivered": delivered, "kinds": sorted(kinds),
@@ -1074,7 +1097,7 @@ def context_omission(ctx: Ctx) -> Outcome:
 @case(id="context.conditional-inclusion-hashed", group="context",
       title="Triggered conditional inputs are delivered and hash-stamped",
       task="Prepare S3 with --motion yes and inspect delivered sources.",
-      expectation="DESIGN-MOTION.md is delivered with a matching SOURCE-SHA256 header.",
+      expectation="The motion policy is delivered with a matching SOURCE-SHA256 header.",
       evaluation="Compare the header hash with the canonical file hash.",
       evidence_required="Header line and computed hash.", layer="deterministic")
 def context_inclusion(ctx: Ctx) -> Outcome:
@@ -1083,16 +1106,18 @@ def context_inclusion(ctx: Ctx) -> Outcome:
     F.complete_s1(ctx.repo, box, ctx.fixtures)
     result = ctx.repo.cli("prepare-next", "--run-root", str(box.run_root), "--motion", "yes", "--assets", "no")
     manifest = box.manifest()
-    entries = [s for s in manifest.get("sources", []) if s.get("path") == "DESIGN-MOTION.md"]
+    motion = F.document_path(ctx, "DESIGN-MOTION.md")
+    entries = [s for s in manifest.get("sources", []) if s.get("path") == motion]
     entry = entries[0] if entries else {}
-    canonical = ctx.repo.root / "DESIGN-MOTION.md"
+    canonical = ctx.repo.root / motion
     real_hash = hashlib.sha256(canonical.read_bytes()).hexdigest()
     packet = box.packet_text()
     header_ok = f"SOURCE-SHA256 {entry.get('source_sha256')}" in packet
     ok = result.returncode == 0 and bool(entry) and entry.get("source_sha256") == real_hash and header_ok
     return Outcome("pass" if ok else "fail",
                    f"delivered={bool(entry)}; hash matches canonical={entry.get('source_sha256') == real_hash}",
-                   {"entry": entry, "canonical_sha256": real_hash, "packet_bytes": len(packet)},
+                   {"entry": entry, "canonical": motion, "canonical_sha256": real_hash,
+                    "packet_bytes": len(packet)},
                    {"packet_bytes": len(packet)})
 
 

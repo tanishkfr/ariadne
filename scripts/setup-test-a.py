@@ -62,8 +62,19 @@ def read(p):
 
 def confirm_repo():
     """Refuse to run from anywhere that is not the Ariadne repository."""
-    markers = ["ROUTER.md", "WORKFLOW.md", "scripts/check.py", "scripts/validate.py"]
-    missing = [m for m in markers if not os.path.exists(os.path.join(ROOT, m))]
+    markers = {
+        # Documentation may live at the root (maintainer layout) or under
+        # docs/policies (public layout). Both are legitimate; the marker is the
+        # document, not one path to it.
+        "ROUTER.md": ("ROUTER.md", "docs/policies/ROUTER.md"),
+        "WORKFLOW.md": ("WORKFLOW.md", "docs/policies/WORKFLOW.md"),
+        "scripts/check.py": ("scripts/check.py",),
+        "scripts/validate.py": ("scripts/validate.py",),
+    }
+    missing = [
+        name for name, choices in markers.items()
+        if not any(os.path.exists(os.path.join(ROOT, choice)) for choice in choices)
+    ]
     if missing:
         die(f"this does not look like the Ariadne repository (missing {missing}). "
             f"Run from the repo root: python scripts/setup-test-a.py")

@@ -57,6 +57,7 @@ REQUIRED = [
     "prompts/build-kickoff.md", "prompts/project-review.md",
     "prompts/retrospective.md",
     "tests/router-cases.md",
+    "validation/run-template.md",
     "adapters/codex.md", "adapters/cursor.md", "adapters/claude-code.md",
     "adapters/reasoner-contract.md", "adapters/reasoners.json",
     "adapters/claude-reasoner.md", "adapters/claude-reasoner-skill/SKILL.md",

@@ -4,13 +4,34 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-POLICY = ROOT / "WRITING-POLICY.md"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from check import DocumentResolutionError, resolve_document  # noqa: E402
+
+
+def document(name: str, fallback: str) -> Path:
+    """Resolve a document through the repository's one layout-aware resolver.
+
+    The public repository groups policies under ``docs/policies``; the
+    maintainer tree may keep a copy at the root. Reading a fixed root path made
+    this suite pass only in the layout it was written in. A name that cannot be
+    resolved stays the root path so the failure names the document that is
+    actually missing instead of raising from an unrelated ``open``.
+    """
+    try:
+        return ROOT / resolve_document(name)
+    except DocumentResolutionError:
+        return ROOT / fallback
+
+
+POLICY = document("WRITING-POLICY.md", "WRITING-POLICY.md")
 BENCHMARK = ROOT / "tests" / "writing-benchmark.md"
-ROUTER = ROOT / "ROUTER.md"
+ROUTER = document("ROUTER.md", "ROUTER.md")
 
 
 CASES = [
@@ -37,6 +58,13 @@ CASE_REQUIREMENTS = {
 
 
 def main() -> int:
+    missing = [str(path.relative_to(ROOT)) for path in (POLICY, BENCHMARK, ROUTER) if not path.is_file()]
+    if missing:
+        print("ARIADNE WRITING ARCHITECTURE SELF-TEST\n")
+        for path in missing:
+            print(f"FAIL  required document is missing: {path}")
+        print(f"\nFAILED  0/{len(missing)} documents resolved")
+        return 1
     policy = POLICY.read_text(encoding="utf-8")
     benchmark = BENCHMARK.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")

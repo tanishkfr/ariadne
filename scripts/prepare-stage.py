@@ -1731,8 +1731,12 @@ def plan_sources(stage: str, project: Path, args: argparse.Namespace) -> list[di
         )
         for choice, name in ((args.motion, "DESIGN-MOTION.md"), (args.assets, "DESIGN-ASSETS.md")):
             selected = choice == "yes"
+            # These two policies moved under docs/policies with the rest of the
+            # canonical documents. The declared name stays bare (packet labels and
+            # omission messages are part of the contract); the source follows the
+            # file, so --motion yes cannot silently deliver nothing.
             add(
-                name, ROOT / name, "canonical", "conditional",
+                name, ROOT / "docs" / "policies" / name, "canonical", "conditional",
                 required=selected, removable=not selected,
                 absent_reason="OPTIONAL_NOT_SELECTED", declared_name=name,
                 selection_reason=f"{name} not triggered â€” explicitly declared no",

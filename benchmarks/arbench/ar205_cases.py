@@ -149,8 +149,9 @@ def release_notes_docs(ctx: Ctx) -> Outcome:
     )
     documents = {}
     for name in ("README.md", "QUICKSTART.md", "INSTALL.md", "GETTING-STARTED.md"):
-        text = (ctx.repo.root / name).read_text(encoding="utf-8")
-        documents[name] = url in text and "archive/refs/heads/master.zip" not in text
+        relative = F.document_path(ctx, name)
+        text = (ctx.repo.root / relative).read_text(encoding="utf-8")
+        documents[relative] = url in text and "archive/refs/heads/master.zip" not in text
     ok = notes.startswith(f"# Ariadne {version}") and all(documents.values())
     return Outcome(
         status="pass" if ok else "fail",

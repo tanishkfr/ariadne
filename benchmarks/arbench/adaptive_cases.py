@@ -267,9 +267,10 @@ def adaptive_context_forbidden(ctx: Ctx) -> Outcome:
     ]
     included_kinds = {item.get("kind") for item in decision.get("decisions", [])
                       if item.get("decision") == "included"}
+    rubric = F.document_path(ctx, "EVALUATION-RUBRICS.md")
     ok = (
         result.returncode == 0
-        and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"]
+        and delivered == ["current S5 prompt block", rubric]
         and not forbidden_present
         and included_kinds <= {"canonical-prompt", "canonical"}
     )
