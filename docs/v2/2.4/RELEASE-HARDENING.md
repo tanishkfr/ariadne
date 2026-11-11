@@ -35,8 +35,14 @@ cases and two declared skips are unchanged and separately accounted for.
 Release subset: 90 pass, 0 fail, 0 error, 0 skip.
 
 Evidence: `validation/runs/2.4a-r/bench-full.txt`,
+`validation/runs/2.4a-r/bench-full-final.txt`,
 `validation/runs/2.4a-r/bench-release.txt`,
 `validation/runs/2.4a-r/bench-baseline-853d827.txt`.
+
+The full benchmark was re-run at the final HEAD after the documentation
+commits (`bench-full-final.txt`): the counts are identical — 338 pass, 0 fail,
+0 error, 5 observed, 2 skip — so the docs-only commit did not disturb the
+result.
 
 ## 2. Mutation qualification
 
@@ -68,22 +74,33 @@ and the post-mutation baseline were both proven.
 | M16 | Reviewer independence — reviewer and implementer share an engine execution | `test-engine-core.py` (585/586 on the mutant) |
 | M17 | Human acceptance authority — the engine supplies the human identity | `acceptance_cannot_be_minted_without_a_human_identity` |
 
-Two survivors in the first pass were investigated rather than excused:
+The first pass produced two survivors, **M02** and **M08**, and one kill that
+was not evidence (**M13**). All three were investigated rather than counted:
 
 - **M02** initially hit the settled-file digest guard before the cross-attempt
   checks. The mutation now disables the digest, the record's packet identity and
   the attempt binding together; that is one boundary, not three independent
   claims. The case then fails.
-- **M13** exposed a real defect: `task-accept` checked that a proof receipt
-  existed and belonged to the task, but never re-ran `receipt_problems` on the
-  stored bytes. A receipt edited in run state kept its old digest and was
-  accepted. The product now re-verifies schema and digest at acceptance, and a
-  red-first regression (`tampered_proof_receipt_cannot_mint_acceptance`) was
-  added. The mutant is killed by the public CLI path.
+- **M08** survived because the original test's passing review also changed the
+  recommendation from `present g3` to `fix and re-review`, so the recommendation
+  check still refused it even after the outcome check was removed. The test did
+  not isolate the outcome condition. A passing review that still recommends
+  `fix and re-review` was added in `498f8ca`; the mutant now dies on the outcome
+  check.
+- **M13's first kill was spurious.** `test-ar224.py` has its own "no mutation is
+  active" guard, which failed because the harness was mid-mutation; that is not
+  evidence that the receipt digest was checked. Investigating the non-kill
+  exposed a real defect: `task-accept` checked that a proof receipt existed and
+  belonged to the task, but never re-ran `receipt_problems` on the stored bytes.
+  A receipt edited in run state kept its old digest and was accepted. The product
+  now re-verifies schema and digest at acceptance, and the mutation is killed by
+  a red-first public CLI regression
+  (`tampered_proof_receipt_cannot_mint_acceptance`).
 
 Evidence: `validation/runs/2.4a-r/mutations.json`,
 `validation/runs/2.4a-r/mutations.log`,
-`validation/runs/2.4a-r/mutations-attempt1.json` (the two-survivor run, kept).
+`validation/runs/2.4a-r/mutations-attempt1.json` (the two-survivor M02/M08 run,
+kept).
 
 ## 3. Live S4B correction and independent S5 re-review
 
@@ -108,8 +125,8 @@ This is the part the deterministic benchmark could not establish.
 
 ### Disposable project
 
-`C:\Users\User\AppData\Local\Temp\opencode\ariadne-live-s4b` (copied to
-`validation/runs/2.4a-r/live-s4b/`). A dependency-free Python/HTML countdown
+A disposable directory outside the repository, copied to
+`validation/runs/2.4a-r/live-s4b/`. A dependency-free Python/HTML countdown
 with a code-only baseline `d4c9e8f`, a declared scope, and the validation
 contract `git diff --check` + `python -m pytest -q`.
 
@@ -158,8 +175,10 @@ qualification starts at the prepared S4B packet.
    mapped as current. The receipt explicitly refused the first validation and
    `C1` (failed status) and `C2` (stale implementation fingerprint).
 9. **Human gate**: `record-acceptance --outcome accepted` was refused:
-   “Accepted requires the human G3 decision to already be recorded.” No G3 was
-   recorded and no acceptance exists. The task stops at the human gate.
+   "Accepted requires the human G3 decision to already be recorded." No G3 was
+   recorded and no acceptance exists. The task stops at the human gate. The
+   refusal is preserved at
+   `validation/runs/2.4a-r/live-s4b/run/acceptance-refused.txt`.
 
 ### Negative checks
 
