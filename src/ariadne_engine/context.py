@@ -32,6 +32,15 @@ CACHE_NAME = "context-cache.json"
 CACHE_SCHEMA = 1
 
 REMOVABLE_BUCKETS = ("optional", "conditional")
+REDUCTION_PROFILES = ("off", "adaptive")
+"""``off`` keeps the AR-202 decisions exactly as they were.
+
+``adaptive`` adds one conservative rule: an unchanged literal scope file that the
+request does not name is not re-delivered. The file stays inside the permitted
+scope and the worker can read it in place, so the omission removes duplicate
+context rather than access. Contract, request, mandatory methods, memory,
+external methods and every required source are never omitted by this rule.
+"""
 
 
 def cache_path(run_root: Path) -> Path:
@@ -44,6 +53,17 @@ def stat_identity(path: Path) -> dict:
     except OSError:
         return {"exists": False}
     return {"exists": True, "size": int(info.st_size), "mtime_ns": int(info.st_mtime_ns)}
+
+
+def _candidate_bytes(candidate: Mapping) -> int | str:
+    path = str(candidate.get("source_path", "") or candidate.get("path", "") or "")
+    if not path:
+        return "UNKNOWN"
+    try:
+        info = Path(path).stat()
+    except OSError:
+        return "UNKNOWN"
+    return int(info.st_size) if Path(path).is_file() else "UNKNOWN"
 
 
 def load_cache(run_root: Path) -> dict:
@@ -177,13 +197,18 @@ def decide(
     run_root: Path | None = None,
     revision_hash: str = "",
     deduplicate: bool = True,
+    reduction: str = "off",
 ) -> dict:
     """Decide inclusion for every candidate and return the decision record.
 
     The record is written to the run state by ``record`` after the transport has
     produced the packet, so the delivered/omitted sets in it are the observed
-    outcome rather than the plan.
+    outcome rather than the plan. ``reduction`` is an explicit profile, not an
+    ambient setting: ``off`` keeps every AR-202 decision and ``adaptive`` adds the
+    one conservative scope-file rule documented above.
     """
+    if str(reduction) not in REDUCTION_PROFILES:
+        raise ContractError(f"unsupported context reduction profile: {reduction!r}")
     cache = load_cache(Path(run_root)) if run_root is not None else {"entries": {}}
     creative_required = bool(state.get("creative_evidence_required", True))
     design_state = design_source_state(state)
@@ -205,6 +230,7 @@ def decide(
             "kind": str(candidate.get("kind", "")),
             "bucket": str(candidate.get("bucket", "")),
             "removable": bool(candidate.get("removable")),
+            "bytes": _candidate_bytes(candidate),
         }
         if candidate.get("forbidden"):
             entry.update({"decision": "omitted", "reason": "FORBIDDEN_FOR_STAGE"})
@@ -262,6 +288,30 @@ def decide(
             entry["evidence"] = changed_reason
             decisions.append(entry)
             continue
+        if (
+            str(reduction) == "adaptive"
+            and str(candidate.get("kind", "")) == "project-scope-file"
+            and not bool(candidate.get("required"))
+        ):
+            request_text = str(state.get("request", "") or "").lower()
+            path_text = str(candidate.get("path", "") or "")
+            name_text = Path(path_text).name
+            if not (
+                request_text
+                and (path_text.lower() in request_text or name_text.lower() in request_text)
+            ):
+                entry.update({
+                    "decision": "omitted",
+                    "reason": "OPTIONAL_NOT_SELECTED",
+                    "evidence": (
+                        "adaptive context reduction: this unchanged scope file remains readable in "
+                        "place and the request does not name it"
+                    ),
+                    "selectable": True,
+                    "bytes": _candidate_bytes(candidate),
+                })
+                decisions.append(entry)
+                continue
         cached = _reuse_entry(cache, candidate, stage=stage, revision_hash=revision_hash) if run_root is not None else None
         if cached is not None:
             hits += 1
@@ -293,6 +343,16 @@ def decide(
         "cache": {"hits": hits, "misses": misses, "invalidated": invalidated},
         "reuse": reuse,
         "deduplicate": bool(deduplicate),
+        "reduction": str(reduction),
+        "revision_hash": str(revision_hash),
+        "included_bytes": sum(
+            int(item.get("bytes", 0)) for item in decisions
+            if str(item.get("decision")) == "included" and isinstance(item.get("bytes"), int)
+        ),
+        "omitted_bytes": sum(
+            int(item.get("bytes", 0)) for item in decisions
+            if str(item.get("decision")) == "omitted" and isinstance(item.get("bytes"), int)
+        ),
         "policy_version": contracts.POLICY_VERSION,
         "recorded_at": contracts.utc_now(),
     }
@@ -388,6 +448,8 @@ def finalise(decision: Mapping, manifest: Mapping) -> dict:
             "decision": "included" if delivered else "omitted",
             "reason": reason,
         }
+        measured_bytes = source.get("bytes", planned_item.get("bytes", "UNKNOWN"))
+        entry["bytes"] = measured_bytes if isinstance(measured_bytes, int) else "UNKNOWN"
         if source.get("duplicate_of"):
             entry["duplicate_of"] = str(source["duplicate_of"])
         if planned_item.get("cached"):
@@ -403,6 +465,14 @@ def finalise(decision: Mapping, manifest: Mapping) -> dict:
     result["omitted"] = sum(1 for item in observed if item.get("decision") == "omitted")
     result["packet_id"] = str(manifest.get("packet_id", ""))
     result["packet_sha256"] = str(manifest.get("packet_sha256", ""))
+    result["included_bytes"] = sum(
+        int(item.get("bytes", 0)) for item in observed
+        if str(item.get("decision")) == "included" and isinstance(item.get("bytes"), int)
+    )
+    result["omitted_bytes"] = sum(
+        int(item.get("bytes", 0)) for item in observed
+        if str(item.get("decision")) == "omitted" and isinstance(item.get("bytes"), int)
+    )
     problems = contracts.context_decision_problems(result)
     if problems:
         raise ContractError("finalised context decision is malformed: " + "; ".join(problems))
@@ -468,9 +538,84 @@ def summarise(decision: Mapping) -> dict:
         "candidates": int(decision.get("candidates", 0) or 0),
         "included": int(decision.get("included", 0) or 0),
         "omitted": int(decision.get("omitted", 0) or 0),
+        "included_bytes": int(decision.get("included_bytes", 0) or 0),
+        "omitted_bytes": int(decision.get("omitted_bytes", 0) or 0),
         "cache_hits": int(((decision.get("cache") or {}).get("hits", 0)) or 0),
         "cache_misses": int(((decision.get("cache") or {}).get("misses", 0)) or 0),
         "invalidations": len(((decision.get("cache") or {}).get("invalidated", []) or [])),
+    }
+
+
+def stale_problems(
+    decision: Mapping,
+    *,
+    revision_hash: str = "",
+    packet_sha256: str = "",
+) -> list[str]:
+    """Why a recorded context decision no longer describes the current packet.
+
+    This is a *refusal* helper, not a cache lookup. A decision with no revision
+    binding cannot be replayed against a revision, and a packet whose digest
+    moved is not the packet the decision describes.
+    """
+    problems: list[str] = []
+    recorded_revision = str(decision.get("revision_hash", "") or "")
+    if not recorded_revision:
+        problems.append("the context decision carries no revision binding; it cannot be replayed")
+    elif str(revision_hash) and recorded_revision != str(revision_hash):
+        problems.append(
+            f"the context decision was taken on revision {recorded_revision[:12]}, "
+            f"not the current {str(revision_hash)[:12]}"
+        )
+    recorded_packet = str(decision.get("packet_sha256", "") or "")
+    if str(packet_sha256) and recorded_packet and recorded_packet != str(packet_sha256):
+        problems.append("the packet digest changed after the context decision")
+    return problems
+
+
+def require_current(
+    decision: Mapping,
+    *,
+    revision_hash: str = "",
+    packet_sha256: str = "",
+) -> dict:
+    """Return the decision only when it still describes the current revision."""
+    problems = stale_problems(decision, revision_hash=revision_hash, packet_sha256=packet_sha256)
+    if problems:
+        raise ContractError("stale context decision: " + "; ".join(problems))
+    return dict(decision)
+
+
+def economics(state: Mapping) -> dict:
+    """Measured context work across recorded decisions. No token estimate."""
+    rows = [dict(item) for item in (state.get("context_decisions") or ()) if isinstance(item, Mapping)]
+    totals = {
+        "decisions": len(rows),
+        "candidates": 0,
+        "included": 0,
+        "omitted": 0,
+        "included_bytes": 0,
+        "omitted_bytes": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "invalidations": 0,
+    }
+    profiles: dict[str, int] = {}
+    for row in rows:
+        metrics = summarise(row)
+        for name in ("candidates", "included", "omitted", "included_bytes", "omitted_bytes",
+                     "cache_hits", "cache_misses", "invalidations"):
+            totals[name] += int(metrics.get(name, 0) or 0)
+        profile = str(row.get("reduction", "off") or "off")
+        profiles[profile] = profiles.get(profile, 0) + 1
+    return {
+        "schema_version": 1,
+        "totals": totals,
+        "reduction_profiles": dict(sorted(profiles.items())),
+        "note": (
+            "bytes are file sizes the engine measured, not token estimates. A cache hit is a "
+            "reused source hash, not a provider prompt-cache hit"
+        ),
     }
 
 
@@ -487,6 +632,7 @@ __all__ = [
     "CACHE_NAME",
     "CACHE_SCHEMA",
     "REMOVABLE_BUCKETS",
+    "REDUCTION_PROFILES",
     "cache_path",
     "stat_identity",
     "load_cache",
@@ -500,5 +646,8 @@ __all__ = [
     "record",
     "update_cache",
     "summarise",
+    "stale_problems",
+    "require_current",
+    "economics",
     "describe",
 ]

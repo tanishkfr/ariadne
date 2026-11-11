@@ -1658,6 +1658,141 @@ def migration_report(run_root=None, project=None, *, args: argparse.Namespace | 
     return _migration_action("report", run_root, project, args=args)
 
 
+def _task_for(state, task_id: str = "") -> dict:
+    from . import task_execution
+
+    task = task_execution.find_task(state, str(task_id)) if str(task_id) else task_execution.current_task(state)
+    if task is None:
+        raise ValueError(f"no task record matches {task_id or 'the current task'!r}")
+    return task
+
+
+def _plan_for(state, task: dict) -> dict:
+    for record in state.get("task_plans") or ():
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("plan_id", "")) == str(task.get("plan_id", "")):
+            return dict(record)
+    return {}
+
+
+def measurement_report(state, task_id: str = "") -> dict:
+    """The measured attempt record(s) for one task, with unknowns explicit."""
+    from . import measurement
+
+    if str(task_id):
+        return measurement.task_view(state, str(task_id))
+    return measurement.summarise(state)
+
+
+def record_task_measurements(state: dict, task_id: str = "") -> dict:
+    """Project the task's attempts into versioned measurement records."""
+    from . import measurement
+
+    task = _task_for(state, task_id)
+    written = measurement.record_task(state, task, plan=_plan_for(state, task))
+    return {
+        "task_id": str(task.get("task_id", "")),
+        "written": len(written),
+        "summary": measurement.summarise(state),
+    }
+
+
+def model_evidence_report(state, *, as_of: str = "") -> dict:
+    """The model-performance registry, including declared capabilities."""
+    from . import model_evidence, task_execution
+
+    return model_evidence.registry(state, adapters=task_execution.WORKER_ADAPTERS, as_of=as_of)
+
+
+def record_model_observation(state: dict, **options) -> dict:
+    """Record one measured benchmark observation, never a worker claim."""
+    from . import model_evidence
+
+    return model_evidence.observe(state, **options)
+
+
+def recommend_model_route(state, **options) -> dict:
+    """Evidence-backed advisory route for one execution role and capability."""
+    from . import model_evidence
+
+    return model_evidence.recommend(state, **options)
+
+
+def promote_model_record(state: dict, *, registry_record_id: str, identity: str, reason: str, task_family: str = "") -> dict:
+    """Record a human promotion of one benchmark-qualified registry record."""
+    from . import model_evidence, task_execution
+
+    view = model_evidence.registry(state, adapters=task_execution.WORKER_ADAPTERS)
+    record = next(
+        (row for row in view["records"] if str(row.get("registry_record_id", "")) == str(registry_record_id)),
+        None,
+    )
+    if record is None:
+        raise ValueError(f"no model registry record matches {registry_record_id!r}")
+    return model_evidence.promote(state, record=record, identity=identity, reason=reason, task_family=task_family)
+
+
+def build_continuation(state, *, task_id: str = "", current_revision: str = "") -> dict:
+    """Build a revision-bound continuation projection for a task."""
+    from . import continuation
+
+    task = _task_for(state, task_id)
+    record = continuation.build(state, task, current_revision=current_revision)
+    return continuation.record(state, record)
+
+
+def continuation_report(state, *, task_id: str = "") -> dict:
+    """The latest continuation projection for a task, if one was built."""
+    from . import continuation
+
+    task = _task_for(state, task_id)
+    return continuation.latest(state, str(task.get("task_id", ""))) or {}
+
+
+def skill_intelligence_report(state) -> dict:
+    """Per-skill selection, invocation, observation and associated outcomes."""
+    from . import skill_intelligence
+
+    return skill_intelligence.effectiveness(state)
+
+
+def generate_skill_proposals(state: dict, *, record: bool = False) -> dict:
+    """Deterministic skill-improvement proposals; recording never applies them."""
+    from . import skill_intelligence
+
+    candidates = skill_intelligence.candidate_proposals(state)
+    written = skill_intelligence.record_proposals(state, candidates) if record else []
+    return {
+        "candidates": candidates,
+        "written": written,
+        "stored": skill_intelligence.proposals(state),
+        "authority": "none; a proposal cannot change trusted instructions",
+    }
+
+
+def authorize_skill_proposal(state: dict, proposal_id: str, *, identity: str, reason: str = "") -> dict:
+    """Record a human's authorization to implement a proposal. Never applies it."""
+    from . import skill_intelligence
+
+    return skill_intelligence.authorize(state, proposal_id, identity=identity, reason=reason)
+
+
+def intelligence_report(state, *, task_id: str = "") -> dict:
+    """One read-only view over measurement, routing evidence, context and skills."""
+    from . import context, efficiency, measurement, model_evidence, skill_intelligence, task_execution
+
+    report = {
+        "measurement": measurement.task_view(state, task_id) if str(task_id) else measurement.summarise(state),
+        "routing": model_evidence.registry(state, adapters=task_execution.WORKER_ADAPTERS),
+        "context": context.economics(state),
+        "skills": skill_intelligence.effectiveness(state),
+        "skill_proposals": skill_intelligence.status(state),
+        "efficiency": efficiency.efficiency_config(state),
+    }
+    return report
+
+
 __all__ = [
     "Result",
     "format_result",
@@ -1762,6 +1897,18 @@ __all__ = [
     "task_economics",
     "economics_report",
     "efficiency_report",
+    "measurement_report",
+    "record_task_measurements",
+    "model_evidence_report",
+    "record_model_observation",
+    "recommend_model_route",
+    "promote_model_record",
+    "build_continuation",
+    "continuation_report",
+    "skill_intelligence_report",
+    "generate_skill_proposals",
+    "authorize_skill_proposal",
+    "intelligence_report",
     "inspect_request",
     "inspect_tool_packs",
     "externalize_output",

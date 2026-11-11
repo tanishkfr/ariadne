@@ -50,3 +50,4 @@ from . import ar205_cases  # noqa: F401  (registers the AR-205 release-engineeri
 from . import ar205d_cases  # noqa: F401  (registers the AR-205D decision-intelligence cases)
 from . import ar206_cases  # noqa: F401  (registers the AR-206 Decision Runtime cases)
 from . import ar222_cases  # noqa: F401  (registers the AR-222 rendered-critique cases)
+from . import ar24b_cases  # noqa: F401  (registers the 2.4B intelligence/efficiency cases)

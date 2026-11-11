@@ -1451,6 +1451,7 @@ def source_entry(
         # bytes differ only by line endings.
         "delivered_content_sha256": sha256_text(delivered_content),
         "delivered": delivered,
+        "bytes": len(delivered_content.encode("utf-8")),
         "content": delivered_content,
     }
     reused = False
@@ -1880,6 +1881,10 @@ def plan_task_sources(plan: dict, project: Path, args: argparse.Namespace) -> li
             requires: str = "", declared_name: str = "", deliverable: bool | None = None) -> None:
         path = Path(path)
         deliverable = path.is_file() if deliverable is None else (bool(deliverable) and path.is_file())
+        try:
+            measured_bytes = int(path.stat().st_size) if deliverable else "UNKNOWN"
+        except OSError:
+            measured_bytes = "UNKNOWN"
         candidates.append({
             "label": label,
             "path": (
@@ -1894,6 +1899,7 @@ def plan_task_sources(plan: dict, project: Path, args: argparse.Namespace) -> li
             "required": required,
             "removable": removable or not required,
             "exists": deliverable,
+            "bytes": measured_bytes,
             "absent_reason": absent_reason,
             "selection_reason": selection_reason,
             "selectable": selectable,

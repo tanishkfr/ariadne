@@ -43,6 +43,12 @@ HISTORY_FORMAT_PROFILES = ("legacy", "structured_v1")
 ROUTING_ECONOMICS_PROFILES = ("off", "observe")
 PACKET_ORDER_PROFILES = ("legacy", "stable_prefix")
 OUTPUT_EXTERNALIZATION_PROFILES = ("off", "threshold")
+MODEL_ROUTING_PROFILES = ("off", "shadow", "apply_qualified")
+"""``off`` records nothing about routing evidence, ``shadow`` computes advice
+without changing a route, and ``apply_qualified`` lets a human-promoted,
+benchmark-qualified record reorder an adapter selection only when the baseline
+is degraded or unavailable. The shipped default is ``off``: sourcing is
+deliberate, never ambient."""
 
 SETTING_VALUES = {
     "prompt_profile": PROMPT_PROFILES,
@@ -53,6 +59,7 @@ SETTING_VALUES = {
     "routing_economics": ROUTING_ECONOMICS_PROFILES,
     "packet_order": PACKET_ORDER_PROFILES,
     "output_externalization": OUTPUT_EXTERNALIZATION_PROFILES,
+    "model_routing": MODEL_ROUTING_PROFILES,
 }
 
 DEFAULT_FLAGS: dict[str, str] = {
@@ -64,6 +71,7 @@ DEFAULT_FLAGS: dict[str, str] = {
     "routing_economics": "off",
     "packet_order": "legacy",
     "output_externalization": "threshold",
+    "model_routing": "off",
 }
 
 BEHAVIOUR_SENSITIVE: tuple[str, ...] = tuple(
@@ -165,6 +173,7 @@ __all__ = [
     "ROUTING_ECONOMICS_PROFILES",
     "PACKET_ORDER_PROFILES",
     "OUTPUT_EXTERNALIZATION_PROFILES",
+    "MODEL_ROUTING_PROFILES",
     "SETTING_VALUES",
     "DEFAULT_FLAGS",
     "BEHAVIOUR_SENSITIVE",

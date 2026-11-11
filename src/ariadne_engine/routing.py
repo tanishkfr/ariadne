@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from . import contracts
 from .contracts import ContractError
@@ -1075,6 +1075,83 @@ def route(
     return decision
 
 
+WORKER_ROLE_TO_EVIDENCE_ROLE = {
+    "bulk": "bulk-implementation",
+    "strong": "strong-implementation",
+    "senior-reasoning": "senior-reasoning",
+}
+"""A worker role maps onto an evidence role. It does not select a model."""
+
+
+def evidence_advice(
+    state: Mapping,
+    *,
+    decision: Mapping,
+    task_family: str = "",
+    baseline_adapter: str = "",
+    baseline_provider: str = "",
+    baseline_model: str = "",
+    independent_of: Sequence[str] = (),
+    failure_count: int = 0,
+    as_of: str = "",
+) -> dict:
+    """Shadow advice for one already-made routing decision.
+
+    The decision is not modified. The returned block records what measured
+    evidence would have suggested, so a comparison can be evaluated before any
+    behaviour changes. ``controls_execution`` is always false here; applying a
+    recommendation is a separate, human-promoted adapter-ranking step.
+    """
+    from . import model_evidence
+
+    chosen = dict(decision.get("chosen") or {})
+    role = WORKER_ROLE_TO_EVIDENCE_ROLE.get(str(chosen.get("id", "")), "")
+    required = {str(item) for item in decision.get("required_capabilities") or ()}
+    capability = (
+        "escalation" if "escalation" in required
+        else "implementation-repair" if "implementation-repair" in required
+        else "implementation"
+    )
+    if not role:
+        return {
+            "schema_version": model_evidence.SCHEMA,
+            "decision_id": str(decision.get("decision_id", "")),
+            "controls_execution": False,
+            "status": "NOT_APPLICABLE",
+            "reason": f"routing decision chose {chosen.get('id')!r}, which has no model-evidence role",
+            "recommendation": {},
+            "unknowns": ["the selected decision is not an implementation worker role"],
+        }
+    recommendation = model_evidence.recommend(
+        state,
+        role=role,
+        capability=capability,
+        task_family=str(task_family or "any"),
+        baseline_provider=baseline_provider,
+        baseline_model=baseline_model,
+        baseline_adapter=baseline_adapter,
+        independent_of=independent_of,
+        failure_count=failure_count,
+        as_of=as_of,
+    )
+    return {
+        "schema_version": model_evidence.SCHEMA,
+        "decision_id": str(decision.get("decision_id", "")),
+        "controls_execution": False,
+        "status": "SHADOW",
+        "role": role,
+        "capability": capability,
+        "recommendation": recommendation,
+        "agrees_with_decision": (
+            str(recommendation.get("decision", "")) == "KEEP_BASELINE"
+            or not baseline_adapter and not baseline_model
+        ),
+        "explanation": model_evidence.explain(recommendation),
+        "unknowns": recommendation.get("unknowns", []),
+        "recorded_at": contracts.utc_now(),
+    }
+
+
 def routing_problems(record: Mapping) -> list[str]:
     problems = contracts.routing_problems(record)
     return problems
@@ -1167,6 +1244,7 @@ __all__ = [
     "record",
     "record_characterisation",
     "latest",
+    "evidence_advice",
     "describe",
     "routing_problems",
     "family_advice",

@@ -156,6 +156,21 @@ PROVISIONAL = (
     "retrieve_artifact",
     "compact_history",
     "plan_execution_path",
+    # Ariadne 2.4B intelligence and efficiency. Provisional because the evidence
+    # model is new: consumers may read it, but its record vocabulary is expected
+    # to settle after live measurement. None of these functions grants authority.
+    "measurement_report",
+    "record_task_measurements",
+    "model_evidence_report",
+    "record_model_observation",
+    "recommend_model_route",
+    "promote_model_record",
+    "build_continuation",
+    "continuation_report",
+    "skill_intelligence_report",
+    "generate_skill_proposals",
+    "authorize_skill_proposal",
+    "intelligence_report",
     "orchestration_report",
     # Ariadne 2.3A universal task entry. Provisional on purpose: the interpretation
     # frame, the plan record, and the skill-selection record are real and tested,

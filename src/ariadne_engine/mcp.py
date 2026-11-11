@@ -32,6 +32,7 @@ TOOLS = (
     "get_verification",
     "compare_verifications",
     "task_status",
+    "intelligence_report",
 )
 
 _PROOF_ID_RE = re.compile(r"^VP-\d{4,}$")
@@ -48,6 +49,7 @@ def tool_schemas() -> dict:
             {"name": "get_verification", "params": ["proof_id"]},
             {"name": "compare_verifications", "params": ["before", "after"]},
             {"name": "task_status", "params": ["task_id"]},
+            {"name": "intelligence_report", "params": ["task_id"]},
         ],
         "authority": "MCP cannot grant human approval, reviewer identity, or authorization_effect",
     }
@@ -134,6 +136,10 @@ def dispatch(state: dict, *, tool: str, params: Mapping[str, Any] | None = None)
         task_id = str(params.get("task_id", "") or "")
         _check_path(task_id)
         return api_module.task_status_state(state, task_id=task_id)
+    if name == "intelligence_report":
+        task_id = str(params.get("task_id", "") or "")
+        _check_path(task_id)
+        return api_module.intelligence_report(state, task_id=task_id)
     raise contracts.ContractError(f"unhandled MCP tool: {tool!r}")
 
 

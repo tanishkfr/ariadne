@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "kind": "ariadne-v2-deterministic-benchmark-manifest",
-  "generated_at": "2026-11-11T10:53:17+00:00",
+  "generated_at": "2026-11-11T15:12:25+00:00",
   "runtime": {
-    "repo_root": "C:\\Dev\\Tools\\Ariadne\\ariadne-v2-3b-e2e-execution"
+    "repo_root": "C:\\Dev\\Tools\\Ariadne\\ariadne-v2-4a-r-hardening"
   },
   "statuses": [
     "pass",
@@ -303,7 +303,7 @@
       "id": "suite.validation-run-benchmark",
       "group": "suites",
       "title": "Existing validation-run measurement",
-      "task": "Read the recorded B1 validation run through the validator's benchmark mode.",
+      "task": "Read a recorded validation run through the validator's benchmark mode.",
       "required_inputs": [
         "repository at the pinned commit",
         "isolated sandbox under --work-root"
@@ -594,7 +594,7 @@
         "repository at the pinned commit",
         "isolated sandbox under --work-root"
       ],
-      "expected_outcome": "S5 delivers only the current prompt block and EVALUATION-RUBRICS.md; no project or build context.",
+      "expected_outcome": "S5 delivers only the current prompt block and the canonical evaluation rubric; no project or build context.",
       "evaluation_method": "Inspect delivered source labels and forbidden kinds.",
       "evidence_required_for_success": "Delivered labels list and verifier result.",
       "environment_requirements": [
@@ -902,7 +902,7 @@
         "repository at the pinned commit",
         "isolated sandbox under --work-root"
       ],
-      "expected_outcome": "DESIGN-MOTION.md is delivered with a matching SOURCE-SHA256 header.",
+      "expected_outcome": "The motion policy is delivered with a matching SOURCE-SHA256 header.",
       "evaluation_method": "Compare the header hash with the canonical file hash.",
       "evidence_required_for_success": "Header line and computed hash.",
       "environment_requirements": [
@@ -7601,6 +7601,182 @@
       "cost_implications": "none",
       "currently_executable": true,
       "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.measurement-completed-is-not-accepted",
+      "group": "intelligence",
+      "title": "A validated attempt without the human decision is completed, not accepted",
+      "task": "Project a task record with no acceptance and inspect the measurement outcome.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "completed=true, accepted=false, acceptance=PENDING_HUMAN_DECISION.",
+      "evaluation_method": "Read the projection fields and provenance.",
+      "evidence_required_for_success": "The measurement row and its outcome block.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.declaration-is-not-qualified",
+      "group": "intelligence",
+      "title": "An adapter declaration never becomes a qualified capability",
+      "task": "Build a registry from declared capabilities only and ask for a recommendation.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The registry has no observed record and the recommendation keeps the baseline.",
+      "evaluation_method": "Read the registry counts, declared rows and the recommendation.",
+      "evidence_required_for_success": "Registry view and recommendation.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.stale-evidence-does-not-control",
+      "group": "intelligence",
+      "title": "Stale model evidence cannot support a route",
+      "task": "Record five benchmark observations from outside the freshness window and ask for a recommendation.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The record is STALE and the recommendation keeps the baseline.",
+      "evaluation_method": "Read the provenance freshness and the decision.",
+      "evidence_required_for_success": "Registry record and recommendation.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.repeated-failure-justifies-qualified-alternative",
+      "group": "intelligence",
+      "title": "Measured failures justify a qualified alternative",
+      "task": "Give the baseline three failed validations and an alternative five clean benchmark observations.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The recommendation names the qualified alternative and remains advisory.",
+      "evaluation_method": "Read the recommendation and its baseline health.",
+      "evidence_required_for_success": "Recommendation with both records.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.context-adaptive-reduction-is-measured",
+      "group": "intelligence",
+      "title": "Adaptive context reduction omits only an unchanged optional scope file",
+      "task": "Compare the off and adaptive context decisions over one required contract and one optional source.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The required contract is included in both; the optional source is omitted with measured bytes.",
+      "evaluation_method": "Compare decisions and byte totals.",
+      "evidence_required_for_success": "Both decision records.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-context",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.continuation-refuses-stale-revision",
+      "group": "intelligence",
+      "title": "A continuation refuses a different revision and keeps review findings",
+      "task": "Build a continuation for a failed-review task at the current and a different revision.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The current projection carries the finding; the changed revision is STALE and refused.",
+      "evaluation_method": "Read status, findings and the refusal.",
+      "evidence_required_for_success": "Continuation record and refusal.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-context",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.skill-proposal-cannot-apply",
+      "group": "intelligence",
+      "title": "A skill proposal cannot rewrite the trusted registry",
+      "task": "Generate a proposal and attempt the automatic apply path.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The proposal is recorded as PROPOSED and apply raises a contract refusal.",
+      "evaluation_method": "Read the recorded proposal and the apply refusal.",
+      "evidence_required_for_success": "Proposal record and refusal.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-skills",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.api-mcp-parity",
+      "group": "intelligence",
+      "title": "CLI/API/MCP expose the same read-only intelligence report",
+      "task": "Compare the stable API report with the MCP dispatch over the same state.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Measurement, context, routing counts and skill totals agree.",
+      "evaluation_method": "Structural equality of the four shared blocks.",
+      "evidence_required_for_success": "Both reports.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-integration",
       "notes": ""
     }
   ]

@@ -144,6 +144,10 @@ RUNTIME_SESSION = DECISIONS.runtime.session
 # and the benchmark drive, so no optimisation rule is duplicated on a surface.
 ECONOMICS = ENGINE.economics
 EFFICIENCY = ENGINE.efficiency
+MEASUREMENT = ENGINE.measurement
+MODEL_EVIDENCE = ENGINE.model_evidence
+CONTINUATION = ENGINE.continuation
+SKILL_INTEL = ENGINE.skill_intelligence
 HARNESS = ENGINE.harness
 TOOLING = ENGINE.tooling
 # Ariadne 2.3A universal task entry. The runtime drives the engine's
@@ -2465,6 +2469,7 @@ def prepare_task_boundary(
         characterisation=plan.get("characterisation") or {},
         run_root=run_root,
         revision_hash=revision,
+        reduction=str(EFFICIENCY.setting(state, "context_reduction")),
     )
     context_plan = CONTEXT.plan(context_decision)
     TRANSPORT.prepare_task(transport_args, context_plan=context_plan)
@@ -2615,6 +2620,15 @@ def _prepare_task_run(project: Path, plan: dict, args: argparse.Namespace) -> in
     run_id = str(getattr(args, "run_id", None) or slug(project.name))
     (run_root / LOG_NAME).write_text(initial_log(run_id, project, str(plan.get("request", ""))), encoding="utf-8")
     state = _task_run_state(run_id, project, plan, run_root)
+    efficiency_flags = {}
+    if str(getattr(args, "context_reduction", "") or ""):
+        efficiency_flags["context_reduction"] = str(args.context_reduction)
+    if str(getattr(args, "model_routing", "") or ""):
+        efficiency_flags["model_routing"] = str(args.model_routing)
+    if efficiency_flags:
+        # The first packet is prepared in this command, so the flags must be
+        # recorded before preparation or the run would not be able to use them.
+        EFFICIENCY.set_efficiency_config(state, **efficiency_flags)
     with run_state_lock(run_root, "task-start"):
         TASKS.record_plan(state, plan)
         entry, output, task = prepare_task_boundary(
@@ -2941,6 +2955,33 @@ def adapter_for_task(state: dict, task: dict, args: argparse.Namespace) -> tuple
         escalate=bool(getattr(args, "escalate", False)),
         registry=registry,
     )
+    # 2.4B: model evidence is recorded in shadow, and may reorder an eligible
+    # adapter only under an explicit apply_qualified setting plus a recorded
+    # human promotion. An explicit adapter request is never overridden.
+    routing_mode = str(EFFICIENCY.setting(state, "model_routing"))
+    if routing_mode in ("shadow", "apply_qualified") and not requested and selection.get("status") == "selected":
+        baseline_id = str((selection.get("chosen") or {}).get("id", ""))
+        role = "strong-implementation" if getattr(args, "escalate", False) else "bulk-implementation"
+        advice = MODEL_EVIDENCE.adapter_ranking(
+            state,
+            adapters=registry,
+            required=required,
+            task_family=str(task.get("intent", "") or "any"),
+            role=role,
+            baseline_adapter=baseline_id,
+            failure_count=len(prior_failures),
+        )
+        selection["model_evidence"] = dict(advice)
+        if routing_mode == "apply_qualified" and advice.get("apply"):
+            selection = TASKX.select_adapter(
+                required=required,
+                requested=requested,
+                prior_failures=prior_failures,
+                escalate=bool(getattr(args, "escalate", False)),
+                registry=registry,
+                evidence_ranking=tuple(advice.get("ranking") or ()),
+                evidence=dict(advice),
+            )
     state.setdefault("adapter_selections", []).append(dict(selection))
     if len(state["adapter_selections"]) > 100:
         state["adapter_selections"] = state["adapter_selections"][-100:]
@@ -6018,6 +6059,11 @@ def task_accept_command(args: argparse.Namespace) -> int:
             acceptance_state=str((task.get("proof") or {}).get("acceptance_state", "")),
             review_outcome=str(review.get("outcome", "")),
         )
+        # Project the settled attempts into versioned measurement rows now that
+        # the human decision exists. A completed attempt without this decision
+        # would remain completed-but-not-accepted, which is exactly the
+        # distinction the report must preserve.
+        ENGINE_API.record_task_measurements(state, task_id=str(task.get("task_id", "")))
         state["updated_at"] = now()
         state["evidence_state"] = f"human acceptance recorded: {outcome} by {identity}"
         state["next"] = (
@@ -10698,6 +10744,7 @@ def prepare_next(args: argparse.Namespace) -> int:
         characterisation=characterisation,
         run_root=run_root,
         revision_hash=revision_hash,
+        reduction=str(EFFICIENCY.setting(state, "context_reduction")),
     )
     context_plan = CONTEXT.plan(context_decision)
     TRANSPORT.prepare(transport_args, context_plan=context_plan)
@@ -14258,6 +14305,14 @@ def parser() -> argparse.ArgumentParser:
     task_start_p.add_argument("--attempt", type=int, default=1)
     task_start_p.add_argument("--retry", action="store_true")
     task_start_p.add_argument("--synthetic-validation", action="store_true")
+    task_start_p.add_argument(
+        "--context-reduction", choices=list(EFFICIENCY.CONTEXT_REDUCTION_PROFILES),
+        help="context profile for the first packet (default off; adaptive omits unchanged unnamed scope files)",
+    )
+    task_start_p.add_argument(
+        "--model-routing", choices=list(EFFICIENCY.MODEL_ROUTING_PROFILES),
+        help="model-evidence mode for this run (default off; shadow records advice without changing a route)",
+    )
 
     task_status_p = sub.add_parser(
         "task-status",
@@ -14970,6 +15025,60 @@ def parser() -> argparse.ArgumentParser:
             help=f"set the {_name} efficiency setting (default {EFFICIENCY.DEFAULT_FLAGS[_name]})",
         )
 
+    intelligence_p = sub.add_parser(
+        "intelligence",
+        help="read-only 2.4B view over measurement, model evidence, context and skill intelligence",
+    )
+    run_selector(intelligence_p)
+    intelligence_p.add_argument("--task", help="report one task's measured attempts")
+    intelligence_p.add_argument("--json", action="store_true")
+
+    model_evidence_p = sub.add_parser(
+        "model-evidence",
+        help="show the observed model-performance registry and its qualification limits",
+    )
+    run_selector(model_evidence_p)
+    model_evidence_p.add_argument("--json", action="store_true")
+
+    route_evidence_p = sub.add_parser(
+        "route-evidence",
+        help="show evidence-based advice for the latest routing decision (shadow; changes nothing)",
+    )
+    run_selector(route_evidence_p)
+    route_evidence_p.add_argument("--json", action="store_true")
+
+    model_promote_p = sub.add_parser(
+        "model-promote",
+        help="record a human promotion of one benchmark-qualified model record; execution stays advisory",
+    )
+    run_selector(model_promote_p)
+    model_promote_p.add_argument("--record", required=True, help="the registry_record_id to promote")
+    model_promote_p.add_argument("--identity", required=True, help="the human making the decision")
+    model_promote_p.add_argument("--reason")
+    model_promote_p.add_argument("--family", help="narrow the promotion to one task family")
+    model_promote_p.add_argument("--json", action="store_true")
+
+    continuation_p = sub.add_parser(
+        "continuation",
+        help="build or print a revision-bound continuation projection for a task",
+    )
+    run_selector(continuation_p)
+    continuation_p.add_argument("--task", help="a recorded task id; defaults to the current task")
+    continuation_p.add_argument("--build", action="store_true", help="build and record a fresh projection")
+    continuation_p.add_argument("--revision", help="the current repository head (defaults to the project HEAD)")
+    continuation_p.add_argument("--json", action="store_true")
+
+    skill_proposals_p = sub.add_parser(
+        "skills-proposals",
+        help="generate, record, list or authorize skill-improvement proposals; never applies them",
+    )
+    run_selector(skill_proposals_p)
+    skill_proposals_p.add_argument("--record", action="store_true", help="record new candidates")
+    skill_proposals_p.add_argument("--authorize", help="a proposal id to authorize for reviewed implementation")
+    skill_proposals_p.add_argument("--identity", help="the human authorizing the proposal")
+    skill_proposals_p.add_argument("--reason")
+    skill_proposals_p.add_argument("--json", action="store_true")
+
     request_map_p = sub.add_parser(
         "request-map",
         help="render the actual request structure of a prepared packet (offline, redacted)",
@@ -15074,6 +15183,167 @@ def _print_skill_effectiveness(view: dict) -> None:
     print("  unknown measurements stay UNKNOWN: " + ", ".join(view.get("unknowns") or ()))
 
 
+def intelligence_command(args: argparse.Namespace) -> int:
+    """One read-only view over measurement, model evidence, context and skills."""
+    _run_root, state = resolve_and_load(args)
+    task_id = str(getattr(args, "task", "") or "")
+    payload = ENGINE_API.intelligence_report(state, task_id=task_id)
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+    print(MEASUREMENT.describe(state))
+    print()
+    print("Context")
+    context = payload["context"]["totals"]
+    print(
+        f"  decisions {context['decisions']}, {context['included']} included, {context['omitted']} omitted, "
+        f"{context['included_bytes']} included byte(s), {context['omitted_bytes']} omitted byte(s), "
+        f"cache {context['cache_hits']} hit(s) / {context['cache_misses']} miss(es)"
+    )
+    print()
+    print("Model evidence")
+    model = payload["routing"]
+    print(
+        f"  {model['counts']['records']} observed record(s), {model['counts']['qualified']} qualified, "
+        f"{model['counts']['stale']} stale; declared capabilities are listed separately"
+    )
+    for row in model["records"][:8]:
+        print(
+            f"  - {row['adapter']} / {row['provider']}:{row['model']} [{row['capability']}/{row['task_family']}] "
+            f"{row['qualification']} n={row['sample_size']} validated={row['validated']} "
+            f"failed={row['failed_validation']} ({row['freshness']})"
+        )
+    print()
+    print("Skills")
+    skills = payload["skills"]["totals"]
+    print(
+        f"  {skills['selected_skills']} selection(s) across {skills['tasks']} task(s); "
+        f"{len(payload['skill_proposals'].get('proposals') or [])} proposal(s) recorded"
+    )
+    print(f"Efficiency: {EFFICIENCY.describe(state)}")
+    return 0
+
+
+def model_evidence_command(args: argparse.Namespace) -> int:
+    """Print the model-performance registry and whether it may control a route."""
+    _run_root, state = resolve_and_load(args)
+    view = ENGINE_API.model_evidence_report(state)
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    print(f"Model evidence ({view['as_of']}; policy {view['apply_policy']})")
+    print(f"  {view['counts']['records']} observed record(s), {view['counts']['qualified']} qualified, "
+          f"{view['counts']['stale']} stale")
+    for row in view["records"]:
+        print(
+            f"  - {row['adapter']} / {row['provider']}:{row['model']} [{row['capability']}/{row['task_family']}] "
+            f"{row['qualification']} n={row['sample_size']} validated={row['validated']} "
+            f"accepted={row['accepted']} failed={row['failed_validation']} freshness={row['freshness']}"
+        )
+        for limitation in row.get("limitations") or ():
+            print(f"      limitation: {limitation}")
+    declared = view.get("declared") or []
+    if declared:
+        print(f"  {len(declared)} declared capability row(s), none of them qualified by declaration")
+    print("  unknowns: " + "; ".join(view.get("unknowns") or ()))
+    return 0
+
+
+def route_evidence_command(args: argparse.Namespace) -> int:
+    """Shadow routing advice for the latest decision. Changes nothing."""
+    _run_root, state = resolve_and_load(args)
+    decisions = [item for item in state.get("routing_decisions") or [] if isinstance(item, dict)]
+    if not decisions:
+        raise RuntimeError_("no routing decision is recorded for this run")
+    decision = decisions[-1]
+    task = TASKX.current_task(state) or {}
+    selections = [item for item in state.get("adapter_selections") or [] if isinstance(item, dict)]
+    baseline_adapter = str(((selections[-1] if selections else {}).get("chosen") or {}).get("id", ""))
+    advice = ROUTING.evidence_advice(
+        state,
+        decision=decision,
+        task_family=str(task.get("intent", "") or "any"),
+        baseline_adapter=baseline_adapter,
+    )
+    if getattr(args, "json", False):
+        print(json.dumps(advice, indent=2, sort_keys=True, default=str))
+    else:
+        print(advice.get("explanation") or advice.get("reason", ""))
+        print(f"Controls execution: {advice.get('controls_execution')} (shadow only)")
+    return 0
+
+
+def model_promote_command(args: argparse.Namespace) -> int:
+    """Record a human promotion of one benchmark-qualified model record."""
+    run_root, state = resolve_and_load(args)
+    record = ENGINE_API.promote_model_record(
+        state,
+        registry_record_id=str(args.record),
+        identity=str(args.identity),
+        reason=str(args.reason or ""),
+        task_family=str(args.family or ""),
+    )
+    state["updated_at"] = now()
+    write_state(run_root, state)
+    if getattr(args, "json", False):
+        print(json.dumps(record, indent=2, sort_keys=True, default=str))
+    else:
+        print(
+            f"Recorded model promotion {record['promotion_id']} for {record['model']} "
+            f"({record['capability']}/{record['task_family']}), scope {record['scope']}"
+        )
+    return 0
+
+
+def continuation_command(args: argparse.Namespace) -> int:
+    """Build or print a revision-bound continuation projection for a task."""
+    run_root, state = resolve_and_load(args)
+    task_id = str(getattr(args, "task", "") or "")
+    if getattr(args, "build", False):
+        revision = str(getattr(args, "revision", "") or "")
+        if not revision:
+            revision = str(TRANSPORT.project_git_snapshot(Path(state["project"])).get("head", ""))
+        record = ENGINE_API.build_continuation(state, task_id=task_id, current_revision=revision)
+        state["updated_at"] = now()
+        write_state(run_root, state)
+    else:
+        record = ENGINE_API.continuation_report(state, task_id=task_id)
+        if not record:
+            raise RuntimeError_("no continuation has been built for this task; run with --build")
+    if getattr(args, "json", False):
+        print(json.dumps(record, indent=2, sort_keys=True, default=str))
+    else:
+        print(CONTINUATION.render(record), end="")
+    return 0
+
+
+def skills_proposals_command(args: argparse.Namespace) -> int:
+    """Generate, record, list or authorize skill-improvement proposals."""
+    run_root, state = resolve_and_load(args)
+    if str(getattr(args, "authorize", "") or ""):
+        record = ENGINE_API.authorize_skill_proposal(
+            state, str(args.authorize), identity=str(args.identity or ""), reason=str(args.reason or ""),
+        )
+        state["updated_at"] = now()
+        write_state(run_root, state)
+        print(f"Authorized proposal {record['proposal_id']} to be implemented and reviewed; registry unchanged")
+        return 0
+    payload = ENGINE_API.generate_skill_proposals(state, record=bool(getattr(args, "record", False)))
+    if getattr(args, "record", False):
+        state["updated_at"] = now()
+        write_state(run_root, state)
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+    print(f"Skill proposals: {len(payload['candidates'])} candidate(s), {len(payload['stored'])} stored")
+    if payload["written"]:
+        print(f"  recorded {len(payload['written'])} new proposal(s)")
+    for row in payload["stored"] or payload["candidates"]:
+        print(f"  - {row['proposal_id']} [{row['kind']}] {row['skill_id']}: {row['suggested_change']}")
+        print(f"    status: {row.get('status', 'PROPOSED')}; authority: {row.get('authority', 'none')}")
+    return 0
+
+
 def request_map_command(args: argparse.Namespace) -> int:
     """Render the actual request structure of a prepared packet (offline)."""
     packet = Path(str(getattr(args, "packet", "") or "")).resolve()
@@ -15150,6 +15420,12 @@ def main() -> int:
             "task-review": task_review_command,
             "task-verify": task_verify_command,
             "task-accept": task_accept_command,
+            "intelligence": intelligence_command,
+            "model-evidence": model_evidence_command,
+            "route-evidence": route_evidence_command,
+            "model-promote": model_promote_command,
+            "continuation": continuation_command,
+            "skills-proposals": skills_proposals_command,
             "skills-discover": skills_discover_command,
             "skills-approve": skills_approve_command,
             "skills-install": skills_install_command,

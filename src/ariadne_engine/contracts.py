@@ -3999,6 +3999,38 @@ MAX_TASK_RECORDS = 200
 MAX_ADAPTER_SELECTIONS = 200
 """Hard safety bound for recorded worker-adapter selections in one run."""
 
+MAX_MEASUREMENTS = 10_000
+"""Hard safety bound for the Ariadne 2.4B measurement projections."""
+
+MAX_MODEL_OBSERVATIONS = 20_000
+"""Hard safety bound for the Ariadne 2.4B model-performance observations."""
+
+MAX_MODEL_PROMOTIONS = 200
+"""Hard safety bound for recorded model-routing promotions."""
+
+MAX_CONTINUATIONS = 2_000
+"""Hard safety bound for revision-bound continuation projections."""
+
+MAX_SKILL_PROPOSALS = 500
+"""Hard safety bound for skill-improvement proposals (never applied automatically)."""
+
+AR24B_COLLECTIONS = (
+    "measurements",
+    "model_observations",
+    "model_promotions",
+    "continuations",
+    "skill_proposals",
+)
+"""The Ariadne 2.4B intelligence-efficiency collections.
+
+They are additive and optional like every earlier family: a run state written by
+an earlier milestone has none of them and stays readable. None of them is an
+authority. A measurement reports what was observed, a model observation reports
+what happened on one run, a continuation projects current evidence, and a skill
+proposal is a reviewed suggestion that cannot alter the trusted registry by
+itself.
+"""
+
 AR23B_COLLECTIONS = (
     "tasks",
     "adapter_selections",
@@ -4033,6 +4065,11 @@ _COLLECTION_LIMITS = {
     "proof_receipts": MAX_PROOF_RECEIPTS,
     "tasks": MAX_TASK_RECORDS,
     "adapter_selections": MAX_ADAPTER_SELECTIONS,
+    "measurements": MAX_MEASUREMENTS,
+    "model_observations": MAX_MODEL_OBSERVATIONS,
+    "model_promotions": MAX_MODEL_PROMOTIONS,
+    "continuations": MAX_CONTINUATIONS,
+    "skill_proposals": MAX_SKILL_PROPOSALS,
 }
 
 
@@ -4048,7 +4085,8 @@ def require_collection_capacity(state: Mapping[str, Any], key: str) -> None:
         raise ContractError(
             f"{key!r} is not a bounded engine record collection; the bound applies to "
             + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS,
-                         *AR223_COLLECTIONS, *AR224_COLLECTIONS, *AR23B_COLLECTIONS])
+                         *AR223_COLLECTIONS, *AR224_COLLECTIONS, *AR23B_COLLECTIONS,
+                         *AR24B_COLLECTIONS])
         )
     values = state.get(key)
     if values is None:

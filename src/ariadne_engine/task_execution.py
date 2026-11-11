@@ -420,6 +420,8 @@ def select_adapter(
     prior_failures: Sequence[Mapping] = (),
     escalate: bool = False,
     registry: Mapping | None = None,
+    evidence_ranking: Sequence[str] = (),
+    evidence: Mapping | None = None,
 ) -> dict:
     """Choose a worker adapter from declared capabilities and discovered facts.
 
@@ -431,7 +433,12 @@ def select_adapter(
        recorded failure for this task already requires a strategy change is
        excluded by name rather than silently retried;
     3. an adapter that cannot declare a required capability is excluded with the
-       missing capability named.
+       missing capability named;
+    4. a caller-supplied ``evidence_ranking`` may reorder only the adapters that
+       already satisfy 1-3. The ranking is never trusted to add an adapter, drop
+       an exclusion, or bypass an explicit request. The caller is responsible
+       for the promotion gate; this selector records the evidence block it was
+       given and nothing more.
     """
     adapters = registry if registry is not None else WORKER_ADAPTERS
     required_ids = [str(item) for item in required if str(item)]
@@ -454,6 +461,8 @@ def select_adapter(
         "fallbacks": [],
         "status": "no-adapter",
         "reason": "",
+        "evidence": dict(evidence or {}),
+        "evidence_applied": False,
         "recorded_at": contracts.utc_now(),
     }
     ordered = sorted(adapters.values(), key=lambda item: (int(item.get("preference", 0)), str(item.get("id"))))
@@ -491,6 +500,19 @@ def select_adapter(
             record["exclusions"].append({"id": adapter_id, "reasons": reasons})
         else:
             capable.append((adapter, availability_reason))
+    if evidence_ranking and not requested:
+        rank = {str(item): index for index, item in enumerate(evidence_ranking) if str(item).strip()}
+        before = [str(item[0].get("id", "")) for item in capable]
+        capable = sorted(
+            capable,
+            key=lambda pair: (
+                rank.get(str(pair[0].get("id", "")), len(rank)),
+                int(pair[0].get("preference", 0)),
+                str(pair[0].get("id", "")),
+            ),
+        )
+        after = [str(item[0].get("id", "")) for item in capable]
+        record["evidence_applied"] = bool(rank) and before != after
     if not capable:
         record["reason"] = (
             "no worker adapter satisfies this task: "
