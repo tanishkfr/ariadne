@@ -46,6 +46,7 @@ STAGE_TRANSITIONS: frozenset[tuple[str | None, str | None]] = frozenset({
     ("S4B", "S4B"),      # routine repair or escalation
     ("S4B", "S5"),
     ("S5", "S5"),        # re-prepared review boundary
+    ("S5", "S4B"),       # review-directed correction of the reviewed revision
     ("S5", "S6"),
     ("S6", None),
     ("S6", "T1"),        # a bounded follow-up task attaches to a completed project run

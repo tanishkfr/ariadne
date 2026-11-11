@@ -112,7 +112,7 @@ Ariadne installs from immutable GitHub release artifacts. It is not published to
 Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.3.0/ariadne-2.3.0-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.4.0rc1/ariadne-2.4.0rc1-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 (or py -m ariadne install)
@@ -286,20 +286,36 @@ No particular paid provider is required by the core engine, and the deterministi
 
 ## Benchmarks
 
-The deterministic suite runs offline with no model calls and no network. The v2 release was evaluated as follows:
+The deterministic suite runs offline with no model calls and no network. The
+2.4A candidate was evaluated as follows:
 
 ```text
-Full benchmark: 295 cases
-Fail: 0
-Error: 0
+Full benchmark: 345 registered cases
+Pass: 331   Fail: 4   Error: 3   Observed: 5   Skip: 2
 
-Engine checks: 578/578
+Engine checks: 586/586
+AR-230 task execution: 27/29 (2 live opt-in skips)
+AR-23C portable intelligence: 22/22
+AR-23D revision binding: 25/25
+AR-225 universal entry: 51/51
+Reliability suite: 19/19
 Release tests: 97/97
 Wheel install: 14/14
-Release subset: 56/56
+Distribution lifecycle: 55/55
+Release benchmark subset: 90/90
 ```
 
-`OBSERVED` and `DECLARED_SKIP` are deliberate categories, separate from failure: an observation records a measurement without a judgement, and a skip means a case declared itself not executable in this environment. Neither is counted as a pass. The benchmark proves deterministic mechanics, not model output quality, cost or a success rate. See [benchmarks/README.md](benchmarks/README.md).
+The seven fail/error cases are pre-existing documentation/path drift
+(`WRITING-POLICY.md`, `DESIGN-MOTION.md`, `QUICKSTART.md`,
+`validation/run-template.md`, and the basename label of
+`docs/policies/EVALUATION-RUBRICS.md`); a clean 2.3.0 worktree reproduces all
+seven. They are not counted as passes.
+
+`OBSERVED` and `DECLARED_SKIP` are deliberate categories, separate from failure:
+an observation records a measurement without a judgement, and a skip means a case
+declared itself not executable in this environment. Neither is counted as a pass.
+The benchmark proves deterministic mechanics, not model output quality, cost or a
+success rate. See [benchmarks/README.md](benchmarks/README.md).
 
 ## Migration from v1
 

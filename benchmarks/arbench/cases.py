@@ -552,6 +552,89 @@ def lifecycle_repair_budget(ctx: Ctx) -> Outcome:
                    {"max_routine_repairs": transport.MAX_ROUTINE_REPAIRS, "problems": problems})
 
 
+@case(id="lifecycle.s4b-review-correction", group="lifecycle",
+      title="A failed S5 review re-enters S4B, revalidates, and re-reviews",
+      task="Deliver S4B, review it with 'fix and re-review', correct it, validate the correction, and review again.",
+      expectation=("The correction is a linked S4B packet authorized only by the failed review; it carries a fresh "
+                   "independent validation, a second S5 review can be ingested, and G3 acceptance is refused "
+                   "until that second review passes."),
+      evaluation="Drive the real CLI through S4B -> S5 -> failed review -> corrective S4B -> validation -> S5 -> passed review -> G3.",
+      evidence_required="Packet chain, retry context, validation records, review outcomes, acceptance refusal and success.",
+      layer="deterministic-lifecycle")
+def lifecycle_s4b_review_correction(ctx: Ctx) -> Outcome:
+    box = ctx.sandbox()
+    F.reach_s4a_with_handoff(ctx.repo, box, ctx.fixtures)
+    F.clear_preflight_and_reach_s4b(ctx.repo, box)
+    F.deliver_return(box, ctx.fixtures, status="complete")
+    first_validation = ctx.repo.cli("validate-worker", "--run-root", str(box.run_root))
+    if first_validation.returncode != 0:
+        validation_path = box.current_packet() / "evidence" / "validation.json"
+        record = json.loads(validation_path.read_text(encoding="utf-8")) if validation_path.is_file() else {}
+        return Outcome("fail", f"first S4B validation failed: {first_validation.tail(6)}",
+                       {"record": record, "tail": first_validation.tail(8)})
+    first_s5 = F.prepare_s5(ctx.repo, box)
+    if first_s5.returncode != 0:
+        return Outcome("fail", f"could not prepare the first S5: {first_s5.tail(4)}")
+    first_s5_id = box.packets()[-1]["id"]
+    failed_review = ctx.fixtures["review"]().replace(
+        "**Recommendation:** Present G3", "**Recommendation:** Fix and re-review"
+    ).replace("### Findings\n\nnone", "### Findings\n\nThe primary action has no visible response.")
+    source = box.root / "review-failed.md"
+    source.write_text(failed_review, encoding="utf-8")
+    failed_ingest = F.ingest_independent_review(ctx.repo, box, source)
+    refused_accept = ctx.repo.cli("record-acceptance", "--run-root", str(box.run_root), "--outcome", "accepted")
+    correction = ctx.repo.cli("advance", "--run-root", str(box.run_root))
+    corrected = box.packets()[-1] if box.packets() else {}
+    manifest = box.manifest() if corrected.get("stage") == "S4B" else {}
+    retry_context = (manifest.get("worker") or {}).get("retry_context") or {}
+    if corrected.get("stage") != "S4B" or manifest.get("parent_id") != first_s5_id:
+        return Outcome("fail", f"correction stage={corrected.get('stage')} parent={manifest.get('parent_id')} expected parent={first_s5_id}",
+                       {"tail": correction.tail(5)})
+    if retry_context.get("failure_kind") != "review-finding":
+        return Outcome("fail", f"correction retry context={retry_context}", {"tail": correction.tail(5)})
+    F.deliver_return(box, ctx.fixtures, status="complete")
+    corrected_validation = ctx.repo.cli("validate-worker", "--run-root", str(box.run_root))
+    second_s5 = F.prepare_s5(ctx.repo, box)
+    passed_source = box.root / "review-passed.md"
+    passed_source.write_text(ctx.fixtures["review"](), encoding="utf-8")
+    passed_ingest = F.ingest_independent_review(ctx.repo, box, passed_source)
+    g3 = F.record_g3(ctx.repo, box)
+    accepted = ctx.repo.cli("record-acceptance", "--run-root", str(box.run_root), "--outcome", "accepted")
+    state = box.state()
+    passed = (
+        failed_ingest.returncode == 0
+        and refused_accept.returncode == 1
+        and correction.returncode == 0
+        and corrected_validation.returncode == 0
+        and second_s5.returncode == 0
+        and passed_ingest.returncode == 0
+        and g3.returncode == 0
+        and accepted.returncode == 0
+        and len([p for p in box.packets() if p.get("stage") == "S4B"]) == 2
+        and len([p for p in box.packets() if p.get("stage") == "S5"]) == 2
+        and state.get("worker", {}).get("acceptance_state") == "ACCEPTED"
+    )
+    return Outcome(
+        "pass" if passed else "fail",
+        (
+            f"failed review ingest={failed_ingest.returncode}, acceptance refused={refused_accept.returncode}, "
+            f"correction={correction.returncode}, corrected validation={corrected_validation.returncode}, "
+            f"second S5={second_s5.returncode}, passed review={passed_ingest.returncode}, "
+            f"G3={g3.returncode}, acceptance={accepted.returncode}"
+        ),
+        {
+            "first_s5": first_s5_id,
+            "corrective_s4b": corrected.get("id"),
+            "retry_context": retry_context,
+            "failed_ingest_tail": failed_ingest.tail(3),
+            "second_s5_tail": second_s5.tail(6),
+            "passed_review_tail": passed_ingest.tail(6),
+            "refused_accept_tail": refused_accept.tail(3),
+            "accepted_tail": accepted.tail(3),
+        },
+    )
+
+
 @case(id="lifecycle.s5-isolation", group="lifecycle",
       title="S5 packet is the canonical isolated pair",
       task="Validate a complete return and let the runtime prepare the review boundary.",

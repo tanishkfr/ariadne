@@ -9,6 +9,81 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.4.0rc1 — 2026-11-11 · PHASE A RELEASE CANDIDATE (NOT PUBLISHED)
+
+**Execution reliability.** 2.4A is not a new intelligence feature. It closes the
+places where a real task could reach a corrected revision and then lose the
+evidence, the review, or the recovery path. The central lesson: a lifecycle that
+can only move forward cannot repair real work, and a recovery path that guesses
+is worse than one that stops.
+
+What changed:
+
+- **Review-directed correction is a first-class linked attempt (T1 and S4B).**
+  A failed review of the current validated attempt can now prepare a correction
+  that names its parent attempt, the authorizing review, the finding it must
+  address, and its own budget. The correction starts with an empty validation
+  record, executes the actual change, receives a fresh revision-bound engine
+  validation, and requires a new independent review. The previous review is
+  preserved in history and retired from the current gate slot; the previous
+  attempt, return and validation bytes are never overwritten. The S4B/S5 path
+  gained the same transition (`S5 -> S4B`), a review-finding retry context, and a
+  bounded correction count, so a corrected creative revision can revalidate and
+  be reviewed again before G3.
+- **Evidence freshness is enforced at every gate.** A T1 validation now carries
+  an implementation fingerprint as well as its own digest. Review ingestion,
+  Proof Pass and human acceptance refuse a validation that no longer describes
+  the live tree. A review is bound to the attempt and the validation digest it
+  saw; a proof receipt is bound to the attempt, review and validation; a stale
+  receipt or a receipt id absent from the durable receipt store cannot be used
+  to accept work. A failed correction never falls back to an earlier pass.
+- **Interrupted execution recovers from durable evidence.** Task operations
+  (launch, execute, collect/ingest return, validate, persist evidence, review,
+  repair, proof, accept) are recorded before their side effects. A recorded
+  validation can be finalized without rerunning the checks; a return already on
+  disk can be reconciled without duplicating the attempt; a lock whose owning
+  process is gone is broken safely; a partial contract preparation is preserved
+  as an orphan and the correction is prepared afresh. `task-recover` reports the
+  last durable state, interrupted operation, last verified revision, safe
+  continuation and the human action still needed. Repeated resume is idempotent.
+- **A real timeout now kills the harness's process tree.** A CLI worker's child
+  process could previously survive the timeout and edit the repository after
+  Ariadne had recorded the attempt as lost. The timeout path now terminates the
+  process group/tree before the failure is recorded, and the adapter
+  conformance suite proves it with a child-process marker.
+- **Shared adapter conformance and live qualification.** `adapter-conformance`
+  separates structural declarations from observed checks across discovery,
+  version, authentication, argument compatibility, working directory, prompt
+  delivery, edit permission, structured return, cancellation, timeout, nonzero
+  exit, interrupted-session recovery, scope enforcement and independent
+  validation. Command Code (DeepSeek V4.1 Flash), OpenCode (DeepSeek V4.1 Flash)
+  and Codex (GPT-6.1 Terra) each completed a real isolated task live; each
+  changed only the permitted file, passed Ariadne's independent validation and
+  produced a Proof Receipt. A live Command Code timeout was classified honestly
+  and recovered into a second, validated attempt.
+- **Observability is the durable record, not a progress message.**
+  `task-status --json` now reports the selected worker and why, the active
+  attempt and operation, validation freshness, review findings and blockers,
+  corrective counts, current revision, next action, human-gate status and the
+  recovery view. The same derivation is exposed through the Python API and a
+  read-only MCP `task_status` tool.
+
+Verified by the focused suite `scripts/test-ar24a.py` (19/19), the adapter
+conformance suite (structural plus live cases), the new benchmark case
+`lifecycle.s4b-review-correction`, the existing engine core and 2.3 suites, and
+the full deterministic benchmark. Seven benchmark cases fail or error for
+pre-existing documentation/path drift (`WRITING-POLICY.md`, `DESIGN-MOTION.md`,
+`QUICKSTART.md`, `validation/run-template.md`, and the basename label of
+`docs/policies/EVALUATION-RUBRICS.md`); a clean 2.3.0 worktree reproduces all
+seven. They are not counted as passing and are not 2.4A regressions.
+
+Known limits recorded rather than hidden: a full creative S5 -> S4B correction
+is executed deterministically through the new benchmark case, but no live
+external reviewer was used for that specific re-review; Claude Code remains
+declared/unauthenticated here; Cursor is absent; macOS and Linux were not
+executed; and local run-state files are still not cryptographically attested.
+
+---
 ## 2.3.0 — 2026-10-16 · PUBLIC RELEASE
 
 Ariadne now takes the task as it arrives. A request no longer has to be a

@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -427,6 +428,51 @@ TASK_LOCK_WAIT = 15.0
 TASK_LOCK_STALE_AFTER = 300.0
 
 
+def _process_alive(pid: int) -> bool:
+    """Whether a recorded lock owner still exists.
+
+    Used only to break a lock whose owner is provably gone after an interrupted
+    process. A live process is never overridden. The check is deliberately
+    conservative: an unreadable process table answers "alive" so a transient
+    probe failure cannot steal a lock from a running command.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))
+            if not handle:
+                return False
+            try:
+                exit_code = ctypes.c_ulong()
+                if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                    return True
+                return int(exit_code.value) == 259  # STILL_ACTIVE
+            finally:
+                ctypes.windll.kernel32.CloseHandle(handle)
+        except Exception:  # noqa: BLE001 - inability to probe means do not steal
+            return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def _lock_owner(lock: Path) -> int:
+    try:
+        raw = lock.read_text(encoding="utf-8", errors="replace").split("|", 1)[0].strip()
+        return int(raw)
+    except (OSError, ValueError):
+        return 0
+
+
 @contextlib.contextmanager
 def run_state_lock(run_root: Path, purpose: str = ""):
     """Serialize task-lifecycle state mutations for one run directory.
@@ -452,13 +498,19 @@ def run_state_lock(run_root: Path, purpose: str = ""):
                 age = time.time() - lock.stat().st_mtime
             except OSError:
                 age = 0.0
-            if age > TASK_LOCK_STALE_AFTER:
+            owner = _lock_owner(lock)
+            owner_gone = bool(owner) and not _process_alive(owner)
+            if owner_gone or age > TASK_LOCK_STALE_AFTER:
                 with contextlib.suppress(OSError):
                     lock.unlink()
                 append_worker_telemetry(
                     run_root, "stale-lock-broken",
                     provider="runtime", model="run-state-lock",
-                    failure_reason=f"lock older than {int(TASK_LOCK_STALE_AFTER)}s was broken",
+                    failure_reason=(
+                        f"lock owner pid {owner} is gone; the lock was broken for recovery"
+                        if owner_gone else
+                        f"lock older than {int(TASK_LOCK_STALE_AFTER)}s was broken"
+                    ),
                 )
                 continue
             if time.monotonic() >= deadline:
@@ -2266,6 +2318,10 @@ def prepare_task_boundary(
     attach: dict | None = None,
     contract_text: str | None = None,
     retry_context_override: Mapping | None = None,
+    repair_kind: str = "",
+    parent_attempt: Mapping | None = None,
+    review_record: Mapping | None = None,
+    directive: Mapping | None = None,
 ) -> tuple[dict, Path, dict]:
     """Prepare one T1 packet inside an existing run and record every decision.
 
@@ -2361,7 +2417,25 @@ def prepare_task_boundary(
     contract_name = "TASK-CONTRACT.md" if attempt <= 1 else f"TASK-CONTRACT-a{attempt}.md"
     contract_path = task_dir / contract_name
     if contract_path.exists():
-        raise RuntimeError_(f"Refusing to overwrite an existing task contract: {contract_path}")
+        task_record = TASKX.current_task(state) if retry else None
+        recorded_attempts = list((task_record or {}).get("attempts") or ())
+        if len(recorded_attempts) >= int(attempt):
+            raise RuntimeError_(f"Refusing to overwrite an existing task contract: {contract_path}")
+        # A preparation that failed before its state write leaves the contract
+        # bytes behind with no recorded attempt. Preserve them as evidence and
+        # prepare afresh instead of refusing forever or overwriting the bytes.
+        stamp = now().replace("-", "").replace(":", "")
+        preserved = contract_path.with_name(f"{contract_path.stem}.orphan-{stamp}.md")
+        counter = 1
+        while preserved.exists():
+            preserved = contract_path.with_name(f"{contract_path.stem}.orphan-{stamp}-{counter}.md")
+            counter += 1
+        contract_path.replace(preserved)
+        emit_event(
+            run_root, "task_partial_preparation_quarantined", state=state,
+            task_id=str((task_record or {}).get("task_id", "")), stage="T1",
+            preserved=str(preserved), attempt=int(attempt),
+        )
     contract_path.write_text(contract_text, encoding="utf-8")
 
     packet_id, output = allocate_packet(run_root, str(state.get("run_id", "")), "T1")
@@ -2430,6 +2504,8 @@ def prepare_task_boundary(
             kind="stage",
             to="T1",
             reason=(
+                "The review-directed corrective attempt prepared a new linked task boundary."
+                if repair_kind == "review" else
                 "The bounded repair attempt prepared a new linked task boundary."
                 if retry else
                 "The interpreted task prepared one bounded implementation boundary."
@@ -2437,7 +2513,10 @@ def prepare_task_boundary(
             evidence=(str(output), packet_id),
             packet={"id": packet_id, "stage": "T1", "path": str(output)},
             actor="human" if not retry else "runtime",
-            operation=("task-repair" if retry else ("task-attach" if attach else "task-start")),
+            operation=(
+                "task-review-correction" if repair_kind == "review"
+                else ("task-repair" if retry else ("task-attach" if attach else "task-start"))
+            ),
         ),
         permitted=True,
     )
@@ -2479,6 +2558,12 @@ def prepare_task_boundary(
     TASKX.prepare_attempt(
         task, packet_id=packet_id, packet_path=str(output),
         attempt=int(prepared_manifest.get("worker", {}).get("attempt", attempt)),
+        parent_attempt_id=str((parent_attempt or {}).get("attempt_id", "")),
+        repair_kind=str(repair_kind),
+        review_id=str((review_record or {}).get("review_id", "")),
+        review_finding="; ".join(str(item) for item in (review_record or {}).get("findings") or ()),
+        authorized_by=str((review_record or {}).get("review_id", "")),
+        directive=dict(directive or {}),
     )
 
     state["updated_at"] = now()
@@ -2712,7 +2797,56 @@ def _current_task_binding(state: dict, entry: dict) -> tuple[dict, dict]:
         raise RuntimeError_(
             f"No prepared attempt records packet {entry['id']}; the packet is not part of this task's chain."
         )
+    scope_problems = TASKX.attempt_scope_problems(task, attempt)
+    if scope_problems:
+        raise RuntimeError_(
+            "The recorded authorization no longer matches this task's declared scope; refusing to act on a "
+            "widened correction: " + "; ".join(scope_problems)
+        )
     return task, attempt
+
+
+@contextlib.contextmanager
+def task_operation(
+    run_root: Path,
+    state: dict,
+    task: dict,
+    kind: str,
+    *,
+    attempt: Mapping | None = None,
+    detail: str = "",
+    persist: bool = True,
+):
+    """Record one durable operation around its side effect.
+
+    The started record is persisted before the side effect, so a process that
+    dies mid-operation leaves a recoverable trace. Completion is recorded only
+    after the operation returns; a raised error records a failed operation and
+    re-raises, never a success. Callers remain responsible for their own state
+    writes, so this adds no second persistence path.
+    """
+    row = TASKX.begin_operation(
+        task,
+        kind=kind,
+        attempt_id=str((attempt or TASKX.latest_attempt(task)).get("attempt_id", "")),
+        detail=detail,
+    )
+    if persist:
+        write_state(run_root, state)
+    try:
+        yield row
+    except Exception as error:  # noqa: BLE001 - the failure is recorded, never swallowed
+        TASKX.fail_operation(
+            task, str(row["operation_id"]), detail=f"{type(error).__name__}: {error}",
+            state_value="failed",
+        )
+        if persist:
+            write_state(run_root, state)
+        raise
+    else:
+        TASKX.complete_operation(task, str(row["operation_id"]), detail=detail)
+        if persist:
+            write_state(run_root, state)
 
 
 def _record_task_preflight(
@@ -2844,40 +2978,82 @@ def worker_prompt_for(packet: Path, project: Path) -> str:
         "a gate or an acceptance decision. When finished, fill the canonical return handoff and write",
         "the complete marked block (BEGIN ARIADNE RETURN HANDOFF ... END ARIADNE RETURN HANDOFF) to the",
         "RETURN TRANSPORT TARGET path named in the packet, including its 'Methods applied' section,",
-        "and also print the same marked block in your final response.",
+        "and also print the same marked block in your final response. The **Status:** field must be",
+        "exactly one of `complete`, `partial`, or `blocked`, with nothing else on that line.",
         "",
         "===== ARIADNE TASK PACKET =====",
     ]
     return "\n".join(header) + "\n" + packet_text
 
 
+def terminate_process_tree(process: subprocess.Popen) -> None:
+    """Terminate a harness and its descendants after a timeout or cancellation.
+
+    A CLI harness often spawns its own node/python children. Killing only the
+    direct process leaves those children editing the repository after Ariadne
+    has already recorded the attempt as timed out; that is a real stale-write
+    race. Windows is handled with ``taskkill /T`` and POSIX with a process group.
+    """
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        with contextlib.suppress(OSError):
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True, text=True, timeout=20,
+            )
+    else:
+        with contextlib.suppress(OSError):
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    with contextlib.suppress(OSError):
+        process.kill()
+    with contextlib.suppress(Exception):
+        process.wait(timeout=10)
+
+
 def invoke_cli_adapter(adapter: Mapping, prompt: str, project: Path, timeout: int) -> dict:
-    """Run one declared CLI harness with the packet on stdin. Bounded, no shell."""
+    """Run one declared CLI harness with the packet on stdin. Bounded, no shell.
+
+    The process is launched with its own process group so a timeout terminates
+    the whole tree, not only the wrapper. A timeout is recorded as ``124`` and
+    never as a result; a nonzero exit without a return handoff is classified by
+    the caller.
+    """
     command = shutil.which(str(adapter.get("command", ""))) or str(adapter.get("command", ""))
     argv = [command, *[str(item) for item in adapter.get("argv") or ()]]
     started = time.monotonic()
     error = ""
+    stdout = ""
+    stderr = ""
+    popen_options: dict = {}
+    if os.name == "nt":
+        popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_options["start_new_session"] = True
     try:
-        completed = subprocess.run(
-            argv, cwd=str(project), input=prompt, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            timeout=int(timeout), shell=False,
+        process = subprocess.Popen(
+            argv, cwd=str(project), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+            shell=False, **popen_options,
         )
-        code = int(completed.returncode)
-        stdout = completed.stdout or ""
-        stderr = completed.stderr or ""
-    except subprocess.TimeoutExpired as exc:
-        code, stdout, stderr = 124, str(exc.stdout or ""), str(exc.stderr or "")
-        error = f"the worker timed out after {int(timeout)}s"
+        try:
+            stdout, stderr = process.communicate(input=prompt, timeout=int(timeout))
+            code = int(process.returncode)
+        except subprocess.TimeoutExpired:
+            terminate_process_tree(process)
+            with contextlib.suppress(Exception):
+                stdout, stderr = process.communicate(timeout=5)
+            code = 124
+            error = f"the worker timed out after {int(timeout)}s; its process tree was terminated"
     except OSError as exc:
-        code, stdout, stderr = 127, "", ""
+        code = 127
         error = f"the worker could not be started: {exc}"
     return {
         "argv": argv,
         "returncode": code,
         "stdout": stdout,
         "stderr": stderr,
-        "stderr_sha256": hashlib.sha256(stderr.encode("utf-8")).hexdigest(),
+        "stderr_sha256": hashlib.sha256((stderr or "").encode("utf-8")).hexdigest(),
         "duration_seconds": round(time.monotonic() - started, 3),
         "error": error,
     }
@@ -2932,6 +3108,13 @@ def record_task_worker_failure(
         scope_status=str(attempt.get("preflight", {}).get("status", "")),
         retryable=bool(retryable),
     )
+    execute_operation = TASKX.started_operation(task, "execute")
+    if execute_operation and str(execute_operation.get("attempt_id", "")) == str(attempt.get("attempt_id", "")):
+        TASKX.fail_operation(
+            task, str(execute_operation.get("operation_id", "")),
+            detail=f"worker execution ended without a usable result: {source}",
+            evidence=evidence,
+        )
     STATEMACHINE.apply_transition(
         state,
         CONTRACTS.TransitionRequest(
@@ -2975,6 +3158,7 @@ def ingest_task_return(
     *,
     source_label: str,
     adapter_id: str = "",
+    allow_existing_evidence: bool = False,
 ) -> dict:
     """Validate and record one T1 worker return. Every refusal happens before writing.
 
@@ -2992,7 +3176,10 @@ def ingest_task_return(
     attempt = TASKX.attempt_for(task, entry["id"])
     if attempt is None:
         raise RuntimeError_("no prepared attempt matches this packet; refusing an unattributed return")
-    if str(attempt.get("state")) in ("returned", "validated", "failed"):
+    destination = packet / "evidence" / "return-handoff.md"
+    machine_destination = packet / "evidence" / "return-handoff.json"
+    reconciling = bool(allow_existing_evidence and destination.is_file())
+    if str(attempt.get("state")) in ("returned", "validated", "failed") and not reconciling:
         record_failure(
             state,
             source="duplicate-result",
@@ -3139,9 +3326,7 @@ def ingest_task_return(
         )
 
     return_status = str(metadata.get("status", "")).lower()
-    destination = packet / "evidence" / "return-handoff.md"
-    machine_destination = packet / "evidence" / "return-handoff.json"
-    if destination.exists() or machine_destination.exists():
+    if not reconciling and (destination.exists() or machine_destination.exists()):
         raise RuntimeError_(f"Refusing to overwrite existing return handoff: {destination}")
     reported_provider = str(metadata.get("provider", "") or "")
     reported_model = str(metadata.get("model", "") or "")
@@ -3151,9 +3336,11 @@ def ingest_task_return(
         evidence=f"task return handoff {machine_destination.name}",
     )
     identity = EXECUTION.identity_view(state, str(implementer["execution_id"]))
-    destination.write_text(text, encoding="utf-8")
+    if not reconciling:
+        destination.write_text(text, encoding="utf-8")
     methods = TASKX.parse_methods_section(text)
-    write_json(
+    if destination.is_file() and not machine_destination.is_file():
+        write_json(
         machine_destination,
         {
             "schema_version": 1,
@@ -3177,16 +3364,18 @@ def ingest_task_return(
             },
         },
     )
-    EXECUTION.complete(
-        state, str(implementer["execution_id"]),
-        result={
-            "packet_id": entry["id"],
-            "status": return_status,
-            "artifact": str(machine_destination),
-            "sha256": sha256(machine_destination),
-        },
-        evidence=(str(destination),),
-    )
+    current_execution = EXECUTION.execution(state, str(implementer["execution_id"]))
+    if current_execution is None or str(current_execution.get("state")) not in EXECUTION.TERMINAL_EXECUTION_STATES:
+        EXECUTION.complete(
+            state, str(implementer["execution_id"]),
+            result={
+                "packet_id": entry["id"],
+                "status": return_status,
+                "artifact": str(machine_destination),
+                "sha256": sha256(machine_destination),
+            },
+            evidence=(str(destination),),
+        )
     emit_event(
         run_root, "execution_completed", state=state, task_id=entry["id"], stage="T1",
         execution=str(implementer["execution_id"]), role="implementer",
@@ -3306,6 +3495,201 @@ def ingest_task_return(
     return {"status": return_status, "attempt": attempt, "execution": str(implementer["execution_id"])}
 
 
+def recover_task_validation(
+    run_root: Path,
+    state: dict,
+    entry: dict,
+    packet: Path,
+    task: dict,
+    attempt: dict,
+) -> dict:
+    """Finalize an attempt from a validation record that was already written.
+
+    This is the crash window between writing ``validation.json`` and persisting
+    the run state. The file is durable evidence; the state is not. Recovery
+    re-reads the file, proves it belongs to this attempt and this revision, and
+    records the lifecycle consequence without rewriting the evidence. A record
+    that cannot be proven current is refused, never promoted to a pass.
+    """
+    destination = packet / "evidence" / "validation.json"
+    try:
+        value = json.loads(read(destination))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError_(f"Recorded validation evidence is unreadable: {exc}") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError_("Recorded validation evidence is not an object")
+    if (
+        str(attempt.get("state")) == "validated"
+        and str((attempt.get("validation") or {}).get("status")) == "passed"
+    ):
+        recorded_digest = str((attempt.get("validation") or {}).get("validation_sha256", ""))
+        if recorded_digest and recorded_digest != sha256(destination):
+            raise RuntimeError_(
+                "The validation record changed after the attempt settled; the old pass is not reused."
+            )
+        revision = dict((attempt.get("validation") or {}).get("validated_revision") or {})
+        current = TRANSPORT.current_implementation_fingerprint(state)
+        if revision.get("implementation_fingerprint") and current and revision.get("implementation_fingerprint") != current:
+            raise RuntimeError_(
+                "The recorded validation cannot be recovered: its revision binding no longer matches the "
+                "current implementation. A new validation is required; the old pass is not reused."
+            )
+        return {
+            "status": "passed",
+            "failure_kind": "none",
+            "failure_reason": "none",
+            "retryable": False,
+            "escalation_required": False,
+            "scope_status": str((attempt.get("validation") or {}).get("scope_status", "unknown")),
+            "recovered": True,
+            "already_current": True,
+        }
+    problems = TRANSPORT.worker_validation_problems(value, entry["id"])
+    if problems:
+        raise RuntimeError_("Recorded validation evidence is malformed: " + "; ".join(problems))
+    value = {**value, "attempt_id": str(value.get("attempt_id", attempt.get("attempt_id", "")))}
+    if not TASKX.validation_belongs_to(attempt, value):
+        raise RuntimeError_(
+            "Recorded validation evidence belongs to another attempt or implementing execution; "
+            "it cannot settle this correction."
+        )
+    status_value = str(value.get("status", "blocked"))
+    if status_value == "passed":
+        revision = dict(value.get("validated_revision") or {})
+        recorded = str(revision.get("implementation_fingerprint", ""))
+        current = TRANSPORT.current_implementation_fingerprint(state)
+        if not recorded or not current or recorded != current:
+            raise RuntimeError_(
+                "The recorded validation cannot be recovered: its revision binding no longer matches the "
+                "current implementation. A new validation is required; the old pass is not reused."
+            )
+        scope = value.get("scope") if isinstance(value.get("scope"), dict) else {}
+        if str(scope.get("status", "")) != "within-contract":
+            raise RuntimeError_(
+                "The recorded validation cannot be recovered: its scope result is "
+                + str(scope.get("status") or "unknown")
+            )
+    implementer, _impl_problems = named_execution(
+        state, str(attempt.get("execution_id", "")), role="implementer", task_id=entry["id"]
+    )
+    validator, execution_problems = execution_for_task(
+        state, task_id=entry["id"], role="validator",
+        adapter="scripts/ariadne.py:task-validate (recovery)",
+        invocation="task-validate --recover-recorded",
+        requested={"provider": str(value.get("executor", "Ariadne local validator")), "model": "local-independent-validator"},
+        packet=packet,
+        reason="recover the durable validation record written before the interrupted state write",
+        reuse=False,
+        parent=str((implementer or {}).get("execution_id", "")),
+    )
+    if execution_problems or validator is None:
+        raise RuntimeError_("Recovered validation execution rejected: " + "; ".join(execution_problems or ["no identity"]))
+    if status_value == "passed":
+        EXECUTION.complete(
+            state, str(validator["execution_id"]),
+            result={"packet_id": entry["id"], "status": "passed", "artifact": str(destination)},
+            evidence=(str(destination),),
+        )
+    else:
+        _update, failure = EXECUTION.fail(
+            state, str(validator["execution_id"]),
+            source=str(value.get("failure_kind", "routine")),
+            evidence=[str(destination), str(value.get("failure_reason", ""))],
+            detail=str(value.get("failure_reason", "")),
+        )
+        emit_event(
+            run_root, "execution_failed", state=state, task_id=entry["id"], stage="T1",
+            execution=str(validator["execution_id"]), role="validator",
+            failure_class=failure["class"], status=status_value,
+        )
+    manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
+    worker_manifest = manifest.get("worker") or {}
+    try:
+        repair_attempts = max(0, int(worker_manifest.get("attempt", 1) or 1) - 1)
+        repair_limit = int(worker_manifest.get("repair_limit", TRANSPORT.MAX_ROUTINE_REPAIRS) or 0)
+    except (TypeError, ValueError):
+        repair_attempts, repair_limit = 0, TRANSPORT.MAX_ROUTINE_REPAIRS
+    outcome = worker_outcome(
+        status_value,
+        str(value.get("failure_kind", "routine")),
+        repair_attempts,
+        repair_limit,
+    )
+    skill_updates = TASKX.evaluate_skill_evidence(
+        task,
+        list((attempt.get("return") or {}).get("methods") or ()),
+        validation_passed=status_value == "passed",
+        review_outcome="",
+    )
+    STATEMACHINE.apply_transition(
+        state,
+        CONTRACTS.TransitionRequest(
+            kind="worker-lifecycle",
+            to=str(outcome["lifecycle"]),
+            reason=f"Recovered independent task validation result: {status_value}",
+            evidence=(str(destination),),
+            fields={
+                "implementation_state": outcome["implementation_state"],
+                "validation_state": outcome["validation_state"],
+                "last_validation": str(destination),
+            },
+            actor="runtime",
+            operation="task-validation-recovery",
+        ),
+        permitted=True,
+    )
+    TASKX.record_attempt_validation(
+        task,
+        packet_id=entry["id"],
+        status=status_value,
+        failure_kind=str(value.get("failure_kind", "routine")),
+        failure_reason=str(value.get("failure_reason", "")),
+        validation_path=str(destination),
+        scope_status=str((value.get("scope") or {}).get("status", "unknown")),
+        commands=list(value.get("commands") or ()),
+        skills=skill_updates,
+        retryable=bool(outcome["retryable"]),
+        validated_revision=dict(value.get("validated_revision") or {}),
+    )
+    for update in skill_updates:
+        try:
+            TASKX.set_task_skill(
+                task,
+                skill_id=str(update.get("skill_id", "")),
+                state_value=str(update.get("state", "selected")),
+                mechanism=str(update.get("mechanism", "engine-observation")),
+                evidence=[str(item) for item in update.get("evidence") or ()],
+                note=str(update.get("note", "")),
+            )
+        except CONTRACTS.ContractError:
+            continue
+    operation = TASKX.started_operation(task, "validate")
+    if operation:
+        TASKX.complete_operation(
+            task, str(operation.get("operation_id", "")),
+            detail=f"validation {status_value} recovered from durable evidence",
+            evidence=[str(destination)],
+        )
+    emit_event(
+        run_root, "task_validation_recovered", state=state, task_id=entry["id"], stage="T1",
+        status=status_value, validation=str(destination), execution=str(validator["execution_id"]),
+    )
+    state["updated_at"] = now()
+    state["evidence_state"] = f"recovered independent task validation: {outcome['validation_state']}"
+    state["next"] = outcome["next"]
+    print(f"Ariadne task validation (recovered): {outcome['validation_state']}")
+    print(f"Next: {state['next']}")
+    return {
+        "status": status_value,
+        "failure_kind": str(value.get("failure_kind", "routine")),
+        "failure_reason": str(value.get("failure_reason", "")),
+        "retryable": bool(outcome["retryable"]),
+        "escalation_required": bool(outcome["escalation_required"]),
+        "scope_status": str((value.get("scope") or {}).get("status", "unknown")),
+        "recovered": True,
+    }
+
+
 def run_task_validation(
     run_root: Path,
     state: dict,
@@ -3330,16 +3714,22 @@ def run_task_validation(
     attempt = TASKX.attempt_for(task, entry["id"])
     if attempt is None:
         raise RuntimeError_("no prepared attempt matches this packet")
+    validation_path = packet / "evidence" / "validation.json"
+    if validation_path.exists():
+        return recover_task_validation(run_root, state, entry, packet, task, attempt)
     if str(attempt.get("state")) != "returned":
         raise RuntimeError_(
             f"Independent validation runs on a returned attempt, not on a {attempt.get('state')} one."
         )
-    validation_path = packet / "evidence" / "validation.json"
-    if validation_path.exists():
-        raise RuntimeError_(f"Worker validation is already recorded: {validation_path}")
     return_path = packet / "evidence" / "return-handoff.md"
     if not return_path.is_file():
         raise RuntimeError_("Cannot validate a task before the worker return handoff is recorded")
+
+    operation = TASKX.begin_operation(
+        task, kind="validate", attempt_id=str(attempt.get("attempt_id", "")),
+        detail=f"independent validation of {entry['id']}",
+    )
+    write_state(run_root, state)
 
     started = now()
     contract_path = Path(str(manifest.get("task_contract", "") or ""))
@@ -3348,6 +3738,7 @@ def run_task_validation(
         "schema_version": TRANSPORT.WORKER_VALIDATION_SCHEMA,
         "kind": "worker-validation",
         "packet_id": entry["id"],
+        "attempt_id": str(attempt.get("attempt_id", "")),
         "stage": "T1",
         "independent": True,
         "executor": "Ariadne local validator",
@@ -3474,8 +3865,9 @@ def run_task_validation(
             (required_failures if command["required"] else optional_failures).append(command["id"])
         command_results.append(result)
 
+    post_snapshot = TRANSPORT.project_git_snapshot(project)
     post_scope = TRANSPORT.worker_scope_check(
-        baseline, TRANSPORT.project_git_snapshot(project), patterns, project,
+        baseline, post_snapshot, patterns, project,
     )
     base_record["scope"] = post_scope
     base_record["changed_files"] = post_scope.get("changed", [])
@@ -3495,6 +3887,10 @@ def run_task_validation(
             failure_reason += "; optional failures: " + ", ".join(optional_failures)
     elif optional_failures:
         failure_reason = "Required validation passed; optional checks failed: " + ", ".join(optional_failures)
+    # Bind the record to the exact implementation bytes the commands ran
+    # against. Without this, a correction could edit the tree and a later gate
+    # would still read the old pass as current.
+    TRANSPORT.attach_validated_revision(base_record, post_snapshot)
     base_record.update({
         "status": "failed" if required_failures else "passed",
         "failure_kind": "routine" if required_failures else "none",
@@ -3630,6 +4026,7 @@ def finish_task_validation(
         commands=list(record.get("commands") or ()),
         skills=skill_updates,
         retryable=bool(outcome["retryable"]),
+        validated_revision=dict(record.get("validated_revision") or {}),
     )
     for update in skill_updates:
         try:
@@ -3680,6 +4077,13 @@ def finish_task_validation(
     # A settled attempt is durable project intelligence: the failure class, the
     # passing commands, and any recurrence are captured here, engine-side only.
     _memory_settle(run_root, state)
+    operation = TASKX.started_operation(task, "validate")
+    if operation:
+        TASKX.complete_operation(
+            task, str(operation.get("operation_id", "")),
+            detail=f"validation {record.get('status', 'unknown')} recorded",
+            evidence=[str(destination)],
+        )
     print(f"Next: {state['next']}")
     return {
         "status": str(record.get("status", "blocked")),
@@ -3734,15 +4138,32 @@ def prepare_repair_attempt(
         and str(rendered.get("packet_id", "")) == str(entry["id"])
         and rendered_failure_repairable(task)
     )
-    if str(attempt.get("state")) != "failed" and not rendered_failed:
-        raise RuntimeError_(
-            "A repair attempt is prepared after a failed attempt or a failed rendered "
-            f"acceptance, not after a {attempt.get('state')} one."
-        )
     validation = dict(attempt.get("validation") or {})
     review = dict(task.get("review") or {})
-    review_failed = str(review.get("outcome")) == "failed" and str(review.get("packet_id", "")) == str(entry["id"])
-    if not validation.get("retryable") and not review_failed and not rendered_failed and not escalate:
+    review_failed = (
+        str(review.get("outcome")) == "failed"
+        and TASKX.review_belongs_to(task, review, attempt)
+    )
+    review_correction = bool(review_failed and str(attempt.get("state")) == "validated")
+    if str(attempt.get("state")) != "failed" and not rendered_failed and not review_correction:
+        raise RuntimeError_(
+            "A repair attempt is prepared after a failed attempt, a failed rendered acceptance, "
+            f"or a failed review of the current validated attempt — not after a {attempt.get('state')} one."
+        )
+    if review_correction:
+        repair_kind = "review"
+        problems = TASKX.corrective_attempt_problems(task, attempt, repair_kind=repair_kind)
+        if problems:
+            raise RuntimeError_("Review-directed correction refused: " + "; ".join(problems) + " Nothing was prepared.")
+    elif rendered_failed:
+        repair_kind = "rendered"
+    elif bool(escalate):
+        repair_kind = "escalation"
+    elif str(validation.get("failure_kind")) == "interrupted":
+        repair_kind = "interruption"
+    else:
+        repair_kind = "routine"
+    if not validation.get("retryable") and not review_correction and not rendered_failed and not escalate:
         manifest = json.loads(read(packet / TRANSPORT.MANIFEST_NAME))
         worker_manifest = manifest.get("worker") or {}
         try:
@@ -3763,13 +4184,18 @@ def prepare_repair_attempt(
             + str(outcome.get("next", ""))
             + " Use --escalate with a stronger worker if the work should continue."
         )
-    if not escalate:
+    if not escalate and not review_correction:
         allowed, why = POLICY.repair_allowed(state)
         if not allowed:
             raise RuntimeError_(why + " Nothing was prepared.")
     plan = TASKS.latest_plan(state)
     if not plan:
         raise RuntimeError_("this run records no task plan; nothing was prepared")
+    repair_operation = TASKX.begin_operation(
+        task, kind="repair", attempt_id=str(attempt.get("attempt_id", "")),
+        detail=f"prepare {repair_kind} correction attempt {len(task.get('attempts') or ()) + 1}",
+    )
+    write_state(run_root, state)
     attempt_number = len(task.get("attempts") or ()) + 1
     # A repair continues from the parent's recorded evidence. An interrupted
     # attempt has no return and no validation, so its engine-recorded outcome is
@@ -3824,6 +4250,30 @@ def prepare_repair_attempt(
                 ),
             },
         )
+    review_context = None
+    if review_correction:
+        findings = [str(item) for item in review.get("findings") or () if str(item).strip()]
+        recommendation = str(review.get("recommendation", "fix and re-review"))
+        review_context = {
+            "parent_task_id": str(entry["id"]),
+            "source": "review-finding",
+            "status": "review-failed",
+            "failure_kind": "review-finding",
+            "failure_reason": (
+                f"independent review {review.get('review_id', '')} returned "
+                f"{recommendation}: " + ("; ".join(findings) or "no findings text was recorded")
+            )[:1200],
+            "failed_checks": findings[:20],
+            "outside": [],
+            "review_id": str(review.get("review_id", "")),
+            "review_recommendation": recommendation,
+            "review_findings": findings[:20],
+            "directive": (
+                "Correct only the recorded review findings inside the existing permitted scope, "
+                "re-run the task contract's required checks on the corrected revision, and require "
+                "a new independent review. This directive cannot widen scope or waive a check."
+            ),
+        }
     entry_new, output, _task = prepare_task_boundary(
         project=Path(state["project"]),
         plan=plan,
@@ -3833,7 +4283,13 @@ def prepare_repair_attempt(
         attempt=attempt_number,
         retry=True,
         parent_packet=str(packet),
+        repair_kind=repair_kind,
+        parent_attempt=attempt,
+        review_record=review if review_correction else None,
+        directive=review_context or {},
         retry_context_override=(
+            review_context
+            if review_correction else
             {
                 "parent_task_id": str(entry["id"]),
                 "status": "rendered-acceptance-failed",
@@ -3845,11 +4301,35 @@ def prepare_repair_attempt(
             if rendered_failed else None
         ),
     )
+    if review_correction:
+        # The review has now been acted on. It is preserved in history, but it
+        # no longer sits in the current gate slot: the corrected revision needs
+        # a new independent review before anything can be proved or accepted.
+        TASKX.supersede_review(
+            task,
+            reason=(
+                f"review {review.get('review_id', '')} directed correction "
+                f"{entry_new['id']}; the corrected revision requires re-review"
+            ),
+        )
+        task["review_corrections"] = TASKX.review_correction_count(task)
+        emit_event(
+            run_root, "task_review_correction_authorized", state=state, task_id=entry_new["id"],
+            stage="T1", parent=str(entry["id"]), review=str(review.get("review_id", "")),
+            recommendation=str(review.get("recommendation", "")),
+            corrective_attempt=int(attempt_number),
+            budget_remaining=max(0, int(task.get("review_correction_limit", 0)) - int(task.get("review_corrections", 0))),
+        )
     emit_event(
         run_root, "task_repair_prepared", state=state, task_id=entry_new["id"], stage="T1",
         previous=str(entry["id"]), attempt=attempt_number,
         reason=str(reason or validation.get("failure_reason") or review.get("recommendation") or ""),
         escalate=bool(escalate),
+    )
+    TASKX.complete_operation(
+        task, str(repair_operation["operation_id"]),
+        detail=f"{repair_kind} correction attempt prepared",
+        evidence=[str(output)],
     )
     return entry_new, output, _task
 
@@ -3867,10 +4347,21 @@ def task_return_command(args: argparse.Namespace) -> int:
         entry, packet = current_packet(state, allow_project_drift=True)
         if entry["stage"] != "T1":
             raise RuntimeError_("Task returns belong to a T1 task boundary; the current boundary is " + str(entry["stage"]))
+        task, attempt = _current_task_binding(state, entry)
+        ingest_operation = TASKX.begin_operation(
+            task, kind="ingest-return", attempt_id=str(attempt.get("attempt_id", "")),
+            detail=f"ingest operator-supplied return for {entry['id']}",
+        )
+        write_state(run_root, state)
         result = ingest_task_return(
             run_root, state, entry, packet, text,
             source_label=str(source),
             adapter_id=str(getattr(args, "adapter", "") or ""),
+        )
+        TASKX.complete_operation(
+            task, str(ingest_operation["operation_id"]),
+            detail="structured return recorded from an external session",
+            evidence=[str(packet / "evidence" / "return-handoff.md")],
         )
         write_state(run_root, state)
     if result["status"] == "complete" and not getattr(args, "no_validate", False):
@@ -4748,7 +5239,18 @@ def task_run_progress(state: dict, run_root: Path, args: argparse.Namespace, att
                 task, attempt = _current_task_binding(state, entry)
         review_required = TASKX.review_is_required(plan)
         review = dict(task.get("review") or {})
-        if review_required and str(review.get("outcome", "")) != "passed":
+        if review_required and str(review.get("outcome", "")) == "failed" and TASKX.review_belongs_to(task, review, attempt):
+            if getattr(args, "auto", True):
+                problems = TASKX.corrective_attempt_problems(task, attempt, repair_kind="review")
+                if not problems:
+                    prepare_repair_attempt(
+                        run_root, state, args=args,
+                        reason=f"review {review.get('review_id', '')} directed a correction",
+                    )
+                    return 1, "a review-directed correction attempt is prepared"
+                return 2, "The review requires correction but it cannot be prepared: " + "; ".join(problems)
+            return 2, "The review found a defect; prepare a review-directed correction with task-repair."
+        if review_required and not TASKX.review_is_current(task):
             review_adapter = str(getattr(args, "review_adapter", "") or "").strip()
             if review_adapter:
                 return _run_review_adapter(run_root, state, entry, packet, task, args, review_adapter)
@@ -4828,17 +5330,27 @@ def _run_task_proof(
                 break
     if not plan:
         return 2, "No recorded task plan matches this task; Proof Pass needs the original request."
-    if task.get("proof"):
+    if TASKX.proof_is_current(task):
         # Resuming a task whose engine determination is already recorded must not
         # mint a second receipt: the first one stays the record of this revision.
         return 0, "The engine's determination is already recorded; the human acceptance decision remains (task-accept)."
     attempt = TASKX.attempt_for(task, entry["id"]) or {}
     if str(attempt.get("state")) != "validated":
         return 2, "Proof Pass runs after a validated attempt."
+    current_fingerprint = TRANSPORT.current_implementation_fingerprint(state)
+    stale = TASKX.validation_current_problems(task, current_fingerprint=current_fingerprint)
+    if stale:
+        return 2, (
+            "Proof Pass refused: the recorded validation no longer describes the current implementation: "
+            + "; ".join(stale)
+            + " A new correction and a fresh validation are required."
+        )
     review_required = TASKX.review_is_required(plan)
     review_record = dict(task.get("review") or {})
-    if review_required and str(review_record.get("outcome")) != "passed":
-        return 2, "The policy for this task requires a recorded independent review before Proof Pass."
+    if review_required:
+        review_problems = TASKX.review_current_problems(task, required=True)
+        if review_problems:
+            return 2, "The policy for this task requires a current passing independent review: " + "; ".join(review_problems)
     rendered_plan = dict(plan.get("rendered_acceptance") or {})
     rendered_record = dict(task.get("rendered") or {})
     rendered_capture: dict = {}
@@ -4868,6 +5380,11 @@ def _run_task_proof(
                 rendered_capture = dict(row)
                 break
     return_record = dict(attempt.get("return") or {})
+    proof_operation = TASKX.begin_operation(
+        task, kind="proof", attempt_id=str(attempt.get("attempt_id", "")),
+        detail=f"Proof Pass for {entry['id']}",
+    )
+    write_state(run_root, state)
     statements: list[str] = []
     return_path = Path(str(return_record.get("path", "")))
     if return_path.is_file():
@@ -4876,7 +5393,9 @@ def _run_task_proof(
             statements.append(line)
     work_digest = PROOF.work_digest_for(
         str(plan.get("request", "")),
-        f"{entry['id']}|{manifest.get('packet_sha256', '')}|{str(attempt.get('validation', {}).get('path', ''))}",
+        f"{entry['id']}|{attempt.get('attempt_id', '')}|{manifest.get('packet_sha256', '')}|"
+        f"{str((attempt.get('validation') or {}).get('path', ''))}|"
+        f"{str((attempt.get('validation') or {}).get('validation_sha256', ''))}|impl:{current_fingerprint}",
     )
     independent_review = {"reviewer": str(review_record.get("reviewer_identity", ""))} if review_record else None
     validation = dict(attempt.get("validation") or {})
@@ -4953,8 +5472,20 @@ def _run_task_proof(
         require_independent_review=review_required,
         evidence_kinds=tuple(evidence_kinds),
         evidence_observation=evidence_observation,
+        implementation_fingerprint=current_fingerprint,
     )
+    receipt = {
+        **receipt,
+        "packet_id": str(entry["id"]),
+        "attempt_id": str(attempt.get("attempt_id", "")),
+        "review_id": str(review_record.get("review_id", "")),
+        "implementation_fingerprint": current_fingerprint,
+    }
     TASKX.record_proof(task, receipt=receipt)
+    TASKX.complete_operation(
+        task, str(proof_operation["operation_id"]),
+        detail=f"Proof Pass {receipt.get('proof_id')} {receipt.get('acceptance_state')}",
+    )
     emit_event(
         run_root, "task_proof_recorded", state=state, task_id=entry["id"], stage="T1",
         proof_id=str(receipt.get("proof_id", "")),
@@ -5072,11 +5603,64 @@ def _ingest_task_review(
     attempt = TASKX.attempt_for(task, entry["id"]) or {}
     if str(attempt.get("state")) != "validated":
         raise RuntimeError_("The required review runs on a validated attempt; the current attempt is " + str(attempt.get('state')))
-    implementer = find_implementer_execution(state, task_id=entry["id"])
+    # A review cannot be ingested against a revision whose validation is stale.
+    # Check that before creating a reviewer execution, so a refused review leaves
+    # no open execution and no partial evidence behind.
+    stale = TASKX.validation_current_problems(
+        task,
+        current_fingerprint=TRANSPORT.current_implementation_fingerprint(state),
+    )
+    if stale:
+        raise RuntimeError_(
+            "Independent review rejected: the validated revision is no longer current: "
+            + "; ".join(stale)
+        )
+    problems = review_judgement_problems(block)
+    if problems:
+        raise RuntimeError_("Review judgement rejected: " + "; ".join(problems))
+    evidence_problems = REVIEWS.review_evidence_problems(
+        state, packet, "technical", pending=("recorded review judgement",)
+    )
+    if evidence_problems:
+        raise RuntimeError_("Independent review rejected: " + "; ".join(evidence_problems))
+    if REVIEWS.current_review(state, packet_id=entry["id"]) is not None:
+        raise RuntimeError_(
+            "Refusing to overwrite the recorded independent review for this revision; "
+            "a corrected revision needs a new attempt, not a second review of the same revision"
+        )
+    review_operation = TASKX.begin_operation(
+        task, kind="review", attempt_id=str(attempt.get("attempt_id", "")),
+        detail=f"independent technical review of {entry['id']}",
+    )
+    write_state(run_root, state)
+    implementer = None
+    attempt_execution = str(attempt.get("execution_id", ""))
+    if attempt_execution:
+        implementer, _impl_problems = named_execution(
+            state, attempt_execution, role="implementer", task_id=entry["id"]
+        )
     if implementer is None:
         raise RuntimeError_(
             "Independent review rejected: the reviewed implementation has no engine-created execution record, "
             "so review independence cannot be established"
+        )
+    identity = str(reviewer_identity or "").strip().lower()
+    task_workers = TASKX.executor_identities(task)
+    worker_identities = {value for value in REVIEWS.worker_identities(state) if value}
+    if identity and (identity in task_workers or identity in worker_identities):
+        record_failure(
+            state,
+            source="out-of-scope",
+            operation=f"task-review:{entry['id']}",
+            evidence=[str(source_label), f"reviewer identity {reviewer_identity!r}"],
+            execution_id=str(implementer.get("execution_id", "")),
+            task_id=entry["id"],
+            detail="a reviewer identity matches an implementation identity for this task",
+        )
+        write_state(run_root, state)
+        raise RuntimeError_(
+            "Independent review identity rejected: the reviewer identity matches an implementation "
+            "identity recorded for this task; an implementer cannot review its own work"
         )
     reviewer_execution, execution_problems = execution_for_task(
         state, task_id=entry["id"], role="reviewer",
@@ -5096,7 +5680,23 @@ def _ingest_task_review(
         reviewer_execution=str(reviewer_execution.get("execution_id", "")),
         implementing_execution=str(implementer.get("execution_id", "")),
     )
+    # The reviewer must differ from every execution this task produced, not only
+    # the latest implementer: a previous attempt's worker cannot certify a later
+    # correction as independent.
+    for record in EXECUTION.executions(state):
+        if str(record.get("task_id", "")) != str(entry["id"]):
+            continue
+        if str(record.get("role", "")) not in ("implementer", "validator"):
+            continue
+        if str(record.get("execution_id", "")) == str(reviewer_execution.get("execution_id", "")):
+            identity_problems.append("the reviewer execution is one of this task's implementation executions")
     if identity_problems:
+        EXECUTION.fail(
+            state, str(reviewer_execution.get("execution_id", "")),
+            source="out-of-scope",
+            evidence=[str(source_label)] + identity_problems,
+            detail="review independence could not be established",
+        )
         record_failure(
             state,
             source="out-of-scope",
@@ -5108,14 +5708,6 @@ def _ingest_task_review(
         )
         write_state(run_root, state)
         raise RuntimeError_("Independent review identity rejected: " + "; ".join(identity_problems))
-    problems = review_judgement_problems(block)
-    if problems:
-        raise RuntimeError_("Review judgement rejected: " + "; ".join(problems))
-    evidence_problems = REVIEWS.review_evidence_problems(
-        state, packet, "technical", pending=("recorded review judgement",)
-    )
-    if evidence_problems:
-        raise RuntimeError_("Independent review rejected: " + "; ".join(evidence_problems))
     raw_destination = packet / "evidence" / "review-response.md"
     block_destination = packet / "evidence" / "review-judgement.md"
     if raw_destination.exists() or block_destination.exists():
@@ -5137,6 +5729,9 @@ def _ingest_task_review(
         recommendation=recommendation,
         reviewer_execution=str(reviewer_execution.get("execution_id", "")),
         implementing_execution=str(implementer.get("execution_id", "")),
+        attempt_id=str(attempt.get("attempt_id", "")),
+        task_id=str(task.get("task_id", "")),
+        validation_sha256=str((attempt.get("validation") or {}).get("validation_sha256", "")),
     )
     review_destination = REVIEWS.store(state, packet, review_record)
     EXECUTION.complete(
@@ -5179,6 +5774,10 @@ def _ingest_task_review(
             except CONTRACTS.ContractError:
                 continue
         if continue_to_proof:
+            TASKX.complete_operation(
+                task, str(review_operation["operation_id"]),
+                detail="independent review passed", evidence=[str(block_destination)],
+            )
             print(f"Independent review recorded: {review_record['outcome']} ({review_record['review_id']})")
             return _run_task_proof(run_root, state, entry, packet, task)
         state["next"] = "The independent review passed; run the task Proof Pass (task-verify)."
@@ -5215,6 +5814,10 @@ def _ingest_task_review(
     print(f"Independent review recorded: {review_record['outcome']} ({review_record['review_id']})")
     print(f"Recommendation: {review_record.get('recommendation')}")
     print(f"Next: {state['next']}")
+    TASKX.complete_operation(
+        task, str(review_operation["operation_id"]),
+        detail=f"independent review {review_record['outcome']}", evidence=[str(block_destination)],
+    )
     return (0 if review_record["outcome"] == "passed" else 2), state["next"]
 
 
@@ -5279,9 +5882,9 @@ def task_verify_command(args: argparse.Namespace) -> int:
         if entry["stage"] != "T1":
             raise RuntimeError_("Task Proof Pass belongs to a T1 boundary")
         task, _attempt = _current_task_binding(state, entry)
-        if task.get("proof"):
+        if TASKX.proof_is_current(task):
             raise RuntimeError_(
-                f"This task already carries a proof receipt ({task['proof'].get('proof_id')}); a new pass is a deliberate new task, not a re-run."
+                f"This task already carries a current proof receipt ({task['proof'].get('proof_id')}); a new pass is a deliberate new task, not a re-run."
             )
         code, next_action = _run_task_proof(run_root, state, entry, packet, task)
         write_state(run_root, state)
@@ -5314,11 +5917,33 @@ def task_accept_command(args: argparse.Namespace) -> int:
             raise RuntimeError_(
                 "The engine's Proof Pass has not been recorded for this task; acceptance needs the verified revision."
             )
-        review_required = TASKX.review_is_required(plan)
-        if review_required and str((task.get("review") or {}).get("outcome", "")) != "passed":
+        proof_problems = TASKX.proof_current_problems(task)
+        if proof_problems:
+            raise RuntimeError_("Acceptance refused: " + "; ".join(proof_problems))
+        proof_record = PROOF.get_receipt(state, str((task.get("proof") or {}).get("proof_id", "")))
+        if proof_record is None:
             raise RuntimeError_(
-                "This task's policy requires an independent review and none has passed; acceptance cannot skip it."
+                "Acceptance refused: the task names a proof receipt that is not in the run's durable receipt store"
             )
+        if str(proof_record.get("task_id", "")) and str(proof_record.get("task_id")) != str(task.get("task_id", "")):
+            raise RuntimeError_("Acceptance refused: the proof receipt belongs to another task")
+        stale = TASKX.validation_current_problems(
+            task,
+            current_fingerprint=TRANSPORT.current_implementation_fingerprint(state),
+        )
+        if stale:
+            raise RuntimeError_(
+                "Acceptance refused: the implementation no longer matches the validated revision: "
+                + "; ".join(stale)
+            )
+        review_required = TASKX.review_is_required(plan)
+        if review_required:
+            review_problems = TASKX.review_current_problems(task, required=True)
+            if review_problems:
+                raise RuntimeError_(
+                    "This task's policy requires a current independent review and none has passed: "
+                    + "; ".join(review_problems)
+                )
         review = dict(task.get("review") or {})
         lifecycle = STATEMACHINE.lifecycle_of(state)
         if review_required:
@@ -5359,9 +5984,19 @@ def task_accept_command(args: argparse.Namespace) -> int:
                     "and consumes no approval"
                 ),
             })
+        accept_operation = TASKX.begin_operation(
+            task, kind="accept", attempt_id=str(attempt.get("attempt_id", "")),
+            detail=f"human {outcome} decision by {identity}",
+        )
+        write_state(run_root, state)
         TASKX.record_acceptance(
             task, outcome=outcome, identity=identity,
             reason=str(getattr(args, "reason", "") or ""),
+        )
+        TASKX.complete_operation(
+            task, str(accept_operation["operation_id"]),
+            detail=f"human acceptance recorded: {outcome}",
+            evidence=[str((task.get("proof") or {}).get("proof_id", ""))],
         )
         _memory_settle(run_root, state)
         emit_event(
@@ -5406,10 +6041,43 @@ def task_report(state: dict, *, task_id: str = "") -> dict:
             plan = candidate
             break
     review_required = TASKX.review_is_required(plan)
-    status_value = TASKX.task_status_value(task, review_required=review_required)
     project = Path(str(state.get("project", "")))
     current_head = str(TRANSPORT.project_git_snapshot(project).get("head", "")) if project.is_dir() else ""
+    current_fingerprint = (
+        TRANSPORT.current_implementation_fingerprint(state) if project.is_dir() else ""
+    )
     baseline_head = str((task.get("baseline") or {}).get("head", ""))
+    latest_attempt = TASKX.latest_attempt(task)
+    validation_freshness = TASKX.validation_current_problems(
+        task, current_fingerprint=current_fingerprint
+    )
+    status_value = TASKX.task_status_value(
+        task, review_required=review_required, evidence_current=not validation_freshness,
+    )
+    review_blockers = TASKX.review_current_problems(task, required=review_required)
+    recovery = TASKX.recovery_view(
+        task,
+        review_required=review_required,
+        current_head=current_head,
+        current_fingerprint=current_fingerprint,
+        open_executions=EXECUTION.open_executions(state),
+    )
+    selected_worker = {}
+    if state.get("adapter_selections"):
+        selection = state["adapter_selections"][-1]
+        selected_worker = {
+            "adapter": str((selection.get("chosen") or {}).get("id", "")),
+            "kind": str((selection.get("chosen") or {}).get("kind", "")),
+            "reason": str(selection.get("reason", "")),
+            "selection_id": str(selection.get("selection_id", "")),
+            "preflight": dict(latest_attempt.get("preflight") or {}),
+        }
+    current_operation = {}
+    operation_id = str(task.get("current_operation", ""))
+    for row in reversed(task.get("operations") or ()):
+        if str(row.get("operation_id", "")) == operation_id:
+            current_operation = dict(row)
+            break
     attempt_rows = []
     for attempt in task.get("attempts") or ():
         validation = dict(attempt.get("validation") or {})
@@ -5467,12 +6135,122 @@ def task_report(state: dict, *, task_id: str = "") -> dict:
         "baseline_head": baseline_head,
         "current_head": current_head,
         "revision_drift": bool(baseline_head and current_head and baseline_head != current_head),
+        "current_attempt": {
+            "attempt_id": str(latest_attempt.get("attempt_id", "")),
+            "packet_id": str(latest_attempt.get("packet_id", "")),
+            "attempt": latest_attempt.get("attempt", 1),
+            "state": str(latest_attempt.get("state", "")),
+            "repair_kind": str(latest_attempt.get("repair_kind", "")),
+            "parent_attempt_id": str(latest_attempt.get("parent_attempt_id", "")),
+        },
+        "selected_worker": selected_worker,
+        "current_operation": current_operation,
+        "last_validation": {
+            "status": str((latest_attempt.get("validation") or {}).get("status", "")),
+            "failure_kind": str((latest_attempt.get("validation") or {}).get("failure_kind", "")),
+            "path": str((latest_attempt.get("validation") or {}).get("path", "")),
+            "validated_revision": dict((latest_attempt.get("validation") or {}).get("validated_revision") or {}),
+            "fresh": not validation_freshness,
+            "problems": validation_freshness,
+        },
+        "review_findings": list((task.get("review") or {}).get("findings") or []),
+        "review_blockers": review_blockers,
+        "review_corrections": int(task.get("review_corrections", TASKX.review_correction_count(task)) or 0),
+        "review_correction_limit": int(task.get("review_correction_limit", TASKX.MAX_REVIEW_CORRECTIONS) or 0),
+        "evidence_freshness": "current" if not validation_freshness else "stale-or-unproven",
         "gates": {
             "ahead": list(((plan.get("approvals") or {}).get("gates_ahead") or [])),
             "human_acceptance_pending": status_value in ("verified",),
+            "human_acceptance_recorded": str((task.get("acceptance") or {}).get("outcome", "")),
+            "human_decision_required": bool(recovery.get("required_human_action")),
+            "approvals_recorded": len(state.get("approvals") or ()),
         },
+        "recovery": recovery,
         "continuation": TASKX.continuation_point(task, review_required=review_required),
     }
+
+
+def task_recover_command(args: argparse.Namespace) -> int:
+    """Report the durable recovery view for a T1 task, or resume a safe continuation.
+
+    Without ``--apply`` this is read-only and never guesses that a worker
+    finished. With ``--apply`` it marks the interrupted operation truthfully and
+    delegates to the same ``task-run`` lifecycle the ordinary resume uses; it
+    never invents a result, never consumes an approval, and never duplicates an
+    attempt. When the next step needs a human decision, it stops and names it.
+    """
+    run_root, state = resolve_and_load(args)
+    entry, _packet = current_packet(state, allow_project_drift=True)
+    if entry["stage"] != "T1":
+        raise RuntimeError_("task-recover reports the T1 task lifecycle; the current boundary is " + str(entry["stage"]))
+    report = task_report(state)
+    recovery = dict(report.get("recovery") or {})
+    if not getattr(args, "apply", False):
+        if getattr(args, "json", False):
+            print(json.dumps(recovery, indent=2, sort_keys=True, default=str))
+        else:
+            print("RECOVERY")
+            print(f"Task:          {recovery.get('task_id')}")
+            print(f"State:         {recovery.get('status')}")
+            print(f"Attempt:       {recovery.get('current_attempt_id')} ({recovery.get('attempt_state')})")
+            print(f"Last durable:  {(recovery.get('last_durable_operation') or {}).get('kind', 'none')}")
+            interrupted = recovery.get("interrupted_operation") or {}
+            print(f"Interrupted:   {interrupted.get('kind', 'none') if interrupted else 'none'}")
+            print(f"Safe resume:   {recovery.get('safe_continuation')}")
+            print(f"Revision:      {str((recovery.get('last_verified_revision') or {}).get('head', 'not recorded'))[:12]}")
+            if recovery.get("required_human_action"):
+                print(f"Needs you:     {recovery.get('required_human_action')}")
+        return 0
+    with run_state_lock(run_root, "task-recover"):
+        state = load_state(run_root)
+        entry, _packet = current_packet(state, allow_project_drift=True)
+        task, attempt = _current_task_binding(state, entry)
+        plan = TASKS.latest_plan(state)
+        for candidate in reversed(state.get("task_plans") or []):
+            if str(candidate.get("plan_id")) == str(task.get("plan_id")):
+                plan = candidate
+                break
+        review_required = TASKX.review_is_required(plan)
+        current_head = str(TRANSPORT.project_git_snapshot(Path(state["project"])).get("head", ""))
+        recovery = TASKX.recovery_view(
+            task,
+            review_required=review_required,
+            current_head=current_head,
+            current_fingerprint=TRANSPORT.current_implementation_fingerprint(state),
+            open_executions=EXECUTION.open_executions(state),
+        )
+        safe = str(recovery.get("safe_continuation", ""))
+        if safe in ("wait-or-abandon-open",) and not getattr(args, "abandon_open", False):
+            print("Recovery stopped: " + str(recovery.get("required_human_action", "")))
+            return 2
+        if safe in ("stop-stale-evidence", "escalate"):
+            print("Recovery stopped: " + str(recovery.get("required_human_action") or "the task cannot be resumed safely."))
+            return 2
+        if safe in ("none", "accept"):
+            print("No automatic continuation is safe or needed. " + str(
+                recovery.get("required_human_action") or "The human decision remains."
+            ))
+            return 0
+        interrupted = dict(recovery.get("interrupted_operation") or {})
+        if interrupted:
+            TASKX.fail_operation(
+                task, str(interrupted.get("operation_id", "")),
+                detail="recovery recorded that this operation was interrupted; its effect is re-established from evidence",
+                state_value="interrupted",
+            )
+            write_state(run_root, state)
+        emit_event(
+            run_root, "task_recovered", state=state, task_id=str(task.get("task_id", "")), stage="T1",
+            safe_continuation=safe, interrupted=str(interrupted.get("kind", "")),
+        )
+        write_state(run_root, state)
+    print(f"Recovery resuming: {safe}")
+    if getattr(args, "escalate", False) and not str(getattr(args, "worker_role", "") or ""):
+        order = list(TRANSPORT.WORKER_ROLES)
+        current = str(worker_state(state).get("worker_role", "bulk")).strip() or "bulk"
+        index = order.index(current) if current in order else 0
+        setattr(args, "worker_role", order[min(index + 1, len(order) - 1)])
+    return task_run_command(args)
 
 
 def task_status_command(args: argparse.Namespace) -> int:
@@ -5505,6 +6283,14 @@ def task_status_command(args: argparse.Namespace) -> int:
     print(f"Request:      {report['objective'][:160]}")
     print(f"Task:         {report['task_id']}")
     print(f"State:        {report['status']}")
+    worker = dict(report.get("selected_worker") or {})
+    if worker.get("adapter"):
+        print(f"Worker:       {worker.get('adapter')} ({worker.get('kind', 'unknown')})")
+        if worker.get("reason"):
+            print(f"Why:          {str(worker.get('reason'))[:180]}")
+    operation = dict(report.get("current_operation") or {})
+    if operation:
+        print(f"Operation:    {operation.get('kind')} / {operation.get('state')}")
     if report["attempts"]:
         print("Attempts:")
         for row in report["attempts"]:
@@ -5538,6 +6324,19 @@ def task_status_command(args: argparse.Namespace) -> int:
         print(f"Acceptance:   {report['acceptance'].get('outcome')} by {report['acceptance'].get('identity')}")
     if report["revision_drift"]:
         print("Note:         the repository HEAD moved since this task's baseline; a stale return will be refused.")
+    print(f"Evidence:     {report.get('evidence_freshness')} (validation: {report['last_validation'].get('status') or 'none'})")
+    if report.get("review_corrections"):
+        print(
+            f"Corrections:  {report.get('review_corrections')}/{report.get('review_correction_limit')} "
+            "review-directed"
+        )
+    recovery = dict(report.get("recovery") or {})
+    if recovery.get("interrupted_operation"):
+        print(f"Recovery:     interrupted {recovery['interrupted_operation'].get('kind')} operation")
+    if recovery.get("safe_continuation") and recovery.get("safe_continuation") != "none":
+        print(f"Safe resume:  {recovery.get('safe_continuation')}")
+    if recovery.get("required_human_action"):
+        print(f"Needs you:    {recovery.get('required_human_action')[:220]}")
     gates = [item for item in report["gates"]["ahead"]]
     if gates:
         print(f"Gates ahead:  {', '.join(gates)} (none granted by this run)")
@@ -5567,6 +6366,12 @@ def task_run_command(args: argparse.Namespace) -> int:
         state, task, entry, attempt, abandon_open=bool(getattr(args, "abandon_open", False)),
     )
     if str(attempt.get("state")) == "running":
+        return_target = structured_return_target(packet)
+        recorded_return = packet / "evidence" / "return-handoff.md"
+        if (return_target is not None and return_target.is_file()) or recorded_return.is_file():
+            # The worker or the runtime wrote its return before the interruption;
+            # continuing is safe because the evidence is read, not invented.
+            return _task_run_continue(run_root, args, attempts_run=int(getattr(args, "_attempts_run", 0) or 0))
         raise RuntimeError_(
             "An attempt execution is open. If the worker is gone, say so deliberately with "
             "`ariadne.py task-run --abandon-open` (the execution is abandoned as a truthful "
@@ -5634,6 +6439,14 @@ def task_run_command(args: argparse.Namespace) -> int:
                 failure_reason="none",
             )
             write_state(run_root, state)
+            execute_operation_id = ""
+            if str(adapter.get("kind")) == TASKX.CLI_HARNESS:
+                execute_operation = TASKX.begin_operation(
+                    task, kind="execute", attempt_id=str(attempt.get("attempt_id", "")),
+                    detail=f"{adapter.get('id')} worker execution attempt {attempt.get('attempt')}",
+                )
+                execute_operation_id = str(execute_operation["operation_id"])
+                write_state(run_root, state)
         if str(adapter.get("kind")) in (TASKX.HOST_SESSION, TASKX.MANUAL):
             print(f"The attempt is bound to the {adapter.get('title')} worker.")
             print(f"Packet: {packet / TRANSPORT.PACKET_NAME}")
@@ -5666,6 +6479,19 @@ def task_run_command(args: argparse.Namespace) -> int:
                     target_text = extract_return_block(target_text) or target_text
             stdout_block = extract_return_block(result["stdout"])
             chosen_text = target_text or stdout_block
+            if execute_operation_id:
+                if result["error"] or not chosen_text:
+                    TASKX.fail_operation(
+                        task, execute_operation_id,
+                        detail=str(result["error"] or "the worker produced no marked return handoff"),
+                        evidence=[str(transcript)] if transcript.exists() else [],
+                    )
+                else:
+                    TASKX.complete_operation(
+                        task, execute_operation_id,
+                        detail=f"worker exited {result['returncode']} and produced a return handoff",
+                        evidence=[str(transcript), str(return_target)] if return_target else [str(transcript)],
+                    )
             if result["error"] or (result["returncode"] != 0 and not chosen_text):
                 source = "validation-timeout" if result["returncode"] == 124 else (
                     "runtime-unavailable" if result["returncode"] == 127 else "provider-unavailable"
@@ -5690,10 +6516,20 @@ def task_run_command(args: argparse.Namespace) -> int:
                 write_state(run_root, state)
                 print("The worker produced no return handoff; the failure is recorded.")
                 return 2
+            ingest_operation = TASKX.begin_operation(
+                task, kind="ingest-return", attempt_id=str(attempt.get("attempt_id", "")),
+                detail=f"ingest return for {entry['id']}",
+            )
+            write_state(run_root, state)
             ingest_task_return(
                 run_root, state, entry, packet, chosen_text,
                 source_label=str(return_target) if target_text else str(transcript),
                 adapter_id=str(adapter.get("id", "")),
+            )
+            TASKX.complete_operation(
+                task, str(ingest_operation["operation_id"]),
+                detail="structured return recorded",
+                evidence=[str(packet / "evidence" / "return-handoff.md")],
             )
             summary = run_task_validation(
                 run_root, state, entry, packet,
@@ -5731,27 +6567,46 @@ def _task_run_continue(run_root: Path, args: argparse.Namespace, attempts_run: i
                 break
         review_required = TASKX.review_is_required(plan)
         if str(attempt.get("state")) == "running":
-            return_target = structured_return_target(packet)
-            if return_target is not None and return_target.is_file():
-                text = extract_return_block(read(return_target)) or read(return_target)
+            validation_file = packet / "evidence" / "validation.json"
+            if validation_file.is_file():
                 try:
-                    ingest_task_return(
-                        run_root, state, entry, packet, text,
-                        source_label=str(return_target), adapter_id=str(attempt.get("adapter", "")),
+                    run_task_validation(
+                        run_root, state, entry, packet,
+                        timeout=int(getattr(args, "validate_timeout", 120) or 120),
                     )
                 except RuntimeError_ as exc:
                     print(str(exc))
                     write_state(run_root, state)
                     return 2
                 attempts_run += 1
-                run_task_validation(
-                    run_root, state, entry, packet,
-                    timeout=int(getattr(args, "validate_timeout", 120) or 120),
-                )
             else:
-                print("The prepared attempt has not returned yet.")
-                print(f"Next: {TASKX.continuation_point(task, review_required=review_required)}")
-                return 0
+                return_target = structured_return_target(packet)
+                recorded_return = packet / "evidence" / "return-handoff.md"
+                target_path = (
+                    return_target if return_target is not None and return_target.is_file()
+                    else recorded_return if recorded_return.is_file() else None
+                )
+                if target_path is not None:
+                    text = extract_return_block(read(target_path)) or read(target_path)
+                    try:
+                        ingest_task_return(
+                            run_root, state, entry, packet, text,
+                            source_label=str(target_path), adapter_id=str(attempt.get("adapter", "")),
+                            allow_existing_evidence=bool(recorded_return.is_file()),
+                        )
+                    except RuntimeError_ as exc:
+                        print(str(exc))
+                        write_state(run_root, state)
+                        return 2
+                    attempts_run += 1
+                    run_task_validation(
+                        run_root, state, entry, packet,
+                        timeout=int(getattr(args, "validate_timeout", 120) or 120),
+                    )
+                else:
+                    print("The prepared attempt has not returned yet.")
+                    print(f"Next: {TASKX.continuation_point(task, review_required=review_required)}")
+                    return 0
         code, next_action = task_run_progress(state, run_root, args, attempts_run + 1)
         write_state(run_root, state)
     if code == 1:
@@ -5834,11 +6689,22 @@ def task_advance(run_root: Path, state: dict, args: argparse.Namespace) -> int:
                 )
                 return 0
         review = dict(task.get("review") or {})
-        if review_required and str(review.get("outcome", "")) != "passed":
-            prepare_task_review_request(run_root, state, entry, packet, task)
-            if str(review.get("outcome", "")) == "failed":
-                print("The independent review failed; prepare a bounded repair with `ariadne.py task-repair`.")
+        if review_required and TASKX.review_belongs_to(task, review, attempt) and str(review.get("outcome", "")) == "failed":
+            problems = TASKX.corrective_attempt_problems(task, attempt, repair_kind="review")
+            if problems:
+                print("The review requires correction but it cannot be prepared: " + "; ".join(problems))
                 return 2
+            entry_new, output, _task_record = prepare_repair_attempt(
+                run_root, state, args=args,
+                reason=f"review {review.get('review_id', '')} directed a correction",
+            )
+            print(
+                "Next: the independent review found a defect; review-directed correction "
+                f"attempt {entry_new['id']} is prepared ({output})."
+            )
+            return 0
+        if review_required and not TASKX.review_is_current(task):
+            prepare_task_review_request(run_root, state, entry, packet, task)
             print("Next: run the independent review in a fresh session, then record it with `ariadne.py task-review --input <file> --identity <reviewer>`.")
             return 0
         code, next_action = _run_task_proof(run_root, state, entry, packet, task)
@@ -7366,7 +8232,14 @@ def ingest_review(args: argparse.Namespace) -> int:
     )
     state["updated_at"] = now()
     state["evidence_state"] = "independent review response and judgement recorded"
-    state["next"] = "Present mechanical and independent evidence for the human G3 decision."
+    if str(review_record.get("outcome")) == "passed":
+        state["next"] = "Present mechanical and independent evidence for the human G3 decision."
+    else:
+        state["next"] = (
+            "The independent review returned 'fix and re-review'; prepare the review-directed "
+            "S4B correction with `advance` (or `prepare-next --retry`). G3 acceptance is refused "
+            "until a corrected revision passes a new independent review."
+        )
     ensure_intervention(
         state,
         "necessary",
@@ -7572,6 +8445,13 @@ def record_acceptance(args: argparse.Namespace) -> int:
     if outcome not in ("accepted", "rejected"):
         raise RuntimeError_("Acceptance outcome must be accepted or rejected")
     review_record = REVIEWS.current_review(state, packet_id=entry["id"])
+    if outcome == "accepted" and (
+        review_record is None or str(review_record.get("outcome")) != "passed"
+    ):
+        raise RuntimeError_(
+            "Acceptance refused: the current independent review did not pass. A corrected revision "
+            "needs a new independent review before G3."
+        )
     consumed_approval = ""
     if outcome == "accepted":
         subject = POLICY.review_subject(state, packet)
@@ -9582,6 +10462,15 @@ def prepare_next(args: argparse.Namespace) -> int:
     run_root, state = resolve_and_load(args)
     entry, parent = current_packet(state, allow_project_drift=True)
     escalate = bool(getattr(args, "escalate", False))
+    review_correction = False
+    if entry["stage"] == "S5":
+        review = REVIEWS.current_review(state, packet_id=str(entry["id"]))
+        if (
+            review is not None
+            and str(review.get("outcome")) == "failed"
+            and str(review.get("recommendation", "")).lower() == "fix and re-review"
+        ):
+            review_correction = True
     if escalate:
         if entry["stage"] != "S4B":
             raise RuntimeError_("Escalation is currently defined for the implementation worker boundary only")
@@ -9589,7 +10478,16 @@ def prepare_next(args: argparse.Namespace) -> int:
             raise RuntimeError_("Worker escalation must remain at the current S4B boundary")
         args.retry = True
     stage, reason = infer_next_stage(state)
-    if args.retry:
+    if review_correction:
+        if args.stage and str(args.stage) != "S4B":
+            raise RuntimeError_("A review-directed correction must re-enter the S4B implementation boundary")
+        stage = "S4B"
+        args.retry = True
+        reason = (
+            "The independent review returned 'fix and re-review'; this is a review-directed "
+            "correction of the same revision, not a new direction or a routine retry."
+        )
+    elif args.retry:
         requested = args.stage or entry["stage"]
         if requested != entry["stage"]:
             raise RuntimeError_("A retry must repeat the current boundary")
@@ -12156,6 +13054,29 @@ def capability_probe_from_spec(
     raise RuntimeError_(f"unsupported capability probe kind: {kind!r}")
 
 
+def adapter_conformance_command(args: argparse.Namespace) -> int:
+    """Report the shared worker-adapter conformance matrix (read-only)."""
+    matrix = TASKX.conformance_matrix()
+    if getattr(args, "json", False):
+        print(json.dumps(matrix, indent=2, sort_keys=True, default=str))
+        return 0
+    print("ADAPTER CONFORMANCE")
+    for row in matrix["adapters"]:
+        print(
+            f"  {row['adapter']:<14} {row['verdict']:<20} "
+            f"available={'yes' if row['available'] else 'no'}"
+        )
+        if row.get("discovery"):
+            print(f"    discovery: {row['discovery']}")
+        if row.get("failed"):
+            print("    failed: " + ", ".join(row["failed"]))
+    print()
+    print("Live-qualified: " + (", ".join(matrix["live"]) or "none"))
+    print("Declared / not live: " + (", ".join(matrix["not_live"]) or "none"))
+    print("A declaration is not an integration; live checks are recorded only when executed.")
+    return 0
+
+
 def capabilities_command(args: argparse.Namespace) -> int:
     """Declare, probe and inspect capability evidence. Read-only unless --input is given."""
     run_root, state = resolve_and_load(args)
@@ -13336,6 +14257,26 @@ def parser() -> argparse.ArgumentParser:
     task_status_p.add_argument("--task", help="a recorded task id; defaults to the current task")
     task_status_p.add_argument("--json", action="store_true")
 
+    task_recover_p = sub.add_parser(
+        "task-recover",
+        help="report the durable T1 recovery view, or safely resume the recorded continuation",
+    )
+    run_selector(task_recover_p)
+    task_recover_p.add_argument("--apply", action="store_true", help="resume the safe continuation")
+    task_recover_p.add_argument("--abandon-open", dest="abandon_open", action="store_true",
+                                help="declare an open worker execution lost before resuming")
+    task_recover_p.add_argument("--timeout", type=int, default=1800)
+    task_recover_p.add_argument("--validate-timeout", type=int, default=120)
+    task_recover_p.add_argument("--max-attempts", type=int, default=3)
+    task_recover_p.add_argument("--adapter")
+    task_recover_p.add_argument("--worker-command")
+    task_recover_p.add_argument("--review-adapter")
+    task_recover_p.add_argument("--no-auto", dest="auto", action="store_false")
+    task_recover_p.add_argument("--escalate", action="store_true")
+    task_recover_p.add_argument("--provider")
+    task_recover_p.add_argument("--worker-role", choices=list(TRANSPORT.WORKER_ROLES))
+    task_recover_p.add_argument("--json", action="store_true")
+
     task_run_p = sub.add_parser(
         "task-run",
         help="select a compatible worker, run the prepared task, and continue the engine lifecycle automatically",
@@ -13812,6 +14753,12 @@ def parser() -> argparse.ArgumentParser:
     capabilities_p.add_argument("--adapter", help="filter the registry view to one adapter")
     capabilities_p.add_argument("--json", action="store_true")
 
+    adapter_conformance_p = sub.add_parser(
+        "adapter-conformance",
+        help="report the shared worker-adapter conformance matrix (declared vs live-observed)",
+    )
+    adapter_conformance_p.add_argument("--json", action="store_true")
+
     verify_p = sub.add_parser(
         "verify",
         help="Proof Pass: verify work against its request (request + work in, receipt out)",
@@ -14184,6 +15131,7 @@ def main() -> int:
             "task-plan": task_plan_command,
             "task-start": task_start_command,
             "task-status": task_status_command,
+            "task-recover": task_recover_command,
             "task-run": task_run_command,
             "task-return": task_return_command,
             "task-validate": task_validate_command,
@@ -14232,6 +15180,7 @@ def main() -> int:
             "recover": recover_command,
             "migrate": migrate_command,
             "capabilities": capabilities_command,
+            "adapter-conformance": adapter_conformance_command,
             "verify": proof_verify_command,
             "proof": proof_show_command,
             "compare": proof_compare_command,

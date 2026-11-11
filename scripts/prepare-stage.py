@@ -195,7 +195,7 @@ STAGES = {
             "skills/visual-qa.md",
         ],
         "conditional_inputs": [],
-        "allowed_parents": ["S4A", "S4B"],
+        "allowed_parents": ["S4A", "S4B", "S5"],
         "forbidden_inputs": ["earlier reasoning conversation"],
         "provider": "implementation-worker",
     },
@@ -1124,7 +1124,7 @@ def worker_retry_context(
     """Carry only bounded repair clues forward; never replay an old transcript."""
     if (
         not parent
-        or parent.get("stage") not in WORKER_PACKET_STAGES
+        or parent.get("stage") not in (*WORKER_PACKET_STAGES, "S5")
         or evidence_path is None
         or not evidence_path.is_file()
     ):
@@ -1157,6 +1157,32 @@ def worker_retry_context(
             "failed_checks": failed_checks[:VALIDATION_COMMAND_LIMIT],
             "changed": [compact_worker_text(path, 240) for path in changed_paths[:20]],
             "outside": [compact_worker_text(path, 240) for path in outside_paths[:20]],
+        }
+    if evidence_kind == "review-finding":
+        try:
+            value = json.loads(read(evidence_path))
+        except (OSError, json.JSONDecodeError):
+            value = {}
+        findings = [
+            compact_worker_text(item, 300)
+            for item in (value.get("findings") or ())
+            if str(item).strip()
+        ] if isinstance(value, dict) else []
+        return {
+            **context,
+            "status": str((value or {}).get("outcome", "review-failed")),
+            "failure_kind": "review-finding",
+            "failure_reason": compact_worker_text(
+                "; ".join(findings) or (value or {}).get("recommendation", "review requires correction")
+            ),
+            "failed_checks": findings[:20],
+            "review_id": str((value or {}).get("review_id", "")),
+            "review_recommendation": str((value or {}).get("recommendation", "")),
+            "review_findings": findings[:20],
+            "directive": (
+                "Correct only the recorded review findings inside the existing permitted scope, "
+                "re-run the required checks on the corrected revision, and require a new independent review."
+            ),
         }
     if evidence_kind == "attempt-outcome":
         try:
@@ -1970,6 +1996,21 @@ def task_stage_contract_problems(specs: dict | None = None) -> list[str]:
 
 
 def parent_evidence(parent: dict, parent_dir: Path) -> tuple[Path, str]:
+    if parent.get("stage") == "S5":
+        # A review-directed correction continues from the recorded review, not
+        # from a worker validation (there is none at S5).
+        review = parent_dir / "evidence" / "review-record.json"
+        if review.is_file():
+            try:
+                value = json.loads(read(review))
+            except (json.JSONDecodeError, OSError) as exc:
+                raise PacketError(f"parent review record is malformed: {exc}") from exc
+            if not isinstance(value, dict) or not value.get("review_id"):
+                raise PacketError("parent review record is malformed")
+            return review, "review-finding"
+        judgement = parent_dir / "evidence" / "review-judgement.md"
+        if judgement.is_file():
+            return judgement, "review-finding"
     if parent.get("stage") in WORKER_PACKET_STAGES:
         validation = parent_dir / "evidence" / "validation.json"
         if validation.is_file():
@@ -2830,8 +2871,8 @@ def repository_contract_problems(stages: dict | None = None) -> list[str]:
         problems.append("S5 packet must not deliver project documents")
     if s5.get("optional_project_inputs"):
         problems.append("S5 packet must not deliver optional project runtime context")
-    if specs.get("S4B", {}).get("allowed_parents") != ["S4A", "S4B"]:
-        problems.append("S4B packet parent contract drifted from S4A -> S4B")
+    if specs.get("S4B", {}).get("allowed_parents") != ["S4A", "S4B", "S5"]:
+        problems.append("S4B packet parent contract drifted from S4A/S4B/S5")
     if specs.get("S4B", {}).get("provider") != "implementation-worker":
         problems.append("S4B packet provider default must remain worker-agnostic")
     if specs.get("S1", {}).get("allowed_parents") != ["S1"]:

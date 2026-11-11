@@ -44,7 +44,7 @@ SKILL_STATES = ("recommended", "invoked", "completed", "used", "skipped", "faile
 SKILL_TRANSITIONS = {
     "recommended": {"invoked", "skipped"},
     "invoked": {"completed", "failed"},
-    "completed": {"used"},
+    "completed": {"used", "invoked", "completed"},
     "used": {"used"},
     "skipped": set(),
     "failed": set(),
@@ -561,11 +561,32 @@ def record_skill_event(ledger: dict, event: dict) -> None:
     if state not in SKILL_STATES[1:]:
         raise CreativeError(f"unsupported skill evidence state: {state}")
     current = skill.get("state")
+    packet_id = str(event.get("packet_id", "") or "").strip()
+    previous_packet = str((skill.get("history") or [{}])[-1].get("packet_id", "") or "")
+    # A review-directed correction runs the same skill again for a new packet.
+    # The second execution is a new evidence cycle, not a rewind: it must name
+    # the new packet, and a completed -> completed duplicate is idempotent only
+    # when it is the same packet.
+    if state == "invoked" and current == "completed":
+        if not packet_id or packet_id == previous_packet:
+            raise CreativeError(
+                f"skill {name} is already completed; re-invoking it requires the new packet id "
+                "that the correction is producing evidence for"
+            )
+    if state == "completed" and current == "completed":
+        if packet_id and packet_id == previous_packet:
+            return
+        if not packet_id:
+            raise CreativeError(
+                f"skill {name} is already completed; a second completion requires the new packet id"
+            )
     if state not in SKILL_TRANSITIONS.get(current, set()):
         raise CreativeError(f"invalid skill transition for {name}: {current} -> {state}")
     if state == "skipped" and skill.get("mandatory"):
         raise CreativeError(f"mandatory skill cannot be skipped: {name}")
     row = {"state": state, "recorded_at": now()}
+    if packet_id:
+        row["packet_id"] = packet_id
     reason = str(event.get("reason", "")).strip()
     if state in ("skipped", "failed"):
         if not reason:

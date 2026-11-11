@@ -1,6 +1,18 @@
 # Ariadne deterministic benchmark
 
-295 registered cases across 50 groups (AR-200 through AR-205D). Offline, no model calls, no network, no paid evaluation. The full suite reports 0 fail and 0 error; `OBSERVED` and `DECLARED_SKIP` are separate categories, never passes.
+345 registered cases across 50 groups (AR-200 through 2.4A). Offline, no model
+calls, no network, no paid evaluation. On the 2.4A candidate the exhaustive run
+reports 331 pass, 4 fail, 3 error, 5 observed and 2 skip. The seven fail/error
+cases are pre-existing documentation/path drift reproduced on a clean 2.3.0
+worktree; they are never counted as passes.
+
+The 2.4A reliability cases include `lifecycle.s4b-review-correction` (a failed
+S5 review, a linked corrective S4B packet, a fresh engine validation, a second
+S5 review and G3 acceptance) and are in the release subset. The focused
+end-to-end T1/recovery suite is `python scripts/test-ar24a.py`; the adapter
+contract and live qualification suite is
+`python scripts/test-ar24a-adapters.py`.
+
 
 ```
 python benchmarks/run_benchmarks.py --list                        # list cases

@@ -1,6 +1,6 @@
 # Hosts, platforms, and known limitations
 
-> Ariadne 2.3C. This file states only what has been verified, and where. It is
+> Ariadne 2.4A. This file states only what has been verified, and where. It is
 > deliberately conservative: a host it lists as "declared" has an adapter and a
 > discovery probe but no recorded live execution here.
 
@@ -12,20 +12,37 @@ Adapter presets and their status:
 
 | Adapter | What it is | Status in this release |
 |---|---|---|
-| `claude-code` | Claude Code CLI (`claude --print ...`) | **Declared.** Executable discovery verified live (`claude --version` → 2.1.245 on Windows). Live execution blocked in this environment: the CLI is installed but unauthenticated; the engine's preflight correctly refuses and classifies the failure rather than claiming success. |
-| `codex` | OpenAI Codex CLI | **Declared.** Not installed here; discovery reports `not found` honestly. |
-| `cursor` | Cursor agent CLI | **Declared.** Not installed here. |
-| `opencode` | OpenCode CLI | **Declared.** Not installed here. |
-| `host-session` | The invoking assistant session performs the packet and records the return (`task-return`) | **Verified live** (this release): a real bug-fix task was bound, performed, returned, validated, reviewed by policy and proved end to end (see the 2.3C acceptance record). |
+| `command-code` | Command Code CLI (`command-code -p ...`) | **Verified live** (2.4A): executable 1.88.5, authenticated Command Code subscription, model `deepseek/deepseek-v4.1-flash`; an isolated bug-fix task changed only `export.py`, passed Ariadne's independent validation and produced an ACCEPTED Proof Receipt. A live 30s timeout was classified `TIMEOUT` and recovered into a second, validated attempt. |
+| `opencode` | OpenCode CLI (`opencode run --auto`) | **Verified live** (2.4A): v2.2.5, authenticated, model `deepseek/deepseek-v4.1-flash`; the same isolated task changed only `export.py`, validated independently and produced an ACCEPTED receipt. |
+| `codex` | OpenAI Codex CLI (`codex exec --sandbox workspace-write ...`) | **Verified live with one recorded format variance** (2.4A): codex-cli 0.166.0, ChatGPT-authenticated, model `gpt-6.1-terra`; one live run wrote a return whose `Status` field the strict schema refused, then a subsequent run completed the same task and produced an ACCEPTED receipt after the prompt was made explicit about the three allowed status values. |
+| `claude-code` | Claude Code CLI (`claude --print ...`) | **Declared.** Executable discovery verified (`2.1.245`), but this host is unauthenticated; preflight refuses honestly. |
+| `cursor` | Cursor agent CLI | **Declared / unavailable.** Not installed here; discovery reports `not found`. |
+| `host-session` | The invoking assistant session performs the packet and records the return (`task-return`) | **Verified live** (2.3 and 2.4A): the real bug-fix and review-correction tasks were bound, performed, returned, validated, reviewed and proved end to end. |
 | `manual` | A human performs the packet | Declared; the host-session path is the same protocol with a person. |
-| custom CLI | `--worker-command "<argv>"` | Verified in the test suites with a real subprocess fixture worker. |
+| custom CLI | `--worker-command "<argv>"` | Verified in the suites with a real subprocess fixture worker, including timeout/process-tree termination. |
 
-"Executable present" is never treated as "integration working": the engine
-requires a preflight, a real invocation, source modification, ingestion,
-independent validation, and accurate failure classification before a run counts.
-Where a harness is unavailable, the suite records the limitation and
-`scripts/test-ar23c.py` carries the reproducible procedure (point `--adapter
-claude-code` at a repository with a failing test after authenticating the CLI).
+"Executable present" is never treated as "integration working". The shared
+`adapter-conformance` matrix separates structural declarations from observed
+checks (discovery, version, authentication, argument compatibility, working
+directory, prompt delivery, edit permission, structured return, cancellation,
+timeout, nonzero exit, interrupted-session recovery, scope enforcement and
+independent validation). A check this environment did not execute is
+`not-observed` or `declared`, never `pass`.
+
+Live qualification procedure (reproducible; existing sessions only, no new keys):
+
+```bash
+# structural checks, offline
+python scripts/test-ar24a-adapters.py adapter_registry_is_structurally_conformant \
+  custom_adapter_timeout_terminates_the_whole_process_tree
+
+# live execution, uses the already-authenticated CLI
+ARIADNE_LIVE_ADAPTERS=1 python scripts/test-ar24a-adapters.py \
+  live_command_code_executes_a_real_task live_opencode_executes_a_real_task \
+  live_codex_executes_a_real_task \
+  live_command_code_timeout_is_classified_and_recovered_into_a_new_attempt
+```
+
 
 ## Rendered (browser) acceptance
 
@@ -60,7 +77,7 @@ declared observer still exists and is still capped at RENDERED by design.
 | macOS | Not executed here. No platform-specific code paths are known; run `python scripts/test-distribution.py`, `python scripts/test-wheel-install.py`, `python scripts/release-check.py`. |
 | Linux | Not executed here. Same procedure as macOS. Nothing in this release claims native macOS/Linux verification. |
 
-## Known limitations (2.3C-R closure)
+## Known limitations (2.4A execution-reliability closure)
 
 1. **S4B scope contracts are checked against the plan before a worker runs, and
    an authorization refusal is resolved only by a human.** Preparation refuses a
@@ -72,29 +89,36 @@ declared observer still exists and is still capped at RENDERED by design.
    covers every refused path and the repository's current deviation, and it
    permits exactly one new attempt. Without a human decision the boundary stays
    blocked by design.
-2. **Proof Pass TEST evidence is wired to the engine's own validation reruns
-   (2.3C-R acceptance pass).** The worker validation record now carries a
-   `validated_revision` fingerprint of the exact implementation bytes the
-   commands ran against, and the acceptance mapper
-   (`integrations.from_worker_validation`) turns one genuine, still-current
-   record into `TEST` evidence per requirement — refusing failed, blocked,
-   unevidenced, foreign-project and stale records by name, on the receipt's own
-   `validation_mapping`. The Proof Pass binds its revision to the implementation
-   fingerprint, so a source change moves the digest and earlier observations go
-   stale at the next pass instead of silently staying current. Two boundaries
-   remain, both conservative:
-   - **A validation recorded before this wiring predates its revision binding
-     and is refused, not guessed at.** `VP-0005` over the generative-UI original
-     request is the live example: the recorded `genui-lab-S4B-C1` rerun is named
-     and refused as unprovable-against-the-current-revision, so `PARTIAL / TEST
-     outstanding` is now an accounting entry rather than silence.
-   - **A post-review corrective iteration cannot re-record S4B validation in the
-     current lifecycle.** `validate-worker` is one-shot per attempt and bound to
-     the S4B boundary, and the stage table has no route back to S4B from S5, so
-     the review's `Fix and re-review` loop runs with captures and QA evidence
-     but without a fresh engine TEST record; the second independent review also
-     cannot be ingested after the first (`reviewed -> reviewed` is not in the
-     worker lifecycle table). Both are the largest remaining acceptance gaps.
+2. **Post-review correction is now a linked lifecycle, not a dead end (2.4A).**
+   A failed review of the current validated attempt authorizes one bounded
+   corrective attempt, which names its parent attempt and the review finding,
+   preserves the earlier evidence, re-runs the required checks on the corrected
+   revision, records a fresh revision-bound validation, and requires a new
+   independent review. Routine repair and review-directed correction have
+   separate budgets. T1 implements this end to end; S4B re-enters the
+   implementation boundary from S5 with a review-finding retry context and the
+   deterministic benchmark case `lifecycle.s4b-review-correction` drives a full
+   failed-review -> corrected S4B -> fresh validation -> second S5 review ->
+   G3 acceptance path. A live external reviewer was not used for the S4B
+   re-review; that remains a live-environment limitation, not a lifecycle claim.
+   Stale validation, cross-attempt evidence, forged reviewer identity, stale or
+   forged proof receipts, out-of-scope corrections and exhausted budgets are
+   refused by name.
+
+   The 2.3C-R history is retained rather than rewritten: a validation recorded
+   before the revision-binding wiring is still refused, not guessed at (the
+   `VP-0005` generative-UI record remains `PARTIAL / TEST outstanding`), and the
+   recorded 2.3C acceptance record still stands as history. 2.4A changes the
+   *future* lifecycle; it does not retroactively convert an old record.
+
+   **Recovery limitation.** `task-recover` reports and resumes interruptions
+   whose effect can be established from durable evidence. A worker that never
+   produced a return and whose execution is still open requires the operator to
+   declare it lost with `--abandon-open`; the engine does not infer death from a
+   process that disappeared. An orphan packet whose state write was lost is
+   preserved and reported; the safe continuation may still need a human
+   inspection rather than automatic adoption. Local run-state files are not
+   cryptographically attested.
 3. **Review independence is mechanical, plus whatever the environment offers.**
    The engine binds reviewer identities to separate executions parented onto the
    implementer's, and the independence ladder is honest about what a record can

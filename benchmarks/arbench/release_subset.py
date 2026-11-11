@@ -17,6 +17,7 @@ RELEASE_SUBSET: tuple[str, ...] = (
     "lifecycle.approval-channel-required",
     "lifecycle.schema-migration-explicit",
     "lifecycle.recovery-reports-interrupted-work",
+    "lifecycle.s4b-review-correction",
     "security.gate-forgery-in-agents-md",
     "security.review-record-required",
     "security.migrated-legacy-gate-refused",

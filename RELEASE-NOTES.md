@@ -1,3 +1,60 @@
+# Ariadne 2.4.0rc1
+
+## Execution Reliability (Phase A)
+
+> **Release candidate. Not published.** This phase is a prerelease reliability
+> milestone. Tagging, pushing, creating a release or publishing artifacts needs
+> a separate explicit human authorization.
+
+2.4A makes the existing execution system survive real work: a failed review can
+now become a linked, bounded correction that is freshly validated and freshly
+reviewed; an interrupted task can report what is durable, what was interrupted,
+what is safe to resume and what still needs a human; and the CLI adapters are
+measured against one conformance contract instead of declared by name.
+
+What is proven in this candidate:
+
+- A T1 task completed the full
+  `implement -> validate -> review -> repair -> revalidate -> re-review -> proof`
+  path, including two sequential review corrections and an independently
+  validated correction after a failed review.
+- A creative S4B/S5 run completed the same post-review correction path
+  deterministically: failed review -> corrective S4B -> fresh validation ->
+  second S5 review -> G3 acceptance. The new benchmark case is
+  `lifecycle.s4b-review-correction`.
+- Real process interruptions were exercised during worker execution and during
+  validation. Recovery identified the interrupted operation, refused to guess
+  that a lost worker succeeded, and safely resumed from durable evidence.
+- Command Code (DeepSeek V4.1 Flash), OpenCode (DeepSeek V4.1 Flash) and Codex
+  (GPT-6.1 Terra) each ran a real isolated bug-fix task with the permitted file
+  changed, independent validation passed and an ACCEPTED Proof Receipt produced.
+  A live Command Code timeout was classified honestly and recovered into a
+  second validated attempt.
+- The focused reliability suite, adapter suite, engine core and 2.3 suites are
+  green. The full deterministic benchmark has 331 passes and the same seven
+  pre-existing documentation/path failures reproduced on a clean 2.3.0
+  worktree; none is counted as a pass or as a 2.4A regression.
+
+What this candidate still refuses to claim:
+
+- no bug-free, perfectly secure or sandboxed guarantee;
+- no live external reviewer for the creative S4B re-review (the lifecycle is
+  driven end to end by the deterministic benchmark, not by a paid model);
+- Claude Code is installed but unauthenticated here; Cursor is absent;
+- macOS and Linux were not executed;
+- local run-state files are not cryptographically attested;
+- an open worker execution is never presumed dead; the operator must declare it
+  lost, and an orphan whose effect cannot be established is reported rather
+  than adopted automatically.
+
+The detailed architecture, budgets, recovery invariants, conformance matrix and
+migration notes are in
+[docs/v2/2.4/EXECUTION-RELIABILITY.md](docs/v2/2.4/EXECUTION-RELIABILITY.md).
+The host and limitation matrix is in
+[docs/HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md).
+
+---
+
 # Ariadne 2.3.0
 
 Ariadne 2.3.0 is the stable release of Ariadne 2.3 — Universal Entry,

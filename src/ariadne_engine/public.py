@@ -46,6 +46,10 @@ STABLE_V2 = (
     "ingest_review",
     "record_acceptance",
     "recovery_report",
+    "task_status",
+    "task_status_state",
+    "task_run",
+    "task_recover",
     "propose_recovery",
     "apply_recovery",
     "engine_events",
@@ -304,6 +308,33 @@ class EngineClient:
 
     def recovery_report(self, **options) -> api.Result:
         return api.recovery_report(**options)
+
+    def task_status(self, **options) -> api.Result:
+        return api.task_status(**options)
+
+    def task_recover(self, **options) -> api.Result:
+        return api.task_recover(**options)
+
+    def task_run(self, **options) -> api.Result:
+        return api.task_run(**options)
+
+    def task_return(self, **options) -> api.Result:
+        return api.task_return(**options)
+
+    def task_validate(self, **options) -> api.Result:
+        return api.task_validate(**options)
+
+    def task_repair(self, **options) -> api.Result:
+        return api.task_repair(**options)
+
+    def task_review(self, **options) -> api.Result:
+        return api.task_review(**options)
+
+    def task_verify(self, **options) -> api.Result:
+        return api.task_verify(**options)
+
+    def task_accept(self, **options) -> api.Result:
+        return api.task_accept(**options)
 
     def propose_recovery(self, **options) -> api.Result:
         return api.propose_recovery(**options)

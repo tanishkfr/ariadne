@@ -228,6 +228,19 @@ elif mode == "add":
 elif mode == "fail":
     tests = "pass"
     built = "Claimed the export fix without changing anything."
+elif mode == "break":
+    (project / "export.py").write_text(
+        "def export_rows(rows):\\n    return \\"\\"\\n", encoding="utf-8"
+    )
+    tests = "fail"
+    built = "Introduced a deliberately failing correction for the validation test."
+elif mode == "repair":
+    text = (project / "export.py").read_text(encoding="utf-8")
+    if "# review-directed correction" not in text:
+        text = "# review-directed correction\\n" + text
+    (project / "export.py").write_text(text, encoding="utf-8")
+    tests = "pass"
+    built = "Applied the review-directed correction inside export.py."
 elif mode == "outofscope":
     (project / "bystander.txt").write_text("outside the contract\\n", encoding="utf-8")
     tests = "pass"

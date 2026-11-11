@@ -237,10 +237,11 @@ def record_skill_evidence(repo: Repo, box: Sandbox, *, skill: str, output_relati
     through the same ``record-creative`` contract a project uses.
     """
     source = box.root / (events_name or f"{skill.lower().replace(' ', '-')}-events.json")
+    packet_id = str((box.state().get("worker") or {}).get("task_id", "") or "")
     source.write_text(json.dumps({"events": [
-        {"type": "skill", "skill": skill, "state": "invoked",
+        {"type": "skill", "skill": skill, "state": "invoked", "packet_id": packet_id,
          "evidence_path": str(box.path(output_relative))},
-        {"type": "skill", "skill": skill, "state": "completed",
+        {"type": "skill", "skill": skill, "state": "completed", "packet_id": packet_id,
          "output_path": str(box.path(output_relative)),
          "result": result, "usefulness": "useful"},
     ]}, indent=2) + "\n", encoding="utf-8")

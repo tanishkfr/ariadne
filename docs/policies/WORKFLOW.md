@@ -26,11 +26,19 @@ carries the same worker contract an S4B packet does — objective, permitted sco
 invariants, prohibited actions, stop and escalation conditions, validation
 commands, and a bounded repair budget.
 
-The lifecycle is unchanged in meaning: `baseline -> implementation -> validation
--> routine repair -> validation -> result/checkpoint`. A worker return is
-`IMPLEMENTED`, never accepted; validation, review, and the G3 human acceptance
-decision keep their existing owners. Entry rules live in
-[TASK-ROUTING.md](TASK-ROUTING.md).
+The lifecycle keeps the same owners but is no longer one-way. A failed review
+authorizes a linked review-directed correction: `validated -> review failed ->
+corrected attempt -> fresh validation -> new independent review -> proof ->
+human acceptance`. Routine repair and review correction have separate bounded
+budgets. The prior attempt, return, validation and review bytes are preserved;
+the failed review is retired from the current gate slot, never deleted. An
+interrupted task is reported by `task-recover` from durable operations: it names
+the last durable state, the interrupted operation, the safe continuation and any
+human action still required, and it refuses to treat a disappeared process as a
+completed worker. A worker return is `IMPLEMENTED`, never accepted; validation,
+review, and the G3 human acceptance decision keep their existing owners. Entry
+rules live in [TASK-ROUTING.md](TASK-ROUTING.md). The full reliability contract is
+in [docs/v2/2.4/EXECUTION-RELIABILITY.md](../v2/2.4/EXECUTION-RELIABILITY.md).
 
 ---
 

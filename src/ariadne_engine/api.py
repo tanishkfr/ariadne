@@ -69,7 +69,9 @@ DEFAULTS = dict(
     execution=None, apply=None, limit=50, family=None, adapter=None, subject=None,
     dependency=None, inspect=False, task_id=None, provider_source=None,
     provider_name=None, provider_model=None, provider_request_id=None,
-    provider_run_id=None, evidence_policy=None,
+    provider_run_id=None, evidence_policy=None, task=None,
+    abandon_open=False, max_attempts=3, auto=True, worker_command=None,
+    review_adapter=None, validate_timeout=120, no_validate=False, no_proof=False,
 )
 """Every option any wrapped command reads, so the API can call them directly."""
 
@@ -236,6 +238,83 @@ def recovery_report(run_root=None, project=None, *, args=None) -> Result:
         message=json.dumps(report, indent=2, sort_keys=True) + "\n",
         state_changed=False,
     )
+
+
+# ------------------------------------------------ T1 task lifecycle (2.4A)
+
+def task_status(run_root=None, project=None, task=None, as_json=False, *, args=None) -> Result:
+    """The durable T1 status view, including the recovery report."""
+    return _call("task_status_command", {
+        "run_root": run_root, "project": project, "task": task, "json": as_json,
+    }, args)
+
+
+def task_status_state(state: dict, task_id: str = "") -> dict:
+    """The same durable task view MCP and host interfaces consume.
+
+    This calls the runtime's one ``task_report`` derivation; it does not
+    re-implement lifecycle status in the API or MCP layer.
+    """
+    report = runtime().task_report(state, task_id=str(task_id or ""))
+    return report
+
+
+def task_recover(run_root=None, project=None, apply=False, abandon_open=False, *, args=None) -> Result:
+    """Report the T1 recovery view, or safely resume its recorded continuation."""
+    return _call("task_recover_command", {
+        "run_root": run_root, "project": project, "apply": apply, "abandon_open": abandon_open,
+    }, args)
+
+
+def task_run(run_root=None, project=None, adapter=None, timeout=1800, max_attempts=3, **options) -> Result:
+    """Drive the prepared T1 attempt through worker execution and validation."""
+    payload = {
+        "run_root": run_root, "project": project, "adapter": adapter,
+        "timeout": timeout, "max_attempts": max_attempts,
+    }
+    payload.update(options)
+    return _call("task_run_command", payload)
+
+
+def task_return(run_root=None, project=None, input=None, adapter=None, *, args=None) -> Result:
+    """Ingest a T1 return produced in any environment."""
+    return _call("task_return_command", {
+        "run_root": run_root, "project": project, "input": input, "adapter": adapter,
+    }, args)
+
+
+def task_validate(run_root=None, project=None, timeout=120, *, args=None) -> Result:
+    """Independently validate the current returned T1 attempt."""
+    return _call("task_validate_command", {
+        "run_root": run_root, "project": project, "timeout": timeout,
+    }, args)
+
+
+def task_repair(run_root=None, project=None, escalate=False, reason=None, *, args=None) -> Result:
+    """Prepare a routine or review-directed corrective attempt."""
+    return _call("task_repair_command", {
+        "run_root": run_root, "project": project, "escalate": escalate, "reason": reason,
+    }, args)
+
+
+def task_review(run_root=None, project=None, input=None, identity=None, *, args=None) -> Result:
+    """Prepare or ingest the independent review of the current validated attempt."""
+    return _call("task_review_command", {
+        "run_root": run_root, "project": project, "input": input, "identity": identity,
+    }, args)
+
+
+def task_verify(run_root=None, project=None, *, args=None) -> Result:
+    """Run Proof Pass for the current validated and reviewed T1 attempt."""
+    return _call("task_verify_command", {"run_root": run_root, "project": project}, args)
+
+
+def task_accept(run_root=None, project=None, identity=None, outcome=None, reason=None, *, args=None) -> Result:
+    """Record the human T1 acceptance decision; the engine never mints it."""
+    return _call("task_accept_command", {
+        "run_root": run_root, "project": project, "identity": identity,
+        "outcome": outcome, "reason": reason,
+    }, args)
 
 
 # ------------------------------------------------- AR-202 adaptive operations
@@ -1595,6 +1674,16 @@ __all__ = [
     "ingest_review",
     "record_acceptance",
     "recovery_report",
+    "task_status",
+    "task_status_state",
+    "task_recover",
+    "task_run",
+    "task_return",
+    "task_validate",
+    "task_repair",
+    "task_review",
+    "task_verify",
+    "task_accept",
     "execution_status",
     "engine_events",
     "propose_recovery",

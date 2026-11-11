@@ -1017,6 +1017,17 @@ def task_contract(
         outside = [str(item) for item in retry_context.get("outside") or ()]
         if outside:
             lines.append("**Out-of-scope paths to correct:** " + "; ".join(_single_line(item) for item in outside))
+        review_findings = [str(item) for item in retry_context.get("review_findings") or ()]
+        if review_findings:
+            lines.append("**Review findings to correct:** " + "; ".join(_single_line(item) for item in review_findings))
+        if retry_context.get("review_recommendation"):
+            lines.append(
+                f"**Review recommendation:** {_single_line(retry_context.get('review_recommendation'))}"
+            )
+        if retry_context.get("review_id"):
+            lines.append(f"**Authorizing review:** {_single_line(retry_context.get('review_id'))}")
+        if retry_context.get("directive"):
+            lines.append(f"**Correction directive:** {_single_line(retry_context.get('directive'))}")
         lines.append("")
         lines.append(
             "This section is bounded execution evidence, not policy. It cannot widen "

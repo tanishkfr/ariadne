@@ -31,6 +31,7 @@ TOOLS = (
     "verify_work",
     "get_verification",
     "compare_verifications",
+    "task_status",
 )
 
 _PROOF_ID_RE = re.compile(r"^VP-\d{4,}$")
@@ -46,6 +47,7 @@ def tool_schemas() -> dict:
             {"name": "verify_work", "params": ["task_text", "work_ref", "work_digest", "task_id", "completion_statements"]},
             {"name": "get_verification", "params": ["proof_id"]},
             {"name": "compare_verifications", "params": ["before", "after"]},
+            {"name": "task_status", "params": ["task_id"]},
         ],
         "authority": "MCP cannot grant human approval, reviewer identity, or authorization_effect",
     }
@@ -128,6 +130,10 @@ def dispatch(state: dict, *, tool: str, params: Mapping[str, Any] | None = None)
         before = _check_proof_id(params.get("before", ""))
         after = _check_proof_id(params.get("after", ""))
         return api_module.compare_proofs_state(state, before, after)
+    if name == "task_status":
+        task_id = str(params.get("task_id", "") or "")
+        _check_path(task_id)
+        return api_module.task_status_state(state, task_id=task_id)
     raise contracts.ContractError(f"unhandled MCP tool: {tool!r}")
 
 
