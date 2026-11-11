@@ -308,8 +308,8 @@ Release benchmark subset: 90/90
 The seven fail/error cases are pre-existing documentation/path drift
 (`WRITING-POLICY.md`, `DESIGN-MOTION.md`, `QUICKSTART.md`,
 `validation/run-template.md`, and the basename label of
-`docs/policies/EVALUATION-RUBRICS.md`); a clean 2.3.0 worktree reproduces all
-seven. They are not counted as passes.
+`docs/policies/EVALUATION-RUBRICS.md`); a clean baseline worktree reproduces
+all seven. They are not counted as passes.
 
 `OBSERVED` and `DECLARED_SKIP` are deliberate categories, separate from failure:
 an observation records a measurement without a judgement, and a skip means a case
