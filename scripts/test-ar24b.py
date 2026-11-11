@@ -309,6 +309,15 @@ def insufficient_sample_size_cannot_produce_a_qualification():
         baseline_adapter="a", task_family="bug",
     )
     assert decision["decision"] == "KEEP_BASELINE", decision
+    # A four-sample alternative next to a degraded five-sample baseline must not
+    # be promoted into a recommendation by its raw success ratio.
+    observe_many(state, adapter="broken", count=5, validated=2, failed=3)
+    observe_many(state, adapter="low", count=4, validated=4)
+    low = model_module.recommend(
+        state, role="bulk-implementation", capability="implementation",
+        baseline_adapter="broken", task_family="bug",
+    )
+    assert low["decision"] == "KEEP_BASELINE", low
 
 
 @case
@@ -336,6 +345,12 @@ def stale_performance_data_is_not_used():
         baseline_adapter="a", task_family="bug",
     )
     assert decision["decision"] == "KEEP_BASELINE"
+    # A stale alternative must not rescue a route with no evidenced baseline.
+    missing = model_module.recommend(
+        state, role="bulk-implementation", capability="implementation",
+        baseline_adapter="not-observed", task_family="bug",
+    )
+    assert missing["decision"] == "KEEP_BASELINE", missing
 
 
 @case

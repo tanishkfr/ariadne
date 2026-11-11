@@ -1,8 +1,29 @@
 # Hosts, platforms, and known limitations
 
-> Ariadne 2.4A. This file states only what has been verified, and where. It is
+> Ariadne 2.4B. This file states only what has been verified, and where. It is
 > deliberately conservative: a host it lists as "declared" has an adapter and a
 > discovery probe but no recorded live execution here.
+
+## 2.4B provider evidence
+
+The 2.4B qualification re-probed the installed surfaces and ran a bounded live
+sample. Versions are observations from this machine, not permanent guarantees.
+
+| Surface | Observed version | Authentication observation | 2.4B live sample |
+|---|---|---|---|
+| Command Code CLI | 1.88.5 | prior 2.4A-R Command Code subscription; not re-authenticated by the probe | one isolated T1 bug fix: validated, `VP-0001` ACCEPTED, 169.4s |
+| OpenCode CLI | v2.2.5 | stored provider entries include GitHub Copilot; no credential value was read | one isolated T1 bug fix: validated, `VP-0001` ACCEPTED, 94.0s |
+| Codex CLI | 0.166.0 | `codex login status` reports ChatGPT | not executed in this pass |
+| Claude Code | 2.1.245 | `claude auth status` reports `loggedIn: false` | not executable here |
+| Cursor agent CLI | not installed | `UNKNOWN` | not executable here |
+
+Both live tasks used the existing T1 adapter path and produced an engine
+validation and Proof Pass. Neither adapter supplied token usage or cost, so the
+measurement rows report those fields as `UNKNOWN`. The model-performance registry
+therefore has **no benchmark-qualified live record**; the 2.4B routing evidence
+is shadow-only. See
+[docs/v2/2.4/MODEL-ROUTING-EVALUATION.md](v2/2.4/MODEL-ROUTING-EVALUATION.md).
+
 
 ## Worker hosts (task execution)
 

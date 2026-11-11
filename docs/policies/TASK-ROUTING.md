@@ -75,6 +75,26 @@ Preparing a packet is not doing the work. A T1 task continues through its own li
 - **The ledger distinguishes reported from observed.** A selected method the return reports is `invoked` (worker-reported); only evidence the engine observed itself promotes it to `completed`; a mandatory method with no report is `unmet` and stays visible.
 - **Proof Pass evaluates the original request** on the independently validated revision, and its receipt never substitutes for the human decision.
 
+### 6.1 Measurement, continuation and skill intelligence (2.4B)
+
+- **Measurement is a projection, not a second record store.** One versioned row
+  per attempt reads the task, execution, validation, review, proof and acceptance
+  records. `OBSERVED`, `REPORTED`, `DECLARED` and `UNKNOWN` stay distinct. A
+  completed attempt is not an accepted one, and an absent token count is not
+  zero. See `ariadne_engine/measurement.py`.
+- **Continuation is revision-bound.** A resumed or new worker session receives a
+  projection of the objective, scope, validated revision, modified files,
+  lifecycle, validation rows, latest failures, unresolved review findings, human
+  decisions and evidence references. A projection for another revision is
+  refused. It is never an authorization. See `ariadne_engine/continuation.py`.
+- **Context decisions are revision-bound and byte-measured.** `adaptive`
+  reduction may omit an unchanged optional scope file the request does not name;
+  it never omits the contract, request, mandatory methods or required policy.
+- **Skill selection is unchanged.** Mandatory methods cannot be dropped. The
+  effectiveness report distinguishes selected, invoked, completed and unmet, and
+  labels an accepted task as an association rather than proof of usefulness.
+  Proposals require human review and cannot rewrite the registry automatically.
+
 ## 7. Gates and authority
 
 A plan names the gates ahead; it never grants one. A task still ends at the human acceptance decision, still sends every dependency through G2, and still sends anything that leaves the machine through G4. Nothing in the task workflow changes the authority of [WORKFLOW.md](WORKFLOW.md), the Proof Pass, or the independent review boundary. The runtime records an acceptance decision only from an explicit human identity, and it never mints one.

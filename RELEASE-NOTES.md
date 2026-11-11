@@ -1,5 +1,66 @@
 # Ariadne 2.4.0rc1
 
+## Intelligence & Efficiency (Phase B)
+
+> **Release candidate. Not published.** No tag, push, artifact publication or
+> deployment is implied by this note.
+
+2.4B adds evidence to the execution system without replacing its deterministic
+policy. A completed attempt now produces a versioned measurement row with
+per-field provenance; model performance is recorded and advised in shadow;
+context decisions are revision-bound and byte-measured; a resumed task gets a
+structured continuation instead of conversation history; and skill selection is
+reported as association, never as proof of usefulness.
+
+What is proven in this candidate:
+
+- **Measurement separates facts from claims.** `OBSERVED`, `REPORTED`,
+  `DECLARED` and `UNKNOWN` are distinct; a pending human decision is not
+  `accepted`, and an unreported token count is not zero. The projection
+  supersedes an earlier row instead of rewriting it.
+- **Model evidence cannot promote itself.** A declaration is `DECLARED`, a few
+  attempts are `DIRECTLY_OBSERVED`, and only a current record with the declared
+  sample gate can be qualified. A model identity that was not observed cannot
+  qualify. Stale, small-sample, unpromoted and independent-review-conflicting
+  evidence are all refused by test.
+- **The existing route keeps control.** `model_routing` defaults to `off`;
+  `shadow` records advice; `apply_qualified` additionally requires a recorded
+  human promotion, a benchmark-qualified record, at least eight samples and a
+  degraded or unavailable baseline. No route was changed in this pass.
+- **Context reduction is measured, not asserted.** On two identical six-file
+  fixtures, `context_reduction=adaptive` produced a **63,812 → 35,591 byte**
+  packet (**−28,221 bytes, −44.2%**) while retaining the contract, request and
+  mandatory methods. This is a file-size result, not a token or provider-cache
+  claim.
+- **Stale context and stale continuations are refused.** A context decision now
+  carries its revision and packet digest; a continuation carries the validated
+  revision and refuses a different one.
+- **Skill proposals cannot rewrite trust.** Recurring unmet or unused methods
+  produce a proposal with evidence, risk and a validation procedure; automatic
+  registry application raises a contract refusal.
+- **The read-only intelligence report is identical through CLI, API and MCP.**
+  MCP still cannot set a reviewer, an approval or an acceptance.
+
+What this candidate refuses to claim:
+
+- no model-quality ranking, provider price, quota, token or cache saving;
+- no claim that a skill caused an accepted outcome;
+- no claim that the 44.2% fixture reduction generalises to every repository or
+  to provider tokens;
+- no live efficiency gain from model routing. The two bounded live samples
+  (Command Code 1.88.5, OpenCode v2.2.5) both validated and produced an ACCEPTED
+  `VP-0001`, but neither supplied token usage, so provider efficiency stays
+  `UNKNOWN`;
+- no new stable release. This is a candidate qualification.
+
+Detailed evidence:
+[INTELLIGENCE-BASELINE.md](docs/v2/2.4/INTELLIGENCE-BASELINE.md),
+[INTELLIGENCE-EFFICIENCY.md](docs/v2/2.4/INTELLIGENCE-EFFICIENCY.md),
+[MODEL-ROUTING-EVALUATION.md](docs/v2/2.4/MODEL-ROUTING-EVALUATION.md),
+[CONTEXT-EFFICIENCY.md](docs/v2/2.4/CONTEXT-EFFICIENCY.md),
+[SKILL-INTELLIGENCE.md](docs/v2/2.4/SKILL-INTELLIGENCE.md),
+[2.4B-QUALIFICATION.md](docs/v2/2.4/2.4B-QUALIFICATION.md).
+
 ## Execution Reliability (Phase A)
 
 > **Release candidate. Not published.** This phase is a prerelease reliability

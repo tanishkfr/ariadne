@@ -9,6 +9,75 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.4.0rc1 - 2026-11-11 - PHASE B INTELLIGENCE & EFFICIENCY (NOT PUBLISHED)
+
+**Measure what the task actually consumed, then spend only what it earns.**
+2.4B adds an evidence loop around the existing deterministic engine. It does not
+add a second router, a second verification path or a new agent framework.
+
+What changed:
+
+- **A versioned measurement record per task attempt.** Every field carries
+  `OBSERVED`, `REPORTED`, `DECLARED` or `UNKNOWN` provenance. An updated record
+  supersedes the earlier row rather than rewriting it. A completed attempt is
+  never counted as accepted without the recorded human decision, and an
+  unreported token count is never rendered as zero.
+- **An evidence-backed model registry** (`model_evidence.py`) with declared,
+  directly observed, production-qualified, benchmark-qualified, unavailable and
+  stale levels. Sample size, freshness, measurement period and evidence
+  references are explicit. A declaration cannot qualify a capability, an
+  unobserved provider/model identity cannot qualify one, and a small sample
+  cannot produce a model ranking.
+- **Shadow routing advice and a narrow fallback.** The existing router keeps
+  control. Evidence can advise an alternative when a baseline is degraded or
+  unavailable; it cannot reorder adapters without `model_routing=apply_qualified`,
+  a benchmark-qualified record, at least eight samples, and a recorded human
+  promotion. Independent review excludes the implementer regardless of evidence.
+- **Revision-bound context decisions and measured bytes.** A context decision now
+  records the revision and packet digest it describes; a stale decision is
+  refused. `context_reduction=adaptive` omits an unchanged optional scope file
+  that the request does not name while keeping it readable in place; the task
+  contract, request, mandatory methods and required policy are never omitted.
+- **Structured continuation.** A new projection preserves the objective, scope,
+  validated revision, modified files, lifecycle, validation rows, latest
+  failures, unresolved review findings, human decisions and evidence references.
+  It refuses a different revision and states that it is not an authorization.
+- **Skill intelligence and proposals.** Per-skill selection, invocation,
+  completion and association are reported separately. Recurring unmet or unused
+  methods produce a recorded proposal with evidence, risk and validation
+  procedure; automatic registry rewrite is refused by construction.
+- **One read-only report through CLI, API and MCP.** `intelligence` exposes the
+  same measurement, routing, context and skill view through all three surfaces;
+  MCP remains unable to mint authority.
+- **A reproducible evaluation suite.** `benchmarks/workloads/2.4b-intelligence.json`
+  defines 28 bounded workloads (27 deterministic, 1 live), and
+  `scripts/evaluate-intelligence.py` runs them, compares shared cases against a
+  baseline worktree, and measures a real context before/after.
+
+Measured in this pass:
+
+- context packet **63,812 → 35,591 bytes** on an identical six-file fixture
+  (**−28,221 bytes, −44.2%**), with the contract and mandatory methods retained;
+  this is a deterministic file-size measurement, not a token or billing claim;
+- full benchmark **346 pass, 0 fail, 0 error, 5 observed, 2 skip** (baseline at
+  the same SHA: 338/0/0/5/2; the eight new cases are additional, not converted);
+- release subset **97/97**, engine core **586/586**, 2.4A reliability **21/21**,
+  2.3B/2.3C/2.3D green, release **98/98**, distribution **55/55**, wheel install
+  **14/14**, repository checks **PASS**;
+- 2.4B suite **26/26**; 2.4B mutation suite **12/12 valid, 12/12 killed**, with
+  digest-verified restoration;
+- two bounded live tasks (Command Code 1.88.5 and OpenCode v2.2.5) both
+  validated with `VP-0001` ACCEPTED. No token or cost figure was supplied, so
+  provider efficiency remains `UNKNOWN`.
+
+What 2.4B deliberately does **not** claim: that a model is better than another,
+that context bytes equal provider tokens, that a skill was useful because a task
+passed, or that model routing improved a live outcome. The routing path is
+implemented and measured in shadow; a live efficiency gain requires the
+promotion procedure in
+[docs/v2/2.4/MODEL-ROUTING-EVALUATION.md](docs/v2/2.4/MODEL-ROUTING-EVALUATION.md).
+
+---
 ## 2.4.0rc1 — 2026-11-11 · PHASE A RELEASE CANDIDATE (NOT PUBLISHED)
 
 **Execution reliability.** 2.4A is not a new intelligence feature. It closes the
