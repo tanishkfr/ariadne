@@ -39,10 +39,10 @@ Evidence: `validation/runs/2.4a-r/bench-full.txt`,
 `validation/runs/2.4a-r/bench-release.txt`,
 `validation/runs/2.4a-r/bench-baseline-853d827.txt`.
 
-The full benchmark was re-run at the final HEAD after the documentation
-commits (`bench-full-final.txt`): the counts are identical — 338 pass, 0 fail,
-0 error, 5 observed, 2 skip — so the docs-only commit did not disturb the
-result.
+The full benchmark was re-run at commit `23484c0`, after the code and initial
+documentation commits (`bench-full-final.txt`): the counts are identical — 338
+pass, 0 fail, 0 error, 5 observed, 2 skip. The only later commit, `e047510`,
+changes this report only, so it cannot disturb the benchmark.
 
 ## 2. Mutation qualification
 
