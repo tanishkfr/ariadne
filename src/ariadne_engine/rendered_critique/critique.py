@@ -367,6 +367,7 @@ def build(
     differential: str = "",
     verdict: str = "",
     run_from: Sequence[str] = (),
+    qualitative: Mapping | None = None,
 ) -> dict:
     """Record one independent critique of one evidence set.
 
@@ -462,6 +463,11 @@ def build(
             "note": str(value.get("note", "")),
         }
     outcome = _verdict(rows, verdict=verdict)
+    qualitative_row = _qualitative(
+        qualitative or {}, valid_captures=valid_captures,
+        finding_ids={str(row.get("finding_id", "")) for row in rows},
+        requirement_ids=requirement_ids,
+    )
     record = {
         "schema_version": contracts.SCHEMA_DESIGN,
         "critique_id": contracts.new_record_id("drc"),
@@ -498,6 +504,7 @@ def build(
         ),
         "counter_reference_review": dict(counter_review or {}),
         "differential": str(differential),
+        "qualitative": qualitative_row,
         "overall_status": outcome,
         "severity_definitions": dict(SEVERITY_DEFINITIONS),
         "ran_from": [str(item) for item in (run_from or ())],
@@ -510,6 +517,75 @@ def build(
     contracts.require_design_capacity(state, "rendered_critiques")
     state.setdefault("rendered_critiques", []).append(record)
     return record
+
+
+def _qualitative(
+    value: Mapping,
+    *,
+    valid_captures: set[str],
+    finding_ids: set[str],
+    requirement_ids: Sequence[str],
+) -> dict:
+    """Normalise the review's judgement layer without inventing a taste score.
+
+    The factual layer is already in ``findings``. This block is where a reviewer
+    records what is technically correct but visually weak, or which screen a
+    subjective recommendation is about. It cannot promote a requirement and it
+    has no numeric score: a reviewer who cannot name a screen or a dimension has
+    not given the next iteration anything to act on.
+    """
+    screens = [str(item) for item in (value.get("screens_reviewed") or [])]
+    unknown = [item for item in screens if item not in valid_captures]
+    if unknown:
+        raise ContractError(
+            "qualitative review cites screens that are not validated captures: " + ", ".join(unknown)
+        )
+    factual = [str(item) for item in (value.get("factual_failures") or [])]
+    missing = [item for item in factual if item not in finding_ids]
+    if missing:
+        raise ContractError(
+            "qualitative review names factual failure(s) that are not recorded findings: "
+            + ", ".join(missing)
+        )
+    recommendations: list[dict] = []
+    for item in value.get("subjective_recommendations") or ():
+        if not isinstance(item, Mapping):
+            raise ContractError("a subjective recommendation must be an object")
+        screen = str(item.get("screen") or item.get("capture_id") or "")
+        dimension = str(item.get("dimension") or "")
+        text = str(item.get("text") or item.get("recommendation") or "")
+        if not text.strip():
+            raise ContractError("a subjective recommendation needs its text")
+        if not screen and not item.get("route"):
+            raise ContractError("a subjective recommendation must name the screen it is about")
+        if not dimension:
+            raise ContractError("a subjective recommendation must name the design dimension")
+        recommendations.append({
+            "screen": screen,
+            "route": str(item.get("route", "")),
+            "dimension": dimension,
+            "text": text,
+            "blocking": False,
+        })
+    weak = bool(value.get("technically_correct_but_visually_weak"))
+    note = str(value.get("overall_note", "") or "")
+    if weak and not (recommendations or note.strip()):
+        raise ContractError(
+            "a review that calls the work visually weak must say what is weak or what would change; "
+            "a bare adjective is not a recommendation"
+        )
+    for row in recommendations:
+        if row["dimension"] not in DESIGN_REVIEW_DIMENSIONS:
+            raise ContractError(f"subjective recommendation names an unknown dimension: {row['dimension']!r}")
+    return {
+        "screens_reviewed": screens,
+        "factual_failures": factual,
+        "subjective_recommendations": recommendations,
+        "technically_correct_but_visually_weak": weak,
+        "overall_note": note,
+        "scoring": "none; this block records judgement, not a numeric taste score",
+        "requirements": [str(item) for item in (requirement_ids or ())],
+    }
 
 
 def _verdict(findings: Sequence[Mapping], *, verdict: str = "") -> str:

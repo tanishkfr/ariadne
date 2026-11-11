@@ -9,6 +9,60 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.4.0rc1 - 2026-11-12 - PHASE C DESIGN VERIFICATION & INTEGRATION (NOT PUBLISHED)
+
+**Close the evidence gaps; do not widen the feature surface.** 2.4C qualifies
+the 2.4B intelligence changes with a bounded live comparison, makes rendered
+design verification real and revisable, binds the independent S5 review into the
+creative Proof Receipt, and exposes one stable read-only host contract.
+
+What changed:
+
+- **Live intelligence qualification.** A bounded evaluation runs the same six
+  workloads through Command Code and OpenCode, records observed versions and
+  identities, validation, repairs, proof and context bytes, and reports
+  `UNKNOWN` where no provider supplied usage. It does not rank models from one
+  run and does not promote a route. See
+  [LIVE-INTELLIGENCE-QUALIFICATION.md](docs/v2/2.4/LIVE-INTELLIGENCE-QUALIFICATION.md).
+- **Command Code headless repair.** Command Code 1.88.5 withholds edit tools from
+  headless runs unless they are enabled explicitly; the preset now passes
+  `--tools-all`. The engine's independent validation and scope check remain the
+  boundary.
+- **Declared viewport matrices and responsive verification.** A project can
+  declare narrow/mobile/tablet/desktop/wide viewports and a supported range. The
+  engine refuses an incomplete responsive claim, records the matrix in the
+  capture plan, and never lets one viewport answer a query for another.
+- **Rendered accessibility checks.** Computed text/background contrast, visible
+  focus, target size, accessible names, dialog focus containment, form-error
+  association and reduced motion are measured per capture. The report names what
+  it did not establish; a passing audit is not WCAG conformance.
+- **Interaction assertions and visual regression.** Capture targets can declare
+  deterministic post-interaction assertions; a failure is recorded, not skipped.
+  A dependency-free PNG comparator measures changed pixels, ratio and bounding
+  box; a changed render requires review and never yields a quality score.
+- **Qualitative design review without fake precision.** A rendered critique can
+  record factual failures, bounded subjective recommendations, screens reviewed
+  and a "technically correct but visually weak" note. No numeric taste score is
+  accepted.
+- **Creative proof binding.** Proof Receipt schema 2 binds the current S5 packet,
+  reviewer execution, independence level, reviewed revision, judgement digest
+  and correction lineage. A stale, failed, substituted or non-independent review
+  is refused. G3 remains a human decision. See
+  [CREATIVE-PROOF-BINDING.md](docs/v2/2.4/CREATIVE-PROOF-BINDING.md).
+- **Stable host contract.** `ariadne-host-1` exposes task, execution,
+  verification, recovery, authority and resource state through CLI, API and MCP,
+  with resumable durable events and a read-only authority boundary. Protocol 2
+  accepts protocol 1. See [HOST-INTEGRATION.md](docs/v2/2.4/HOST-INTEGRATION.md).
+- **Real rendered qualification.** A disposable surface produced 15 deterministic
+  defects before correction, 0 after, with fresh interaction/accessibility
+  evidence, a visual comparison and an independent rendered review. See
+  [DESIGN-VERIFICATION.md](docs/v2/2.4/DESIGN-VERIFICATION.md).
+- **Qualification report.** [2.4C-QUALIFICATION.md](docs/v2/2.4/2.4C-QUALIFICATION.md).
+
+No dependency, paid API, tag, push or publication was added. Version metadata
+remains `2.4.0rc1`; publication is a separate human decision.
+
+---
 ## 2.4.0rc1 - 2026-11-11 - PHASE B INTELLIGENCE & EFFICIENCY (NOT PUBLISHED)
 
 **Measure what the task actually consumed, then spend only what it earns.**

@@ -36,6 +36,15 @@ from ..contracts import (
     DEFAULT_CAPTURE_BUDGET,
     ContractError,
 )
+from . import viewports as viewport_module
+
+ASSERTION_KINDS = ("visible", "absent", "text", "value", "focus", "aria", "count")
+"""Deterministic post-interaction assertions a target may declare.
+
+Each is evaluated in the live page by the same browser adapter that produced the
+capture. A failure is recorded as evidence about the state, not silently turned
+into a skip.
+"""
 
 PRIMARY_VIEWPORT = {"width": 1440, "height": 900}
 """The default primary desktop viewport. A number, not a standard: the plan records
@@ -53,6 +62,7 @@ def _target(
     interaction: Mapping | None = None,
     reduced_motion: bool = False,
     required_regions: Sequence[str] = (),
+    assertions: Sequence[Mapping] = (),
     notes: str = "",
 ) -> dict:
     if kind not in CAPTURE_TARGET_KINDS:
@@ -69,19 +79,52 @@ def _target(
             "a capture target must name why it exists; a screenshot nobody asked for is not "
             "rendered evidence, it is clutter with a timestamp"
         )
+    checks = _assertions(assertions)
     return {
         "target_id": contracts.new_record_id("rct"),
         "kind": kind,
         "route": str(route),
         "state": str(state),
         "viewport": dict(viewport),
+        "viewport_class": str(viewport.get("viewport_class", "") or ""),
         "theme": str(theme),
         "interaction": dict(interaction or {}),
         "reduced_motion": bool(reduced_motion),
         "required_regions": [str(item) for item in (required_regions or ())],
+        "assertions": checks,
         "materiality_basis": rows,
         "notes": str(notes),
     }
+
+
+def _assertions(rows: Sequence[Mapping]) -> list[dict]:
+    output: list[dict] = []
+    for item in rows or ():
+        if not isinstance(item, Mapping):
+            raise ContractError("an interaction assertion must be an object")
+        kind = str(item.get("kind", "") or "").strip()
+        if kind not in ASSERTION_KINDS:
+            raise ContractError(
+                f"unsupported interaction assertion {kind!r}; expected one of "
+                + ", ".join(ASSERTION_KINDS)
+            )
+        row = {"kind": kind, "selector": str(item.get("selector", "") or ""),
+               "text": str(item.get("text", "") or ""),
+               "value": str(item.get("value", "") or ""),
+               "attribute": str(item.get("attribute", "") or ""),
+               "equals": str(item.get("equals", "") or ""),
+               "minimum": int(item.get("minimum", 1) or 1),
+               "description": str(item.get("description", "") or "")}
+        if kind in ("visible", "absent", "value", "focus", "aria", "count") and not row["selector"]:
+            raise ContractError(f"a {kind} assertion needs a selector")
+        if kind == "text" and not row["text"]:
+            raise ContractError("a text assertion needs the text to find")
+        if kind == "aria" and (not row["attribute"] or not row["equals"]):
+            raise ContractError("an aria assertion needs attribute and equals")
+        if kind == "count" and row["minimum"] < 1:
+            raise ContractError("a count assertion needs a positive minimum")
+        output.append(row)
+    return output
 
 
 def viewport_state(
@@ -92,11 +135,12 @@ def viewport_state(
     basis: Sequence[Mapping],
     theme: str = "project-default",
     required_regions: Sequence[str] = (),
+    assertions: Sequence[Mapping] = (),
     notes: str = "",
 ) -> dict:
     return _target(
         kind="viewport-state", route=route, state=state, viewport=viewport or PRIMARY_VIEWPORT,
-        basis=basis, theme=theme, required_regions=required_regions, notes=notes,
+        basis=basis, theme=theme, required_regions=required_regions, assertions=assertions, notes=notes,
     )
 
 
@@ -109,6 +153,7 @@ def interaction_state(
     viewport: Mapping | None = None,
     theme: str = "project-default",
     required_regions: Sequence[str] = (),
+    assertions: Sequence[Mapping] = (),
     notes: str = "",
 ) -> dict:
     if not str(action.get("kind", "")).strip():
@@ -118,7 +163,8 @@ def interaction_state(
         )
     return _target(
         kind="interaction-state", route=route, state=state, viewport=viewport or PRIMARY_VIEWPORT,
-        basis=basis, theme=theme, interaction=action, required_regions=required_regions, notes=notes,
+        basis=basis, theme=theme, interaction=action, required_regions=required_regions,
+        assertions=assertions, notes=notes,
     )
 
 
@@ -130,11 +176,12 @@ def responsive_state(
     basis: Sequence[Mapping],
     theme: str = "project-default",
     required_regions: Sequence[str] = (),
+    assertions: Sequence[Mapping] = (),
     notes: str = "",
 ) -> dict:
     return _target(
         kind="responsive-state", route=route, state=state, viewport=viewport,
-        basis=basis, theme=theme, required_regions=required_regions, notes=notes,
+        basis=basis, theme=theme, required_regions=required_regions, assertions=assertions, notes=notes,
     )
 
 
@@ -178,6 +225,23 @@ def responsive_viewports(direction: Mapping, implementation: Mapping | None = No
         token in claims for token in ("responsive", "mobile", "narrow", "breakpoint", "phone", "tablet")
     )
     implementation = dict(implementation or {})
+    declared = viewport_module.declared(implementation)
+    if declared is not None:
+        problems = viewport_module.matrix_problems(
+            implementation, responsive_claimed=responsive_claimed, rows=declared,
+        )
+        if problems:
+            raise ContractError("declared viewport matrix is not usable: " + "; ".join(problems))
+        return [
+            {
+                "width": int(row["width"]),
+                "height": int(row["height"]),
+                "device_scale_factor": float(row.get("device_scale_factor", 1) or 1),
+                "viewport_class": str(row["viewport_class"]),
+            }
+            for row in declared
+            if bool(row.get("supported", True))
+        ]
     breakpoints = [int(item) for item in implementation.get("breakpoints", []) or [] if str(item).strip().isdigit()]
     if not responsive_claimed and not breakpoints:
         return []
@@ -344,6 +408,18 @@ def _assemble(
         "launch_command": argv,
         "routes": sorted({str(row.get("route", "")) for row in rows}),
         "targets": rows,
+        "viewport_matrix": [
+            {
+                "viewport_class": str(row.get("viewport_class", "") or ""),
+                "width": int((row.get("viewport") or {}).get("width", 0) or 0),
+                "height": int((row.get("viewport") or {}).get("height", 0) or 0),
+                "device_scale_factor": float(
+                    (row.get("viewport") or {}).get("device_scale_factor", 1) or 1
+                ),
+            }
+            for row in rows
+            if str(row.get("viewport_class", "") or "")
+        ],
         "required_evidence": [str(item) for item in (required_evidence or ())],
         "browser_requirements": dict(browser_requirements or {}),
         "capture_budget": dict(budget or capture_budget()),

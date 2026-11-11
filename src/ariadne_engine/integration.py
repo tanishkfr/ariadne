@@ -23,10 +23,18 @@ from . import api, contracts, package_version
 from .contracts import ContractError
 
 PROTOCOL_NAME = "ariadne-consumer"
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 MIN_SUPPORTED_VERSION = 1
-MAX_SUPPORTED_VERSION = 1
+MAX_SUPPORTED_VERSION = 2
 ENVELOPE_SCHEMA = 1
+
+HOST_CONTRACT_VERSION = 1
+"""Version of the read-only host projection exposed by the 2.4C contract.
+
+Protocol 2 adds ``host_status`` and ``host_events`` to the v1 operations. A
+protocol-1 consumer remains supported and sees no host operations it did not
+negotiate; it also sees no weaker authority boundary.
+"""
 
 OPERATIONS = (
     "describe",
@@ -43,6 +51,8 @@ OPERATIONS = (
     "get_evidence",
     "inspect_migration",
     "apply_migration",
+    "host_status",
+    "host_events",
 )
 
 CAPABILITIES = (
@@ -57,6 +67,8 @@ CAPABILITIES = (
     "design-evidence",
     "recovery",
     "migration",
+    "host-contract",
+    "events-cursor",
 )
 
 AUTHORITY_NOTE = (
@@ -85,6 +97,12 @@ def describe() -> dict:
             "record_schema": contracts.SCHEMA_RECORD,
         },
         "envelope_schema": ENVELOPE_SCHEMA,
+        "host_contract": {
+            "schema_version": "ariadne-host-1",
+            "version": HOST_CONTRACT_VERSION,
+            "read_only": True,
+            "authority_effect": "none",
+        },
         "operations": list(OPERATIONS),
         "capabilities": list(CAPABILITIES),
         "authority": AUTHORITY_NOTE,
@@ -196,6 +214,8 @@ class ConsumerAdapter:
             "get_evidence": self._get_evidence,
             "inspect_migration": self._inspect_migration,
             "apply_migration": self._apply_migration,
+            "host_status": self._host_status,
+            "host_events": self._host_events,
         }[operation]
         data, problems = handler(payload)
         result = data.pop("_result", None) if isinstance(data, dict) else None
@@ -360,6 +380,31 @@ class ConsumerAdapter:
             run_root=payload.get("run_root"),
         )
         return {"_result": result}, []
+
+    def _host_status(self, payload: dict):
+        """The versioned read-only host view; no approval path exists here."""
+        result = self._call(
+            "host_status",
+            project=payload.get("project"),
+            run_root=payload.get("run_root"),
+            as_json=True,
+        )
+        return {"_result": result, "host": _parse_json(result.message)}, []
+
+    def _host_events(self, payload: dict):
+        cursor = payload.get("cursor")
+        if cursor is not None and not isinstance(cursor, dict):
+            return {"_result": _refused("host_events cursor must be the cursor object")}, [
+                "cursor must be an object"
+            ]
+        result = self._call(
+            "host_events",
+            project=payload.get("project"),
+            run_root=payload.get("run_root"),
+            cursor=cursor,
+            limit=payload.get("limit", 100),
+        )
+        return {"_result": result, "page": _parse_json(result.message)}, []
 
 
 def _refused(text: str) -> api.Result:

@@ -185,6 +185,9 @@ class RenderAdapter:
     def inspect(self) -> dict:
         raise RenderCapabilityUnavailable(f"render adapter {self.id!r} cannot inspect")
 
+    def evaluate(self, expression: str) -> object:
+        raise RenderCapabilityUnavailable(f"render adapter {self.id!r} cannot evaluate a page expression")
+
     def shutdown(self) -> None:
         raise RenderCapabilityUnavailable(f"render adapter {self.id!r} cannot shut down")
 
@@ -423,6 +426,11 @@ class ChromiumRenderAdapter(RenderAdapter):
         kind = str(action["kind"])
         selector = str(action.get("selector", "") or "")
         steps: list[str] = []
+        if kind == "sequence":
+            for step in action.get("actions") or ():
+                performed = self.perform_state(step)
+                steps.extend(performed.get("steps") or ())
+            return {"kind": "sequence", "steps": steps, "action": action}
         with self._lock:
             if kind == "hover" and selector:
                 page.hover(selector)
@@ -529,9 +537,23 @@ class ChromiumRenderAdapter(RenderAdapter):
             )
         except Exception as exc:  # noqa: BLE001
             raise CaptureFailed(f"CAPTURE_FAILED: the page could not be inspected: {exc}") from exc
+        try:
+            report["accessibility"] = page.evaluate(ACCESSIBILITY_SCRIPT)
+        except Exception as exc:  # noqa: BLE001 - a partial audit is reported, not invented
+            report["accessibility"] = {
+                "error": f"the accessibility inspection could not run: {exc}",
+                "contrast": {"checks": 0, "failures": [], "unverified": 0},
+            }
         report["console"] = list(self._console[-40:])
         report["page_errors"] = list(self._page_errors[-20:])
         return report
+
+    def evaluate(self, expression: str) -> object:
+        page = self._require_page()
+        try:
+            return page.evaluate(f"() => ({expression})")
+        except Exception as exc:  # noqa: BLE001
+            raise CaptureFailed(f"CAPTURE_FAILED: the assertion could not be evaluated: {exc}") from exc
 
     def shutdown(self) -> None:
         """Stop the browser and wait for it to actually be gone.
@@ -639,7 +661,16 @@ INSPECT_SCRIPT = """
   );
   const focusSamples = [];
   const noRing = [];
+  const originalFocus = document.activeElement;
   for (const node of Array.from(focusable).slice(0, 40)) {
+    const nodeRect = node.getBoundingClientRect();
+    const nodeStyle = window.getComputedStyle(node);
+    if (nodeRect.width <= 0 || nodeRect.height <= 0 || nodeStyle.visibility === 'hidden' ||
+        nodeStyle.display === 'none' || node.disabled) {
+      // A hidden or disabled control is not part of the keyboard path; including
+      // it invents a ringless control that no keyboard user can reach.
+      continue;
+    }
     // Focus with keyboard intent when the browser supports declaring it:
     // a plain programmatic focus() does not put the browser in keyboard
     // modality, so :focus-visible rules do not match and a surface styled
@@ -666,7 +697,14 @@ INSPECT_SCRIPT = """
       });
     }
   }
-  if (document.activeElement && document.body) { document.activeElement.blur(); }
+  // Restore the interaction state's focus. Blurring everything would make an
+  // open dialog look as though focus had escaped, and would photograph a
+  // focused-state capture after destroying the focus it was meant to show.
+  try {
+    if (originalFocus && originalFocus.focus) { originalFocus.focus({ focusVisible: true }); }
+  } catch (error) {
+    if (originalFocus && originalFocus.focus) { originalFocus.focus(); }
+  }
   const clipped = [];
   for (const node of Array.from(document.querySelectorAll('*')).slice(0, 900)) {
     const style = window.getComputedStyle(node);
@@ -797,6 +835,159 @@ INSPECT_SCRIPT = """
   };
 }
 """ % json.dumps(list(LOADING_SELECTORS))
+
+
+ACCESSIBILITY_SCRIPT = """
+() => {
+  const parse = (value) => {
+    if (!value) { return null; }
+    const text = String(value).trim().toLowerCase();
+    if (text === 'transparent') { return {r: 0, g: 0, b: 0, a: 0}; }
+    let match = text.match(/^rgba?\\(([^)]+)\\)$/);
+    if (match) {
+      const parts = match[1].split(',').map((item) => item.trim());
+      return {r: Number(parts[0]), g: Number(parts[1]), b: Number(parts[2]), a: parts.length > 3 ? Number(parts[3]) : 1};
+    }
+    match = text.match(/^#([0-9a-f]{3,8})$/);
+    if (match) {
+      let hex = match[1];
+      if (hex.length === 3 || hex.length === 4) { hex = hex.split('').map((c) => c + c).join(''); }
+      const int = (start) => parseInt(hex.slice(start, start + 2), 16);
+      return {r: int(0), g: int(2), b: int(4), a: hex.length === 8 ? int(6) / 255 : 1};
+    }
+    return null;
+  };
+  const composite = (top, bottom) => {
+    const a = top.a + bottom.a * (1 - top.a);
+    if (a <= 0) { return {r: 255, g: 255, b: 255, a: 1}; }
+    return {
+      r: (top.r * top.a + bottom.r * bottom.a * (1 - top.a)) / a,
+      g: (top.g * top.a + bottom.g * bottom.a * (1 - top.a)) / a,
+      b: (top.b * top.a + bottom.b * bottom.a * (1 - top.a)) / a,
+      a: a,
+    };
+  };
+  const background = (node) => {
+    const chain = [];
+    let current = node;
+    while (current && current.nodeType === 1) {
+      const style = window.getComputedStyle(current);
+      const colour = parse(style.backgroundColor);
+      if (colour && colour.a > 0) { chain.push(colour); }
+      if (colour && colour.a >= 0.999) { break; }
+      current = current.parentElement;
+    }
+    let result = {r: 255, g: 255, b: 255, a: 1};
+    for (let index = chain.length - 1; index >= 0; index -= 1) {
+      result = composite(chain[index], result);
+    }
+    return result;
+  };
+  const luminance = (colour) => {
+    const channel = (value) => {
+      const v = value / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(colour.r) + 0.7152 * channel(colour.g) + 0.0722 * channel(colour.b);
+  };
+  const ratio = (a, b) => {
+    const left = luminance(a);
+    const right = luminance(b);
+    return (Math.max(left, right) + 0.05) / (Math.min(left, right) + 0.05);
+  };
+  const visible = (node) => {
+    const rect = node.getBoundingClientRect();
+    const style = window.getComputedStyle(node);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity || 1) > 0;
+  };
+  const failures = [];
+  let tested = 0;
+  let unverified = 0;
+  let minimum = null;
+  const candidates = Array.from(document.querySelectorAll('body *')).slice(0, 2500);
+  for (const node of candidates) {
+    if (failures.length >= 40) { break; }
+    if (node.closest('[aria-hidden="true"]')) { continue; }
+    const ownText = Array.from(node.childNodes || [])
+      .filter((child) => child.nodeType === 3)
+      .map((child) => String(child.textContent || '').trim())
+      .join(' ')
+      .trim();
+    if (!ownText || !visible(node)) { continue; }
+    const style = window.getComputedStyle(node);
+    if (style.backgroundImage && style.backgroundImage !== 'none') { unverified += 1; continue; }
+    const foreground = parse(style.color);
+    if (!foreground) { unverified += 1; continue; }
+    const back = background(node);
+    const size = parseFloat(style.fontSize || '0');
+    const weight = Number(style.fontWeight || 400) || 400;
+    const large = size >= 24 || (size >= 18.66 && weight >= 700);
+    const required = large ? 3 : 4.5;
+    const value = ratio(foreground, back);
+    tested += 1;
+    minimum = minimum === null ? value : Math.min(minimum, value);
+    if (value < required) {
+      failures.push({
+        tag: (node.tagName || '').toLowerCase(),
+        cls: String(node.className || '').slice(0, 80),
+        text: ownText.slice(0, 60),
+        ratio: Math.round(value * 100) / 100,
+        required: required,
+        font_size: style.fontSize,
+        font_weight: style.fontWeight,
+        foreground: style.color,
+        background: 'rgb(' + Math.round(back.r) + ', ' + Math.round(back.g) + ', ' + Math.round(back.b) + ')',
+      });
+    }
+  }
+  const focusOrder = Array.from(document.querySelectorAll(
+    'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )).slice(0, 60).map((node) => ({
+    tag: (node.tagName || '').toLowerCase(),
+    label: String(node.getAttribute('aria-label') || node.textContent || node.getAttribute('type') || '').trim().slice(0, 60),
+  }));
+  const dialogs = Array.from(document.querySelectorAll('dialog[open], [role="dialog"], [aria-modal="true"]')).map((node) => {
+    const rect = node.getBoundingClientRect();
+    const active = document.activeElement;
+    return {
+      open: true,
+      visible: rect.width > 0 && rect.height > 0,
+      accessible_name: String(node.getAttribute('aria-label') || node.getAttribute('aria-labelledby') || '').slice(0, 120),
+      focus_inside: Boolean(active && node.contains(active)),
+    };
+  });
+  const status = Array.from(document.querySelectorAll('[role="status"], [role="alert"], [aria-live]')).map((node) => ({
+    role: String(node.getAttribute('role') || 'live'),
+    live: String(node.getAttribute('aria-live') || ''),
+    visible: visible(node),
+    text: String(node.textContent || '').trim().slice(0, 120),
+  }));
+  const errors = Array.from(document.querySelectorAll('input, select, textarea')).map((node) => ({
+    id: String(node.getAttribute('id') || ''),
+    name: String(node.getAttribute('name') || ''),
+    invalid: String(node.getAttribute('aria-invalid') || '').toLowerCase() === 'true',
+    described_by: String(node.getAttribute('aria-errormessage') || node.getAttribute('aria-describedby') || ''),
+    required: Boolean(node.required),
+  }));
+  const landmarks = Array.from(document.querySelectorAll('header, nav, main, footer, form, [role="banner"], [role="navigation"], [role="main"], [role="contentinfo"]')).map((node) => ({
+    tag: (node.tagName || '').toLowerCase(),
+    role: String(node.getAttribute('role') || ''),
+    label: String(node.getAttribute('aria-label') || '').slice(0, 80),
+  }));
+  return {
+    contrast: {checks: tested, failures: failures, minimum_ratio: minimum, unverified: unverified},
+    focus_order: focusOrder,
+    dialogs: dialogs,
+    status_messages: status,
+    form_controls: errors,
+    landmarks: landmarks,
+    reduced_motion: {
+      preferred: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      body_transition: getComputedStyle(document.body || document.documentElement).transitionDuration,
+    },
+  };
+}
+"""
 
 
 class UnavailableRenderAdapter(RenderAdapter):

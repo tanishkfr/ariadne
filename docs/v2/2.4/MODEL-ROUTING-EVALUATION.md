@@ -142,3 +142,20 @@ Before any route change can be applied:
 
 Until then, 2.4B's routing improvement is **operational shadow evidence**, not a
 proven live efficiency gain.
+
+## 8. 2.4C live addendum
+
+2.4C ran the bounded live comparison the 2.4B pass could not. Command Code
+1.88.5 and OpenCode 2.2.5 executed the same six workload families on the same
+model family (DeepSeek V4.1 Flash) through different harnesses, plus a matched
+`context_reduction=off/adaptive` comparison. Every completed cell passed the
+engine's independent validation; ten produced an ACCEPTED Proof Receipt and four
+stopped at a required review boundary without a proof. No provider supplied
+token or cost usage. The observed identity was harness-configured, not
+provider-attested.
+
+This is one trial per cell and therefore **not** an eight-sample qualification:
+no promotion is eligible, no route changed, and `model_routing` remains
+shadow-only. A measured outcome of "no routing change justified" is the correct
+result, not a failure. Full rows and limitations:
+[LIVE-INTELLIGENCE-QUALIFICATION.md](LIVE-INTELLIGENCE-QUALIFICATION.md).

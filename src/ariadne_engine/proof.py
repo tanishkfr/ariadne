@@ -25,10 +25,16 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
-from . import contracts
+from . import contracts, creative_proof
 
-PROOF_SCHEMA_VERSION = "ar-224-proof-receipt-1"
-READABLE_PROOF_SCHEMAS = ("ar-224-proof-receipt-1",)
+PROOF_SCHEMA_VERSION = "ar-224-proof-receipt-2"
+READABLE_PROOF_SCHEMAS = ("ar-224-proof-receipt-1", "ar-224-proof-receipt-2")
+"""Receipt versions this engine can read.
+
+Version 2 adds the optional ``creative_review`` binding. Version 1 receipts are
+kept readable and are never silently reinterpreted as carrying an independent
+S5 review: a run that needs that evidence must produce a new receipt.
+"""
 
 COLLECTION = "proof_receipts"
 
@@ -200,6 +206,19 @@ def receipt_problems(record: Mapping[str, Any]) -> list[str]:
         problems.append("proof receipt claim_assessments is not a list")
     if str(record.get("acceptance_state", "")) not in ("ACCEPTED", "NOT_ACCEPTED", "VERIFICATION_BLOCKED"):
         problems.append("proof receipt acceptance_state must be ACCEPTED, NOT_ACCEPTED or VERIFICATION_BLOCKED")
+    binding = record.get("creative_review")
+    if binding is not None:
+        if not isinstance(binding, Mapping):
+            problems.append("proof receipt creative_review is not an object")
+        else:
+            problems.extend(creative_proof.binding_shape_problems(binding))
+            if str(binding.get("implementation_revision", "")) and str(
+                binding.get("implementation_revision", "")
+            ) != str(record.get("work_digest", "")):
+                problems.append(
+                    "the creative review binding describes a different implementation revision than "
+                    "the receipt it is attached to"
+                )
     digest = str(record.get("receipt_digest", ""))
     if not re.fullmatch(r"[0-9a-f]{64}", digest):
         problems.append("proof receipt digest is not a sha256")
@@ -365,6 +384,14 @@ def format_human(receipt: Mapping[str, Any], *, task_title: str = "") -> str:
         "",
         f"Evaluated against {total} requirements using Proof Pass {receipt.get('proof_id', '')}.",
     ]
+    binding = receipt.get("creative_review")
+    if isinstance(binding, Mapping):
+        lines += [
+            "",
+            "Independent review",
+            f"{binding.get('review_id', '')} bound to {binding.get('packet_id', '')} "
+            f"({binding.get('outcome', '')}, {binding.get('independence_level', '')})",
+        ]
     return "\n".join(lines)
 
 
@@ -598,6 +625,18 @@ def verify_task(
         digest = work_digest_for(task_text, ref)
     if not re.fullmatch(r"[0-9a-f]{16,64}", digest):
         raise contracts.ContractError("work digest must be hex 16-64 chars")
+    # The creative S5 boundary is the one place the engine is asked to prove
+    # completion from an independent review. Fail closed before any receipt is
+    # created if the review is missing, stale, failed, substituted or
+    # non-independent. A T1 task and a technical S4B pass have no S5 packet and
+    # therefore no new obligation.
+    creative_binding: dict | None = None
+    if creative_proof.is_creative_review_boundary(state):
+        creative_binding = creative_proof.build(
+            state,
+            work_digest=digest,
+            implementation_fingerprint=str(implementation_fingerprint or ""),
+        )
     contract_record = ensure_contract(state, task_text=task_text, task_id=task_id)
     requirements = ensure_requirements(state, contract_record=contract_record, task_text=task_text)
     ensure_claims(
@@ -623,9 +662,12 @@ def verify_task(
         # The receipt must be able to say what it did with each recorded engine
         # result -- mapped, replayed, or refused and why. A pass that silently
         # dropped a stale record would be as misleading as one that counted it.
-        extra: dict | None = {"validation_mapping": validation_mapping}
+        extra: dict = {"validation_mapping": validation_mapping}
     else:
-        extra = None
+        extra = {}
+    if creative_binding is not None:
+        creative_proof.store(state, creative_binding)
+        extra["creative_review"] = creative_binding
     contract_module_active = contract_record
     pass_record = gates_module.run_pass(
         state, contract_id=str(contract_module_active.get("contract_id", "")),

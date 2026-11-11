@@ -88,8 +88,16 @@ def version_problems(root: Path) -> list[str]:
             )
     except OSError as exc:
         problems.append(f"the engine version could not be read: {exc}")
-    if integration.PROTOCOL_VERSION != migration.REPORT_SCHEMA:
-        problems.append("the integration protocol version and the migration report schema disagree")
+    # Protocol 2 adds read-only host operations while still negotiating protocol
+    # 1. The migration report schema is independent of that addition, so the
+    # requirement is that the schema a consumer may see is inside the supported
+    # protocol range -- not that the two numbers are identical forever.
+    if not (
+        integration.MIN_SUPPORTED_VERSION
+        <= migration.REPORT_SCHEMA
+        <= integration.MAX_SUPPORTED_VERSION
+    ):
+        problems.append("the migration report schema is outside the integration protocol's supported range")
     if not (
         integration.MIN_SUPPORTED_VERSION
         <= integration.PROTOCOL_VERSION

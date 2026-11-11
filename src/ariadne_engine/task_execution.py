@@ -115,6 +115,12 @@ WORKER_ADAPTERS: dict[str, dict] = {
         # for live qualification, and --no-session keeps the run isolated.
         argv=(
             "-p", "--skip-onboarding", "--trust", "--permission-mode", "accept-edits",
+            # Command Code 1.88.5 withholds edit/write tools from headless runs
+            # unless they are enabled explicitly; a session that cannot write a
+            # file is not a worker. The engine's independent scope check and
+            # validation remain the boundary, so enabling the declared
+            # capabilities here does not widen what the task may change.
+            "--tools-all",
             "--no-session", "--model", "deepseek/deepseek-v4.1-flash",
         ),
         capabilities=("read", "search", "edit", "shell", "implementation", "implementation-repair", "escalation"),

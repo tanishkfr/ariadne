@@ -1,8 +1,24 @@
 # Hosts, platforms, and known limitations
 
-> Ariadne 2.4B. This file states only what has been verified, and where. It is
+> Ariadne 2.4C. This file states only what has been verified, and where. It is
 > deliberately conservative: a host it lists as "declared" has an adapter and a
 > discovery probe but no recorded live execution here.
+
+## 2.4C surfaces
+
+| Surface | Status | Boundary |
+|---|---|---|
+| Rendered design verification | Verified on a disposable surface: declared 320/390/834/1440/1920 matrix, 7 captures per phase, interaction assertions, contrast/focus/target/dialog/form checks | One Chromium-family browser on Windows; not WCAG conformance and not a human usability study |
+| Visual regression | Verified by synthetic and real before/after captures | Pixel comparison, not a quality score; masks require a reason |
+| Creative proof binding | Verified on the qualification lifecycle: packet/review/execution/revision/evidence digests bound into `VP-0001` | G3 remains human-owned and was not recorded |
+| Host contract `ariadne-host-1` | Verified through CLI, API, MCP and an external consumer fixture across a simulated restart | Read-only; no Juno integration claimed; no daemon or remote transport added |
+
+The 2.4C live matrix is 16 cells across Command Code and OpenCode (same model
+family, different harnesses): 16/16 passed independent validation, 10 produced
+an ACCEPTED Proof Receipt, 6 stopped at a required review boundary without a
+proof, and no provider supplied token/cost usage. No model ranking or efficiency
+promotion is claimed. Evidence:
+[docs/v2/2.4/LIVE-INTELLIGENCE-QUALIFICATION.md](v2/2.4/LIVE-INTELLIGENCE-QUALIFICATION.md).
 
 ## 2.4B provider evidence
 

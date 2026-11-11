@@ -1,5 +1,45 @@
 # Ariadne 2.4.0rc1
 
+## Design Verification & Integration (Phase C)
+
+2.4C closes the evidence gaps that kept 2.4B PARTIAL. It does not add a second
+workflow engine or a new product surface.
+
+- **Command Code headless repair.** Command Code 1.88.5 withholds edit/write
+  tools from headless sessions unless they are enabled explicitly; the adapter
+  preset now passes `--tools-all`. The engine's independent validation and scope
+  check remain the boundary, so this restores the declared worker capability
+  rather than widening what a task may change.
+- **Live intelligence comparison.** Six bounded workloads were run through two
+  authenticated harnesses (Command Code and OpenCode) plus a matched adaptive
+  context comparison. Results record observed versions, identity provenance,
+  validation, repairs, proof, duration and packet bytes. Token and cost fields
+  stay `UNKNOWN` where no provider reported them. No model ranking is claimed
+  from this sample and no route was promoted.
+- **Rendered design verification.** Declared viewport matrices, real browser
+  captures, interaction assertions, deterministic contrast/focus/target/dialog/
+  form checks, dependency-free screenshot comparison and an independent rendered
+  review. A disposable surface produced 15 defects before correction and 0 after,
+  with fresh evidence and a second review.
+- **Creative proof binding.** A creative Proof Receipt now binds the current S5
+  packet, the engine-created reviewer execution, its independence level, the
+  reviewed revision and the review evidence digest. Stale, failed, substituted
+  and non-independent reviews are refused. G3 remains human-owned.
+- **Host contract.** `ariadne-host-1` provides one read-only task/execution/
+  verification/recovery/authority/resource projection through CLI, API and MCP,
+  with a resumable durable event cursor. Protocol 2 remains compatible with
+  protocol 1. An external consumer fixture proves restart recovery and read-only
+  authority; Juno integration is not claimed until Juno consumes it.
+
+What remains unproven:
+
+- The live comparison is one trial per cell on one Windows machine; it is not a
+  model-quality ranking and does not establish token or cost savings.
+- Static screenshots do not establish WCAG conformance, screen-reader order or
+  keyboard traversal over time.
+- The host contract is qualified by a fixture, not by an external host product.
+- No tag, push, package publication or deployment is implied.
+
 ## Intelligence & Efficiency (Phase B)
 
 > **Release candidate. Not published.** No tag, push, artifact publication or

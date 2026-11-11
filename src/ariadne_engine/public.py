@@ -48,6 +48,10 @@ STABLE_V2 = (
     "recovery_report",
     "task_status",
     "task_status_state",
+    "host_status",
+    "host_status_state",
+    "host_events",
+    "host_events_state",
     "task_run",
     "task_recover",
     "propose_recovery",
@@ -326,6 +330,12 @@ class EngineClient:
 
     def task_status(self, **options) -> api.Result:
         return api.task_status(**options)
+
+    def host_status(self, **options) -> api.Result:
+        return api.host_status(**options)
+
+    def host_events(self, **options) -> api.Result:
+        return api.host_events(**options)
 
     def task_recover(self, **options) -> api.Result:
         return api.task_recover(**options)

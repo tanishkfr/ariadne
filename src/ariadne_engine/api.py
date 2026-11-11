@@ -259,6 +259,65 @@ def task_status_state(state: dict, task_id: str = "") -> dict:
     return report
 
 
+def host_status_state(state: dict) -> dict:
+    """The host view for an already-loaded state (MCP and embedded clients)."""
+    from . import host as host_module
+
+    report = runtime().task_report(state, task_id="")
+    return host_module.status(state, task_report=report)
+
+
+def host_events_state(state: dict, *, cursor=None, limit=100) -> dict:
+    """The host event page for an already-loaded state."""
+    from . import host as host_module
+
+    root = str(state.get("run_root", "") or "")
+    if not root:
+        raise ContractError("host events need a run root recorded on the state")
+    return host_module.event_page(Path(root), cursor=cursor, limit=limit)
+
+
+def host_status(run_root=None, project=None, *, as_json=False, args=None) -> Result:
+    """The versioned read-only host projection (Ariadne 2.4C).
+
+    It is derived from the same durable state and the runtime's one task
+    derivation the CLI and MCP use. It never writes, approves, validates,
+    reviews or accepts.
+    """
+    from . import host as host_module
+
+    try:
+        root = _migration_run_root(run_root, project, args)
+        state = persistence.load_state(root)
+        state["run_root"] = str(root)
+        report = runtime().task_report(state, task_id="")
+        view = host_module.status(state, task_report=report)
+    except ContractError as exc:
+        return Result(exit_code=2, message=f"STOPPED: {exc}\n")
+    return Result(
+        exit_code=0,
+        message=json.dumps(view, indent=2, sort_keys=True, default=str) + "\n",
+        state_changed=False,
+    )
+
+
+def host_events(run_root=None, project=None, *, cursor=None, limit=100, args=None) -> Result:
+    """One page of durable host events after a caller-supplied cursor."""
+    from . import host as host_module
+
+    try:
+        root = _migration_run_root(run_root, project, args)
+        page = host_module.event_page(Path(root), cursor=cursor, limit=limit)
+    except ContractError as exc:
+        return Result(exit_code=2, message=f"STOPPED: {exc}\n")
+    code = 0 if page.get("status") in ("OK", "EMPTY") else 1
+    return Result(
+        exit_code=code,
+        message=json.dumps(page, indent=2, sort_keys=True, default=str) + "\n",
+        state_changed=False,
+    )
+
+
 def task_recover(run_root=None, project=None, apply=False, abandon_open=False, *, args=None) -> Result:
     """Report the T1 recovery view, or safely resume its recorded continuation."""
     return _call("task_recover_command", {
@@ -1811,6 +1870,10 @@ __all__ = [
     "recovery_report",
     "task_status",
     "task_status_state",
+    "host_status",
+    "host_status_state",
+    "host_events",
+    "host_events_state",
     "task_recover",
     "task_run",
     "task_return",

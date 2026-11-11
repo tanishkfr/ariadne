@@ -2678,6 +2678,38 @@ def rendered_critique_problems(record: Mapping[str, Any]) -> list[str]:
                 problems.append(f"coverage for {dimension} has an unsupported state")
             if str(verdict.get("state", "")) == "REVIEWED" and not verdict.get("capture_ids"):
                 problems.append(f"coverage for {dimension} is REVIEWED but cites no capture")
+    qualitative = record.get("qualitative")
+    if qualitative is not None:
+        if not isinstance(qualitative, Mapping):
+            problems.append("rendered critique qualitative block is not an object")
+        else:
+            if not isinstance(qualitative.get("screens_reviewed", []), list):
+                problems.append("qualitative review screens_reviewed is not a list")
+            if not isinstance(qualitative.get("factual_failures", []), list):
+                problems.append("qualitative review factual_failures is not a list")
+            recommendations = qualitative.get("subjective_recommendations", [])
+            if not isinstance(recommendations, list):
+                problems.append("qualitative review subjective_recommendations is not a list")
+            else:
+                for row in recommendations:
+                    if not isinstance(row, Mapping):
+                        problems.append("a subjective recommendation is not an object")
+                        continue
+                    if not str(row.get("text", "")).strip():
+                        problems.append("a subjective recommendation has no text")
+                    if not (str(row.get("screen", "")).strip() or str(row.get("route", "")).strip()):
+                        problems.append("a subjective recommendation names no screen")
+                    if str(row.get("dimension", "")) not in DESIGN_REVIEW_DIMENSIONS:
+                        problems.append("a subjective recommendation has an unsupported dimension")
+                    if row.get("blocking"):
+                        problems.append("a subjective recommendation may not be blocking")
+            if qualitative.get("technically_correct_but_visually_weak") and not (
+                recommendations or str(qualitative.get("overall_note", "")).strip()
+            ):
+                problems.append("a visually-weak review records no recommendation or note")
+            for key in ("score", "taste_score", "quality_score", "rating"):
+                if key in qualitative:
+                    problems.append("a rendered critique never records a numeric taste score")
     findings = record.get("findings")
     if not isinstance(findings, list):
         problems.append("rendered critique records no findings list")

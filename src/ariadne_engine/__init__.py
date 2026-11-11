@@ -55,6 +55,7 @@ from . import (  # noqa: E402
     context,
     continuation,
     contracts,
+    creative_proof,
     critique,
     decisions,
     design,
@@ -67,6 +68,7 @@ from . import (  # noqa: E402
     external_skills,
     harness,
     history,
+    host,
     integration,
     mcp,
     measurement,
@@ -95,6 +97,7 @@ from . import (  # noqa: E402
     tasks,
     tooling,
     verification,
+    visual_diff,
 )
 
 __all__ = [
@@ -108,6 +111,7 @@ __all__ = [
     "context",
     "continuation",
     "contracts",
+    "creative_proof",
     "critique",
     "decisions",
     "design",
@@ -120,6 +124,7 @@ __all__ = [
     "external_skills",
     "harness",
     "history",
+    "host",
     "integration",
     "mcp",
     "measurement",
@@ -148,4 +153,5 @@ __all__ = [
     "tasks",
     "tooling",
     "verification",
+    "visual_diff",
 ]

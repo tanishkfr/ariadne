@@ -58,7 +58,7 @@ MAX_TARGET_ID_LENGTH = 64
 
 INTERACTION_ACTIONS = (
     "hover", "focus", "click", "fill", "press", "select", "navigate", "set_viewport",
-    "emulate_media", "evaluate_readonly",
+    "emulate_media", "evaluate_readonly", "sequence",
 )
 """The interaction vocabulary a capture plan may request.
 
@@ -202,6 +202,20 @@ def safe_action(descriptor: Mapping) -> dict:
                 "navigator, performance or matchMedia; calls, assignments and operators are refused"
             )
         value["expression"] = expression.strip()
+    if kind == "sequence":
+        rows = value.get("actions")
+        if not isinstance(rows, (list, tuple)) or not rows:
+            raise ContractError("a sequence action needs at least one action")
+        if len(rows) > 12:
+            raise ContractError("a sequence action is bounded to 12 steps")
+        checked = []
+        for step in rows:
+            if not isinstance(step, Mapping):
+                raise ContractError("every sequence step must be an object")
+            if str(step.get("kind", "")).strip().lower() == "sequence":
+                raise ContractError("a sequence may not contain another sequence")
+            checked.append(safe_action(step))
+        value["actions"] = checked
     return value
 
 
@@ -299,6 +313,11 @@ def capture_path(directory: Path, capture_id: str, *, suffix: str = ".png") -> P
             f"{slug!r}, so the recorded id would not match the file on disk"
         )
     target = Path(directory) / f"{slug}{suffix}"
+    if Path(directory).is_symlink():
+        # The artifact's parent resolving inside its own target is not containment:
+        # the capture directory itself was a link out of the run root. Refuse it
+        # before the resolved-parent check can be satisfied by that same link.
+        raise ContractError(f"a capture artifact may not escape the run root: {target}")
     if not resolves_inside(Path(directory), target):
         raise ContractError(f"a capture artifact may not escape the run root: {target}")
     base = Path(directory).resolve() if Path(directory).exists() else Path(directory).absolute()

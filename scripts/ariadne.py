@@ -176,6 +176,8 @@ PROMPTING = ENGINE.prompting
 SERIALIZATION = ENGINE.serialization
 MIGRATION = ENGINE.migration
 PROOF = ENGINE.proof
+CREATIVE_PROOF = ENGINE.creative_proof
+HOST = ENGINE.host
 
 # The run-state *file* schema is unchanged in AR-201: new authority lives in
 # versioned records inside the state, so published runtimes keep reading it.
@@ -13075,6 +13077,54 @@ def engine_events_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def host_status_command(args: argparse.Namespace) -> int:
+    """Print the versioned read-only host projection."""
+    run_root, state = resolve_and_load(args)
+    state["run_root"] = str(run_root)
+    report = task_report(state)
+    view = HOST.status(state, task_report=report)
+    if getattr(args, "json", False):
+        print(json.dumps(view, indent=2, sort_keys=True, default=str))
+        return 0
+    task = view["task"]
+    print(f"Task:        {task['task_id']} ({task['lifecycle_state']})")
+    print(f"Stage:       {task['stage'] or 'unrecorded'}")
+    print(f"Revision:    {task['repository_revision'][:12] or 'UNKNOWN'}")
+    print(f"Validation:  {view['verification']['last_validation']['status']}")
+    print(f"Review:      {view['verification']['review']['outcome']}")
+    print(f"Proof:       {view['verification']['proof']['proof_id'] or 'none'} "
+          f"{view['verification']['proof']['acceptance_state']}")
+    print(f"Gate:        {view['authority']['pending_gate'] or 'none pending'}")
+    print(f"Cursor:      {view['events']['cursor']['seq']}")
+    print("Read-only:   this surface cannot approve, validate, review or accept.")
+    return 0
+
+
+def host_events_command(args: argparse.Namespace) -> int:
+    """Print one durable event page after a cursor; never replays blindly."""
+    run_root, _state = resolve_and_load(args)
+    cursor = None
+    raw = str(getattr(args, "cursor", "") or "")
+    if raw:
+        try:
+            cursor = json.loads(raw)
+        except json.JSONDecodeError:
+            raise RuntimeError_("--cursor must be the JSON cursor object host-status returned")
+        if not isinstance(cursor, dict):
+            raise RuntimeError_("--cursor must be a JSON object")
+    page = HOST.event_page(run_root, cursor=cursor, limit=int(getattr(args, "limit", 100) or 100))
+    if getattr(args, "json", False):
+        print(json.dumps(page, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Host events: {page['status']} ({len(page.get('events') or [])} shown)")
+        for row in page.get("events") or []:
+            print(f"  {row['seq']}. {row['type']} {row['task_id']}")
+        print(f"Next cursor: {page['next_cursor']['seq']} {page['next_cursor']['digest'][:12]}")
+        if page.get("integrity_problems"):
+            print("Integrity: " + "; ".join(page["integrity_problems"]))
+    return 0 if page.get("status") in ("OK", "EMPTY") else 1
+
+
 def capability_probe_from_spec(
     spec: dict, *, run_root: Path, reference_adapters: dict, capture_adapters: dict,
 ):
@@ -14785,6 +14835,22 @@ def parser() -> argparse.ArgumentParser:
     events_p.add_argument("--limit", type=int, default=50)
     events_p.add_argument("--json", action="store_true")
 
+    host_status_p = sub.add_parser(
+        "host-status",
+        help="versioned read-only host projection of task, execution, verification, recovery, authority and resources",
+    )
+    run_selector(host_status_p)
+    host_status_p.add_argument("--json", action="store_true")
+
+    host_events_p = sub.add_parser(
+        "host-events",
+        help="read one durable event page after a host cursor (read-only; unknown cursors are refused)",
+    )
+    run_selector(host_events_p)
+    host_events_p.add_argument("--cursor", help="the JSON cursor object returned by host-status or a prior page")
+    host_events_p.add_argument("--limit", type=int, default=100)
+    host_events_p.add_argument("--json", action="store_true")
+
     recover_p = sub.add_parser(
         "recover",
         help="inspect a divergence and, where a safe action exists, apply it through the engine boundary",
@@ -15463,6 +15529,8 @@ def main() -> int:
             "prepare-next": ENGINE_API.prepare_next,
             "execution-status": execution_status_command,
             "engine-events": engine_events_command,
+            "host-status": host_status_command,
+            "host-events": host_events_command,
             "recover": recover_command,
             "migrate": migrate_command,
             "capabilities": capabilities_command,

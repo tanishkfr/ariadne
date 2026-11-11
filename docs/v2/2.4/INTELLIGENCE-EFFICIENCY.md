@@ -6,6 +6,12 @@
 **Status:** candidate, not published. Tagging, pushing and release publication
 remain separate human decisions.
 
+> **2.4C follow-up.** The live comparison that 2.4B could not run is now in
+> [LIVE-INTELLIGENCE-QUALIFICATION.md](LIVE-INTELLIGENCE-QUALIFICATION.md). It
+> records route performance, adaptive-context packets and the absence of a
+> justified model promotion. It does not convert the 2.4B fixture byte saving
+> into a token or cost claim.
+
 ## 1. The thesis
 
 Ariadne already preferred deterministic computation over bounded judgment and
