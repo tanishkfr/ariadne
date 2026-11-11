@@ -556,7 +556,15 @@ def promotions(state: Mapping) -> list[dict]:
     return [dict(item) for item in values if isinstance(item, Mapping)]
 
 
-def promoted_scope(state: Mapping, *, provider: str, model: str, capability: str, task_family: str) -> dict | None:
+def promoted_scope(
+    state: Mapping,
+    *,
+    provider: str,
+    model: str,
+    capability: str,
+    task_family: str,
+    current_records: Sequence[Mapping] | None = None,
+) -> dict | None:
     """An active, still-current promotion for exactly this identity and scope.
 
     The promotion carries the registry digest it was granted against. If a later
@@ -565,7 +573,10 @@ def promoted_scope(state: Mapping, *, provider: str, model: str, capability: str
     also re-checks qualification and samples, so this is a second, independent
     check rather than the only one.
     """
-    current_records = registry(state)["records"]
+    current_records = (
+        list(current_records) if current_records is not None
+        else registry(state)["records"]
+    )
     for row in reversed(promotions(state)):
         if not row.get("active", True):
             continue
@@ -933,6 +944,7 @@ def adapter_ranking(
                 model=str(row.get("model", "")),
                 capability=capability,
                 task_family=task_family,
+                current_records=view["records"],
             ) is not None
         )
     ]
