@@ -759,6 +759,9 @@ def forged_proof_receipt_in_task_state_cannot_mint_acceptance():
         )
         assert code == 1, text
         assert "receipt" in text.lower(), text
+        # The refusal must be the store's authority, not a generic malformed-
+        # receipt message: a receipt id that was never stored is not evidence.
+        assert "durable receipt store" in text.lower(), text
         assert not current_task(state_of(run_root)).get("acceptance")
 
 

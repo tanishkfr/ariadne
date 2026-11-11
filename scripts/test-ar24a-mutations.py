@@ -106,6 +106,23 @@ MUTATIONS: list[dict] = [
             {
                 "path": CLI,
                 "before": (
+                    '        recorded_digest = str((attempt.get("validation") or {}).get("validation_sha256", ""))\n'
+                    '        if recorded_digest and recorded_digest != sha256(destination):\n'
+                    '            raise RuntimeError_(\n'
+                    '                "The validation record changed after the attempt settled; the old pass is not reused."\n'
+                    '            )'
+                ),
+                "after": (
+                    '        recorded_digest = str((attempt.get("validation") or {}).get("validation_sha256", ""))\n'
+                    '        if False and recorded_digest and recorded_digest != sha256(destination):\n'
+                    '            raise RuntimeError_(\n'
+                    '                "The validation record changed after the attempt settled; the old pass is not reused."\n'
+                    '            )'
+                ),
+            },
+            {
+                "path": CLI,
+                "before": (
                     '    problems = TRANSPORT.worker_validation_problems(value, entry["id"])\n'
                     '    if problems:\n'
                     '        raise RuntimeError_("Recorded validation evidence is malformed: " + "; ".join(problems))'
@@ -120,7 +137,9 @@ MUTATIONS: list[dict] = [
         "tests": [test(AR24A, "cross_attempt_validation_evidence_is_refused")],
         "why": (
             "packet, attempt and implementing execution are the three identities that make a "
-            "validation belong to one attempt. Removing all three is 'accept the other attempt's proof'."
+            "validation belong to one attempt. The recovery path also compares the durable file "
+            "digest and the record's own packet id; all of these are the same boundary, and they "
+            "are disabled together so the mutation tests the boundary rather than one layer of it."
         ),
     },
     {
