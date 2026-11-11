@@ -291,6 +291,33 @@ def corrected_revision_receives_a_new_independent_review_and_proof():
 
 
 @case
+def acceptance_cannot_be_minted_without_a_human_identity():
+    require_pytest()
+    with workspace() as base:
+        project = BASE.make_project(base)
+        assert BASE.start_task(project, request=BASE.HIGH_STAKES_REQUEST)[0] == 0
+        run_root = BASE.run_root_for(project)
+        assert BASE.run_task(project, base, "fix")[0] == 0
+        assert review_pass(project, base)[0] == 0
+        # The engine records a human decision; it cannot supply the human. The
+        # CLI must refuse to invent an identity, not default one.
+        code, text = BASE.run_cli(
+            "task-accept", "--project", str(project), "--outcome", "accepted",
+        )
+        assert code != 0, text
+        assert not current_task(state_of(run_root)).get("acceptance"), "no acceptance may be recorded"
+        # Positive control: a named human can still record the same decision.
+        code, text = BASE.run_cli(
+            "task-accept", "--project", str(project),
+            "--identity", "operator", "--outcome", "accepted",
+        )
+        assert code == 0, text
+        accepted = current_task(state_of(run_root))
+        assert accepted["acceptance"]["outcome"] == "accepted"
+        assert accepted["acceptance"]["identity"] == "operator"
+
+
+@case
 def two_sequential_review_corrections_are_bounded_and_reviewable():
     require_pytest()
     with workspace() as base:
