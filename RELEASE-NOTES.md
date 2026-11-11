@@ -30,18 +30,38 @@ What is proven in this candidate:
   changed, independent validation passed and an ACCEPTED Proof Receipt produced.
   A live Command Code timeout was classified honestly and recovered into a
   second validated attempt.
-- The focused reliability suite, adapter suite, engine core and 2.3 suites are
-  green. The full deterministic benchmark has 331 passes and the same seven
-  pre-existing documentation/path failures reproduced on a clean 2.3.0
-  worktree; none is counted as a pass or as a 2.4A regression.
+- The focused reliability suite, adapter suite (structural), engine core and
+  2.3 suites are green. The full deterministic benchmark has **338 passes, 0
+  failures, 0 errors, 5 observed and 2 declared skips**. The seven cases that
+  were red in the original candidate were pre-existing documentation/path drift;
+  a clean 2.3.0 worktree reproduced all seven, and the hardening branch closed
+  them at their causes rather than converting them to skips.
+- The hardening pass added a 17-mutation lifecycle harness: every valid mutant
+  was killed, with digest-verified restoration. It found and fixed a real
+  acceptance defect: a proof receipt edited in run state kept its old digest and
+  was accepted because acceptance never re-verified the receipt's contents.
+- The creative S4B/S5 correction path was exercised with live external workers,
+  not only the deterministic benchmark: Command Code 1.88.5 (DeepSeek V4.1 Flash)
+  implemented and corrected a disposable project; an independent OpenCode 2.2.5
+  / GitHub Copilot session found a real input-validation defect; the linked
+  correction was freshly validated; a new independent session passed the
+  corrected revision; and the engine issued an ACCEPTED `VP-0001` receipt bound
+  to the corrected validation. No G3 was recorded; acceptance correctly refused
+  at the human gate. See
+  [docs/v2/2.4/RELEASE-HARDENING.md](docs/v2/2.4/RELEASE-HARDENING.md).
 
 What this candidate still refuses to claim:
 
 - no bug-free, perfectly secure or sandboxed guarantee;
-- no live external reviewer for the creative S4B re-review (the lifecycle is
-  driven end to end by the deterministic benchmark, not by a paid model);
+- the creative S5 gate is the G3 approval plus the passed independent review;
+  `verify` does not bind the S5 review into the VP receipt, so the receipt is
+  evidence of the corrected work and validation, not of the review;
+- Codex and OpenAI direct were quota-blocked during the live hardening review;
+  the review used the strongest available authenticated distinct provider;
 - Claude Code is installed but unauthenticated here; Cursor is absent;
 - macOS and Linux were not executed;
+- `python -m pytest` validation depends on the ambient interpreter; a contract
+  that names `python` must ensure the test runner is importable;
 - local run-state files are not cryptographically attested;
 - an open worker execution is never presumed dead; the operator must declare it
   lost, and an orphan whose effect cannot be established is reported rather

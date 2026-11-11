@@ -12,9 +12,9 @@ Adapter presets and their status:
 
 | Adapter | What it is | Status in this release |
 |---|---|---|
-| `command-code` | Command Code CLI (`command-code -p ...`) | **Verified live** (2.4A): executable 1.88.5, authenticated Command Code subscription, model `deepseek/deepseek-v4.1-flash`; an isolated bug-fix task changed only `export.py`, passed Ariadne's independent validation and produced an ACCEPTED Proof Receipt. A live 30s timeout was classified `TIMEOUT` and recovered into a second, validated attempt. |
-| `opencode` | OpenCode CLI (`opencode run --auto`) | **Verified live** (2.4A): v2.2.5, authenticated, model `deepseek/deepseek-v4.1-flash`; the same isolated task changed only `export.py`, validated independently and produced an ACCEPTED receipt. |
-| `codex` | OpenAI Codex CLI (`codex exec --sandbox workspace-write ...`) | **Verified live with one recorded format variance** (2.4A): codex-cli 0.166.0, ChatGPT-authenticated, model `gpt-6.1-terra`; one live run wrote a return whose `Status` field the strict schema refused, then a subsequent run completed the same task and produced an ACCEPTED receipt after the prompt was made explicit about the three allowed status values. |
+| `command-code` | Command Code CLI (`command-code -p ...`) | **Verified live** (2.4A and 2.4A-R): executable 1.88.5, authenticated Command Code subscription, model `deepseek/deepseek-v4.1-flash`; an isolated bug-fix task changed only `export.py`, passed Ariadne's independent validation and produced an ACCEPTED Proof Receipt. A live 30s timeout was classified `TIMEOUT` and recovered into a second, validated attempt. In 2.4A-R it performed the S4B implementation and the linked corrective attempt on the disposable Sandglass project; the engine refused one return whose `Scope status` carried a qualifier, and accepted the same worker's repaired return. |
+| `opencode` | OpenCode CLI (`opencode run --auto`) | **Verified live** (2.4A and 2.4A-R): v2.2.5, authenticated, model `deepseek/deepseek-v4.1-flash` in the original T1 qualification; in 2.4A-R it was the review harness driving GitHub Copilot (`gpt-5.6-luna` observed) for the failed first S5 review and the fresh passing re-review. It is a distinct harness from the Command Code implementer. |
+| `codex` | OpenAI Codex CLI (`codex exec --sandbox workspace-write ...`) | **Verified live with one recorded format variance** (2.4A): codex-cli 0.166.0, ChatGPT-authenticated, model `gpt-6.1-terra`; one live run wrote a return whose `Status` field the strict schema refused, then a subsequent run completed the same task and produced an ACCEPTED receipt after the prompt was made explicit about the three allowed status values. In 2.4A-R it was probed at 0.166.0 but a ChatGPT usage limit returned an error before any review; no execution is claimed for that attempt. |
 | `claude-code` | Claude Code CLI (`claude --print ...`) | **Declared.** Executable discovery verified (`2.1.245`), but this host is unauthenticated; preflight refuses honestly. |
 | `cursor` | Cursor agent CLI | **Declared / unavailable.** Not installed here; discovery reports `not found`. |
 | `host-session` | The invoking assistant session performs the packet and records the return (`task-return`) | **Verified live** (2.3 and 2.4A): the real bug-fix and review-correction tasks were bound, performed, returned, validated, reviewed and proved end to end. |
@@ -42,6 +42,14 @@ ARIADNE_LIVE_ADAPTERS=1 python scripts/test-ar24a-adapters.py \
   live_codex_executes_a_real_task \
   live_command_code_timeout_is_classified_and_recovered_into_a_new_attempt
 ```
+
+The 2.4A-R live S4B/S5 qualification is a separate path: Command Code performed
+the implementation and the linked correction, and fresh OpenCode/GitHub Copilot
+sessions performed the failed review and the passing re-review. It did not use
+the T1 adapter runner, so the four opt-in cases above remain a separate,
+unexecuted part of this hardening pass. Evidence:
+`validation/runs/2.4a-r/live-s4b/` and
+[docs/v2/2.4/RELEASE-HARDENING.md](v2/2.4/RELEASE-HARDENING.md).
 
 
 ## Rendered (browser) acceptance
@@ -99,8 +107,15 @@ declared observer still exists and is still capped at RENDERED by design.
    implementation boundary from S5 with a review-finding retry context and the
    deterministic benchmark case `lifecycle.s4b-review-correction` drives a full
    failed-review -> corrected S4B -> fresh validation -> second S5 review ->
-   G3 acceptance path. A live external reviewer was not used for the S4B
-   re-review; that remains a live-environment limitation, not a lifecycle claim.
+   G3 acceptance path. In 2.4A-R the live external path was exercised: a fresh
+   OpenCode 2.2.5 / GitHub Copilot session reviewed the served page, found a
+   real invalid-input defect (plus a material-depth and a per-tick network
+   finding), the linked corrective attempt was freshly validated, and a second
+   fresh session passed the corrected revision. The engine records
+   `DISTINCT_RUNTIME` rather than `DISTINCT_PROVIDER` because it did not certify
+   a provider-observed difference; the harnesses were Command Code/DeepSeek and
+   OpenCode/GitHub Copilot. The creative final gate remains the human G3; the
+   `verify` VP receipt binds the corrected validation but not the S5 review.
    Stale validation, cross-attempt evidence, forged reviewer identity, stale or
    forged proof receipts, out-of-scope corrections and exhausted budgets are
    refused by name.
@@ -145,3 +160,10 @@ declared observer still exists and is still capped at RENDERED by design.
    degrades to fixture bytes. Byte-for-byte re-production is verified on this
    platform; a platform whose Chromium renders text differently would honestly
    fail verification rather than pass it.
+7. **A validation command inherits the ambient interpreter.** The engine runs
+   the contract's command with the process environment; `python -m pytest`
+   therefore depends on which `python` the host resolves. The live 2.4A-R run
+   hit an interpreter without pytest and recorded the failure honestly; the
+   repaired attempt used `PYTHONPATH` to the existing site-packages rather than
+   installing anything. A contract that names `python` should ensure the test
+   runner is importable, or name the interpreter explicitly.

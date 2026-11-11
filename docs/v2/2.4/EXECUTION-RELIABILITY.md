@@ -183,6 +183,15 @@ Focused reliability suite:
 python scripts/test-ar24a.py
 ```
 
+Lifecycle mutation harness (run it from a disposable worktree; it edits the
+implementation it lives in and restores it transactionally):
+
+```bash
+git worktree add --detach /tmp/ariadne-mutations HEAD
+cd /tmp/ariadne-mutations
+python scripts/test-ar24a-mutations.py --report /path/to/mutations.json
+```
+
 Adapter conformance (structural; live cases need existing authenticated CLIs):
 
 ```bash
@@ -202,7 +211,40 @@ The focused suite covers failed review -> correction, correction -> failed
 validation, successful correction -> re-review, two sequential corrections,
 correction budget exhaustion, unchanged passing attempt no-op, stale validation,
 cross-attempt evidence, forged reviewer identity, out-of-scope correction,
-forged proof receipt, real process interruption during worker execution, real
-process interruption during validation, recorded-validation recovery without
-rerunning checks, interrupted return ingestion, changed repository state,
-repeated resume, CLI/API/MCP status parity, and the S4B correction contract.
+forged and tampered proof receipts, a missing human identity at acceptance, real
+process interruption during worker execution, real process interruption during
+validation, recorded-validation recovery without rerunning checks, interrupted
+return ingestion, changed repository state, repeated resume, CLI/API/MCP status
+parity, and the S4B correction contract.
+
+2.4A-R fresh evidence (Windows, Python 3.11.9):
+
+- focused suite: 21/21 (the 19 original cases plus the tampered-receipt and
+  human-identity regressions);
+- mutation harness: 17 attempted, 17 valid, 17 killed, 0 survived, 0 invalid,
+  restoration proven; the first pass's two survivors are kept in
+  `validation/runs/2.4a-r/mutations-attempt1.json`;
+- full benchmark: 338 pass, 0 fail, 0 error, 5 observed, 2 skip; release subset
+  90/90;
+- engine core 586/586, AR-23B 27/29 (2 declared opt-in skips), AR-23C 22/22,
+  AR-23D 25/25, AR-225 51/51, release 97/97, distribution 55/55, wheel install
+  14/14;
+- live S4B/S5: Command Code 1.88.5 / DeepSeek V4.1 Flash implemented and
+  corrected; a fresh OpenCode 2.2.5 / GitHub Copilot (`gpt-5.6-luna`) session
+  produced the failed first review and the passing re-review; the corrected
+  validation is `live-s4b-S4B-C3`, the final review is on `live-s4b-S5-C1`, and
+  `VP-0001` is ACCEPTED. G3 was not recorded and acceptance refused at the human
+  gate. The evidence is in `validation/runs/2.4a-r/live-s4b/`.
+
+The creative S4B/S5 boundary's final gate is the human G3 plus the passed review.
+`ariadne.py verify` can issue a VP receipt for the corrected work and its
+engine-run validation, but it does not bind the S5 review into that receipt. Do
+not describe a VP receipt as approval of the review; the review record and the
+human gate are the separate authorities.
+
+`validate.py --benchmark` accepts `--runs-dir <directory>` so a benchmark can
+exercise the reader without depending on one machine's gitignored
+`validation/runs/` tree. The tracked template is
+`validation/run-template.md`; its self-test is part of
+`suite.validation-guards`.
+

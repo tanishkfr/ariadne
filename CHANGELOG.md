@@ -68,20 +68,35 @@ What changed:
   recovery view. The same derivation is exposed through the Python API and a
   read-only MCP `task_status` tool.
 
-Verified by the focused suite `scripts/test-ar24a.py` (19/19), the adapter
-conformance suite (structural plus live cases), the new benchmark case
-`lifecycle.s4b-review-correction`, the existing engine core and 2.3 suites, and
-the full deterministic benchmark. Seven benchmark cases fail or error for
-pre-existing documentation/path drift (`WRITING-POLICY.md`, `DESIGN-MOTION.md`,
-`QUICKSTART.md`, `validation/run-template.md`, and the basename label of
-`docs/policies/EVALUATION-RUBRICS.md`); a clean 2.3.0 worktree reproduces all
-seven. They are not counted as passing and are not 2.4A regressions.
+Verified by the focused suite `scripts/test-ar24a.py` (21/21), the new
+17-mutation lifecycle harness (`17/17` valid mutants killed, no survivors), the
+two new acceptance regressions, the adapter conformance suite (structural), the
+new benchmark case `lifecycle.s4b-review-correction`, the existing engine core
+and 2.3 suites, and the full deterministic benchmark: **338 pass, 0 fail, 0
+error, 5 observed, 2 skip**. The seven cases that were red in the 2.4A baseline
+were closed at their causes: the missing validation template, the gitignored
+run-record dependency, five stale root-document paths, and the S3 conditional
+source that silently delivered nothing after the documentation move. A clean
+v2.3.0 worktree at `853d827` reproduced all seven before the correction.
 
-Known limits recorded rather than hidden: a full creative S5 -> S4B correction
-is executed deterministically through the new benchmark case, but no live
-external reviewer was used for that specific re-review; Claude Code remains
-declared/unauthenticated here; Cursor is absent; macOS and Linux were not
-executed; and local run-state files are still not cryptographically attested.
+The creative S4B/S5 correction path was then exercised with live external
+workers, not only the deterministic benchmark: Command Code 1.88.5 (DeepSeek
+V4.1 Flash) implemented and corrected the disposable project; an independent
+OpenCode 2.2.5 / GitHub Copilot session found a real input-validation defect
+and a material-depth issue; the linked correction was freshly validated; a new
+independent session passed the corrected revision; and the engine issued an
+ACCEPTED `VP-0001` receipt bound to the corrected validation. No G3 was
+recorded and acceptance correctly refused at the human gate. The detailed
+evidence and the remaining boundaries are in
+[docs/v2/2.4/RELEASE-HARDENING.md](docs/v2/2.4/RELEASE-HARDENING.md).
+
+Known limits recorded rather than hidden: the creative S5 gate is the G3
+approval plus the passed review, and `verify` does not bind the S5 review into
+the VP receipt; Codex and OpenAI direct were quota-blocked during the live
+review; Claude Code remains declared/unauthenticated here; Cursor is absent;
+macOS and Linux were not executed; `python -m pytest` validation depends on the
+ambient interpreter; and local run-state files are still not cryptographically
+attested.
 
 ---
 ## 2.3.0 — 2026-10-16 · PUBLIC RELEASE
