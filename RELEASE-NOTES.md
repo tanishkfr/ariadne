@@ -50,6 +50,9 @@ What remains unproven:
 - Static screenshots do not establish WCAG conformance, screen-reader order or
   keyboard traversal over time.
 - The host contract is qualified by a fixture, not by an external host product.
+- Rollback restores the older runtime's checks: a 2.3 runtime displays a schema-2
+  receipt verbatim but does not evaluate its creative-review binding or
+  re-verify its digest at task acceptance.
 - Publication is an immutable GitHub release; Ariadne performs no deployment.
 
 ## Intelligence & Efficiency (Phase B)

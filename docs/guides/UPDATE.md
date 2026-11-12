@@ -36,6 +36,12 @@ and evidence remain unchanged. An unchanged managed Codex baseline follows the
 rollback version. If that older version predates the baseline, the unchanged
 owned file is removed; an edited file is preserved as user-owned.
 
+Rollback restores the older runtime's checks as well as its version. A 2.3
+runtime can display a 2.4 schema-2 Proof Receipt verbatim, but it does not
+evaluate the creative-review binding and does not re-verify the receipt digest
+at task acceptance; both are 2.4 behavior. Rollback is for returning to the
+older installed runtime, not for running newer evidence through older rules.
+
 ## Repair
 
 Running the installer again is safe:
