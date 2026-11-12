@@ -12,20 +12,63 @@ policy.
 
 ## Locate the runtime
 
-Resolve the Ariadne root in this order:
+This skill is agent instructions, not the execution engine. Check the engine
+before doing any work:
+
+```bash
+python -m ariadne doctor
+```
+
+If the command is missing or doctor reports that Ariadne is not installed, stop
+and follow "Install the runtime" below. Never reconstruct the engine from this
+skill, start a task without it, or present an unexecuted workflow as done.
+
+Resolve the runtime root in this order:
 
 1. `ARIADNE_HOME` when set.
-2. `references/installation.json` beside this skill when installed personally.
-3. The repository root containing this skill when it is loaded from
-   `.agents/skills/ariadne` in Ariadne itself.
+2. `references/installation.json` beside this skill, when a managed installation
+   wrote it.
+3. The `skill` path printed by `python -m ariadne paths`, then that directory's
+   `references/installation.json`. A project-local or other-agent copy uses this
+   step to find a user-global managed runtime. If `paths` is unavailable, try
+   `~/.agents/skills/ariadne/references/installation.json` directly.
+4. The repository root containing this skill only when `scripts/ariadne.py`,
+   `ROUTER.md`, and `WORKFLOW.md` are present (Ariadne's own checkout).
 
-For a personal installation, run `ariadne doctor` before first use after an
-install, update or rollback. The root is valid only when its release manifest,
-version, file hashes and this managed skill agree, and `scripts/ariadne.py`,
-`ROUTER.md`, and `WORKFLOW.md` exist. For a repository-local development skill,
-the three files are the minimum check. If validation fails, stop with one
-action: run `ariadne install` to repair it. Do not reconstruct policies from
-this skill or from conversation history.
+`references/installation.example.json` is illustrative; never treat it as the
+active pointer. The root is valid only when its release manifest, version, file
+hashes and managed skill agree, and `scripts/ariadne.py`, `ROUTER.md`, and
+`WORKFLOW.md` exist. If validation fails, stop with the supported repair or
+update procedure. Do not reconstruct policies from this skill or from
+conversation history.
+
+### Install the runtime
+
+The skills.sh package installs these instructions, not the Python engine. The
+engine requires Python 3.10 or newer and the official v2.4.0 wheel:
+
+```bash
+python -m pip show ariadne
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.4.0/ariadne-2.4.0-py3-none-any.whl"
+python -m ariadne install
+python -m ariadne doctor
+```
+
+If `pip show ariadne` describes the unrelated GraphQL package, stop and use a
+separate interpreter or virtual environment; never uninstall or replace it.
+
+The installer refuses to overwrite an unmanaged `ariadne` skill. That refusal is
+the safety boundary, not an error to work around.
+
+### Duplicate skill copies
+
+Codex and OpenCode global installs use `~/.agents/skills/ariadne`, the same path
+as Ariadne's managed skill. Install the runtime first, then install this skill
+inside a project without `-g`. Do not add a global skills.sh install while a
+managed runtime exists: it can replace the managed copy and make `doctor` fail.
+If doctor reports the managed marker missing, stop and follow the recovery in
+the [installation guide](https://github.com/tanishkfr/ariadne/blob/master/docs/guides/INSTALL.md#install-the-agent-skill-through-skillssh)
+instead of editing runtime files.
 
 ## Any request: task or project
 

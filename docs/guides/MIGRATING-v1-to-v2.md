@@ -3,6 +3,11 @@
 Ariadne v2 reads v1 projects. It does not rewrite one until you ask, and it never
 invents authority while doing it.
 
+> These commands run through the active runtime controller, not the installer.
+> From the runtime root, use `python scripts/ariadne.py migrate ...`;
+> `python -m ariadne` manages installation and does not expose `migrate`.
+> Normal `$ariadne` use can run the same dry-run before writing anything.
+
 - **v1 project documents stay where they are.** `PROJECT.md`, `DESIGN.md`,
   `AGENTS.md`, `HANDOFF.md`, `QA.md` and `RESEARCH.md` are read as legacy
   material. A gate note written inside a document remains a note.
@@ -18,7 +23,7 @@ invents authority while doing it.
 ## Before you migrate
 
 ```bash
-python -m ariadne migrate --dry-run --project /path/to/project
+python scripts/ariadne.py migrate --dry-run --project /path/to/project
 ```
 
 The dry run prints, without writing anything:
@@ -38,7 +43,7 @@ until you resolve it. Nothing is written in that case.
 ## Apply
 
 ```bash
-python -m ariadne migrate --apply --project /path/to/project
+python scripts/ariadne.py migrate --apply --project /path/to/project
 ```
 
 What apply does, in order:
@@ -66,7 +71,7 @@ old gate it still needs to be re-granted by a human.
 ## Rollback
 
 ```bash
-python -m ariadne migrate --rollback --project /path/to/project
+python scripts/ariadne.py migrate --rollback --project /path/to/project
 ```
 
 Rollback restores the preserved pre-migration bytes while that is honest:
@@ -111,7 +116,7 @@ exists, and the release gate fails if a default moves.
 ## If something goes wrong
 
 ```bash
-python -m ariadne migrate --dry-run --project /path/to/project
+python scripts/ariadne.py migrate --dry-run --project /path/to/project
 ```
 
 The dry run is safe to repeat; it reports the current classification without

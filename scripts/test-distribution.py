@@ -515,6 +515,44 @@ def self_test() -> int:
             unmanaged_blocked = True
         case("installer refuses to overwrite an unmanaged skill", unmanaged_blocked and (unmanaged_target / "SKILL.md").read_text(encoding="utf-8") == "person-owned\n")
 
+        skills_sh_home = root / "skills-sh-home"
+        skills_sh_target = root / "skills-sh-target" / "ariadne"
+        skills_sh_target.mkdir(parents=True)
+        public_skill = (ROOT / ".agents" / "skills" / "ariadne" / "SKILL.md").read_text(encoding="utf-8")
+        (skills_sh_target / "SKILL.md").write_text(public_skill, encoding="utf-8")
+        try:
+            cli.install_bundle(bundle_140, skills_sh_home, skills_sh_target)
+            skills_sh_blocked = False
+        except cli.ProductError:
+            skills_sh_blocked = True
+        case(
+            "installer refuses a skills.sh copy and preserves it byte-for-byte",
+            skills_sh_blocked
+            and (skills_sh_target / "SKILL.md").read_text(encoding="utf-8") == public_skill
+            and not (skills_sh_target / ".ariadne-managed.json").exists(),
+        )
+
+        (root / ".ariadne-test-root").write_text("disposable\n", encoding="utf-8")
+        guard_spec = importlib.util.spec_from_file_location(
+            "ariadne_isolation_guard", ROOT / "scripts" / "test-isolation-guard.py"
+        )
+        guard = importlib.util.module_from_spec(guard_spec)
+        guard_spec.loader.exec_module(guard)
+        try:
+            guard.require_isolated(root / "disposable-project", root)
+            guard_accepts = True
+        except guard.IsolationError:
+            guard_accepts = False
+        try:
+            guard.require_isolated(Path.home() / ".agents" / "ariadne", root)
+            guard_rejects = False
+        except guard.IsolationError:
+            guard_rejects = True
+        case(
+            "test isolation guard accepts a marked root and rejects the real managed-skill path",
+            guard_accepts and guard_rejects,
+        )
+
     print("ARIADNE DISTRIBUTION SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)

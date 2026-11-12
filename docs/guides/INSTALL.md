@@ -57,6 +57,73 @@ create a duplicate.
 Social intelligence needs no additional installation or account connection.
 It remains dormant until the user explicitly asks for distribution help.
 
+## Install the agent skill through skills.sh
+
+`npx skills add` installs the skill's instructions. It does not install the
+Python runtime, and Ariadne does not treat the skill's presence as proof that
+the runtime exists.
+
+Recommended order:
+
+1. Install the runtime above and confirm `python -m ariadne doctor` is healthy.
+2. Inside a project, run:
+
+```bash
+npx skills add tanishkfr/ariadne --skill ariadne
+```
+
+This writes the project-local `.agents/skills/ariadne` and records
+`skills-lock.json`. It leaves the user-global managed skill at
+`~/.agents/skills/ariadne` untouched. The repository's skills.sh page is
+<https://www.skills.sh/tanishkfr/ariadne>.
+
+### Do not use a global install for Codex or OpenCode
+
+The skills CLI maps both Codex and OpenCode global installs to
+`~/.agents/skills/ariadne`, the path Ariadne's installer owns. A global install
+(`-g`) replaces that directory, removes the managed marker, and makes
+`ariadne doctor` report `managed $ariadne skill marker is missing`. The
+installer then correctly refuses to overwrite the unmanaged copy.
+
+A global install is supported only when Ariadne has no managed skill at that
+path, for example a machine that wants the instructions without the engine.
+If you installed that way before the runtime, remove the skill with
+`npx skills remove ariadne -g -a codex` before you run `python -m ariadne install`.
+Claude Code and Cursor have separate global paths, but project-local installation
+remains the tested default.
+
+### If a skills.sh copy already occupies the managed path
+
+Do not delete a copy you may have edited, and do not bypass doctor.
+
+1. Run `python -m ariadne doctor` and keep the failure text.
+2. If the copy came from the skills CLI and has no `.ariadne-managed.json`,
+   remove it with the skills CLI before restoring the runtime:
+   `npx skills remove ariadne -g -a codex`.
+3. If you already moved the directory aside, run the same remove command anyway
+   to clear the global skills lock, then run `python -m ariadne install` and
+   `python -m ariadne doctor`.
+4. Reinstall the skill project-locally if you still want the instructions there.
+
+Moving the directory aside without clearing the lock is not enough. That lock
+still owns `~/.agents/skills/ariadne`, so a later `npx skills update -g` can
+overwrite the managed skill, and `npx skills remove -g ariadne` deletes it even
+when the managed marker is present. Never run a global skills CLI update or
+remove after the managed runtime is restored.
+
+Never edit the runtime manifest, delete a user-owned skill, or force the managed
+installer over an unmanaged directory.
+
+### Update and remove
+
+- Skill: `npx skills update ariadne` in the project, or `npx skills remove ariadne`.
+- Runtime: `python -m ariadne update`; rollback and uninstall are in
+  [UPDATE.md](UPDATE.md).
+
+`ariadne-verify` is a legacy internal note. It has no skills.sh frontmatter, is
+not part of the runtime manifest, and is not installed by either path. Use the
+`ariadne` skill.
+
 ## Optional recommended Codex baseline
 
 Normal installation does not change your global Codex instructions. To opt in

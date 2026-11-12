@@ -1,5 +1,10 @@
 # Ariadne Verify — thin conversational integration
 
+> **Legacy, not distributed.** This file is retained for historical reference.
+> It is not part of the Ariadne runtime or the skills.sh package, and it has no
+> YAML frontmatter, so the skills CLI skips it. Use
+> `.agents/skills/ariadne/SKILL.md`.
+
 Teach an assistant when to invoke Ariadne, how to recover the request,
 how to identify the work, and how to present results faithfully.
 
