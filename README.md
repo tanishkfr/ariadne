@@ -2,123 +2,80 @@
 
 # Ariadne
 
-**Evidence-driven execution for complex creative and technical work.**
+**An evidence-driven agent runtime for building, reviewing, and verifying software and creative work.**
 
-Ariadne is an execution engine that chooses the right form of intelligence for each part of a task. Deterministic code handles what can be known exactly. Bounded Decision Intelligence handles closed judgments. Generative models handle creation and open-ended reasoning. Verification establishes what actually happened, and protected decisions stay under human control.
+Ariadne coordinates execution, independent checks, recovery, and human approvals. It does not treat a worker's claim of completion as proof: each important action is bound to a revision, an identity, and the evidence that actually supports it.
 
-Every important action remains tied to evidence, verification and explicit authority.
+[Install](#install) · [skills.sh](https://skills.sh/tanishkfr/ariadne) · [Documentation](#documentation) · [Release v2.4.0](https://github.com/tanishkfr/ariadne/releases/tag/v2.4.0) · [Trust boundaries](docs/guides/TRUST.md)
 
-> **Code before judgment. Judgment before generation. Evidence after action.**
+## What Ariadne does
 
-> **Spend only what the task earns.**
-
-## The core idea
-
-Before Ariadne spends any intelligence, it asks one question:
-
-```text
-Task
- │
- ▼
-Can code know it?
- │
- ├─ yes → deterministic execution
- │
- └─ no
-      ▼
-Can it be a bounded judgment?
- │
- ├─ yes → Decision Plane
- │
- └─ no
-      ▼
-Generative execution
- │
- ▼
-Verification
- │
- ▼
-Human control when required
-```
-
-A fact that a check, a digest or a recorded approval can settle is never sent to a model. A judgment with a closed answer space becomes a bounded decision with a declared option set. Only work that genuinely needs creation or open reasoning reaches a generative worker, and even then the result is verified before it counts.
-
-You do not need to know the internals to use Ariadne, and none of the vocabulary above is a prerequisite. It is simply how the engine avoids expensive answers to cheap questions.
-
-## Product principles
-
-- **Code before judgment.** If computation can establish the answer, Ariadne computes it and consults nothing else.
-- **Judgment before generation.** A closed question with a declared answer space is a bounded decision, not a prompt.
-- **Evidence after action.** Each step produces a record bound to an identity and a revision, so a claim never quietly becomes a verified outcome.
-- **Spend only what the task earns.** A task that needs no generative model is never given one.
-
-## What makes Ariadne different
-
-### Adaptive execution
-
-Ariadne routes a task by its difficulty, its stakes, the capabilities actually available and the evidence already recorded, instead of applying one workflow to every request.
-
-### Universal task entry
-
-Ask for a bug fix, a feature, a refactor, or an audit and Ariadne interprets the request, discovers the project, and opens a lightweight task workflow instead of a creative project. It also selects the native engineering skills the task needs — root-cause investigation, blast-radius analysis, behaviour tests, adversarial review, performance investigation and the rest. A small fix does not generate a whole creative project, and a new website still receives the design-direction workflow and the human G1 gate.
-
-### Decision Intelligence
-
-Closed judgments are answered by bounded decision providers that return a value inside a declared option set. A deterministic provider ships in the box and needs no paid API, so the default path works offline.
-
-### Generative workers
-
-Open-ended creation still uses capable generative models where they earn their cost, through your own agent or an adapter you select.
-
-### Verification
-
-A worker's claim is not a verified outcome. Verification binds the executing attempt, the revision and the evidence, and stale evidence stops satisfying a gate.
-
-### Design Intelligence
-
-References, an approved design direction, rendered evidence and an independent critique are first-class records rather than prose, and they stay current as the work is revised.
-
-### Human control
-
-Confidence never grants authorization. Direction, dependencies, completion, shipping and publishing stay behind human gates that the engine cannot open for you.
-
-### Context economics
-
-Ariadne tracks what context, tools and work actually contributed to a verified result, and reports unknown when a value cannot be measured.
+- **Plans before it spends.** Deterministic code answers what can be known exactly, bounded decision contracts handle closed judgments, and generative workers are used only when creation or open reasoning is genuinely needed.
+- **Keeps execution and verification separate.** A worker's summary is an input to verification, not a result. Independent validation and Proof Pass bind the evidence to the revision that produced it.
+- **Recovers without guessing.** Interrupted work, failed attempts, and stale evidence stay visible. Recovery stops rather than inventing a successor or silently accepting a partial result.
+- **Keeps humans in control.** Direction, dependencies, review, acceptance, shipping, and publishing remain explicit human decisions. Confidence never grants authorization.
+- **Works with your agents.** Ariadne is provider-neutral and can use Codex, OpenCode, or a declared CLI harness, while the deterministic core works offline.
 
 ## How it works
 
 ```text
-                 ARIADNE
-                    │
-        ┌───────────┼───────────┐
-        │           │           │
- deterministic   bounded     generative
-    logic        decisions      work
-        │           │           │
-        └───────────┼───────────┘
-                    ▼
-               verification
-                    ▼
-               human control
+Task
+  |
+  +-- Can code decide it? --------- yes -> deterministic execution
+  |
+  +-- Is it a bounded judgment? ---- yes -> Decision Plane
+  |
+  +-- Otherwise ------------------------- generative worker
+                                                |
+                                          verification
+                                                |
+                                       human authority
 ```
 
-Around that core, Ariadne keeps adaptive context (only the sources a stage needs), provenance (who or what acted, on which revision), design intelligence and task-level economics. The engine enforces the transitions; a later edit can invalidate earlier evidence without deleting it.
+The engine owns the transitions, not the model. It records what was decided, what was executed, what was verified, and what remains unproven. A later edit can invalidate earlier evidence without deleting it.
+
+## Core capabilities
+
+| Capability | What it gives you |
+|---|---|
+| **Task planning and bounded execution** | Ordinary-language requests become an explicit task contract with permitted scope, required validation, selected skills, and the gates ahead. |
+| **Engineering changes and correction loops** | A worker implements one bounded change; failed validation enters a documented repair budget instead of an open-ended retry loop. |
+| **Evidence-based verification** | Proof Pass evaluates the original request against the actual revision and reports proven, partial, unproven, and failed requirements. |
+| **Independent review** | Review is bound to a genuinely distinct reviewer execution. An implementer cannot certify their own work. |
+| **Design verification** | Declared viewport matrices, real browser captures, interaction assertions, contrast/focus/target checks, and visual regression evidence. |
+| **Durable recovery** | Revision fingerprints and durable run state let Ariadne resume, refuse, or escalate honestly after interruption. |
+| **Routing and context efficiency** | Deterministic routing, bounded judgments, context reduction, and skill telemetry. Adaptive routing remains shadow-only in 2.4.0. |
+| **Human approval gates** | A gate binds a decision, a target, a revision, and an identity. The engine can stop and ask; it cannot manufacture the answer. |
+| **Host integration** | `ariadne-host-1` exposes a read-only task, execution, verification, recovery, authority, and resource projection over CLI, API, and MCP, with a durable event cursor. |
+
+The deterministic path is the default. A missing optional provider is recorded as capability state rather than treated as a crash. Design and rendered checks are not a WCAG certification, and the 2.4.0 live qualification used one Windows machine and one Chromium-family browser.
+
+## A practical example
+
+Suppose you ask:
+
+> Fix the failing login validation, add a regression test, and verify the result.
+
+Ariadne interprets the request, discovers the project, and opens a bounded task rather than a full creative project. It records the permitted files and the command that must prove the change, selects the relevant engineering skills, and hands the work to an approved worker with that scope. When the worker returns, Ariadne reruns the validation independently, records the evidence against the exact revision, and only then runs Proof Pass. If the worker changed a file outside the contract or the test still fails, the attempt is rejected or enters a bounded repair; it is not reported as complete.
 
 ## Install
 
 Ariadne installs from immutable GitHub release artifacts. It is not published to PyPI: the `ariadne` distribution name already belongs to the unrelated Ariadne GraphQL project, so a plain `pip install ariadne` would fetch the wrong package.
 
-Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
+Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, OpenCode, or another adapter you configure. The deterministic core needs no paid provider.
+
+### 1. Install the runtime
 
 ```bash
+python -m pip show ariadne
 python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.4.0/ariadne-2.4.0-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
-(or py -m ariadne install)
 ```
 
-`python -m ariadne --version` reports the active version. The launcher keeps an immutable runtime under the platform data directory and registers the managed skill at `~/.agents/skills/ariadne` unless an Ariadne-owned skill is already active there.
+`pip show ariadne` is a safety check. If it describes a GraphQL library, stop and use a separate Python environment; the two distributions cannot coexist in one environment.
+
+`python -m ariadne --version` reports the active runtime version. The launcher keeps an immutable runtime under the platform data directory and registers the managed skill at `~/.agents/skills/ariadne` unless an Ariadne-owned skill is already active there.
 
 | Platform | Ariadne data directory |
 |---|---|
@@ -126,24 +83,36 @@ python -m ariadne doctor
 | macOS | `~/Library/Application Support/Ariadne` |
 | Linux | `$XDG_DATA_HOME/ariadne`, otherwise `~/.local/share/ariadne` |
 
-If `python -m pip show ariadne` describes a GraphQL library, stop and use a separate Python environment. The two distributions cannot coexist in one environment. More detail is in [Installation](docs/guides/INSTALL.md).
+The first install writes a user-local runtime and a managed Codex skill. No administrator account is required. Full platform, repair, and compatibility detail: [Installation](docs/guides/INSTALL.md).
 
-### Install the agent skill through skills.sh
+### 2. Install the agent skill through skills.sh (optional)
 
-The skills CLI installs agent instructions only; it does not install the Python engine. Install the runtime first, then run this inside a project:
+The skills CLI installs agent instructions only. It does not install the Python engine. Install and verify the runtime first, then run this inside a project:
 
 ```bash
 npx skills add tanishkfr/ariadne --skill ariadne
 ```
 
-Project-local installation writes `.agents/skills/ariadne` in that project and leaves the user-global managed skill alone. Do not add `-g` for Codex or OpenCode while a managed Ariadne installation exists: both use `~/.agents/skills/ariadne`, the path Ariadne manages, and a global install can replace it. Recovery and the tested combinations are in [Installation](docs/guides/INSTALL.md#install-the-agent-skill-through-skillssh).
+Project-local installation writes `.agents/skills/ariadne` in that project and leaves the user-global managed skill alone. The managed skill may already be enough for Codex; install the project-local copy when you want the skills.sh-managed instructions, another compatible agent, or a per-project pin.
+
+Do **not** add `-g` for Codex or OpenCode while a managed Ariadne installation exists. Both global installs target `~/.agents/skills/ariadne`, the same path Ariadne manages, and a global install can replace the managed skill. The tested recovery and the complete supported/unsupported matrix are in [Installation](docs/guides/INSTALL.md#install-the-agent-skill-through-skillssh).
+
+### Which installation do I need?
+
+| Situation | Recommended path |
+|---|---|
+| Codex, runtime installed | The managed skill from `ariadne install` is sufficient. |
+| Codex plus skills.sh management | Install the runtime first, then the skill project-locally. |
+| OpenCode | Install the runtime first, then the skill project-locally. |
+| Another compatible agent | Install project-locally where the agent supports project skills. |
+| No runtime yet | Install the runtime first. The skill alone cannot execute Ariadne. |
 
 ## Quick start
 
-1. Run `python -m ariadne doctor` and confirm the runtime, the managed skill and compatible project state.
-2. Open Codex in the project you want to work on and type `$ariadne`.
-3. Describe the outcome you want in ordinary language. Ariadne finds an unfinished run, safely adopts an existing repository, or begins a new project.
-4. At each gate it pauses for your decision, then continues from the recorded state.
+1. Run `python -m ariadne doctor` and confirm the runtime, the managed skill, and compatible project state.
+2. Open Codex or OpenCode in the project you want to work on and invoke `$ariadne`.
+3. Describe the outcome you want in ordinary language.
+4. Answer the decisions that genuinely belong to you; Ariadne records them and continues from the durable state.
 
 A fully deterministic, model-free introduction lives in [examples/README.md](examples/README.md). The examples call the same engine the command line uses and need no provider:
 
@@ -152,29 +121,37 @@ python examples/01_basic_task.py
 python examples/04_bounded_decision.py
 ```
 
+## Supported environments
+
+| Area | Status in 2.4.0 |
+|---|---|
+| Python | 3.10 or newer; the launcher and runtime are dependency-free. |
+| Codex | Default reasoner and `$ariadne` interface; managed skill verified on Windows. |
+| OpenCode | Supported project-local skill integration; file layout tested, live execution not claimed here. |
+| Other agents | Structurally compatible through project-local skills; not all were executed. |
+| Windows | Principal live qualification platform. |
+| macOS / Linux | Same Python entry point; not natively executed for 2.4.0. |
+| External providers | Optional. A missing provider is reported as capability state; no paid API is required by the deterministic core. |
+| Browser checks | Optional. Playwright is not installed by Ariadne; rendered acceptance reports the absence instead of claiming visual success. |
+
+## Security and trust
+
+Ariadne is an execution system, not a sandbox. Read [Trust boundaries](docs/guides/TRUST.md) before relying on it for hostile input or untrusted workers.
+
+- **Approved commands run with your OS privileges.** `--validate` commands are part of the task contract supplied by the operator or orchestrating agent. Ariadne reruns them and records the result; it does not jail them. Do not use an untrusted validation command.
+- **Workers cannot grant authority.** A worker return is data. It cannot approve its own work, widen the permitted scope, mint a Proof Pass, or change policy. The engine validates the return and binds evidence to the revision.
+- **External content is untrusted evidence.** Fetched pages, provider output, worker returns, and third-party skills cannot grant approvals or become instructions. Prompt injection can still influence a model within its own authority; the engine limits the blast radius but does not eliminate it.
+- **External skills require an explicit digest-bound approval.** Discovery is metadata-first, installs are copies, and an unapproved or changed skill is never selected. See [External skill trust](docs/SKILL-TRUST.md).
+- **Release artifacts are digest-authenticated, not publisher-signed.** The manifest and SHA-256 checks detect corruption and substitution against the supplied manifest; they do not establish a maintainer signing identity.
+- **Audits describe capabilities and exposure, not certification.** As observed on 12 November 2026: [Socket](https://www.skills.sh/tanishkfr/ariadne/ariadne/security/socket) reports **PASS**; [Gen Agent Trust Hub](https://www.skills.sh/tanishkfr/ariadne/ariadne/security/agent-trust-hub) reports **MEDIUM** for command execution, external downloads, external-return ingestion, and external skill loading; [Snyk](https://www.skills.sh/tanishkfr/ariadne/ariadne/security/snyk) reports **MEDIUM W011** (low risk 0.10) for explicitly retrieved third-party content. These are automated findings, not a security certification, and they do not replace the boundaries above.
+
 ## Proof Pass
 
-Workers produce. Ariadne determines what is actually proven. Give Ariadne
-the original request and the work; it constructs the verification model,
-so normal use never assembles contracts by hand:
+Workers produce. Ariadne determines what is actually proven. Ask Ariadne to verify the work against the original request; it constructs the verification model and returns a receipt that states what was evaluated, against which requirements, using which evidence.
 
-```bash
-ariadne verify --against task.md --work-root ./work
-ariadne proof VP-0001
-```
+A repair can be verified again and the two receipts compared. Receipts are revision-bound: a later edit can make earlier evidence stale without deleting it. `verify --json` emits a versioned machine-readable receipt for CI, MCP, and conversational integrations. Exit codes are 0 ACCEPTED, 1 NOT_ACCEPTED, 2 VERIFICATION_BLOCKED, and 3 usage or configuration error.
 
-Repair, verify again, then compare the two receipts:
-
-```bash
-ariadne verify --against task.md --work-root ./work
-ariadne compare VP-0001 VP-0002
-```
-
-`ariadne verify --json` emits a versioned machine-readable receipt for CI,
-MCP and conversational integrations. Exit codes are 0 ACCEPTED,
-1 NOT_ACCEPTED, 2 VERIFICATION_BLOCKED and 3 usage or configuration error.
-A receipt states what was evaluated against which requirements using which
-evidence; it never claims bug-free, perfect or guaranteed.
+A receipt never claims bug-free, perfect, or guaranteed. It reports requirement-level verdicts and remaining unknowns. The runtime controller and integration surfaces are documented in [Python and CLI API](docs/v2/AR-205/06-RELEASE-API.md) and [Integration protocol](docs/v2/AR-205/04-INTEGRATION-CONTRACT.md).
 
 ## A short walkthrough
 
@@ -200,64 +177,19 @@ The mechanism is documented in [Decision Intelligence](docs/v2/AR-205D/01-DECISI
 
 ## The Decision Runtime
 
-Ariadne 2.1 ships a bounded inference engine of its own, so a closed question has
-somewhere local to be asked. It runs in a separate process, answers one projected state
-and many independent questions in a single inference, over answer spaces the question
-already declared, and refuses rather than guesses.
+Ariadne ships a bounded inference engine of its own, so a closed question has somewhere local to be asked. It runs in a separate process, answers one projected state and many independent questions in a single inference, over answer spaces the question already declared, and refuses rather than guesses.
 
-```bash
-ariadne decision-runtime --action install     # writes a data directory; no download
-ariadne decision-runtime --action status      # "Decision Runtime: available"
-```
+You do not configure it, and there is no provider to choose. Ariadne finds a Decision Runtime or it does not, and the four rules below hold whether it finds one or not.
 
-You do not configure it, and there is no provider to choose. Ariadne finds a Decision
-Runtime or it does not, and the four rules below hold whether it finds one or not.
+**It never authorises anything.** Every record it produces carries `authorization_effect: "none"`, and nothing it writes can reach an approval, a verification, or an execution edge.
 
-**It never authorises anything.** Every record it produces carries
-`authorization_effect: "none"`, and nothing it writes can reach an approval, a
-verification, or an execution edge.
+**It is never verification.** A prediction is not proof. A shadow observation is evidence that the runtime would have answered differently, and nothing more.
 
-**It is never verification.** A prediction is not proof. A shadow observation is
-evidence that the runtime would have answered differently, and nothing more.
+**It observes before it influences.** The authoritative answer is decided, judged and recorded first. The runtime's prediction is then stored beside it, in a record that is structurally incapable of carrying an execution effect. This is the default posture, and it is not something you opt into.
 
-**It observes before it influences.** The authoritative answer is decided, judged and
-recorded first. The runtime's prediction is then stored beside it, in a record that is
-structurally incapable of carrying an execution effect. This is the default posture, and
-it is not something you opt into.
+**It abstains instead of guessing.** No confidence threshold is applied unless a measured calibration profile justifies one for this exact decision, this question and this exact model revision. With no such profile, no threshold is invented and the answer stands ungated.
 
-**It abstains instead of guessing.** No confidence threshold is applied unless a
-measured calibration profile justifies one for this exact decision, this question and
-this exact model revision. With no such profile, no threshold is invented and the answer
-stands ungated - Ariadne does not know when a decision is wrong, only when the evidence
-is too weak for this decision. When a valid threshold does apply and the answer falls
-below it, the decision is refused, the reason is recorded, and Ariadne escalates.
-
-A probability is only labelled *calibrated* when a measured profile matches the runtime
-kind, implementation, model revision, decision definition, question version and question
-schema exactly. The engine that ships is rule-derived rather than trained, its
-probabilities are uncalibrated, and no calibration profile is included.
-
-Promoting the runtime from shadow to an authoritative role is scoped (risk class,
-reversibility, verification availability, languages), ordered, and reversible at any
-point with one command that needs no migration. It is deliberately not a one-line
-setting.
-
-Adding a runtime to a 2.0 project changes nothing: with none configured, the same call
-returns a byte-identical result plus one extra inert key. There is no migration step.
-
-**Ariadne's Decision Runtime is usable immediately.** Confidence-gated abstention
-activates only when a matching calibration profile has been evaluated and marked
-proven, so a fresh installation answers every bounded question ungated rather than
-guessing at a cutoff.
-
-`ariadne doctor` reports it alongside the rest of the product - capability, installation,
-manifest, concrete model revision, device, protocol, and one bounded smoke question - and
-treats an absent runtime as optional rather than as a fault:
-
-```text
-[OK] Decision Runtime: healthy (1.0.0)
-[OK] Decision Runtime calibration: 0 proven profile(s); confidence-gated abstention is inactive
-```
+`ariadne doctor` reports the runtime alongside the rest of the product, including capability, installation, manifest, concrete model revision, device, protocol, and one bounded smoke question. An absent runtime is optional rather than a fault.
 
 The full documentation is in [docs/v2/2.1/](docs/v2/2.1/README.md).
 
@@ -266,9 +198,9 @@ The full documentation is in [docs/v2/2.1/](docs/v2/2.1/README.md).
 Ariadne keeps five things apart, and none of them substitutes for another:
 
 ```text
-Decision      ≠  Authorization
-Execution     ≠  Verification
-Verification  ≠  Acceptance
+Decision      !=  Authorization
+Execution     !=  Verification
+Verification  !=  Acceptance
 ```
 
 An approval binds a gate, a target, a revision and an identity. A review binds two distinct executions, so an implementer cannot certify their own work. An acceptance spends exactly one human approval. The engine can stop and ask, and it cannot manufacture the answer.
@@ -296,8 +228,7 @@ No particular paid provider is required by the core engine, and the deterministi
 
 ## Benchmarks
 
-The deterministic suite runs offline with no model calls and no network. The
-2.4.0 release was evaluated as follows:
+The deterministic suite runs offline with no model calls and no network. The 2.4.0 release was evaluated as follows:
 
 ```text
 Full benchmark: 353 registered cases
@@ -319,27 +250,15 @@ Distribution lifecycle: 55/55
 Release benchmark subset: 97/97
 ```
 
-The seven documentation/path-drift cases that were red in the 2.4A baseline
-were closed at their causes in 2.4A-R and remain green; they are not counted as
-passes. The five observed cases and two declared skips are accounted for in the
-benchmark results.
+The seven documentation/path-drift cases that were red in the 2.4A baseline were closed at their causes in 2.4A-R and remain green; they are not counted as passes. The five observed cases and two declared skips are accounted for in the benchmark results.
 
-`OBSERVED` and `DECLARED_SKIP` are deliberate categories, separate from failure:
-an observation records a measurement without a judgement, and a skip means a case
-declared itself not executable in this environment. Neither is counted as a pass.
-The benchmark proves deterministic mechanics, not model output quality, cost or a
-success rate. See [benchmarks/README.md](benchmarks/README.md).
+`OBSERVED` and `DECLARED_SKIP` are deliberate categories, separate from failure: an observation records a measurement without a judgement, and a skip means a case declared itself not executable in this environment. Neither is counted as a pass. The benchmark proves deterministic mechanics, not model output quality, cost or a success rate. See [benchmarks/README.md](benchmarks/README.md).
 
 ## Migration from v1
 
-Existing v1 projects keep working without migration. A run state written before the engine contract is refused until you migrate it, and migration is explicit, dry-runnable, backed up and additive:
+Existing v1 projects keep working without migration. A run state written before the engine contract is refused until you migrate it, and migration is explicit, dry-runnable, backed up and additive. Ask Ariadne to migrate the project; it shows the dry-run before writing anything. The full command surface and safety rules are in [MIGRATING-v1-to-v2.md](docs/guides/MIGRATING-v1-to-v2.md).
 
-```bash
-python -m ariadne migrate --dry-run --project <project>
-python -m ariadne migrate --apply --project <project>
-```
-
-An apply preserves the pre-migration bytes and creates no approval, review or verification record. Rollback restores the preserved bytes while that remains honest, and refuses once v2-only work exists. The full guide is [MIGRATING-v1-to-v2.md](docs/guides/MIGRATING-v1-to-v2.md).
+An apply preserves the pre-migration bytes and creates no approval, review or verification record. Rollback restores the preserved bytes while that remains honest, and refuses once v2-only work exists.
 
 ## Updates, rollback and removal
 
@@ -348,7 +267,6 @@ Updates download and verify a newer release, and rollback returns to the previou
 ```bash
 python -m ariadne update
 python -m ariadne rollback
-(or py -m ariadne update)
 ```
 
 Removal is two explicit steps:
@@ -372,7 +290,7 @@ Ariadne enforces its own state transitions, approval binding, revision freshness
 - one install path was verified on one platform; other platforms use the same Python entry point but were not executed here;
 - migration rollback stops being available once v2-only work exists.
 
-These are stated precisely in [TRUST.md](docs/guides/TRUST.md).
+These are stated precisely in [TRUST.md](docs/guides/TRUST.md). Platform and host limits are in [HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md).
 
 ## Documentation
 
@@ -382,10 +300,13 @@ These are stated precisely in [TRUST.md](docs/guides/TRUST.md).
 - [Architecture](docs/v2/AR-200/03-ARCHITECTURE.md) · [Workflow](docs/policies/WORKFLOW.md) · [Router](docs/policies/ROUTER.md) · [Task routing](docs/policies/TASK-ROUTING.md)
 - [Decision Intelligence](docs/v2/AR-205D/01-DECISION-COMPILER.md) · [Decision Graph](docs/v2/AR-205D/02-DECISION-GRAPH.md)
 - [Design Intelligence](docs/v2/AR-202D/02-REFERENCE-INTELLIGENCE.md) · [Design direction](docs/v2/AR-202D/04-DESIGN-DIRECTION.md) · [Design taste](docs/policies/DESIGN-TASTE.md)
-- [Trust boundaries](docs/guides/TRUST.md) · [Privacy](docs/policies/PRIVACY-POLICY.md) · [Model routing](docs/policies/MODEL-ROUTING.md)
+- [Trust boundaries](docs/guides/TRUST.md) · [External skill trust](docs/SKILL-TRUST.md) · [Privacy](docs/policies/PRIVACY-POLICY.md) · [Model routing](docs/policies/MODEL-ROUTING.md)
 - [Migration guide](docs/guides/MIGRATING-v1-to-v2.md) · [Examples](examples/README.md) · [Benchmarks](benchmarks/README.md)
+- [skills.sh listing](https://skills.sh/tanishkfr/ariadne) · [Latest release](https://github.com/tanishkfr/ariadne/releases/tag/v2.4.0)
 - [Release notes](RELEASE-NOTES.md) · [Changelog](CHANGELOG.md)
 
 ## Licence
 
 Ariadne is available under the [Apache License 2.0](LICENSE).
+
+For security reports, open a private security advisory on the repository rather than a public issue. Include the Ariadne version (`python -m ariadne --version`), the command, and the smallest reproduction you can build.

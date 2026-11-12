@@ -532,6 +532,27 @@ def self_test() -> int:
             and not (skills_sh_target / ".ariadne-managed.json").exists(),
         )
 
+        (root / ".ariadne-test-root").write_text("disposable\n", encoding="utf-8")
+        guard_spec = importlib.util.spec_from_file_location(
+            "ariadne_isolation_guard", ROOT / "scripts" / "test-isolation-guard.py"
+        )
+        guard = importlib.util.module_from_spec(guard_spec)
+        guard_spec.loader.exec_module(guard)
+        try:
+            guard.require_isolated(root / "disposable-project", root)
+            guard_accepts = True
+        except guard.IsolationError:
+            guard_accepts = False
+        try:
+            guard.require_isolated(Path.home() / ".agents" / "ariadne", root)
+            guard_rejects = False
+        except guard.IsolationError:
+            guard_rejects = True
+        case(
+            "test isolation guard accepts a marked root and rejects the real managed-skill path",
+            guard_accepts and guard_rejects,
+        )
+
     print("ARIADNE DISTRIBUTION SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)
