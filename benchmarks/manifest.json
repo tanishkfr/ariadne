@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "kind": "ariadne-v2-deterministic-benchmark-manifest",
-  "generated_at": "2026-09-25T05:54:23+00:00",
+  "generated_at": "2026-11-11T15:12:25+00:00",
   "runtime": {
-    "repo_root": "<path>"
+    "repo_root": "C:\\Dev\\Tools\\Ariadne\\ariadne-v2-4a-r-hardening"
   },
   "statuses": [
     "pass",
@@ -303,7 +303,7 @@
       "id": "suite.validation-run-benchmark",
       "group": "suites",
       "title": "Existing validation-run measurement",
-      "task": "Read the recorded B1 validation run through the validator's benchmark mode.",
+      "task": "Read a recorded validation run through the validator's benchmark mode.",
       "required_inputs": [
         "repository at the pinned commit",
         "isolated sandbox under --work-root"
@@ -564,6 +564,28 @@
       "notes": ""
     },
     {
+      "id": "lifecycle.s4b-review-correction",
+      "group": "lifecycle",
+      "title": "A failed S5 review re-enters S4B, revalidates, and re-reviews",
+      "task": "Deliver S4B, review it with 'fix and re-review', correct it, validate the correction, and review again.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The correction is a linked S4B packet authorized only by the failed review; it carries a fresh independent validation, a second S5 review can be ingested, and G3 acceptance is refused until that second review passes.",
+      "evaluation_method": "Drive the real CLI through S4B -> S5 -> failed review -> corrective S4B -> validation -> S5 -> passed review -> G3.",
+      "evidence_required_for_success": "Packet chain, retry context, validation records, review outcomes, acceptance refusal and success.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-lifecycle",
+      "notes": ""
+    },
+    {
       "id": "lifecycle.s5-isolation",
       "group": "lifecycle",
       "title": "S5 packet is the canonical isolated pair",
@@ -572,7 +594,7 @@
         "repository at the pinned commit",
         "isolated sandbox under --work-root"
       ],
-      "expected_outcome": "S5 delivers only the current prompt block and EVALUATION-RUBRICS.md; no project or build context.",
+      "expected_outcome": "S5 delivers only the current prompt block and the canonical evaluation rubric; no project or build context.",
       "evaluation_method": "Inspect delivered source labels and forbidden kinds.",
       "evidence_required_for_success": "Delivered labels list and verifier result.",
       "environment_requirements": [
@@ -880,7 +902,7 @@
         "repository at the pinned commit",
         "isolated sandbox under --work-root"
       ],
-      "expected_outcome": "DESIGN-MOTION.md is delivered with a matching SOURCE-SHA256 header.",
+      "expected_outcome": "The motion policy is delivered with a matching SOURCE-SHA256 header.",
       "evaluation_method": "Compare the header hash with the canonical file hash.",
       "evidence_required_for_success": "Header line and computed hash.",
       "environment_requirements": [
@@ -6501,6 +6523,1260 @@
       "cost_implications": "none",
       "currently_executable": true,
       "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.production-path-resolves-a-threshold",
+      "group": "runtime-abstention",
+      "title": "The production path supplies a threshold only where a profile proves one",
+      "task": "Resolve the effective policy for a bounded batch with a matching PROVEN profile, then with none, a retired one, and one bound to another model revision.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Only the matched active profile supplies a threshold. No profile, a retired profile and a revision mismatch each supply none, and none is invented.",
+      "evaluation_method": "Call batch.effective_policy for each case and read the per-question thresholds.",
+      "evidence_required_for_success": "The four resolved threshold maps and the refusal reasons.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-contracts.doctor-reports-the-runtime-honestly",
+      "group": "runtime-contracts",
+      "title": "doctor reports runtime health, and never overstates it",
+      "task": "Ask the health adapter for an absent runtime, an installed one, and one whose weight file is corrupt.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Absent is OPTIONAL_RUNTIME_UNAVAILABLE and contributes no problem. Installed is HEALTHY. Corrupt is BROKEN with the reason named and no traceback. No state is ever reported as calibrated with zero profiles.",
+      "evaluation_method": "Call decision_runtime_health for each scenario and read status and rows.",
+      "evidence_required_for_success": "The three statuses, the broken reason, and the calibration counts.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-contracts.runtime-identity-is-canonical-and-aliases-read",
+      "group": "runtime-contracts",
+      "title": "One canonical runtime identity, with read compatibility for 2.1 records",
+      "task": "Normalise each known spelling, then match a profile stored under a legacy alias against the canonical runtime, and vary every other identity field.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "All three historical spellings normalise to ariadne-decision-runtime and an unknown name is preserved verbatim. A legacy profile matches the canonical runtime, and a different revision, implementation, runtime or risk class still refuses.",
+      "evaluation_method": "Call canonical_runtime_id, then profile_for across the matched and varied cases.",
+      "evidence_required_for_success": "The normalisations and the accept/refuse matrix.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.below-threshold-escalates-without-an-answer",
+      "group": "runtime-abstention",
+      "title": "A bounded decision below its threshold abstains, escalates, and decides nothing",
+      "task": "Run a real failure classification with a threshold the answer cannot clear.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The decision is refused with BELOW_MIN_CONFIDENCE, no class is produced, the fallback says UNKNOWN, Ariadne escalates, and the record grants no authority while keeping the evidence the refusal was judged on.",
+      "evaluation_method": "Call classify_failure with a runtime and a profile, and read the record.",
+      "evidence_required_for_success": "The record status, abstention reason, escalation classification and preserved candidate.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.above-threshold-avoids-escalation",
+      "group": "runtime-abstention",
+      "title": "A bounded decision above its threshold is used without spending escalation",
+      "task": "Run the same classification with a threshold the answer clears.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The answer is accepted from the bounded decision, no escalation is required, the confidence stays a provider probability, and authority is still none.",
+      "evaluation_method": "Call classify_failure with a low threshold and read the record.",
+      "evidence_required_for_success": "The record status, policy verdict and confidence kind.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.thresholds-are-per-question",
+      "group": "runtime-abstention",
+      "title": "One question's threshold never reaches its sibling in the same batch",
+      "task": "Batch a profiled failure-classification question with an unprofiled review-escalation question, at a threshold the first cannot clear.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Only the profiled question abstains; the sibling is answered from the same inference, and the batch reports itself as partial rather than failed.",
+      "evaluation_method": "Call batch.evaluate with both questions and read both decision statuses.",
+      "evidence_required_for_success": "The two statuses and the batch status.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.a-caller-can-tighten-but-not-loosen",
+      "group": "runtime-abstention",
+      "title": "A caller may ask for more than Ariadne's evidence does, and never less",
+      "task": "Merge caller-stated thresholds into the engine-resolved ones, higher and lower.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "A higher caller threshold is adopted and labelled caller-stated. A lower one is ignored, so a caller cannot buy its way past a calibration profile, and a malformed value is discarded rather than coerced.",
+      "evaluation_method": "Call tighten_with_caller_policy for each case and read the merged thresholds.",
+      "evidence_required_for_success": "The merged maps and the list of tightened questions.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-mapping.answer-space-is-the-declared-space",
+      "group": "runtime-mapping",
+      "title": "A question's answer space is the one it declared, for all three primitives",
+      "task": "Derive the closed answer space of a binary, a scale and a choice question, before and after the record form that actually crosses the wire.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Each primitive's space is its own declared values. The record form does not change the space, because DecisionQuestion flattens it into `allowed` and empties `scale`.",
+      "evaluation_method": "Derive answer_space for each question's dataclass form and record form, and derive the weight-book identity both ways.",
+      "evidence_required_for_success": "The four derived spaces and the two matching identities.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-mapping.unsupported-primitive-takes-the-fallback",
+      "group": "runtime-mapping",
+      "title": "A primitive the runtime cannot represent is refused, not coerced",
+      "task": "Ask the runtime for a multi-select answer over a declared option set.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "UNSUPPORTED_PRIMITIVE at every layer: the primitive predicate, the engine, and the provider. No partial answer is produced.",
+      "evaluation_method": "Call unsupported_primitive, score_question and the provider, and compare.",
+      "evidence_required_for_success": "The three refusals and the empty answer set.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-batching.one-state-many-questions-one-inference",
+      "group": "runtime-batching",
+      "title": "One state and three independent questions cost one bounded inference",
+      "task": "Answer failure classification, review escalation and evidence relevance over the same projection in a single call.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Three answer slots in one call, each keyed state-index and question, with usage reporting one state and three questions.",
+      "evaluation_method": "Call decide once with all three questions and read the slots and usage.",
+      "evidence_required_for_success": "The three slots and the usage block.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-batching.result-mapping-is-exact",
+      "group": "runtime-batching",
+      "title": "A many-state batch maps every state/question pair to the right slot",
+      "task": "Score three states, one of which is a different projection, against three questions in one decide_batch call.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Nine slots, each carrying the digest of the state it belongs to, and two identical states producing identical answers.",
+      "evaluation_method": "Call decide_batch over three distinct digests and check the mapping.",
+      "evidence_required_for_success": "The nine slot keys and the per-slot state digests.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-batching.dependent-questions-stay-staged",
+      "group": "runtime-batching",
+      "title": "The runtime's one-call batching cannot collapse a declared dependency",
+      "task": "Plan two questions where the second depends on the first, then ask the runtime to answer the independent group in one call.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The AR-205D planner stages the dependent question into a later step, and the runtime only ever collapses what the planner already proved independent.",
+      "evaluation_method": "Call plan_steps with the dependency and compare against the one-call answer.",
+      "evidence_required_for_success": "The staged plan and the runtime's slot count for the independent group.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.no-local-model-abstains",
+      "group": "runtime-abstention",
+      "title": "A question with no local model abstains rather than guessing",
+      "task": "Ask the runtime a question from a family it was never fitted on.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "NO_LOCAL_MODEL with no label, no probability, valid False and answer None. The refusal appears in the usage block so coverage stays visible.",
+      "evaluation_method": "Call decide with an unfitted question and read the slot.",
+      "evidence_required_for_success": "The refusal slot and the usage block.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.threshold-produces-a-structured-refusal",
+      "group": "runtime-abstention",
+      "title": "A threshold the answer cannot meet is a structured abstention, not a low score",
+      "task": "Answer with a threshold above the evidence supports, then without one.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "BELOW_MIN_CONFIDENCE with answer None and confidence_kind NONE when a threshold is supplied, and a plain answer when it is not.",
+      "evaluation_method": "Call decide twice and compare the two slots.",
+      "evidence_required_for_success": "Both slots and both usage blocks.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-abstention.no-universal-threshold-exists",
+      "group": "runtime-abstention",
+      "title": "The runtime ships no default confidence threshold",
+      "task": "Resolve a threshold from the runtime's own policy, in every combination of caller threshold and contextual policy.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "None when neither is stated, the caller's value when stated, the policy's when only the policy states one, and None for a non-numeric value.",
+      "evaluation_method": "Call the threshold resolver directly for all four cases.",
+      "evidence_required_for_success": "The four resolved values.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-calibration.only-a-matched-proven-profile-calibrates",
+      "group": "runtime-calibration",
+      "title": "CALIBRATED_PROBABILITY requires a PROVEN profile that matches on everything",
+      "task": "Ask for a calibration verdict with no profile, with a DRAFT profile, with a matched PROVEN profile, and with a profile measured on a different revision.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Only the fully matched PROVEN profile yields CALIBRATED_PROBABILITY. The other three stay PROVIDER_PROBABILITY with no threshold.",
+      "evaluation_method": "Call profile_for for each case and read confidence_kind and min_confidence.",
+      "evidence_required_for_success": "The four verdicts.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-calibration.runtime-cannot-grant-its-own-calibration",
+      "group": "runtime-calibration",
+      "title": "A runtime that declares it calibrates its own probabilities is refused",
+      "task": "Wrap the reference engine in a subclass whose status claims self-granted calibration and ask the session whether it is healthy.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "problems() names the claim and the session refuses to be selected.",
+      "evaluation_method": "Read problems() on the self-certifying runtime and on an honest one.",
+      "evidence_required_for_success": "Both problem lists.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-shadow.observation-has-no-execution-effect",
+      "group": "runtime-shadow",
+      "title": "A shadow observation is recorded beside the decision and cannot change it",
+      "task": "Observe a prediction for a question whose authoritative answer differs, then check the stored record and the decision that was already made.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The record is stored with execution_effect none, the authoritative answer is unchanged, and the disagreement is not scored as a loss without ground truth.",
+      "evaluation_method": "Call observe and read the state, then read the record back.",
+      "evidence_required_for_success": "The stored record and the projection digest it binds.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-shadow.isolation-check-is-load-bearing",
+      "group": "runtime-shadow",
+      "title": "A shadow record that claims it acted is detected and refused",
+      "task": "Record a clean observation, then tamper the stored record to claim an execution effect and ask whether the isolation problem surfaces.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "shadow_problems is empty for the clean record and non-empty once the record claims an effect, and require_isolated refuses.",
+      "evaluation_method": "Read shadow_problems before and after the tamper, then call require_isolated.",
+      "evidence_required_for_success": "The two problem lists and the refusal.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-shadow.ground-truth-must-be-sourced",
+      "group": "runtime-shadow",
+      "title": "A recorded outcome must name its source and must reach the state",
+      "task": "Reconcile a shadow record with an unsourced outcome, then with a sourced one.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The unsourced outcome is refused. The sourced one is stored on the record, re-derives the agreement, and makes the record exportable.",
+      "evaluation_method": "Call record_ground_truth three ways and read the stored record back.",
+      "evidence_required_for_success": "The refusal, the updated record, and the exported row.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-promotion.lifecycle-order-is-enforced",
+      "group": "runtime-promotion",
+      "title": "A slice cannot reach ACTIVE without passing through the ordered lifecycle",
+      "task": "Try to jump UNTESTED to ACTIVE, and try to reach ELIGIBLE without naming the evaluation that justified it.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Both are refused, and the recorded history shows only the transitions that actually happened.",
+      "evaluation_method": "Attempt each illegal transition and read the slice history.",
+      "evidence_required_for_success": "The two refusals and the resulting history.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-promotion.slice-cannot-outgrow-its-scope",
+      "group": "runtime-promotion",
+      "title": "A slice promoted for one scope does not cover a wider one",
+      "task": "Drive a slice legitimately to ACTIVE for LOW risk, English, reversible, verification-available use, then request it for four wider uses.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The in-scope request is authoritative and each widening falls back to shadow with a reason naming the mismatch.",
+      "evaluation_method": "Call select_bounded_provider for each scope and read the mode and problems.",
+      "evidence_required_for_success": "Five selection verdicts.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-promotion.suspension-is-unconditional",
+      "group": "runtime-promotion",
+      "title": "Suspending a slice withdraws it immediately and keeps the history",
+      "task": "Suspend an ACTIVE slice, re-request the same scope, then re-open for evaluation.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The next request falls back to shadow with no migration, the history keeps the ACTIVE entry, and SUSPENDED may return to SHADOW.",
+      "evaluation_method": "Suspend, re-select, and read the history and the transition table.",
+      "evidence_required_for_success": "The post-suspension verdict and the full history.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-evaluation.metrics-bind-the-experiment-identity",
+      "group": "runtime-evaluation",
+      "title": "An evaluation report binds its dataset, question, runtime and revision",
+      "task": "Score a small dataset with a fully matched profile, then with a drifted one, a rewritten question and a reordered dataset.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Only the reorder compares (the digest is order-independent). The other three are refused with a reason naming the key.",
+      "evaluation_method": "Evaluate the four runs and call compare for each against the original.",
+      "evidence_required_for_success": "The four comparison verdicts and the report identity.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-evaluation.regression-gate-refuses-a-different-experiment",
+      "group": "runtime-evaluation",
+      "title": "The regression gate refuses rather than printing a delta across experiments",
+      "task": "Assert a regression between a report and a run at a different model revision, then between a report and a comparable run that actually got worse.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The first raises a comparability refusal; the second raises on the metric. A metric the candidate dropped is reported missing, not unchanged.",
+      "evaluation_method": "Call assert_regression for both, and compare with a trimmed report.",
+      "evidence_required_for_success": "Both refusals and the missing-metric list.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-cache.invalidated-by-revision-question-and-policy",
+      "group": "runtime-cache",
+      "title": "A cached runtime answer is bound to its revision, question and policy",
+      "task": "Store an answered runtime decision, then look it up under a changed model revision, a reworded question and a changed policy version.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The identical lookup hits. Each change is a miss with the reason naming what changed, and a moving alias is refused outright.",
+      "evaluation_method": "Store, then call key_for and lookup for each variation.",
+      "evidence_required_for_success": "The hit and the three miss reasons.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-security.runtime-can-never-grant-authority",
+      "group": "runtime-security",
+      "title": "Nothing the runtime produces carries an authorisation effect",
+      "task": "Read the authorisation effect from a provider response, the provider's own description, a shadow record and a status report.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Every one of them says none, and the runtime status says outright that it is never verification.",
+      "evaluation_method": "Read all four fields and the status note.",
+      "evidence_required_for_success": "The four authorisation effects and the status note.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-security.out-of-space-answer-is-refused",
+      "group": "runtime-security",
+      "title": "A runtime that answers outside the declared option set is refused, not trusted",
+      "task": "Stand up a rogue engine that returns a confident answer the question never offered, and read what the provider does with it.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The out-of-space answer is refused with a problem, listed as a failed question, and never counted as answered.",
+      "evaluation_method": "Call the provider against a rogue engine and read the slot and the failure list.",
+      "evidence_required_for_success": "The refused slot, the problems list and the failed-question list.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-security.hostile-projection-cannot-widen-the-answer-space",
+      "group": "runtime-security",
+      "title": "Untrusted text inside a projection cannot widen the answer space or the question",
+      "task": "Put injection text into the projection entries and read the resulting distribution and the question identity.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The distribution stays inside the declared options and the question identity is unchanged, because the identity is computed from the question and not from the projection text.",
+      "evaluation_method": "Score a poisoned projection and compare the distribution keys and identity.",
+      "evidence_required_for_success": "The distribution keys and the two question identities.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-security.crashing-runtime-cannot-break-a-decision",
+      "group": "runtime-security",
+      "title": "A runtime that crashes or refuses cannot turn its failure into an answer",
+      "task": "Point the integration at a runtime that is unavailable, then at one that raises.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The authoritative answer is identical in all three cases, the failure is recorded with a reason, and no traceback reaches the caller.",
+      "evaluation_method": "Call classify_failure with no runtime, an unavailable one and a raising one.",
+      "evidence_required_for_success": "The three class values and the two shadow failure blocks.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-packaging.install-and-discover-without-a-download",
+      "group": "runtime-packaging",
+      "title": "The reference runtime installs offline and is discovered by path",
+      "task": "Install into an empty directory, then discover it and ask the real sidecar subprocess for its status over the wire.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Install writes only a manifest and a weight file. Discovery reports product vocabulary first and names a concrete revision, with all three primitives available.",
+      "evaluation_method": "Install, discover, and call the subprocess transport's status and decide.",
+      "evidence_required_for_success": "The installation listing, the status block and the answered slot.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-packaging.in-process-and-subprocess-agree-exactly",
+      "group": "runtime-packaging",
+      "title": "The shipping transport gives the same answers as the in-process engine",
+      "task": "Answer the same four projections through the in-process engine and through the subprocess sidecar, and compare every slot.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The two agree exactly on every answer, which is what makes the sidecar an implementation detail rather than a behaviour change.",
+      "evaluation_method": "Compare slot by slot for the four seeded projections.",
+      "evidence_required_for_success": "The two answer maps and the agreement verdict.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-packaging.absent-runtime-is-a-state-not-a-crash",
+      "group": "runtime-packaging",
+      "title": "With nothing installed the runtime reports unavailable and the fallback stands",
+      "task": "Discover a runtime in a directory with no installation, and select a provider.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Status is UNAVAILABLE in product vocabulary, decide refuses with a reason, and the selection returns a usable fallback provider rather than None.",
+      "evaluation_method": "Discover, read status, attempt decide, and call select_bounded_provider.",
+      "evidence_required_for_success": "The status block, the refusal and the fallback provider class.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-packaging.fresh-digest-is-not-verification",
+      "group": "runtime-packaging",
+      "title": "Hashing bytes you just found is a description, not a verification",
+      "task": "Install, read the integrity report with no reviewed record, then verify against a reviewed digest map, then corrupt a byte.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "UNKNOWN with no record, PASS against a matching reviewed map, FAIL after corruption, and a non-empty problems list naming the corrupt file.",
+      "evaluation_method": "Call require_reviewed_digests, session.integrity, verify_against and problems.",
+      "evidence_required_for_success": "The four integrity verdicts.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-contracts.attaching-a-runtime-changes-nothing-but-the-shadow",
+      "group": "runtime-contracts",
+      "title": "Attaching the runtime to a real integration changes only the shadow block",
+      "task": "Call all four real integration entry points with and without a runtime attached.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The class, answer, family, source, reason and escalation verdict are identical, and the difference is a shadow block that reports no effect.",
+      "evaluation_method": "Compare both results field by field for the four entry points.",
+      "evidence_required_for_success": "The four comparisons and the shadow blocks.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-contracts.no-provider-picker-and-no-vendor-vocabulary",
+      "group": "runtime-contracts",
+      "title": "The product surface offers no provider picker and names no vendor",
+      "task": "Inspect the runtime package, the decision-runtime CLI command, the public API surface and the shipped dependencies.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "No option offers a bounded implementation as a choice, no provider-picker argument exists, no vendor appears in the 2.1 surfaces, and the core declares no ML dependency.",
+      "evaluation_method": "Scan the sources, the parser options, the API surface and pyproject.",
+      "evidence_required_for_success": "The scan results and the dependency verdict.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "runtime-contracts.a-missing-runtime-leaves-two-point-oh-byte-identical",
+      "group": "runtime-contracts",
+      "title": "A 2.0 caller with no runtime configured gets the 2.0 result plus one inert key",
+      "task": "Call the four integration entry points with no runtime and list the keys the 2.0 shape had, then the keys the 2.1 result has.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The only new key is `shadow`, it is inert, and the recorded decision record contains no shadow content at all.",
+      "evaluation_method": "Diff the key sets and search the decision record for shadow fields.",
+      "evidence_required_for_success": "The key difference and the decision record.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.capture-without-source-identity-refused",
+      "group": "render-identity",
+      "title": "A capture with no source identity cannot become rendered evidence",
+      "task": "Build a capture plan and a critique that name no render source digest.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Both are refused: a screenshot with nothing binding it to an implementation is not evidence.",
+      "evaluation_method": "Attempt each and read the refusal message.",
+      "evidence_required_for_success": "Both refusals, each naming the missing source identity.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.stale-capture-refused",
+      "group": "render-identity",
+      "title": "Editing a relevant stylesheet makes an existing capture stale",
+      "task": "Bind a capture to the implementation, then edit the stylesheet it renders from.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The capture is reported STALE_RENDER_EVIDENCE and a re-capture against the old binding is refused.",
+      "evaluation_method": "Re-read the source after the edit and read the staleness reason.",
+      "evidence_required_for_success": "The staleness message naming both digests.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.blank-and-error-captures-refused",
+      "group": "render-validity",
+      "title": "A blank, loading or errored render cannot be critiqued as the interface",
+      "task": "Present a zero-byte artifact, a page still loading, an error document, and a shell whose workspace has collapsed.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Each is refused with its own reason; none is recorded as a usable capture.",
+      "evaluation_method": "Validate each artifact and each runtime report and read the states.",
+      "evidence_required_for_success": "The four refusal states and their reasons.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.reviewer-isolation-boundary",
+      "group": "render-critique",
+      "title": "The reviewer is handed a whitelist, never the worker's own account",
+      "task": "Assemble a reviewer packet and attempt to carry the implementation rationale into it.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The packet is filtered to the whitelist and any smuggled rationale is refused by name.",
+      "evaluation_method": "Inspect the packet's keys and read the refusal.",
+      "evidence_required_for_success": "The withheld list, the packet keys, and the refusal message.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.finding-must-cite-a-capture",
+      "group": "render-critique",
+      "title": "A judgement about a render must point at the render",
+      "task": "Record findings that cite nothing, and one that cites a capture absent from the set.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Both are refused, and one labelled as measurement when it is judgement is refused too.",
+      "evaluation_method": "Attempt each and read the refusals.",
+      "evidence_required_for_success": "The three refusals.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.principles-not-pixels",
+      "group": "render-alignment",
+      "title": "Reference alignment is principle satisfaction, and no similarity score exists",
+      "task": "Evaluate an approved principle against findings, with a reference in view.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The record reports principle satisfaction, compares zero reference images, and computes no similarity score.",
+      "evaluation_method": "Read every field of the alignment record.",
+      "evidence_required_for_success": "The method, the zero counts, and the project-identity precedence rule.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.counter-reference-checked",
+      "group": "render-alignment",
+      "title": "Material counter-reference patterns are checked, and absence is recorded as a success",
+      "task": "Check a clean stylesheet and one with the forbidden treatments restored.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Absence is reported for the clean case and presence for the regressed one, with the byte-level limit stated.",
+      "evaluation_method": "Read both counter-reference reviews.",
+      "evidence_required_for_success": "Both pattern states and the stated limitation.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.refinement-is-bounded",
+      "group": "render-refinement",
+      "title": "A repair is bounded by approved principle, allowed scope, and a two-attempt allowance",
+      "task": "Attempt a plan with no authorising principle, one that changes the toolchain, and a third attempt.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Each is refused; the budget is two and is shared with the capture allowance.",
+      "evaluation_method": "Attempt each and read the refusals.",
+      "evidence_required_for_success": "The three refusals and the budget arithmetic.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.worker-cannot-self-certify",
+      "group": "render-refinement",
+      "title": "The worker that made a change cannot be the party that certifies it",
+      "task": "Attempt a critique and a resolution in which the reviewer is the implementing execution.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Both are refused: a review of one's own render establishes nothing.",
+      "evaluation_method": "Attempt each and read the refusals.",
+      "evidence_required_for_success": "Both refusals naming the same execution.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.no-design-score",
+      "group": "render-reporting",
+      "title": "Coverage is reported per dimension and no scalar design score exists",
+      "task": "Build a coverage map and a telemetry record.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Coverage counts per state; telemetry carries counts only; neither produces a quality score.",
+      "evaluation_method": "Read both records and search for any score-like field.",
+      "evidence_required_for_success": "The coverage counts, the telemetry keys, and the stated reason.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.trace-reports-gaps",
+      "group": "render-reporting",
+      "title": "The rendered trace reports its missing links instead of closing them",
+      "task": "Build a trace for a run with captures, findings and a refinement.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Orphan captures and unaddressed findings are reported as gaps, not smoothed over.",
+      "evaluation_method": "Read the gaps and the completeness flag.",
+      "evidence_required_for_success": "The gap reasons and the completeness flag.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "render.budget-not-a-screenshot-matrix",
+      "group": "render-reporting",
+      "title": "Capture selection is bounded and every target names its basis",
+      "task": "Build a plan with an unjustified target, and one with forty.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Both are refused: a capture nobody asked for, and a screenshot matrix, are both inadmissible.",
+      "evaluation_method": "Attempt each and read the refusals.",
+      "evidence_required_for_success": "Both refusals and the budget arithmetic.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.measurement-completed-is-not-accepted",
+      "group": "intelligence",
+      "title": "A validated attempt without the human decision is completed, not accepted",
+      "task": "Project a task record with no acceptance and inspect the measurement outcome.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "completed=true, accepted=false, acceptance=PENDING_HUMAN_DECISION.",
+      "evaluation_method": "Read the projection fields and provenance.",
+      "evidence_required_for_success": "The measurement row and its outcome block.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.declaration-is-not-qualified",
+      "group": "intelligence",
+      "title": "An adapter declaration never becomes a qualified capability",
+      "task": "Build a registry from declared capabilities only and ask for a recommendation.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The registry has no observed record and the recommendation keeps the baseline.",
+      "evaluation_method": "Read the registry counts, declared rows and the recommendation.",
+      "evidence_required_for_success": "Registry view and recommendation.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.stale-evidence-does-not-control",
+      "group": "intelligence",
+      "title": "Stale model evidence cannot support a route",
+      "task": "Record five benchmark observations from outside the freshness window and ask for a recommendation.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The record is STALE and the recommendation keeps the baseline.",
+      "evaluation_method": "Read the provenance freshness and the decision.",
+      "evidence_required_for_success": "Registry record and recommendation.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.repeated-failure-justifies-qualified-alternative",
+      "group": "intelligence",
+      "title": "Measured failures justify a qualified alternative",
+      "task": "Give the baseline three failed validations and an alternative five clean benchmark observations.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The recommendation names the qualified alternative and remains advisory.",
+      "evaluation_method": "Read the recommendation and its baseline health.",
+      "evidence_required_for_success": "Recommendation with both records.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-intelligence",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.context-adaptive-reduction-is-measured",
+      "group": "intelligence",
+      "title": "Adaptive context reduction omits only an unchanged optional scope file",
+      "task": "Compare the off and adaptive context decisions over one required contract and one optional source.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The required contract is included in both; the optional source is omitted with measured bytes.",
+      "evaluation_method": "Compare decisions and byte totals.",
+      "evidence_required_for_success": "Both decision records.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-context",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.continuation-refuses-stale-revision",
+      "group": "intelligence",
+      "title": "A continuation refuses a different revision and keeps review findings",
+      "task": "Build a continuation for a failed-review task at the current and a different revision.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The current projection carries the finding; the changed revision is STALE and refused.",
+      "evaluation_method": "Read status, findings and the refusal.",
+      "evidence_required_for_success": "Continuation record and refusal.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-context",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.skill-proposal-cannot-apply",
+      "group": "intelligence",
+      "title": "A skill proposal cannot rewrite the trusted registry",
+      "task": "Generate a proposal and attempt the automatic apply path.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "The proposal is recorded as PROPOSED and apply raises a contract refusal.",
+      "evaluation_method": "Read the recorded proposal and the apply refusal.",
+      "evidence_required_for_success": "Proposal record and refusal.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-skills",
+      "notes": ""
+    },
+    {
+      "id": "intelligence.api-mcp-parity",
+      "group": "intelligence",
+      "title": "CLI/API/MCP expose the same read-only intelligence report",
+      "task": "Compare the stable API report with the MCP dispatch over the same state.",
+      "required_inputs": [
+        "repository at the pinned commit",
+        "isolated sandbox under --work-root"
+      ],
+      "expected_outcome": "Measurement, context, routing counts and skill totals agree.",
+      "evaluation_method": "Structural equality of the four shared blocks.",
+      "evidence_required_for_success": "Both reports.",
+      "environment_requirements": [
+        "python >= 3.10",
+        "git on PATH"
+      ],
+      "provider_requirements": [],
+      "cost_implications": "none",
+      "currently_executable": true,
+      "layer": "deterministic-integration",
       "notes": ""
     }
   ]

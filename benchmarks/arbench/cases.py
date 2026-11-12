@@ -275,17 +275,39 @@ def suite_writing_execution(ctx: Ctx) -> Outcome:
 
 @case(id="suite.validation-run-benchmark", group="suites",
       title="Existing validation-run measurement",
-      task="Read the recorded B1 validation run through the validator's benchmark mode.",
+      task="Read a recorded validation run through the validator's benchmark mode.",
       expectation="At least one run is read and reported without error.",
       evaluation="Exit code 0 and a non-empty run table.",
       evidence_required="Run table tail.", layer="deterministic")
 def suite_validation_benchmark(ctx: Ctx) -> Outcome:
-    result = ctx.repo.script_run("validate.py", "--benchmark", timeout=300)
-    rows = len(re.findall(r"(?m)^B\d+\s", result.combined))
+    # validation/runs/ is deliberately gitignored operator evidence. Reading it
+    # made this case depend on one machine's private history: a clean checkout
+    # had no runs and reported a defect in the reader. The fixture is a real run
+    # record derived from the tracked template, in the case's own sandbox.
+    box = ctx.sandbox()
+    runs = box.root / "recorded-runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    template = ctx.repo.root / "validation" / "run-template.md"
+    record = template.read_text(encoding="utf-8")
+    values = {
+        "Run ID": "B1", "Date": "2026-11-11", "Ariadne version": "2.4.0rc1",
+        "Test": "B", "Project type": "benchmark fixture", "Mode": "product-app",
+        "Provider": "fixture", "Model": "none", "Started": "09:00",
+        "Ended": "10:00", "Result": "PASS",
+    }
+    for name, value in values.items():
+        record = re.sub(
+            rf"(?m)^\| \*\*{re.escape(name)}\*\* \|.*$",
+            f"| **{name}** | `{value}` |",
+            record,
+        )
+    (runs / "B1.md").write_text(record, encoding="utf-8")
+    result = ctx.repo.script_run("validate.py", "--benchmark", "--runs-dir", str(runs))
+    rows = len(re.findall(r"(?m)^B1\s", result.combined))
     return Outcome("pass" if result.returncode == 0 and rows >= 1 else "fail",
                    f"{rows} recorded validation run(s) read",
                    {"exit_code": result.returncode, "tail": result.tail(3),
-                    "command": " ".join(result.argv)},
+                    "runs_dir": str(runs), "command": " ".join(result.argv)},
                    {"runs": rows, "duration_seconds": result.duration_seconds, "model_calls": 0})
 
 
@@ -552,10 +574,93 @@ def lifecycle_repair_budget(ctx: Ctx) -> Outcome:
                    {"max_routine_repairs": transport.MAX_ROUTINE_REPAIRS, "problems": problems})
 
 
+@case(id="lifecycle.s4b-review-correction", group="lifecycle",
+      title="A failed S5 review re-enters S4B, revalidates, and re-reviews",
+      task="Deliver S4B, review it with 'fix and re-review', correct it, validate the correction, and review again.",
+      expectation=("The correction is a linked S4B packet authorized only by the failed review; it carries a fresh "
+                   "independent validation, a second S5 review can be ingested, and G3 acceptance is refused "
+                   "until that second review passes."),
+      evaluation="Drive the real CLI through S4B -> S5 -> failed review -> corrective S4B -> validation -> S5 -> passed review -> G3.",
+      evidence_required="Packet chain, retry context, validation records, review outcomes, acceptance refusal and success.",
+      layer="deterministic-lifecycle")
+def lifecycle_s4b_review_correction(ctx: Ctx) -> Outcome:
+    box = ctx.sandbox()
+    F.reach_s4a_with_handoff(ctx.repo, box, ctx.fixtures)
+    F.clear_preflight_and_reach_s4b(ctx.repo, box)
+    F.deliver_return(box, ctx.fixtures, status="complete")
+    first_validation = ctx.repo.cli("validate-worker", "--run-root", str(box.run_root))
+    if first_validation.returncode != 0:
+        validation_path = box.current_packet() / "evidence" / "validation.json"
+        record = json.loads(validation_path.read_text(encoding="utf-8")) if validation_path.is_file() else {}
+        return Outcome("fail", f"first S4B validation failed: {first_validation.tail(6)}",
+                       {"record": record, "tail": first_validation.tail(8)})
+    first_s5 = F.prepare_s5(ctx.repo, box)
+    if first_s5.returncode != 0:
+        return Outcome("fail", f"could not prepare the first S5: {first_s5.tail(4)}")
+    first_s5_id = box.packets()[-1]["id"]
+    failed_review = ctx.fixtures["review"]().replace(
+        "**Recommendation:** Present G3", "**Recommendation:** Fix and re-review"
+    ).replace("### Findings\n\nnone", "### Findings\n\nThe primary action has no visible response.")
+    source = box.root / "review-failed.md"
+    source.write_text(failed_review, encoding="utf-8")
+    failed_ingest = F.ingest_independent_review(ctx.repo, box, source)
+    refused_accept = ctx.repo.cli("record-acceptance", "--run-root", str(box.run_root), "--outcome", "accepted")
+    correction = ctx.repo.cli("advance", "--run-root", str(box.run_root))
+    corrected = box.packets()[-1] if box.packets() else {}
+    manifest = box.manifest() if corrected.get("stage") == "S4B" else {}
+    retry_context = (manifest.get("worker") or {}).get("retry_context") or {}
+    if corrected.get("stage") != "S4B" or manifest.get("parent_id") != first_s5_id:
+        return Outcome("fail", f"correction stage={corrected.get('stage')} parent={manifest.get('parent_id')} expected parent={first_s5_id}",
+                       {"tail": correction.tail(5)})
+    if retry_context.get("failure_kind") != "review-finding":
+        return Outcome("fail", f"correction retry context={retry_context}", {"tail": correction.tail(5)})
+    F.deliver_return(box, ctx.fixtures, status="complete")
+    corrected_validation = ctx.repo.cli("validate-worker", "--run-root", str(box.run_root))
+    second_s5 = F.prepare_s5(ctx.repo, box)
+    passed_source = box.root / "review-passed.md"
+    passed_source.write_text(ctx.fixtures["review"](), encoding="utf-8")
+    passed_ingest = F.ingest_independent_review(ctx.repo, box, passed_source)
+    g3 = F.record_g3(ctx.repo, box)
+    accepted = ctx.repo.cli("record-acceptance", "--run-root", str(box.run_root), "--outcome", "accepted")
+    state = box.state()
+    passed = (
+        failed_ingest.returncode == 0
+        and refused_accept.returncode == 1
+        and correction.returncode == 0
+        and corrected_validation.returncode == 0
+        and second_s5.returncode == 0
+        and passed_ingest.returncode == 0
+        and g3.returncode == 0
+        and accepted.returncode == 0
+        and len([p for p in box.packets() if p.get("stage") == "S4B"]) == 2
+        and len([p for p in box.packets() if p.get("stage") == "S5"]) == 2
+        and state.get("worker", {}).get("acceptance_state") == "ACCEPTED"
+    )
+    return Outcome(
+        "pass" if passed else "fail",
+        (
+            f"failed review ingest={failed_ingest.returncode}, acceptance refused={refused_accept.returncode}, "
+            f"correction={correction.returncode}, corrected validation={corrected_validation.returncode}, "
+            f"second S5={second_s5.returncode}, passed review={passed_ingest.returncode}, "
+            f"G3={g3.returncode}, acceptance={accepted.returncode}"
+        ),
+        {
+            "first_s5": first_s5_id,
+            "corrective_s4b": corrected.get("id"),
+            "retry_context": retry_context,
+            "failed_ingest_tail": failed_ingest.tail(3),
+            "second_s5_tail": second_s5.tail(6),
+            "passed_review_tail": passed_ingest.tail(6),
+            "refused_accept_tail": refused_accept.tail(3),
+            "accepted_tail": accepted.tail(3),
+        },
+    )
+
+
 @case(id="lifecycle.s5-isolation", group="lifecycle",
       title="S5 packet is the canonical isolated pair",
       task="Validate a complete return and let the runtime prepare the review boundary.",
-      expectation="S5 delivers only the current prompt block and EVALUATION-RUBRICS.md; no project or build context.",
+      expectation="S5 delivers only the current prompt block and the canonical evaluation rubric; no project or build context.",
       evaluation="Inspect delivered source labels and forbidden kinds.",
       evidence_required="Delivered labels list and verifier result.", layer="deterministic-lifecycle")
 def lifecycle_s5_isolation(ctx: Ctx) -> Outcome:
@@ -568,10 +673,11 @@ def lifecycle_s5_isolation(ctx: Ctx) -> Outcome:
     manifest = box.manifest() if box.packets() else {}
     delivered = [s["label"] for s in manifest.get("sources", []) if s.get("delivered", True)]
     kinds = {s.get("kind") for s in manifest.get("sources", []) if s.get("delivered", True)}
+    rubric = F.document_path(ctx, "EVALUATION-RUBRICS.md")
     transport = ctx.repo.module("prepare-stage.py")
     problems = transport.verify_packet(box.current_packet())
     ok = (result.returncode == 0 and box.packets()[-1]["stage"] == "S5"
-          and delivered == ["current S5 prompt block", "EVALUATION-RUBRICS.md"]
+          and delivered == ["current S5 prompt block", rubric]
           and kinds <= {"canonical-prompt", "canonical"} and not problems)
     return Outcome("pass" if ok else "fail", f"S5 delivered={delivered}; verify={problems or 'clean'}",
                    {"delivered": delivered, "kinds": sorted(kinds),
@@ -991,7 +1097,7 @@ def context_omission(ctx: Ctx) -> Outcome:
 @case(id="context.conditional-inclusion-hashed", group="context",
       title="Triggered conditional inputs are delivered and hash-stamped",
       task="Prepare S3 with --motion yes and inspect delivered sources.",
-      expectation="DESIGN-MOTION.md is delivered with a matching SOURCE-SHA256 header.",
+      expectation="The motion policy is delivered with a matching SOURCE-SHA256 header.",
       evaluation="Compare the header hash with the canonical file hash.",
       evidence_required="Header line and computed hash.", layer="deterministic")
 def context_inclusion(ctx: Ctx) -> Outcome:
@@ -1000,16 +1106,18 @@ def context_inclusion(ctx: Ctx) -> Outcome:
     F.complete_s1(ctx.repo, box, ctx.fixtures)
     result = ctx.repo.cli("prepare-next", "--run-root", str(box.run_root), "--motion", "yes", "--assets", "no")
     manifest = box.manifest()
-    entries = [s for s in manifest.get("sources", []) if s.get("path") == "DESIGN-MOTION.md"]
+    motion = F.document_path(ctx, "DESIGN-MOTION.md")
+    entries = [s for s in manifest.get("sources", []) if s.get("path") == motion]
     entry = entries[0] if entries else {}
-    canonical = ctx.repo.root / "DESIGN-MOTION.md"
+    canonical = ctx.repo.root / motion
     real_hash = hashlib.sha256(canonical.read_bytes()).hexdigest()
     packet = box.packet_text()
     header_ok = f"SOURCE-SHA256 {entry.get('source_sha256')}" in packet
     ok = result.returncode == 0 and bool(entry) and entry.get("source_sha256") == real_hash and header_ok
     return Outcome("pass" if ok else "fail",
                    f"delivered={bool(entry)}; hash matches canonical={entry.get('source_sha256') == real_hash}",
-                   {"entry": entry, "canonical_sha256": real_hash, "packet_bytes": len(packet)},
+                   {"entry": entry, "canonical": motion, "canonical_sha256": real_hash,
+                    "packet_bytes": len(packet)},
                    {"packet_bytes": len(packet)})
 
 

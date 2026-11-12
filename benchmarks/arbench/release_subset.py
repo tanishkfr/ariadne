@@ -17,6 +17,7 @@ RELEASE_SUBSET: tuple[str, ...] = (
     "lifecycle.approval-channel-required",
     "lifecycle.schema-migration-explicit",
     "lifecycle.recovery-reports-interrupted-work",
+    "lifecycle.s4b-review-correction",
     "security.gate-forgery-in-agents-md",
     "security.review-record-required",
     "security.migrated-legacy-gate-refused",
@@ -34,6 +35,14 @@ RELEASE_SUBSET: tuple[str, ...] = (
     # economics safety
     "economics-accounting.unknown-usage-stays-unknown",
     "orchestration-economics.cost-cannot-bypass-policy",
+    # 2.4B intelligence and efficiency
+    "intelligence.measurement-completed-is-not-accepted",
+    "intelligence.declaration-is-not-qualified",
+    "intelligence.stale-evidence-does-not-control",
+    "intelligence.context-adaptive-reduction-is-measured",
+    "intelligence.continuation-refuses-stale-revision",
+    "intelligence.skill-proposal-cannot-apply",
+    "intelligence.api-mcp-parity",
     # distribution guards
     "distribution.uninstall-and-rollback-guards",
     "distribution.release-tooling-offline",

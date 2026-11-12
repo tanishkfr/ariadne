@@ -69,7 +69,9 @@ DEFAULTS = dict(
     execution=None, apply=None, limit=50, family=None, adapter=None, subject=None,
     dependency=None, inspect=False, task_id=None, provider_source=None,
     provider_name=None, provider_model=None, provider_request_id=None,
-    provider_run_id=None, evidence_policy=None,
+    provider_run_id=None, evidence_policy=None, task=None,
+    abandon_open=False, max_attempts=3, auto=True, worker_command=None,
+    review_adapter=None, validate_timeout=120, no_validate=False, no_proof=False,
 )
 """Every option any wrapped command reads, so the API can call them directly."""
 
@@ -236,6 +238,142 @@ def recovery_report(run_root=None, project=None, *, args=None) -> Result:
         message=json.dumps(report, indent=2, sort_keys=True) + "\n",
         state_changed=False,
     )
+
+
+# ------------------------------------------------ T1 task lifecycle (2.4A)
+
+def task_status(run_root=None, project=None, task=None, as_json=False, *, args=None) -> Result:
+    """The durable T1 status view, including the recovery report."""
+    return _call("task_status_command", {
+        "run_root": run_root, "project": project, "task": task, "json": as_json,
+    }, args)
+
+
+def task_status_state(state: dict, task_id: str = "") -> dict:
+    """The same durable task view MCP and host interfaces consume.
+
+    This calls the runtime's one ``task_report`` derivation; it does not
+    re-implement lifecycle status in the API or MCP layer.
+    """
+    report = runtime().task_report(state, task_id=str(task_id or ""))
+    return report
+
+
+def host_status_state(state: dict) -> dict:
+    """The host view for an already-loaded state (MCP and embedded clients)."""
+    from . import host as host_module
+
+    report = runtime().task_report(state, task_id="")
+    return host_module.status(state, task_report=report)
+
+
+def host_events_state(state: dict, *, cursor=None, limit=100) -> dict:
+    """The host event page for an already-loaded state."""
+    from . import host as host_module
+
+    root = str(state.get("run_root", "") or "")
+    if not root:
+        raise ContractError("host events need a run root recorded on the state")
+    return host_module.event_page(Path(root), cursor=cursor, limit=limit)
+
+
+def host_status(run_root=None, project=None, *, as_json=False, args=None) -> Result:
+    """The versioned read-only host projection (Ariadne 2.4C).
+
+    It is derived from the same durable state and the runtime's one task
+    derivation the CLI and MCP use. It never writes, approves, validates,
+    reviews or accepts.
+    """
+    from . import host as host_module
+
+    try:
+        root = _migration_run_root(run_root, project, args)
+        state = persistence.load_state(root)
+        state["run_root"] = str(root)
+        report = runtime().task_report(state, task_id="")
+        view = host_module.status(state, task_report=report)
+    except ContractError as exc:
+        return Result(exit_code=2, message=f"STOPPED: {exc}\n")
+    return Result(
+        exit_code=0,
+        message=json.dumps(view, indent=2, sort_keys=True, default=str) + "\n",
+        state_changed=False,
+    )
+
+
+def host_events(run_root=None, project=None, *, cursor=None, limit=100, args=None) -> Result:
+    """One page of durable host events after a caller-supplied cursor."""
+    from . import host as host_module
+
+    try:
+        root = _migration_run_root(run_root, project, args)
+        page = host_module.event_page(Path(root), cursor=cursor, limit=limit)
+    except ContractError as exc:
+        return Result(exit_code=2, message=f"STOPPED: {exc}\n")
+    code = 0 if page.get("status") in ("OK", "EMPTY") else 1
+    return Result(
+        exit_code=code,
+        message=json.dumps(page, indent=2, sort_keys=True, default=str) + "\n",
+        state_changed=False,
+    )
+
+
+def task_recover(run_root=None, project=None, apply=False, abandon_open=False, *, args=None) -> Result:
+    """Report the T1 recovery view, or safely resume its recorded continuation."""
+    return _call("task_recover_command", {
+        "run_root": run_root, "project": project, "apply": apply, "abandon_open": abandon_open,
+    }, args)
+
+
+def task_run(run_root=None, project=None, adapter=None, timeout=1800, max_attempts=3, **options) -> Result:
+    """Drive the prepared T1 attempt through worker execution and validation."""
+    payload = {
+        "run_root": run_root, "project": project, "adapter": adapter,
+        "timeout": timeout, "max_attempts": max_attempts,
+    }
+    payload.update(options)
+    return _call("task_run_command", payload)
+
+
+def task_return(run_root=None, project=None, input=None, adapter=None, *, args=None) -> Result:
+    """Ingest a T1 return produced in any environment."""
+    return _call("task_return_command", {
+        "run_root": run_root, "project": project, "input": input, "adapter": adapter,
+    }, args)
+
+
+def task_validate(run_root=None, project=None, timeout=120, *, args=None) -> Result:
+    """Independently validate the current returned T1 attempt."""
+    return _call("task_validate_command", {
+        "run_root": run_root, "project": project, "timeout": timeout,
+    }, args)
+
+
+def task_repair(run_root=None, project=None, escalate=False, reason=None, *, args=None) -> Result:
+    """Prepare a routine or review-directed corrective attempt."""
+    return _call("task_repair_command", {
+        "run_root": run_root, "project": project, "escalate": escalate, "reason": reason,
+    }, args)
+
+
+def task_review(run_root=None, project=None, input=None, identity=None, *, args=None) -> Result:
+    """Prepare or ingest the independent review of the current validated attempt."""
+    return _call("task_review_command", {
+        "run_root": run_root, "project": project, "input": input, "identity": identity,
+    }, args)
+
+
+def task_verify(run_root=None, project=None, *, args=None) -> Result:
+    """Run Proof Pass for the current validated and reviewed T1 attempt."""
+    return _call("task_verify_command", {"run_root": run_root, "project": project}, args)
+
+
+def task_accept(run_root=None, project=None, identity=None, outcome=None, reason=None, *, args=None) -> Result:
+    """Record the human T1 acceptance decision; the engine never mints it."""
+    return _call("task_accept_command", {
+        "run_root": run_root, "project": project, "identity": identity,
+        "outcome": outcome, "reason": reason,
+    }, args)
 
 
 # ------------------------------------------------- AR-202 adaptive operations
@@ -1579,6 +1717,141 @@ def migration_report(run_root=None, project=None, *, args: argparse.Namespace | 
     return _migration_action("report", run_root, project, args=args)
 
 
+def _task_for(state, task_id: str = "") -> dict:
+    from . import task_execution
+
+    task = task_execution.find_task(state, str(task_id)) if str(task_id) else task_execution.current_task(state)
+    if task is None:
+        raise ValueError(f"no task record matches {task_id or 'the current task'!r}")
+    return task
+
+
+def _plan_for(state, task: dict) -> dict:
+    for record in state.get("task_plans") or ():
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("plan_id", "")) == str(task.get("plan_id", "")):
+            return dict(record)
+    return {}
+
+
+def measurement_report(state, task_id: str = "") -> dict:
+    """The measured attempt record(s) for one task, with unknowns explicit."""
+    from . import measurement
+
+    if str(task_id):
+        return measurement.task_view(state, str(task_id))
+    return measurement.summarise(state)
+
+
+def record_task_measurements(state: dict, task_id: str = "") -> dict:
+    """Project the task's attempts into versioned measurement records."""
+    from . import measurement
+
+    task = _task_for(state, task_id)
+    written = measurement.record_task(state, task, plan=_plan_for(state, task))
+    return {
+        "task_id": str(task.get("task_id", "")),
+        "written": len(written),
+        "summary": measurement.summarise(state),
+    }
+
+
+def model_evidence_report(state, *, as_of: str = "") -> dict:
+    """The model-performance registry, including declared capabilities."""
+    from . import model_evidence, task_execution
+
+    return model_evidence.registry(state, adapters=task_execution.WORKER_ADAPTERS, as_of=as_of)
+
+
+def record_model_observation(state: dict, **options) -> dict:
+    """Record one measured benchmark observation, never a worker claim."""
+    from . import model_evidence
+
+    return model_evidence.observe(state, **options)
+
+
+def recommend_model_route(state, **options) -> dict:
+    """Evidence-backed advisory route for one execution role and capability."""
+    from . import model_evidence
+
+    return model_evidence.recommend(state, **options)
+
+
+def promote_model_record(state: dict, *, registry_record_id: str, identity: str, reason: str, task_family: str = "") -> dict:
+    """Record a human promotion of one benchmark-qualified registry record."""
+    from . import model_evidence, task_execution
+
+    view = model_evidence.registry(state, adapters=task_execution.WORKER_ADAPTERS)
+    record = next(
+        (row for row in view["records"] if str(row.get("registry_record_id", "")) == str(registry_record_id)),
+        None,
+    )
+    if record is None:
+        raise ValueError(f"no model registry record matches {registry_record_id!r}")
+    return model_evidence.promote(state, record=record, identity=identity, reason=reason, task_family=task_family)
+
+
+def build_continuation(state, *, task_id: str = "", current_revision: str = "") -> dict:
+    """Build a revision-bound continuation projection for a task."""
+    from . import continuation
+
+    task = _task_for(state, task_id)
+    record = continuation.build(state, task, current_revision=current_revision)
+    return continuation.record(state, record)
+
+
+def continuation_report(state, *, task_id: str = "") -> dict:
+    """The latest continuation projection for a task, if one was built."""
+    from . import continuation
+
+    task = _task_for(state, task_id)
+    return continuation.latest(state, str(task.get("task_id", ""))) or {}
+
+
+def skill_intelligence_report(state) -> dict:
+    """Per-skill selection, invocation, observation and associated outcomes."""
+    from . import skill_intelligence
+
+    return skill_intelligence.effectiveness(state)
+
+
+def generate_skill_proposals(state: dict, *, record: bool = False) -> dict:
+    """Deterministic skill-improvement proposals; recording never applies them."""
+    from . import skill_intelligence
+
+    candidates = skill_intelligence.candidate_proposals(state)
+    written = skill_intelligence.record_proposals(state, candidates) if record else []
+    return {
+        "candidates": candidates,
+        "written": written,
+        "stored": skill_intelligence.proposals(state),
+        "authority": "none; a proposal cannot change trusted instructions",
+    }
+
+
+def authorize_skill_proposal(state: dict, proposal_id: str, *, identity: str, reason: str = "") -> dict:
+    """Record a human's authorization to implement a proposal. Never applies it."""
+    from . import skill_intelligence
+
+    return skill_intelligence.authorize(state, proposal_id, identity=identity, reason=reason)
+
+
+def intelligence_report(state, *, task_id: str = "") -> dict:
+    """One read-only view over measurement, routing evidence, context and skills."""
+    from . import context, efficiency, measurement, model_evidence, skill_intelligence, task_execution
+
+    report = {
+        "measurement": measurement.task_view(state, task_id) if str(task_id) else measurement.summarise(state),
+        "routing": model_evidence.registry(state, adapters=task_execution.WORKER_ADAPTERS),
+        "context": context.economics(state),
+        "skills": skill_intelligence.effectiveness(state),
+        "skill_proposals": skill_intelligence.status(state),
+        "efficiency": efficiency.efficiency_config(state),
+    }
+    return report
+
+
 __all__ = [
     "Result",
     "format_result",
@@ -1595,6 +1868,20 @@ __all__ = [
     "ingest_review",
     "record_acceptance",
     "recovery_report",
+    "task_status",
+    "task_status_state",
+    "host_status",
+    "host_status_state",
+    "host_events",
+    "host_events_state",
+    "task_recover",
+    "task_run",
+    "task_return",
+    "task_validate",
+    "task_repair",
+    "task_review",
+    "task_verify",
+    "task_accept",
     "execution_status",
     "engine_events",
     "propose_recovery",
@@ -1673,6 +1960,18 @@ __all__ = [
     "task_economics",
     "economics_report",
     "efficiency_report",
+    "measurement_report",
+    "record_task_measurements",
+    "model_evidence_report",
+    "record_model_observation",
+    "recommend_model_route",
+    "promote_model_record",
+    "build_continuation",
+    "continuation_report",
+    "skill_intelligence_report",
+    "generate_skill_proposals",
+    "authorize_skill_proposal",
+    "intelligence_report",
     "inspect_request",
     "inspect_tool_packs",
     "externalize_output",

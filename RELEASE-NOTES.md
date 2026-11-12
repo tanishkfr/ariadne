@@ -1,3 +1,198 @@
+# Ariadne 2.4.0
+
+Ariadne 2.4.0 is the stable release of Ariadne 2.4 — execution reliability,
+intelligence and efficiency, design verification, creative proof and host
+integration. It is promoted from the fully verified 2.4.0 candidate without a
+behavior change after the complete release gate passed on the release commit
+and the built artifacts were checked against their manifest. Install from the
+immutable stable wheel below, run `python -m ariadne doctor`, and verify work
+with `ariadne verify` from the installed release.
+
+This release adds no dependency and no second workflow engine. Adaptive routing
+remains shadow-only, human gates remain explicit, and every new surface reports
+what it did not establish.
+
+## Design Verification & Integration (Phase C)
+
+2.4C closes the evidence gaps that kept 2.4B PARTIAL. It does not add a second
+workflow engine or a new product surface.
+
+- **Command Code headless repair.** Command Code 1.88.5 withholds edit/write
+  tools from headless sessions unless they are enabled explicitly; the adapter
+  preset now passes `--tools-all`. The engine's independent validation and scope
+  check remain the boundary, so this restores the declared worker capability
+  rather than widening what a task may change.
+- **Live intelligence comparison.** Six bounded workloads were run through two
+  authenticated harnesses (Command Code and OpenCode) plus a matched adaptive
+  context comparison. Results record observed versions, identity provenance,
+  validation, repairs, proof, duration and packet bytes. Token and cost fields
+  stay `UNKNOWN` where no provider reported them. No model ranking is claimed
+  from this sample and no route was promoted.
+- **Rendered design verification.** Declared viewport matrices, real browser
+  captures, interaction assertions, deterministic contrast/focus/target/dialog/
+  form checks, dependency-free screenshot comparison and an independent rendered
+  review. A disposable surface produced 15 defects before correction and 0 after,
+  with fresh evidence and a second review.
+- **Creative proof binding.** A creative Proof Receipt now binds the current S5
+  packet, the engine-created reviewer execution, its independence level, the
+  reviewed revision and the review evidence digest. Stale, failed, substituted
+  and non-independent reviews are refused. G3 remains human-owned.
+- **Host contract.** `ariadne-host-1` provides one read-only task/execution/
+  verification/recovery/authority/resource projection through CLI, API and MCP,
+  with a resumable durable event cursor. Protocol 2 remains compatible with
+  protocol 1. An external consumer fixture proves restart recovery and read-only
+  authority; Juno integration is not claimed until Juno consumes it.
+
+What remains unproven:
+
+- The live comparison is one trial per cell on one Windows machine; it is not a
+  model-quality ranking and does not establish token or cost savings.
+- Static screenshots do not establish WCAG conformance, screen-reader order or
+  keyboard traversal over time.
+- The host contract is qualified by a fixture, not by an external host product.
+- Rollback restores the older runtime's checks: a 2.3 runtime displays a schema-2
+  receipt verbatim but does not evaluate its creative-review binding or
+  re-verify its digest at task acceptance.
+- Publication is an immutable GitHub release; Ariadne performs no deployment.
+
+## Intelligence & Efficiency (Phase B)
+
+> **Included in 2.4.0.** Phase B was qualified as a release candidate and is
+> included in the stable release unchanged. Its evidence and limitations are
+> recorded below.
+
+2.4B adds evidence to the execution system without replacing its deterministic
+policy. A completed attempt now produces a versioned measurement row with
+per-field provenance; model performance is recorded and advised in shadow;
+context decisions are revision-bound and byte-measured; a resumed task gets a
+structured continuation instead of conversation history; and skill selection is
+reported as association, never as proof of usefulness.
+
+What this phase proved:
+
+- **Measurement separates facts from claims.** `OBSERVED`, `REPORTED`,
+  `DECLARED` and `UNKNOWN` are distinct; a pending human decision is not
+  `accepted`, and an unreported token count is not zero. The projection
+  supersedes an earlier row instead of rewriting it.
+- **Model evidence cannot promote itself.** A declaration is `DECLARED`, a few
+  attempts are `DIRECTLY_OBSERVED`, and only a current record with the declared
+  sample gate can be qualified. A model identity that was not observed cannot
+  qualify. Stale, small-sample, unpromoted and independent-review-conflicting
+  evidence are all refused by test.
+- **The existing route keeps control.** `model_routing` defaults to `off`;
+  `shadow` records advice; `apply_qualified` additionally requires a recorded
+  human promotion, a benchmark-qualified record, at least eight samples and a
+  degraded or unavailable baseline. No route was changed in this pass.
+- **Context reduction is measured, not asserted.** On two identical six-file
+  fixtures, `context_reduction=adaptive` produced a **63,812 → 35,591 byte**
+  packet (**−28,221 bytes, −44.2%**) while retaining the contract, request and
+  mandatory methods. This is a file-size result, not a token or provider-cache
+  claim.
+- **Stale context and stale continuations are refused.** A context decision now
+  carries its revision and packet digest; a continuation carries the validated
+  revision and refuses a different one.
+- **Skill proposals cannot rewrite trust.** Recurring unmet or unused methods
+  produce a proposal with evidence, risk and a validation procedure; automatic
+  registry application raises a contract refusal.
+- **The read-only intelligence report is identical through CLI, API and MCP.**
+  MCP still cannot set a reviewer, an approval or an acceptance.
+
+What this candidate refuses to claim:
+
+- no model-quality ranking, provider price, quota, token or cache saving;
+- no claim that a skill caused an accepted outcome;
+- no claim that the 44.2% fixture reduction generalises to every repository or
+  to provider tokens;
+- no live efficiency gain from model routing. The two bounded live samples
+  (Command Code 1.88.5, OpenCode v2.2.5) both validated and produced an ACCEPTED
+  `VP-0001`, but neither supplied token usage, so provider efficiency stays
+  `UNKNOWN`;
+- no new stable release. This is a candidate qualification.
+
+Detailed evidence:
+[INTELLIGENCE-BASELINE.md](docs/v2/2.4/INTELLIGENCE-BASELINE.md),
+[INTELLIGENCE-EFFICIENCY.md](docs/v2/2.4/INTELLIGENCE-EFFICIENCY.md),
+[MODEL-ROUTING-EVALUATION.md](docs/v2/2.4/MODEL-ROUTING-EVALUATION.md),
+[CONTEXT-EFFICIENCY.md](docs/v2/2.4/CONTEXT-EFFICIENCY.md),
+[SKILL-INTELLIGENCE.md](docs/v2/2.4/SKILL-INTELLIGENCE.md),
+[2.4B-QUALIFICATION.md](docs/v2/2.4/2.4B-QUALIFICATION.md).
+
+## Execution Reliability (Phase A)
+
+> **Included in 2.4.0.** Phase A was qualified as a release candidate and is
+> included in the stable release unchanged. The gates, budgets and recovery
+> boundaries below remain in force.
+
+2.4A makes the existing execution system survive real work: a failed review can
+now become a linked, bounded correction that is freshly validated and freshly
+reviewed; an interrupted task can report what is durable, what was interrupted,
+what is safe to resume and what still needs a human; and the CLI adapters are
+measured against one conformance contract instead of declared by name.
+
+What this phase proved:
+
+- A T1 task completed the full
+  `implement -> validate -> review -> repair -> revalidate -> re-review -> proof`
+  path, including two sequential review corrections and an independently
+  validated correction after a failed review.
+- A creative S4B/S5 run completed the same post-review correction path
+  deterministically: failed review -> corrective S4B -> fresh validation ->
+  second S5 review -> G3 acceptance. The new benchmark case is
+  `lifecycle.s4b-review-correction`.
+- Real process interruptions were exercised during worker execution and during
+  validation. Recovery identified the interrupted operation, refused to guess
+  that a lost worker succeeded, and safely resumed from durable evidence.
+- Command Code (DeepSeek V4.1 Flash), OpenCode (DeepSeek V4.1 Flash) and Codex
+  (GPT-6.1 Terra) each ran a real isolated bug-fix task with the permitted file
+  changed, independent validation passed and an ACCEPTED Proof Receipt produced.
+  A live Command Code timeout was classified honestly and recovered into a
+  second validated attempt.
+- The focused reliability suite, adapter suite (structural), engine core and
+  2.3 suites are green. The full deterministic benchmark has **338 passes, 0
+  failures, 0 errors, 5 observed and 2 declared skips**. The seven cases that
+  were red in the original candidate were pre-existing documentation/path drift;
+  a clean 2.3.0 worktree reproduced all seven, and the hardening branch closed
+  them at their causes rather than converting them to skips.
+- The hardening pass added a 17-mutation lifecycle harness: every valid mutant
+  was killed, with digest-verified restoration. It found and fixed a real
+  acceptance defect: a proof receipt edited in run state kept its old digest and
+  was accepted because acceptance never re-verified the receipt's contents.
+- The creative S4B/S5 correction path was exercised with live external workers,
+  not only the deterministic benchmark: Command Code 1.88.5 (DeepSeek V4.1 Flash)
+  implemented and corrected a disposable project; an independent OpenCode 2.2.5
+  / GitHub Copilot session found a real input-validation defect; the linked
+  correction was freshly validated; a new independent session passed the
+  corrected revision; and the engine issued an ACCEPTED `VP-0001` receipt bound
+  to the corrected validation. No G3 was recorded; acceptance correctly refused
+  at the human gate. See
+  [docs/v2/2.4/RELEASE-HARDENING.md](docs/v2/2.4/RELEASE-HARDENING.md).
+
+What this phase still refuses to claim:
+
+- no bug-free, perfectly secure or sandboxed guarantee;
+- the creative S5 gate is the G3 approval plus the passed independent review;
+  the 2.4A-R receipt did not bind the S5 review, and the 2.4C binding closes
+  that gap for current receipts while version 1 receipts remain readable as
+  history;
+- Codex and OpenAI direct were quota-blocked during the live hardening review;
+  the review used the strongest available authenticated distinct provider;
+- Claude Code is installed but unauthenticated here; Cursor is absent;
+- macOS and Linux were not executed;
+- `python -m pytest` validation depends on the ambient interpreter; a contract
+  that names `python` must ensure the test runner is importable;
+- local run-state files are not cryptographically attested;
+- an open worker execution is never presumed dead; the operator must declare it
+  lost, and an orphan whose effect cannot be established is reported rather
+  than adopted automatically.
+
+The detailed architecture, budgets, recovery invariants, conformance matrix and
+migration notes are in
+[docs/v2/2.4/EXECUTION-RELIABILITY.md](docs/v2/2.4/EXECUTION-RELIABILITY.md).
+The host and limitation matrix is in
+[docs/HOSTS-AND-LIMITS.md](docs/HOSTS-AND-LIMITS.md).
+
+---
+
 # Ariadne 2.3.0
 
 Ariadne 2.3.0 is the stable release of Ariadne 2.3 — Universal Entry,

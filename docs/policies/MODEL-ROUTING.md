@@ -327,3 +327,53 @@ Enforced by four rules:
 4. Nothing depends on a proprietary feature. If a tool offers a shortcut, it goes in that tool's adapter as an *optimisation*, never as a requirement.
 
 **The portability test**, run at each retrospective: *could a new tool replace one of mine by writing one adapter file?* If the answer is no, a product detail has leaked out of `adapters/` and must be moved back.
+
+---
+
+## 11. Evidence-backed routing (2.4B)
+
+The capability classes and the role table remain authoritative. 2.4B records
+what actually happened so a future mapping change has evidence behind it, but
+**measurement never becomes authority by default**.
+
+### 11.1 Qualification levels
+
+| Level | What it means | May influence a route? |
+|---|---|---|
+| `DECLARED` | the adapter claims the capability | No |
+| `DIRECTLY_OBSERVED` | at least one engine-recorded attempt exists | Only as context |
+| `OBSERVED_QUALIFIED` | at least 5 attempts and 4 validated | Shadow advice only |
+| `BENCHMARK_QUALIFIED` | at least 5 formal benchmark observations and 4 validated | Shadow advice; the only level a human may promote |
+| `STALE` | older than 30 days or an older model revision | No |
+| `UNKNOWN` | provider/model identity was not observed | No |
+
+A declaration is not a verification. A provider/model identity that was not
+observed cannot qualify. A sample count is not a probability, and no numeric
+confidence is invented.
+
+### 11.2 Modes
+
+- `model_routing=off` (default): no advice is computed during preparation.
+- `model_routing=shadow`: advice is recorded and compared; no route changes.
+- `model_routing=apply_qualified`: a benchmark-qualified, current record with at
+  least 8 samples **and a recorded human promotion** may reorder an eligible
+  adapter, and only when the baseline is degraded or unavailable.
+
+An explicit adapter request always wins. An empty authorized-provider set is a
+refusal, not a prompt to invent a provider. Independent review excludes the
+implementer's adapter, provider and model regardless of performance evidence.
+
+### 11.3 Recording an observation
+
+Measurements from real attempts become observations automatically. A benchmark
+observation must be recorded by the caller that measured it
+(`record_model_observation`); a worker's claim is refused. See
+[docs/v2/2.4/MODEL-ROUTING-EVALUATION.md](../v2/2.4/MODEL-ROUTING-EVALUATION.md)
+for the promotion procedure.
+
+### 11.4 What the operator sees
+
+`python scripts/ariadne.py model-evidence` prints the registry and its
+limitations. `route-evidence` prints the shadow advice for the latest decision
+and states that it controls nothing. `intelligence` prints the same read-only
+view as the API and MCP surfaces.

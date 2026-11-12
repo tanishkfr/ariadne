@@ -59,8 +59,9 @@ def _entry_points() -> bytes:
 
 
 def _package_files() -> dict[str, bytes]:
+    release = _release_module()
     files = {
-        path.relative_to(PACKAGE_ROOT.parent).as_posix(): path.read_bytes()
+        path.relative_to(PACKAGE_ROOT.parent).as_posix(): release.runtime_bytes(path)
         for path in sorted(PACKAGE_ROOT.rglob("*.py"))
     }
     files["ariadne/seed-runtime.zip"] = _seed_runtime()
@@ -84,7 +85,7 @@ def _seed_runtime() -> bytes:
     content = io.BytesIO()
     with zipfile.ZipFile(content, "w") as archive:
         for relative, path in release.runtime_sources():
-            release.zip_entry(archive, relative, path.read_bytes())
+            release.zip_entry(archive, relative, release.runtime_bytes(path))
         release.zip_entry(
             archive,
             "RELEASE-MANIFEST.json",
@@ -129,7 +130,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             f"{dist_info}/METADATA": _metadata(),
             f"{dist_info}/WHEEL": _wheel_metadata(),
             f"{dist_info}/entry_points.txt": _entry_points(),
-            f"{dist_info}/licenses/LICENSE": (ROOT / "LICENSE").read_bytes(),
+            f"{dist_info}/licenses/LICENSE": _release_module().runtime_bytes(ROOT / "LICENSE"),
         }
     )
     record_path = f"{dist_info}/RECORD"

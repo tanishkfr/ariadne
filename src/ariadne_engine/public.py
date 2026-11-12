@@ -46,6 +46,14 @@ STABLE_V2 = (
     "ingest_review",
     "record_acceptance",
     "recovery_report",
+    "task_status",
+    "task_status_state",
+    "host_status",
+    "host_status_state",
+    "host_events",
+    "host_events_state",
+    "task_run",
+    "task_recover",
     "propose_recovery",
     "apply_recovery",
     "engine_events",
@@ -152,6 +160,21 @@ PROVISIONAL = (
     "retrieve_artifact",
     "compact_history",
     "plan_execution_path",
+    # Ariadne 2.4B intelligence and efficiency. Provisional because the evidence
+    # model is new: consumers may read it, but its record vocabulary is expected
+    # to settle after live measurement. None of these functions grants authority.
+    "measurement_report",
+    "record_task_measurements",
+    "model_evidence_report",
+    "record_model_observation",
+    "recommend_model_route",
+    "promote_model_record",
+    "build_continuation",
+    "continuation_report",
+    "skill_intelligence_report",
+    "generate_skill_proposals",
+    "authorize_skill_proposal",
+    "intelligence_report",
     "orchestration_report",
     # Ariadne 2.3A universal task entry. Provisional on purpose: the interpretation
     # frame, the plan record, and the skill-selection record are real and tested,
@@ -304,6 +327,39 @@ class EngineClient:
 
     def recovery_report(self, **options) -> api.Result:
         return api.recovery_report(**options)
+
+    def task_status(self, **options) -> api.Result:
+        return api.task_status(**options)
+
+    def host_status(self, **options) -> api.Result:
+        return api.host_status(**options)
+
+    def host_events(self, **options) -> api.Result:
+        return api.host_events(**options)
+
+    def task_recover(self, **options) -> api.Result:
+        return api.task_recover(**options)
+
+    def task_run(self, **options) -> api.Result:
+        return api.task_run(**options)
+
+    def task_return(self, **options) -> api.Result:
+        return api.task_return(**options)
+
+    def task_validate(self, **options) -> api.Result:
+        return api.task_validate(**options)
+
+    def task_repair(self, **options) -> api.Result:
+        return api.task_repair(**options)
+
+    def task_review(self, **options) -> api.Result:
+        return api.task_review(**options)
+
+    def task_verify(self, **options) -> api.Result:
+        return api.task_verify(**options)
+
+    def task_accept(self, **options) -> api.Result:
+        return api.task_accept(**options)
 
     def propose_recovery(self, **options) -> api.Result:
         return api.propose_recovery(**options)

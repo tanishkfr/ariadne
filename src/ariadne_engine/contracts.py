@@ -2678,6 +2678,38 @@ def rendered_critique_problems(record: Mapping[str, Any]) -> list[str]:
                 problems.append(f"coverage for {dimension} has an unsupported state")
             if str(verdict.get("state", "")) == "REVIEWED" and not verdict.get("capture_ids"):
                 problems.append(f"coverage for {dimension} is REVIEWED but cites no capture")
+    qualitative = record.get("qualitative")
+    if qualitative is not None:
+        if not isinstance(qualitative, Mapping):
+            problems.append("rendered critique qualitative block is not an object")
+        else:
+            if not isinstance(qualitative.get("screens_reviewed", []), list):
+                problems.append("qualitative review screens_reviewed is not a list")
+            if not isinstance(qualitative.get("factual_failures", []), list):
+                problems.append("qualitative review factual_failures is not a list")
+            recommendations = qualitative.get("subjective_recommendations", [])
+            if not isinstance(recommendations, list):
+                problems.append("qualitative review subjective_recommendations is not a list")
+            else:
+                for row in recommendations:
+                    if not isinstance(row, Mapping):
+                        problems.append("a subjective recommendation is not an object")
+                        continue
+                    if not str(row.get("text", "")).strip():
+                        problems.append("a subjective recommendation has no text")
+                    if not (str(row.get("screen", "")).strip() or str(row.get("route", "")).strip()):
+                        problems.append("a subjective recommendation names no screen")
+                    if str(row.get("dimension", "")) not in DESIGN_REVIEW_DIMENSIONS:
+                        problems.append("a subjective recommendation has an unsupported dimension")
+                    if row.get("blocking"):
+                        problems.append("a subjective recommendation may not be blocking")
+            if qualitative.get("technically_correct_but_visually_weak") and not (
+                recommendations or str(qualitative.get("overall_note", "")).strip()
+            ):
+                problems.append("a visually-weak review records no recommendation or note")
+            for key in ("score", "taste_score", "quality_score", "rating"):
+                if key in qualitative:
+                    problems.append("a rendered critique never records a numeric taste score")
     findings = record.get("findings")
     if not isinstance(findings, list):
         problems.append("rendered critique records no findings list")
@@ -3999,6 +4031,38 @@ MAX_TASK_RECORDS = 200
 MAX_ADAPTER_SELECTIONS = 200
 """Hard safety bound for recorded worker-adapter selections in one run."""
 
+MAX_MEASUREMENTS = 10_000
+"""Hard safety bound for the Ariadne 2.4B measurement projections."""
+
+MAX_MODEL_OBSERVATIONS = 20_000
+"""Hard safety bound for the Ariadne 2.4B model-performance observations."""
+
+MAX_MODEL_PROMOTIONS = 200
+"""Hard safety bound for recorded model-routing promotions."""
+
+MAX_CONTINUATIONS = 2_000
+"""Hard safety bound for revision-bound continuation projections."""
+
+MAX_SKILL_PROPOSALS = 500
+"""Hard safety bound for skill-improvement proposals (never applied automatically)."""
+
+AR24B_COLLECTIONS = (
+    "measurements",
+    "model_observations",
+    "model_promotions",
+    "continuations",
+    "skill_proposals",
+)
+"""The Ariadne 2.4B intelligence-efficiency collections.
+
+They are additive and optional like every earlier family: a run state written by
+an earlier milestone has none of them and stays readable. None of them is an
+authority. A measurement reports what was observed, a model observation reports
+what happened on one run, a continuation projects current evidence, and a skill
+proposal is a reviewed suggestion that cannot alter the trusted registry by
+itself.
+"""
+
 AR23B_COLLECTIONS = (
     "tasks",
     "adapter_selections",
@@ -4033,6 +4097,11 @@ _COLLECTION_LIMITS = {
     "proof_receipts": MAX_PROOF_RECEIPTS,
     "tasks": MAX_TASK_RECORDS,
     "adapter_selections": MAX_ADAPTER_SELECTIONS,
+    "measurements": MAX_MEASUREMENTS,
+    "model_observations": MAX_MODEL_OBSERVATIONS,
+    "model_promotions": MAX_MODEL_PROMOTIONS,
+    "continuations": MAX_CONTINUATIONS,
+    "skill_proposals": MAX_SKILL_PROPOSALS,
 }
 
 
@@ -4048,7 +4117,8 @@ def require_collection_capacity(state: Mapping[str, Any], key: str) -> None:
         raise ContractError(
             f"{key!r} is not a bounded engine record collection; the bound applies to "
             + ", ".join([*AR203_COLLECTIONS, *AR204_COLLECTIONS, *AR205D_COLLECTIONS,
-                         *AR223_COLLECTIONS, *AR224_COLLECTIONS, *AR23B_COLLECTIONS])
+                         *AR223_COLLECTIONS, *AR224_COLLECTIONS, *AR23B_COLLECTIONS,
+                         *AR24B_COLLECTIONS])
         )
     values = state.get(key)
     if values is None:

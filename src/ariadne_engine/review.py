@@ -323,6 +323,9 @@ def build_record(
     findings: tuple[str, ...] | None = None,
     reviewer_execution: str = "",
     implementing_execution: str = "",
+    attempt_id: str = "",
+    task_id: str = "",
+    validation_sha256: str = "",
 ) -> dict:
     """Construct a review record from the evidence that actually exists."""
     packet = Path(packet)
@@ -347,12 +350,19 @@ def build_record(
         ),
         "run_id": str(state.get("run_id", "")),
         "packet_id": packet_id,
+        "attempt_id": str(attempt_id),
+        "task_id": str(task_id),
         "review_kind": review_kind,
         "reviewer_identity": str(reviewer_identity).strip(),
         "reviewer_role": str(reviewer_role).strip(),
         "context_digest": context_digest,
         "reviewed_revision": _sha256(packet / "evidence" / "validation.json")
         if (packet / "evidence" / "validation.json").is_file() else "",
+        "validation_sha256": str(validation_sha256)
+        or (
+            _sha256(packet / "evidence" / "validation.json")
+            if (packet / "evidence" / "validation.json").is_file() else ""
+        ),
         "requirements": list(requirements if requirements is not None else delivered),
         "evidence": list(evidence if evidence is not None else sorted(evidence_available(state, packet))),
         "findings": list(findings if findings is not None else _findings(block)),

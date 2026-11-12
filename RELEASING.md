@@ -12,7 +12,16 @@ none of them is waivable.
    human-approved Apache-2.0 licence.
 3. Update the single authoritative [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
 4. Start from a clean tracked worktree and run the complete validation recorded
-   in the current private readiness report.
+   in the current private readiness report. The AR-221 design-execution fixture
+   needs its devDependencies installed once, offline, from the local npm cache:
+
+   ```bash
+   (cd src/ariadne_engine/design_execution/fixtures/desktop-tool && npm ci --offline)
+   ```
+
+   Without that local toolchain the real vertical slice reports the absence as
+   BLOCKED and the gate fails; it is a setup prerequisite, not a package the
+   release ships.
 5. Build the release set:
 
    ```bash

@@ -79,6 +79,8 @@ from . import (
     safety,
     source,
     trace,
+    viewports,
+    visual_regression,
 )
 
 __all__ = [
@@ -93,4 +95,6 @@ __all__ = [
     "safety",
     "source",
     "trace",
+    "viewports",
+    "visual_regression",
 ]

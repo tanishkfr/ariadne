@@ -122,6 +122,21 @@ The binding constraint is monthly usage limits, not rupees. The full technique l
 2. **Documents are the compression layer.** `HANDOFF.md` exists so the implementer never re-derives what the strategist already decided. Re-deriving context is the largest recurring waste in this system.
 3. **Run free local checks first.** Every build, typecheck, or Playwright run that catches a bug is a round trip you did not spend.
 
+### 7.1 Measured efficiency (2.4B)
+
+Ariadne now records one versioned measurement row per task attempt. Use it before
+buying capacity:
+
+- a field no provider reported is `UNKNOWN`, never zero;
+- a completed attempt is not an accepted one;
+- context bytes are file sizes, not token claims;
+- a model observation without an observed provider/model identity cannot qualify;
+- a cache hit is a local source-hash reuse, not a provider prompt-cache saving.
+
+`python scripts/ariadne.py intelligence` prints the read-only view. A cheap-looking
+total with poor measurement coverage is visible as such, and no efficiency claim
+is accepted without a before/after comparison.
+
 ---
 
 ## 8. Review cadence

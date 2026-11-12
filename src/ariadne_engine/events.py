@@ -160,10 +160,18 @@ EVENT_TYPES = (
     "task_worker_selected",
     "task_skill_recorded",
     "task_repair_prepared",
+    "task_review_correction_authorized",
+    "task_review_correction_prepared",
+    "task_partial_preparation_quarantined",
     "task_proof_recorded",
     "task_accepted",
     "task_rejected",
     "task_blocked",
+    "task_operation_started",
+    "task_operation_completed",
+    "task_operation_failed",
+    "task_validation_recovered",
+    "task_recovered",
 
     # Ariadne 2.3C vocabulary. The rendered-acceptance step of a UI task, the
     # project-memory lifecycle, and the external-skill trust boundary all record

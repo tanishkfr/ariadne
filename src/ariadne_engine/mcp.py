@@ -31,6 +31,10 @@ TOOLS = (
     "verify_work",
     "get_verification",
     "compare_verifications",
+    "task_status",
+    "intelligence_report",
+    "host_status",
+    "host_events",
 )
 
 _PROOF_ID_RE = re.compile(r"^VP-\d{4,}$")
@@ -46,8 +50,12 @@ def tool_schemas() -> dict:
             {"name": "verify_work", "params": ["task_text", "work_ref", "work_digest", "task_id", "completion_statements"]},
             {"name": "get_verification", "params": ["proof_id"]},
             {"name": "compare_verifications", "params": ["before", "after"]},
+            {"name": "task_status", "params": ["task_id"]},
+            {"name": "intelligence_report", "params": ["task_id"]},
+            {"name": "host_status", "params": []},
+            {"name": "host_events", "params": ["cursor", "limit"]},
         ],
-        "authority": "MCP cannot grant human approval, reviewer identity, or authorization_effect",
+        "authority": "MCP cannot grant human approval, reviewer identity, or authorization_effect; host tools are read-only",
     }
 
 
@@ -128,6 +136,27 @@ def dispatch(state: dict, *, tool: str, params: Mapping[str, Any] | None = None)
         before = _check_proof_id(params.get("before", ""))
         after = _check_proof_id(params.get("after", ""))
         return api_module.compare_proofs_state(state, before, after)
+    if name == "task_status":
+        task_id = str(params.get("task_id", "") or "")
+        _check_path(task_id)
+        return api_module.task_status_state(state, task_id=task_id)
+    if name == "intelligence_report":
+        task_id = str(params.get("task_id", "") or "")
+        _check_path(task_id)
+        return api_module.intelligence_report(state, task_id=task_id)
+    if name == "host_status":
+        return api_module.host_status_state(state)
+    if name == "host_events":
+        cursor = params.get("cursor")
+        if cursor is not None and not isinstance(cursor, Mapping):
+            raise contracts.ContractError("MCP host cursor must be an object")
+        try:
+            limit = int(params.get("limit", 100) or 100)
+        except (TypeError, ValueError) as exc:
+            raise contracts.ContractError("MCP host event limit must be a count") from exc
+        if limit < 1 or limit > 200:
+            raise contracts.ContractError("MCP host event limit must be between 1 and 200")
+        return api_module.host_events_state(state, cursor=cursor, limit=limit)
     raise contracts.ContractError(f"unhandled MCP tool: {tool!r}")
 
 

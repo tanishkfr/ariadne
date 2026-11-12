@@ -1,6 +1,20 @@
 # Ariadne deterministic benchmark
 
-295 registered cases across 50 groups (AR-200 through AR-205D). Offline, no model calls, no network, no paid evaluation. The full suite reports 0 fail and 0 error; `OBSERVED` and `DECLARED_SKIP` are separate categories, never passes.
+353 registered cases across 51 groups (AR-200 through 2.4B). Offline, no model
+calls, no network, no paid evaluation. On the 2.4B candidate the exhaustive run
+reports **346 pass, 0 fail, 0 error, 5 observed and 2 skip**. The eight new
+`intelligence.*` cases are the 2.4B measurement, routing-evidence, context,
+continuation, skill-proposal and API/MCP-parity checks. The 2.4A-R baseline at
+`3ec1efc` reports 338 pass on the same machine with the older case set; the
+release subset is 97/97 (baseline: 90/90).
+
+The 2.4A reliability cases include `lifecycle.s4b-review-correction` (a failed
+S5 review, a linked corrective S4B packet, a fresh engine validation, a second
+S5 review and G3 acceptance) and are in the release subset. The focused
+end-to-end T1/recovery suite is `python scripts/test-ar24a.py`; the adapter
+contract and live qualification suite is
+`python scripts/test-ar24a-adapters.py`.
+
 
 ```
 python benchmarks/run_benchmarks.py --list                        # list cases
@@ -10,6 +24,7 @@ python benchmarks/run_benchmarks.py --only security               # one group
 python benchmarks/run_benchmarks.py --case lifecycle.s5-isolation # one case
 python benchmarks/run_benchmarks.py --write-manifest              # regenerate manifest.json
 python benchmarks/run_benchmarks.py --work-root D:\tmp\ar-bench --keep-sandbox
+python scripts/evaluate-intelligence.py --baseline-worktree <clean-2.4A-R-worktree>
 ```
 
 The exhaustive suite is the authority. `--release` selects `arbench/release_subset.py`:
@@ -31,6 +46,8 @@ golden workflows) and is fast enough to run as a release gate.
 | `arbench/ar203_cases.py` | The AR-203 verification-hardening and decision-plane cases (execution provenance, capability registry, review independence, render/reference verification, decision plane, false acceptance). |
 | `arbench/ar204_cases.py` | The AR-204 harness-economics cases (accounting, request rendering, tool schemas, externalized output, context economics, compaction, orchestration economics). |
 | `arbench/ar205_cases.py` | The AR-205 release-engineering cases (release metadata, distribution integrity, migration, the consumer contract, the six golden workflows). |
+| `arbench/ar24b_cases.py` | The 2.4B intelligence/efficiency cases (measurement provenance, model-evidence qualification, stale refusals, adaptive context bytes, continuation freshness, skill proposals, API/MCP parity). |
+| `workloads/2.4b-intelligence.json` | The 28 bounded evaluation workloads (27 deterministic, 1 live) with request, revision, scope, validation and expected behaviour. |
 | `arbench/release_subset.py` | The curated release-gate case list. |
 | `manifest.json` | Generated, machine-readable case manifest (id, task, inputs, expected outcome, evaluation method, environment/provider requirements, cost, executable, layer). |
 | `results/*.json` | One document per run; `LATEST.json` mirrors the most recent. |

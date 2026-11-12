@@ -15,6 +15,18 @@ from pathlib import Path
 from .driver import Repo, Sandbox
 
 
+def document_path(ctx, name: str) -> str:
+    """The repository-relative path of a canonical document, by name.
+
+    Documentation lives at the repository root in the maintainer layout and
+    under ``docs/guides`` / ``docs/policies`` in the public layout. The runtime
+    already follows the file; a benchmark that hardcodes one layout would report
+    a layout change as a behaviour regression. ``check.py`` owns the one
+    resolver precisely so this decision is made in a single place.
+    """
+    return ctx.repo.module("check.py").resolve_document(name)
+
+
 # ---------------------------------------------------------------- project docs
 
 def project_md(thesis_criterion: str = "The interaction has a clear response.") -> str:
@@ -237,10 +249,11 @@ def record_skill_evidence(repo: Repo, box: Sandbox, *, skill: str, output_relati
     through the same ``record-creative`` contract a project uses.
     """
     source = box.root / (events_name or f"{skill.lower().replace(' ', '-')}-events.json")
+    packet_id = str((box.state().get("worker") or {}).get("task_id", "") or "")
     source.write_text(json.dumps({"events": [
-        {"type": "skill", "skill": skill, "state": "invoked",
+        {"type": "skill", "skill": skill, "state": "invoked", "packet_id": packet_id,
          "evidence_path": str(box.path(output_relative))},
-        {"type": "skill", "skill": skill, "state": "completed",
+        {"type": "skill", "skill": skill, "state": "completed", "packet_id": packet_id,
          "output_path": str(box.path(output_relative)),
          "result": result, "usefulness": "useful"},
     ]}, indent=2) + "\n", encoding="utf-8")

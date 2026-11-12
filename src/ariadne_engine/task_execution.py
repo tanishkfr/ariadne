@@ -33,6 +33,7 @@ Everything in this module is a pure function of the records it is given.
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from pathlib import Path
@@ -103,6 +104,29 @@ WORKER_ADAPTERS: dict[str, dict] = {
             "records its return through the runtime; availability is the caller's declaration"
         ),
     ),
+    "command-code": _adapter(
+        "command-code",
+        title="Command Code CLI",
+        kind=CLI_HARNESS,
+        command="command-code",
+        # Non-interactive print mode; the prompt is read from stdin. The model
+        # is the operator's configured Command Code model unless the adapter
+        # preset names one. DeepSeek V4.1 Flash is the documented 2.4A default
+        # for live qualification, and --no-session keeps the run isolated.
+        argv=(
+            "-p", "--skip-onboarding", "--trust", "--permission-mode", "accept-edits",
+            # Command Code 1.88.5 withholds edit/write tools from headless runs
+            # unless they are enabled explicitly; a session that cannot write a
+            # file is not a worker. The engine's independent scope check and
+            # validation remain the boundary, so enabling the declared
+            # capabilities here does not widen what the task may change.
+            "--tools-all",
+            "--no-session", "--model", "deepseek/deepseek-v4.1-flash",
+        ),
+        capabilities=("read", "search", "edit", "shell", "implementation", "implementation-repair", "escalation"),
+        preference=1,
+        note="headless invocation of the installed Command Code CLI; no credentials are read or stored",
+    ),
     "claude-code": _adapter(
         "claude-code",
         title="Claude Code CLI",
@@ -110,7 +134,7 @@ WORKER_ADAPTERS: dict[str, dict] = {
         command="claude",
         argv=("--print", "--permission-mode", "acceptEdits", "--allowedTools", "Read,Edit,Write,Bash,Glob,Grep"),
         capabilities=("read", "search", "edit", "shell", "implementation", "implementation-repair", "escalation"),
-        preference=1,
+        preference=2,
         note="headless invocation of the installed Claude Code CLI; no credentials are read or stored",
     ),
     "codex": _adapter(
@@ -122,9 +146,9 @@ WORKER_ADAPTERS: dict[str, dict] = {
         # never prompts anyway); the explicit sandbox flag is the supported
         # spelling, and a non-interactive exec already answers approval with
         # "never". The prompt is still read from stdin via the trailing dash.
-        argv=("exec", "--sandbox", "workspace-write", "-"),
+        argv=("exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "-"),
         capabilities=("read", "search", "edit", "shell", "implementation", "implementation-repair", "escalation"),
-        preference=2,
+        preference=3,
         note="headless invocation of the installed Codex CLI",
     ),
     "cursor": _adapter(
@@ -134,7 +158,7 @@ WORKER_ADAPTERS: dict[str, dict] = {
         command="cursor-agent",
         argv=("--print", "--force"),
         capabilities=("read", "search", "edit", "shell", "implementation", "implementation-repair", "escalation"),
-        preference=3,
+        preference=4,
         note="headless invocation of the installed Cursor agent CLI",
     ),
     "opencode": _adapter(
@@ -142,10 +166,10 @@ WORKER_ADAPTERS: dict[str, dict] = {
         title="OpenCode CLI",
         kind=CLI_HARNESS,
         command="opencode",
-        argv=("run",),
+        argv=("run", "--auto"),
         capabilities=("read", "search", "edit", "shell", "implementation", "implementation-repair", "escalation"),
-        preference=4,
-        note="headless invocation of the installed OpenCode CLI",
+        preference=5,
+        note="headless invocation of the installed OpenCode CLI; --auto permits the bounded edit it was given",
     ),
     "manual": _adapter(
         "manual",
@@ -224,6 +248,139 @@ def registry_problems(registry: Mapping | None = None) -> list[str]:
     return problems
 
 
+ADAPTER_CONFORMANCE_CHECKS = (
+    "identity",
+    "kind-and-transport",
+    "capability-declaration",
+    "executable-discovery",
+    "version-reporting",
+    "authentication",
+    "argument-compatibility",
+    "working-directory",
+    "prompt-delivery",
+    "file-edit-permission",
+    "structured-return",
+    "cancellation",
+    "timeout",
+    "nonzero-exit",
+    "interrupted-session-recovery",
+    "scope-enforcement",
+    "independent-validation",
+)
+"""The checks every worker adapter is measured against.
+
+``executable-discovery`` is an engine fact. The rest are either structural
+(declared by the adapter) or observed in a live qualification run. A check this
+environment did not execute is ``not-observed``, never ``pass``: a declaration
+is not an integration.
+"""
+
+
+def adapter_conformance(
+    adapter: Mapping,
+    *,
+    environment: Mapping | None = None,
+) -> dict:
+    """One adapter's conformance report, separating declarations from observations."""
+    environment = dict(environment or {})
+    problems = adapter_problems(adapter)
+    available = False
+    discovery_reason = ""
+    if str(adapter.get("kind")) == CLI_HARNESS:
+        available, discovery_reason = executable_available(str(adapter.get("command", "")))
+    else:
+        available, discovery_reason = True, "no executable is required for this adapter kind"
+    structural = {
+        "identity": bool(str(adapter.get("id", "")).strip()),
+        "kind-and-transport": str(adapter.get("kind")) in ADAPTER_KINDS,
+        "capability-declaration": bool(adapter.get("capabilities")),
+        "executable-discovery": available,
+    }
+    rows: dict[str, dict] = {}
+    for check in ADAPTER_CONFORMANCE_CHECKS:
+        if check in structural:
+            if check == "executable-discovery":
+                rows[check] = {
+                    "status": "pass" if available else "blocked",
+                    "source": "engine-structure",
+                    "detail": discovery_reason,
+                }
+            else:
+                rows[check] = {
+                    "status": "pass" if structural[check] else "fail",
+                    "source": "engine-structure",
+                    "detail": "",
+                }
+            continue
+        observed = environment.get(check)
+        if isinstance(observed, Mapping):
+            rows[check] = {
+                "status": str(observed.get("status", "not-observed")),
+                "source": str(observed.get("source", "live-observation")),
+                "detail": str(observed.get("detail", "")),
+            }
+        else:
+            declared = {
+                "version-reporting": bool(str(adapter.get("command", "")).strip()),
+                "authentication": str(adapter.get("kind")) != CLI_HARNESS,
+                "argument-compatibility": bool(adapter.get("argv") is not None),
+                "working-directory": True,
+                "prompt-delivery": str(adapter.get("prompt_mode", "stdin")) in ("stdin", "argument"),
+                "file-edit-permission": "edit" in tuple(adapter.get("capabilities") or ()),
+                "structured-return": True,
+                "cancellation": True,
+                "timeout": True,
+                "nonzero-exit": True,
+                "interrupted-session-recovery": True,
+                "scope-enforcement": True,
+                "independent-validation": True,
+            }.get(check, False)
+            rows[check] = {
+                "status": "declared" if declared else "not-observed",
+                "source": "adapter-declaration",
+                "detail": "not executed in a live qualification run",
+            }
+    failed = [name for name, row in rows.items() if row["status"] == "fail"]
+    unobserved = [name for name, row in rows.items() if row["status"] in ("declared", "not-observed")]
+    return {
+        "adapter": str(adapter.get("id", "")),
+        "kind": str(adapter.get("kind", "")),
+        "available": available,
+        "discovery": discovery_reason,
+        "problems": problems,
+        "checks": rows,
+        "failed": failed,
+        "unobserved": unobserved,
+        "verdict": (
+            "fail" if failed or problems else
+            "unavailable" if not available else
+            "conformant-live" if not unobserved else
+            "declared-not-live"
+        ),
+    }
+
+
+def conformance_matrix(
+    registry: Mapping | None = None,
+    *,
+    environments: Mapping | None = None,
+) -> dict:
+    environments = dict(environments or {})
+    adapters = dict(registry or WORKER_ADAPTERS)
+    rows = [
+        adapter_conformance(adapter, environment=environments.get(adapter_id, {}))
+        for adapter_id, adapter in sorted(adapters.items())
+    ]
+    return {
+        "schema_version": contracts.SCHEMA_ADAPTIVE,
+        "checks": list(ADAPTER_CONFORMANCE_CHECKS),
+        "adapters": rows,
+        "declared": len(rows),
+        "live": [row["adapter"] for row in rows if row["verdict"] == "conformant-live"],
+        "not_live": [row["adapter"] for row in rows if row["verdict"] != "conformant-live"],
+    }
+
+
 def adapter_view(adapter: Mapping, *, available: bool, reason: str = "") -> dict:
     return {
         "id": str(adapter.get("id", "")),
@@ -233,6 +390,7 @@ def adapter_view(adapter: Mapping, *, available: bool, reason: str = "") -> dict
         "capabilities": [str(item) for item in adapter.get("capabilities") or ()],
         "preference": int(adapter.get("preference", 0)),
         "note": str(adapter.get("note", "")),
+        "prompt_mode": str(adapter.get("prompt_mode", "stdin")),
         "available": bool(available),
         "reason": str(reason),
     }
@@ -268,6 +426,8 @@ def select_adapter(
     prior_failures: Sequence[Mapping] = (),
     escalate: bool = False,
     registry: Mapping | None = None,
+    evidence_ranking: Sequence[str] = (),
+    evidence: Mapping | None = None,
 ) -> dict:
     """Choose a worker adapter from declared capabilities and discovered facts.
 
@@ -279,7 +439,12 @@ def select_adapter(
        recorded failure for this task already requires a strategy change is
        excluded by name rather than silently retried;
     3. an adapter that cannot declare a required capability is excluded with the
-       missing capability named.
+       missing capability named;
+    4. a caller-supplied ``evidence_ranking`` may reorder only the adapters that
+       already satisfy 1-3. The ranking is never trusted to add an adapter, drop
+       an exclusion, or bypass an explicit request. The caller is responsible
+       for the promotion gate; this selector records the evidence block it was
+       given and nothing more.
     """
     adapters = registry if registry is not None else WORKER_ADAPTERS
     required_ids = [str(item) for item in required if str(item)]
@@ -302,6 +467,8 @@ def select_adapter(
         "fallbacks": [],
         "status": "no-adapter",
         "reason": "",
+        "evidence": dict(evidence or {}),
+        "evidence_applied": False,
         "recorded_at": contracts.utc_now(),
     }
     ordered = sorted(adapters.values(), key=lambda item: (int(item.get("preference", 0)), str(item.get("id"))))
@@ -339,6 +506,19 @@ def select_adapter(
             record["exclusions"].append({"id": adapter_id, "reasons": reasons})
         else:
             capable.append((adapter, availability_reason))
+    if evidence_ranking and not requested:
+        rank = {str(item): index for index, item in enumerate(evidence_ranking) if str(item).strip()}
+        before = [str(item[0].get("id", "")) for item in capable]
+        capable = sorted(
+            capable,
+            key=lambda pair: (
+                rank.get(str(pair[0].get("id", "")), len(rank)),
+                int(pair[0].get("preference", 0)),
+                str(pair[0].get("id", "")),
+            ),
+        )
+        after = [str(item[0].get("id", "")) for item in capable]
+        record["evidence_applied"] = bool(rank) and before != after
     if not capable:
         record["reason"] = (
             "no worker adapter satisfies this task: "
@@ -396,8 +576,185 @@ TASK_STATES = (
     "rejected",
     "blocked",
     "escalation-required",
+    "stale-evidence",
 )
 """Derived task states. They are computed from records, never stored as claims."""
+
+REPAIR_KINDS = ("routine", "review", "rendered", "escalation", "interruption")
+"""Why a corrective attempt exists.
+
+``routine`` is a retry after a failed engine validation and spends the bounded
+routine-repair budget. ``review`` is a review-directed correction: only a
+recorded failed review authorizes it, and it spends its own smaller budget
+without inheriting any previous validation. ``rendered`` corrects a capture
+failure, ``escalation`` is a deliberate stronger-worker retry, and
+``interruption`` continues an attempt whose worker disappeared.
+"""
+
+MAX_REVIEW_CORRECTIONS = 2
+"""Review-directed corrections permitted inside one task.
+
+Kept separate from ``policy.MAX_ROUTINE_REPAIRS``: a review finding is a
+different authorization than a failed validation, and merging the budgets
+would let a worker turn repeated failed reviews into unlimited retries.
+"""
+
+TASK_OPERATION_KINDS = (
+    "launch",
+    "execute",
+    "collect-return",
+    "ingest-return",
+    "validate",
+    "persist-evidence",
+    "review",
+    "repair",
+    "proof",
+    "accept",
+)
+"""Durable operation phases used for recovery.
+
+Each phase is recorded *before* the side effect it describes. A started
+operation without a completed/failed record is an interrupted operation, and
+recovery reports it rather than assuming the side effect happened.
+"""
+
+TASK_OPERATION_STATES = ("started", "completed", "failed", "interrupted", "refused")
+OPERATION_HISTORY_LIMIT = 100
+
+
+def attempt_id_for(packet_id: str) -> str:
+    """The stable identity of one attempt, derived from its packet identity.
+
+    Packet ids are already unique inside a run; this name makes the attempt
+    identity explicit in records that need to distinguish "which attempt" from
+    "which packet directory". It is deterministic, so a repeated adoption finds
+    the same attempt instead of minting a second one.
+    """
+    return f"atm_{str(packet_id)}"
+
+
+def latest_attempt(task: Mapping | None) -> dict:
+    attempts = (task or {}).get("attempts") or []
+    return attempts[-1] if attempts else {}
+
+
+def attempt_is_latest(task: Mapping | None, attempt: Mapping | None) -> bool:
+    if not attempt:
+        return False
+    return str(attempt.get("packet_id", "")) == str((latest_attempt(task) or {}).get("packet_id", ""))
+
+
+def review_belongs_to(task: Mapping | None, review: Mapping | None, attempt: Mapping | None) -> bool:
+    """Whether a review record is about this exact attempt and revision.
+
+    A review that names another attempt, another packet or another validation
+    digest is stale evidence: it cannot approve a revision it never saw.
+    """
+    review = review or {}
+    attempt = attempt or {}
+    if not review or not attempt:
+        return False
+    if str(review.get("task_id", "")) and str(review.get("task_id")) != str((task or {}).get("task_id", "")):
+        return False
+    if str(review.get("packet_id", "")) != str(attempt.get("packet_id", "")):
+        return False
+    review_attempt = str(review.get("attempt_id", ""))
+    if review_attempt and review_attempt != str(attempt.get("attempt_id", "")):
+        return False
+    validation = dict(attempt.get("validation") or {})
+    expected = str(validation.get("validation_sha256", ""))
+    recorded = str(review.get("validation_sha256", ""))
+    if expected and recorded and expected != recorded:
+        return False
+    return True
+
+
+def validation_belongs_to(attempt: Mapping | None, record: Mapping | None) -> bool:
+    """Whether a validation record is bound to the attempt it claims to settle."""
+    attempt = attempt or {}
+    record = record or {}
+    if not record:
+        return False
+    if str(record.get("packet_id", "")) != str(attempt.get("packet_id", "")):
+        return False
+    attempt_name = str(record.get("attempt_id", ""))
+    if attempt_name and attempt_name != str(attempt.get("attempt_id", "")):
+        return False
+    execution = dict(record.get("execution") or {})
+    implementing = str(execution.get("implementing_execution", ""))
+    attempt_execution = str(attempt.get("execution_id", ""))
+    if implementing and attempt_execution and implementing != attempt_execution:
+        return False
+    return True
+
+
+def proof_is_current(task: Mapping | None) -> bool:
+    """A proof receipt only stands for the attempt and revision it was made from."""
+    task = task or {}
+    proof = dict(task.get("proof") or {})
+    if not proof:
+        return False
+    if proof.get("stale"):
+        return False
+    attempt = latest_attempt(task)
+    if not str(proof.get("packet_id", "")) or not str(proof.get("attempt_id", "")):
+        return False
+    if str(proof.get("packet_id", "")) and str(proof.get("packet_id")) != str(attempt.get("packet_id", "")):
+        return False
+    if str(proof.get("attempt_id", "")) and str(proof.get("attempt_id")) != str(attempt.get("attempt_id", "")):
+        return False
+    validation = dict(attempt.get("validation") or {})
+    if str(proof.get("validation_sha256", "")) and str(proof.get("validation_sha256")) != str(
+        validation.get("validation_sha256", "")
+    ):
+        return False
+    return True
+
+
+def review_is_current(task: Mapping | None) -> bool:
+    """The current review, if it is about the current attempt and still passing."""
+    task = task or {}
+    review = dict(task.get("review") or {})
+    attempt = latest_attempt(task)
+    return bool(review) and review_belongs_to(task, review, attempt)
+
+
+def review_correction_count(task: Mapping | None) -> int:
+    return sum(
+        1
+        for attempt in (task or {}).get("attempts") or ()
+        if str(attempt.get("repair_kind", "")) == "review"
+    )
+
+
+def executor_identities(task: Mapping | None) -> list[str]:
+    """Every worker identity this task's attempts have carried, lower-cased.
+
+    Used to refuse a reviewer that is one of the task's own implementers. It is
+    a label check on top of the stronger engine-execution check: both must agree
+    that review and implementation are separate.
+    """
+    values: set[str] = set()
+    for attempt in (task or {}).get("attempts") or ():
+        for key in ("adapter", "execution_id"):
+            value = str(((attempt or {}).get(key)) or "").strip().lower()
+            if value:
+                values.add(value)
+        returned = dict((attempt or {}).get("return") or {})
+        metadata = dict(returned.get("metadata") or {})
+        for key in ("provider", "model", "worker role"):
+            value = str(metadata.get(key, "") or "").strip().lower()
+            if value:
+                values.add(value)
+    return sorted(values)
+
+
+def _scope_digest(scope: Sequence[str] | None) -> str:
+    import hashlib
+    import json
+
+    values = sorted({str(item).replace("\\", "/") for item in (scope or ()) if str(item)})
+    return hashlib.sha256(json.dumps(values, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def task_records(state: Mapping) -> list[dict]:
@@ -572,7 +929,13 @@ def create_task(
             for item in selection.get("selected") or ()
         ],
         "attempts": [],
+        "reviews": [],
         "review": {},
+        "operations": [],
+        "current_operation": "",
+        "current_attempt_id": "",
+        "review_corrections": 0,
+        "review_correction_limit": MAX_REVIEW_CORRECTIONS,
         "rendered": _rendered_seed(plan),
         "proof": {},
         "acceptance": {},
@@ -620,6 +983,27 @@ def task_problems(record: Mapping) -> list[str]:
             problems.append("task record rendered ledger is not an object")
         elif str(rendered.get("status", "")) not in ("not-required", "required", "captured", "blocked"):
             problems.append(f"task rendered ledger has an unsupported status: {rendered.get('status')!r}")
+    for attempt in record.get("attempts") or ():
+        if not isinstance(attempt, Mapping):
+            problems.append("task record has a malformed attempt entry")
+            break
+        if not str(attempt.get("packet_id", "")).strip():
+            problems.append("task attempt has no packet id")
+            break
+        if str(attempt.get("repair_kind", "")) and str(attempt.get("repair_kind")) not in REPAIR_KINDS:
+            problems.append(f"task attempt has an unsupported repair kind: {attempt.get('repair_kind')!r}")
+            break
+    for item in record.get("operations") or ():
+        if not isinstance(item, Mapping) or str(item.get("kind", "")) not in TASK_OPERATION_KINDS:
+            problems.append("task record has a malformed operation entry")
+            break
+        if str(item.get("state", "")) not in TASK_OPERATION_STATES:
+            problems.append(f"task operation has an unsupported state: {item.get('state')!r}")
+            break
+    for item in record.get("reviews") or ():
+        if not isinstance(item, Mapping) or not str(item.get("review_id", "")).strip():
+            problems.append("task record has a malformed review-history entry")
+            break
     return problems
 
 
@@ -639,20 +1023,47 @@ def open_attempt(task: Mapping | None) -> dict | None:
     return None
 
 
-def prepare_attempt(task: dict, *, packet_id: str, packet_path: str, attempt: int = 1) -> dict:
+def prepare_attempt(
+    task: dict,
+    *,
+    packet_id: str,
+    packet_path: str,
+    attempt: int = 1,
+    parent_attempt_id: str = "",
+    repair_kind: str = "",
+    review_id: str = "",
+    review_finding: str = "",
+    authorized_by: str = "",
+    directive: Mapping | None = None,
+) -> dict:
     """Record a prepared attempt when its packet is prepared.
 
     The attempt exists from preparation on, so the lifecycle can never be
     confused with a worker that started without a bounded contract, and a status
-    check sees "prepared, not yet run" instead of nothing.
+    check sees "prepared, not yet run" instead of nothing. A corrective attempt
+    records its parent, the review that authorized it and the finding it must
+    address; those fields are evidence, never a new authorization channel. A
+    fresh attempt always starts with an empty validation record: no correction
+    can inherit a prior pass.
     """
     existing = attempt_for(task, packet_id)
     if existing is not None:
         raise ContractError(f"an attempt record for packet {packet_id!r} already exists")
+    if repair_kind and repair_kind not in REPAIR_KINDS:
+        raise ContractError(f"unsupported repair kind: {repair_kind!r}")
+    scope = [str(item) for item in (task.get("scope") or {}).get("declared") or ()]
     row = {
+        "attempt_id": attempt_id_for(packet_id),
         "packet_id": str(packet_id),
         "packet_path": str(packet_path),
         "attempt": int(attempt),
+        "parent_attempt_id": str(parent_attempt_id),
+        "repair_kind": str(repair_kind),
+        "review_id": str(review_id),
+        "review_finding": str(review_finding),
+        "authorized_by": str(authorized_by),
+        "directive": dict(directive or {}),
+        "scope_digest": _scope_digest(scope),
         "adapter": "",
         "execution_id": "",
         "state": "prepared",
@@ -663,8 +1074,77 @@ def prepare_attempt(task: dict, *, packet_id: str, packet_path: str, attempt: in
         "validation": {},
     }
     task.setdefault("attempts", []).append(row)
+    task["current_attempt_id"] = str(row["attempt_id"])
     task["updated_at"] = contracts.utc_now()
     return row
+
+
+def attempt_scope_problems(task: Mapping, attempt: Mapping) -> list[str]:
+    """A correction may not widen the authorized scope it inherited.
+
+    The scope is the task's declared scope; both the task record and the parent
+    attempt carry a digest of it. A changed digest means the plan or task record
+    moved under the correction and the attempt cannot be trusted to stay inside
+    the authorization that was granted for the original work.
+    """
+    problems: list[str] = []
+    declared = [str(item) for item in ((task or {}).get("scope") or {}).get("declared") or ()]
+    if not declared:
+        return problems
+    expected = _scope_digest(declared)
+    parent_digest = str((attempt or {}).get("scope_digest", ""))
+    if parent_digest and parent_digest != expected:
+        problems.append(
+            "the task's declared scope changed after the parent attempt; a correction cannot widen or "
+            "replace the authorized scope"
+        )
+    return problems
+
+
+def corrective_attempt_problems(
+    task: Mapping,
+    attempt: Mapping,
+    *,
+    repair_kind: str,
+) -> list[str]:
+    """Whether a correction is authorized by the records that exist.
+
+    Routine repair is authorized by a retryable failed validation. A review
+    correction is authorized *only* by a recorded failed review of the current
+    attempt with the ``fix and re-review`` recommendation. A passing attempt with
+    no such finding needs no rerun and is refused here rather than wasting a
+    worker attempt.
+    """
+    problems: list[str] = []
+    task = task or {}
+    attempt = attempt or {}
+    if not attempt_is_latest(task, attempt):
+        problems.append("a correction must continue from the latest attempt, not an older one")
+    problems.extend(attempt_scope_problems(task, attempt))
+    if str((task.get("acceptance") or {}).get("outcome", "")) in ("accepted", "rejected"):
+        problems.append("the task already records a human decision; prepare a new deliberate task instead")
+    review = dict(task.get("review") or {})
+    if repair_kind == "review":
+        if str(review.get("outcome", "")) != "failed":
+            problems.append("a review-directed correction needs a recorded failed review for the current attempt")
+        elif not review_belongs_to(task, review, attempt):
+            problems.append(
+                "the recorded review is not bound to the current attempt and validation; it cannot authorize a correction"
+            )
+        if str(review.get("recommendation", "")).lower() != "fix and re-review":
+            problems.append(
+                "the review recommendation does not authorize a correction "
+                "(only 'fix and re-review' does; 'present g3' needs acceptance and 'restart the direction' needs a new direction)"
+            )
+        if review_correction_count(task) >= int(task.get("review_correction_limit", MAX_REVIEW_CORRECTIONS) or 0):
+            problems.append(
+                "the review-directed correction budget is exhausted; a further pass needs a human decision"
+            )
+    elif repair_kind in ("routine", "interruption"):
+        validation = dict(attempt.get("validation") or {})
+        if not validation.get("retryable"):
+            problems.append("a routine correction needs a retryable failed validation on the current attempt")
+    return problems
 
 
 def start_attempt(
@@ -731,10 +1211,73 @@ def record_attempt_validation(
     commands: Sequence[Mapping] = (),
     skills: Sequence[Mapping] = (),
     retryable: bool = False,
+    validated_revision: Mapping | None = None,
 ) -> dict:
+    """Record one engine validation against exactly one attempt.
+
+    ``status == "passed"`` is refused unless a real validation record exists on
+    disk and it is bound to this attempt's packet and implementing execution. A
+    worker failure (no validation record) can only be failed or blocked: there is
+    no path from an incomplete validation to a pass. The record's digest is
+    stored beside the attempt so a later review can prove which validation it
+    reviewed and a stale one can be refused by name.
+    """
     attempt = attempt_for(task, packet_id)
     if attempt is None:
         raise ContractError(f"no attempt record exists for packet {packet_id!r}")
+    if str(status) not in ("passed", "failed", "blocked"):
+        raise ContractError(f"unsupported attempt validation status: {status!r}")
+    if str(validation_path or "").strip() and Path(str(validation_path)).is_file():
+        try:
+            recorded = json.loads(Path(str(validation_path)).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError(f"the attempt validation record is unreadable: {exc}") from exc
+        if isinstance(recorded, dict):
+            recorded = {**recorded, "attempt_id": str(recorded.get("attempt_id", attempt.get("attempt_id", "")))}
+            if not validation_belongs_to(attempt, recorded):
+                raise ContractError(
+                    "the validation record is not bound to this attempt's packet or implementing execution; "
+                    "a correction cannot inherit another attempt's evidence"
+                )
+    if str(status) == "passed":
+        path = Path(str(validation_path or ""))
+        if not str(validation_path or "").strip() or not path.is_file():
+            raise ContractError("a passed attempt validation needs its durable validation record on disk")
+        attempt_dir = Path(str(attempt.get("packet_path", ""))).resolve()
+        try:
+            path.resolve().relative_to(attempt_dir)
+        except (ValueError, OSError):
+            raise ContractError(
+                "the validation record is outside this attempt's own packet; cross-attempt evidence cannot settle it"
+            )
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError(f"the passed validation record is unreadable: {exc}") from exc
+        if not isinstance(value, dict):
+            raise ContractError("the passed validation record is not an object")
+        value = {**value, "attempt_id": str(value.get("attempt_id", attempt.get("attempt_id", "")))}
+        if not validation_belongs_to(attempt, value):
+            raise ContractError(
+                "the validation record is not bound to this attempt's packet or implementing execution; "
+                "a correction cannot inherit another attempt's pass"
+            )
+        if str(value.get("status", "")) != "passed":
+            raise ContractError(
+                f"the validation record says {value.get('status')!r}, not passed; refusing to record a pass"
+            )
+        revision = dict(validated_revision or value.get("validated_revision") or {})
+        if not str(revision.get("implementation_fingerprint", "")).strip():
+            raise ContractError(
+                "a passed attempt validation needs its validated implementation fingerprint; "
+                "an unbound pass cannot be used"
+            )
+        validation_path = str(path)
+    else:
+        revision = dict(validated_revision or {})
+    existing = dict(attempt.get("validation") or {})
+    if str(existing.get("status", "")) == "passed" and str(status) != "passed":
+        raise ContractError("a recorded passing validation cannot be replaced by a failure")
     attempt["state"] = "validated" if status == "passed" else "failed"
     attempt["outcome"] = "validated" if status == "passed" else ("blocked" if status == "blocked" else "failed")
     attempt["validation"] = {
@@ -742,8 +1285,10 @@ def record_attempt_validation(
         "failure_kind": str(failure_kind),
         "failure_reason": str(failure_reason),
         "path": str(validation_path),
+        "validation_sha256": _file_sha256(validation_path) if str(validation_path) and Path(str(validation_path)).is_file() else "",
         "scope_status": str(scope_status),
         "retryable": bool(retryable),
+        "validated_revision": revision,
         "commands": [dict(item) for item in commands],
         "skills": [dict(item) for item in skills],
         "recorded_at": contracts.utc_now(),
@@ -752,7 +1297,27 @@ def record_attempt_validation(
     return attempt
 
 
+def _file_sha256(path: str) -> str:
+    import hashlib
+
+    target = Path(str(path))
+    return hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ""
+
+
 def record_review(task: dict, *, record: Mapping) -> dict:
+    """Record the newest review while preserving every earlier one.
+
+    The current review is the only one that can satisfy a gate; earlier records
+    stay in ``reviews`` with their original outcome. A review is bound to the
+    attempt and the validation digest it actually saw, so a review of an older
+    revision cannot approve a newer one.
+    """
+    attempt = latest_attempt(task)
+    previous = dict(task.get("review") or {})
+    if previous and str(previous.get("review_id", "")) != str(record.get("review_id", "")):
+        history = task.setdefault("reviews", [])
+        if not any(str(item.get("review_id", "")) == str(previous.get("review_id", "")) for item in history):
+            history.append(previous)
     task["review"] = {
         "review_id": str(record.get("review_id", "")),
         "outcome": str(record.get("outcome", "")),
@@ -761,18 +1326,63 @@ def record_review(task: dict, *, record: Mapping) -> dict:
         "independence_level": str(record.get("independence_level", "")),
         "findings": [str(item) for item in record.get("findings") or ()],
         "packet_id": str(record.get("packet_id", "")),
+        "attempt_id": str(record.get("attempt_id", attempt.get("attempt_id", ""))),
+        "task_id": str(record.get("task_id", task.get("task_id", ""))),
+        "validation_sha256": str(record.get("validation_sha256", "")),
+        "reviewed_revision": str(record.get("reviewed_revision", "")),
         "recorded_at": contracts.utc_now(),
     }
+    # A new review is a new decision about a revision: any older proof receipt
+    # no longer describes it and must not be used for acceptance.
+    proof = dict(task.get("proof") or {})
+    if proof and str(proof.get("review_id", "")) != str(record.get("review_id", "")):
+        proof.update({
+            "stale": True,
+            "stale_reason": "a new independent review was recorded after this receipt",
+        })
+        task["proof"] = proof
     task["updated_at"] = contracts.utc_now()
     return task["review"]
 
 
+def supersede_review(task: dict, *, reason: str) -> dict:
+    """Retire the current review because a corrective attempt will replace it.
+
+    The record is moved to ``reviews`` unchanged; the current slot is cleared so
+    no gate can keep reading a passed review after the revision has moved.
+    """
+    current = dict(task.get("review") or {})
+    if not current:
+        return {}
+    archived = {**current, "superseded_at": contracts.utc_now(), "superseded_reason": str(reason)}
+    history = task.setdefault("reviews", [])
+    if not any(str(item.get("review_id", "")) == str(archived.get("review_id", "")) for item in history):
+        history.append(archived)
+    task["review"] = {}
+    task["updated_at"] = contracts.utc_now()
+    return archived
+
+
 def record_proof(task: dict, *, receipt: Mapping) -> dict:
+    """Record the engine's receipt for the exact attempt and revision it proves."""
+    attempt = latest_attempt(task)
+    validation = dict(attempt.get("validation") or {})
+    review = dict(task.get("review") or {})
+    previous = dict(task.get("proof") or {})
+    if previous and str(previous.get("proof_id", "")) != str(receipt.get("proof_id", "")):
+        history = task.setdefault("proof_history", [])
+        if not any(str(item.get("proof_id", "")) == str(previous.get("proof_id", "")) for item in history):
+            history.append(previous)
     task["proof"] = {
         "proof_id": str(receipt.get("proof_id", "")),
         "acceptance_state": str(receipt.get("acceptance_state", "")),
         "work_digest": str(receipt.get("work_digest", "")),
         "requirements": len(receipt.get("requirements") or ()),
+        "packet_id": str(receipt.get("packet_id", attempt.get("packet_id", ""))),
+        "attempt_id": str(receipt.get("attempt_id", attempt.get("attempt_id", ""))),
+        "validation_sha256": str(validation.get("validation_sha256", "")),
+        "review_id": str(receipt.get("review_id", review.get("review_id", ""))),
+        "implementation_fingerprint": str(receipt.get("implementation_fingerprint", "")),
         "recorded_at": contracts.utc_now(),
     }
     task["updated_at"] = contracts.utc_now()
@@ -989,6 +1599,197 @@ def evaluate_skill_evidence(
     return updates
 
 
+# --------------------------------------------------------------- operations
+
+def begin_operation(
+    task: dict,
+    *,
+    kind: str,
+    attempt_id: str = "",
+    detail: str = "",
+    operation_id: str = "",
+) -> dict:
+    """Record an operation *before* its side effect, for recovery.
+
+    The caller persists the task after this returns. The same ``operation_id``
+    may be supplied on a repeated resume: the existing record is returned rather
+    than duplicated, which is what makes resume idempotent.
+    """
+    if kind not in TASK_OPERATION_KINDS:
+        raise ContractError(f"unsupported task operation: {kind!r}")
+    if operation_id:
+        for item in task.get("operations") or ():
+            if str(item.get("operation_id", "")) == str(operation_id):
+                return item
+    row = {
+        "operation_id": operation_id or contracts.new_record_id("op"),
+        "kind": str(kind),
+        "attempt_id": str(attempt_id or (latest_attempt(task).get("attempt_id", ""))),
+        "state": "started",
+        "detail": str(detail),
+        "started_at": contracts.utc_now(),
+        "completed_at": "",
+        "evidence": [],
+    }
+    rows = task.setdefault("operations", [])
+    rows.append(row)
+    if len(rows) > OPERATION_HISTORY_LIMIT:
+        task["operations"] = rows[-OPERATION_HISTORY_LIMIT:]
+    task["current_operation"] = str(row["operation_id"])
+    task["updated_at"] = contracts.utc_now()
+    return row
+
+
+def start_operation(task: dict, *, kind: str, **options) -> dict:
+    """Compatibility alias: an operation starts when it is first recorded."""
+    return begin_operation(task, kind=kind, **options)
+
+
+def complete_operation(
+    task: dict,
+    operation_id: str,
+    *,
+    detail: str = "",
+    evidence: Sequence[str] = (),
+) -> dict | None:
+    for item in task.get("operations") or ():
+        if str(item.get("operation_id", "")) != str(operation_id):
+            continue
+        if str(item.get("state")) not in ("started", "interrupted"):
+            return item
+        item.update({
+            "state": "completed",
+            "detail": str(detail or item.get("detail", "")),
+            "evidence": [str(value) for value in evidence],
+            "completed_at": contracts.utc_now(),
+        })
+        if str(task.get("current_operation", "")) == str(operation_id):
+            task["current_operation"] = ""
+        task["updated_at"] = contracts.utc_now()
+        return item
+    return None
+
+
+def fail_operation(
+    task: dict,
+    operation_id: str,
+    *,
+    detail: str,
+    evidence: Sequence[str] = (),
+    state_value: str = "failed",
+) -> dict | None:
+    if state_value not in ("failed", "interrupted", "refused"):
+        raise ContractError(f"unsupported operation outcome: {state_value!r}")
+    for item in task.get("operations") or ():
+        if str(item.get("operation_id", "")) != str(operation_id):
+            continue
+        if str(item.get("state")) == "completed":
+            return item
+        item.update({
+            "state": str(state_value),
+            "detail": str(detail),
+            "evidence": [str(value) for value in evidence],
+            "completed_at": contracts.utc_now(),
+        })
+        if str(task.get("current_operation", "")) == str(operation_id):
+            task["current_operation"] = ""
+        task["updated_at"] = contracts.utc_now()
+        return item
+    return None
+
+
+def interrupted_operation(task: Mapping | None) -> dict:
+    """The one operation that started and never recorded an outcome."""
+    current = str((task or {}).get("current_operation", ""))
+    for item in reversed((task or {}).get("operations") or ()):
+        if str(item.get("operation_id", "")) == current and str(item.get("state")) == "started":
+            return dict(item)
+    for item in reversed((task or {}).get("operations") or ()):
+        if str(item.get("state")) == "started":
+            return dict(item)
+    return {}
+
+
+def last_durable_operation(task: Mapping | None) -> dict:
+    rows = [item for item in (task or {}).get("operations") or () if isinstance(item, Mapping)]
+    return dict(rows[-1]) if rows else {}
+
+
+def started_operation(task: Mapping | None, kind: str) -> dict:
+    """The newest started operation of one kind, if any."""
+    for item in reversed((task or {}).get("operations") or ()):
+        if str(item.get("kind", "")) == str(kind) and str(item.get("state")) == "started":
+            return dict(item)
+    return {}
+
+
+# ------------------------------------------------------- evidence freshness
+
+def validation_current_problems(
+    task: Mapping,
+    *,
+    current_fingerprint: str = "",
+    require_fingerprint: bool = True,
+) -> list[str]:
+    """Whether the latest attempt's validation still describes the live tree.
+
+    The check is deliberately derived from records plus the caller's observed
+    implementation fingerprint. An unbound validation is not accepted as
+    current: a result that cannot be proven current is refused, not trusted.
+    """
+    task = task or {}
+    attempt = latest_attempt(task)
+    problems: list[str] = []
+    if not attempt:
+        return ["the task has no attempt record"]
+    if str(attempt.get("state")) != "validated":
+        problems.append(f"the latest attempt is {attempt.get('state') or 'unrecorded'}, not validated")
+    validation = dict(attempt.get("validation") or {})
+    if str(validation.get("status")) != "passed":
+        problems.append("the latest attempt's validation did not pass")
+    path = Path(str(validation.get("path", ""))) if validation.get("path") else None
+    if path is None or not path.is_file():
+        problems.append("the latest attempt's validation record is missing on disk")
+    elif str(validation.get("validation_sha256", "")) and _file_sha256(str(path)) != str(
+        validation.get("validation_sha256")
+    ):
+        problems.append("the validation record changed after it was recorded")
+    revision = dict(validation.get("validated_revision") or {})
+    recorded = str(revision.get("implementation_fingerprint", ""))
+    if require_fingerprint:
+        if not recorded:
+            problems.append("the validation record has no implementation fingerprint; it cannot be proven current")
+        elif not str(current_fingerprint or "").strip():
+            problems.append("the current implementation fingerprint could not be established")
+        elif recorded != str(current_fingerprint):
+            problems.append(
+                "the implementation changed after the validation ran; the recorded validation is stale"
+            )
+    return problems
+
+
+def review_current_problems(task: Mapping, *, required: bool = True) -> list[str]:
+    task = task or {}
+    review = dict(task.get("review") or {})
+    if not review:
+        return ["the required independent review has not been recorded for the current attempt"] if required else []
+    attempt = latest_attempt(task)
+    if not review_belongs_to(task, review, attempt):
+        return ["the recorded review is not bound to the current attempt and validation; it is stale"]
+    if str(review.get("outcome")) != "passed":
+        return [f"the current independent review outcome is {review.get('outcome') or 'unrecorded'}, not passed"]
+    return []
+
+
+def proof_current_problems(task: Mapping) -> list[str]:
+    task = task or {}
+    if not task.get("proof"):
+        return ["the engine's Proof Pass receipt has not been recorded"]
+    if not proof_is_current(task):
+        return ["the recorded Proof Pass receipt belongs to an earlier attempt or revision and is stale"]
+    return []
+
+
 # ----------------------------------------------------------------- resume view
 
 def task_status_value(
@@ -997,13 +1798,15 @@ def task_status_value(
     review_required: bool,
     rendered_required: bool | None = None,
     rendered_satisfied: bool | None = None,
+    evidence_current: bool | None = None,
 ) -> str:
     """The derived state of one task from its records, nothing else.
 
-    ``rendered_required``/``rendered_satisfied`` default to the task's own
-    rendered ledger, so callers that only know about review keep working: a UI
-    task with a validated attempt and no captures derives ``render-pending``,
-    and no caller has to remember to ask.
+    The latest attempt is authoritative. An earlier passing attempt never
+    rescues a later failed correction, and an older review or proof receipt never
+    speaks for a newer revision. ``rendered_required``/``rendered_satisfied``
+    default to the task's own rendered ledger, so callers that only know about
+    review keep working.
     """
     rendered = dict(task.get("rendered") or {})
     if rendered_required is None:
@@ -1017,43 +1820,150 @@ def task_status_value(
         return "accepted"
     if str(acceptance.get("outcome")) == "rejected":
         return "rejected"
-    if task.get("proof"):
+    attempt = latest_attempt(task)
+    if evidence_current is False and (
+        task.get("proof") or str(attempt.get("state", "")) == "validated"
+    ):
+        return "stale-evidence"
+    if proof_is_current(task):
         return "verified"
+    if not attempt:
+        return "prepared"
     review = dict(task.get("review") or {})
-    if review.get("outcome") == "failed":
+    review_applies = review_belongs_to(task, review, attempt)
+    if review_applies and str(review.get("outcome")) == "failed":
         return "review-failed"
-    if review.get("outcome") == "passed":
-        return "validated"
-    attempts = list(task.get("attempts") or ())
-    attempts_desc = list(reversed(attempts))
-    latest = attempts_desc[0] if attempts_desc else {}
-    if not attempts:
+    state_value = str(attempt.get("state", ""))
+    if state_value == "prepared":
         return "prepared"
-    if str(latest.get("state")) == "prepared":
-        return "prepared"
-    if str(latest.get("state")) == "running":
+    if state_value == "running":
         return "worker-running"
-    if str(latest.get("state")) == "returned":
+    if state_value == "returned":
         return "returned"
-    if str(latest.get("state")) == "validated":
+    if state_value == "validated":
+        if review_applies and str(review.get("outcome")) == "passed":
+            return "validated"
         if rendered_required and not rendered_satisfied:
             return "render-pending"
         return "review-pending" if review_required else "validated"
-    if str(latest.get("state")) == "failed":
-        validation = dict(latest.get("validation") or {})
+    if state_value == "failed":
+        validation = dict(attempt.get("validation") or {})
         if str(validation.get("failure_kind")) in (
             "contract", "out-of-scope", "dangerous-action", "repository-conflict", "worker-blocked"
         ):
             return "escalation-required"
-        earlier_validated = any(
-            str(item.get("outcome")) == "validated" for item in attempts_desc if item is not latest
-        )
-        if earlier_validated:
-            if rendered_required and not rendered_satisfied:
-                return "render-pending"
-            return "validated"
         return "repair-pending" if validation.get("retryable") else "blocked"
     return "prepared"
+
+
+def recovery_view(
+    task: Mapping,
+    *,
+    review_required: bool,
+    current_head: str = "",
+    current_fingerprint: str = "",
+    open_executions: Sequence[Mapping] = (),
+) -> dict:
+    """The durable recovery report for one task.
+
+    It reports what is recorded, what was interrupted, and the single safe
+    continuation. It never claims a worker finished because its process
+    disappeared, and it never offers to replay a write whose effect cannot be
+    established.
+    """
+    task = task or {}
+    attempt = latest_attempt(task)
+    operation = interrupted_operation(task)
+    validation = dict(attempt.get("validation") or {})
+    stale_problems = validation_current_problems(task, current_fingerprint=current_fingerprint)
+    status_value = task_status_value(
+        task, review_required=review_required, evidence_current=not stale_problems,
+    )
+    packet_path = Path(str(attempt.get("packet_path", ""))) if attempt else None
+    return_path = packet_path / "evidence" / "return-handoff.md" if packet_path else None
+    validation_path = packet_path / "evidence" / "validation.json" if packet_path else None
+    review_recorded = bool(task.get("review")) and review_belongs_to(task, task.get("review"), attempt)
+    review = dict(task.get("review") or {})
+    safe = "inspect"
+    human = ""
+    if status_value in ("accepted", "rejected", "verified"):
+        safe = "none"
+    elif status_value == "worker-running":
+        if return_path is not None and return_path.is_file():
+            safe = "ingest-return"
+        elif open_executions:
+            safe = "wait-or-abandon-open"
+            human = (
+                "The worker execution is still open. Wait for it, or declare it lost with "
+                "`task-run --abandon-open`; the engine will record a truthful interruption."
+            )
+        else:
+            safe = "record-interruption"
+    elif status_value == "returned":
+        safe = "recover-validation" if validation_path is not None and validation_path.is_file() else "validate"
+    elif status_value == "validated":
+        stale = validation_current_problems(task, current_fingerprint=current_fingerprint)
+        if stale:
+            safe = "stop-stale-evidence"
+            human = " ".join(stale) + " A new correction or task is required; the old pass cannot be reused."
+        elif review_required and not review_recorded:
+            safe = "review"
+        elif review_required and str(review.get("outcome")) != "passed":
+            safe = "prepare-review-correction"
+        elif not task.get("proof"):
+            safe = "proof"
+        else:
+            safe = "accept"
+    elif status_value == "review-failed":
+        safe = "prepare-review-correction"
+    elif status_value == "stale-evidence":
+        safe = "stop-stale-evidence"
+        human = (
+            "The implementation changed after the recorded validation. A new correction and a fresh "
+            "validation are required; the old pass cannot be reused."
+        )
+    elif status_value == "repair-pending":
+        safe = "repair"
+    elif status_value == "prepared":
+        safe = "run"
+    elif status_value in ("blocked", "escalation-required"):
+        safe = "escalate"
+        human = "Inspect the recorded failure; routine repair is not authorized. Escalate deliberately or prepare a new task."
+    revision = dict(validation.get("validated_revision") or {})
+    return {
+        "task_id": str(task.get("task_id", "")),
+        "status": status_value,
+        "current_attempt_id": str(attempt.get("attempt_id", "")),
+        "current_packet_id": str(attempt.get("packet_id", "")),
+        "attempt_state": str(attempt.get("state", "")),
+        "last_durable_operation": last_durable_operation(task),
+        "interrupted_operation": operation,
+        "interrupted": bool(operation),
+        "last_verified_revision": {
+            "attempt_id": str(attempt.get("attempt_id", "")),
+            "head": str(revision.get("head", "")),
+            "implementation_fingerprint": str(revision.get("implementation_fingerprint", "")),
+            "validation_sha256": str(validation.get("validation_sha256", "")),
+        },
+        "current_revision": {
+            "head": str(current_head),
+            "implementation_fingerprint": str(current_fingerprint),
+            "matches_recorded": bool(
+                not revision.get("implementation_fingerprint")
+                or not current_fingerprint
+                or str(revision.get("implementation_fingerprint")) == str(current_fingerprint)
+            ),
+        },
+        "review": {
+            "recorded": review_recorded,
+            "outcome": str(review.get("outcome", "")),
+            "review_id": str(review.get("review_id", "")),
+        },
+        "safe_continuation": safe,
+        "required_human_action": human,
+        "review_corrections": review_correction_count(task),
+        "review_correction_limit": int(task.get("review_correction_limit", MAX_REVIEW_CORRECTIONS) or 0),
+    }
 
 
 def review_is_required(plan: Mapping | None) -> bool:
@@ -1073,12 +1983,13 @@ def continuation_point(task: Mapping, *, review_required: bool) -> str:
         "validated": "run Ariadne Proof Pass against the original request (task-verify)",
         "render-pending": "capture the required browser-rendered acceptance evidence (task-render) against this revision",
         "review-pending": "obtain the required independent review (task-review) before completion",
-        "review-failed": "inspect the review findings and repair within the bounded budget",
+        "review-failed": "the review found a real defect: prepare a review-directed correction (task-repair) and re-review the corrected revision",
         "verified": "the engine is done; the human acceptance decision remains (task-accept)",
         "accepted": "complete: the human accepted the verified result",
         "rejected": "the human rejected the result; repair or abandon deliberately",
         "blocked": "blocked: inspect the recorded failure and escalate or abandon deliberately",
         "escalation-required": "escalate to a stronger worker adapter or a human decision",
+        "stale-evidence": "the implementation moved after validation; a new correction and fresh validation are required, never the old pass",
     }.get(status, "inspect the recorded task state")
 
 
@@ -1095,6 +2006,9 @@ __all__ = [
     "custom_adapter",
     "adapter_problems",
     "registry_problems",
+    "ADAPTER_CONFORMANCE_CHECKS",
+    "adapter_conformance",
+    "conformance_matrix",
     "adapter_view",
     "executable_available",
     "availability",
@@ -1102,6 +2016,19 @@ __all__ = [
     "preflight_required_capabilities",
     "TASK_SCHEMA",
     "TASK_STATES",
+    "REPAIR_KINDS",
+    "MAX_REVIEW_CORRECTIONS",
+    "TASK_OPERATION_KINDS",
+    "TASK_OPERATION_STATES",
+    "attempt_id_for",
+    "latest_attempt",
+    "attempt_is_latest",
+    "review_belongs_to",
+    "validation_belongs_to",
+    "proof_is_current",
+    "review_is_current",
+    "review_correction_count",
+    "executor_identities",
     "task_records",
     "current_task",
     "find_task",
@@ -1114,10 +2041,13 @@ __all__ = [
     "attempt_for",
     "open_attempt",
     "prepare_attempt",
+    "attempt_scope_problems",
+    "corrective_attempt_problems",
     "start_attempt",
     "record_attempt_return",
     "record_attempt_validation",
     "record_review",
+    "supersede_review",
     "record_proof",
     "record_acceptance",
     "set_task_skill",
@@ -1125,7 +2055,18 @@ __all__ = [
     "parse_methods_section",
     "methods_report_problems",
     "evaluate_skill_evidence",
+    "begin_operation",
+    "start_operation",
+    "complete_operation",
+    "fail_operation",
+    "interrupted_operation",
+    "last_durable_operation",
+    "started_operation",
+    "validation_current_problems",
+    "review_current_problems",
+    "proof_current_problems",
     "task_status_value",
+    "recovery_view",
     "review_is_required",
     "continuation_point",
 ]

@@ -51,6 +51,13 @@ from .contracts import (
 )
 
 MAX_ROUTINE_REPAIRS = 2
+MAX_REVIEW_CORRECTIONS = 2
+"""Review-directed corrections permitted for one creative task chain.
+
+Kept separate from the routine-repair budget: a failed review authorizes a
+corrective revision, not a generic retry, and the two budgets must not be
+merged into one unlimited loop.
+"""
 
 _TOOLS: dict[str, object] = {}
 
@@ -524,18 +531,29 @@ def _record_digest_matches(project: Path, record: Mapping) -> bool:
 
 
 def stale_creative_evidence(project: Path, ledger: Mapping, stage: str) -> list[str]:
-    """Skills whose recorded output artifact changed after the evidence was written."""
+    """Skills whose latest recorded output artifact changed after the evidence was written.
+
+    Only the newest history entry for each artifact key is authoritative. A
+    later execution of the same skill (for example a review-directed correction
+    that re-records QA after the review wrote its judgement into QA.md) supersedes
+    the older digest; checking every historical row would make a legitimate
+    re-record look stale forever.
+    """
     stale: list[str] = []
     for skill in ledger.get("skills", []):
         if not isinstance(skill, Mapping) or skill.get("stage") != stage or not skill.get("selected"):
             continue
-        for row in (skill.get("history") or [])[-3:]:
+        latest: dict[str, Mapping] = {}
+        for row in reversed((skill.get("history") or [])[-6:]):
             if not isinstance(row, Mapping):
                 continue
             for key in ("output", "downstream", "evidence"):
                 record = row.get(key)
-                if isinstance(record, Mapping) and not _record_digest_matches(Path(project), record):
-                    stale.append(f"{skill.get('name')} {key}")
+                if isinstance(record, Mapping) and key not in latest:
+                    latest[key] = record
+        for key, record in latest.items():
+            if not _record_digest_matches(Path(project), record):
+                stale.append(f"{skill.get('name')} {key}")
     return sorted(set(stale))
 
 
@@ -815,6 +833,49 @@ def optional_evidence(state: dict, target: str, *, project: Path | None = None) 
     ]
 
 
+def review_correction_count(state: dict) -> int:
+    """S4B corrections whose parent was an S5 review boundary."""
+    count = 0
+    for entry in state.get("packets") or ():
+        if not isinstance(entry, dict) or str(entry.get("stage", "")) != "S4B":
+            continue
+        manifest_path = Path(str(entry.get("path", ""))) / "manifest.json"
+        if not manifest_path.is_file():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        parent_id = str(manifest.get("parent_id", ""))
+        for parent in state.get("packets") or ():
+            if isinstance(parent, dict) and str(parent.get("id", "")) == parent_id and str(parent.get("stage", "")) == "S5":
+                count += 1
+                break
+    return count
+
+
+def failed_review_problems(state: dict, packet: Path) -> list[str]:
+    """Whether a review-directed correction is authorized for this S5 packet."""
+    review = review_module.current_review(state, packet_id=str(Path(packet).name))
+    if review is None:
+        return ["no independent review is recorded for the current S5 packet; nothing authorizes a correction"]
+    if str(review.get("outcome")) != "failed":
+        return [
+            f"the current review outcome is {review.get('outcome') or 'unrecorded'}; only a failed review "
+            "authorizes a corrective revision"
+        ]
+    if str(review.get("recommendation", "")).lower() != "fix and re-review":
+        return [
+            "the review recommendation does not authorize a correction "
+            "(only 'fix and re-review' does)"
+        ]
+    if review_correction_count(state) >= MAX_REVIEW_CORRECTIONS:
+        return [
+            "the review-directed correction budget is exhausted; a further pass needs a human decision"
+        ]
+    return []
+
+
 def continuation_problems(state: dict, target: str, *, project: Path | None = None) -> list[str]:
     """The single precondition set for a stage transition to ``target``."""
     project = Path(project or state.get("project", ""))
@@ -840,6 +901,15 @@ def continuation_problems(state: dict, target: str, *, project: Path | None = No
             problems.extend(g1_problems(state, project))
         return problems
     if target == "S4B":
+        if current == "S5":
+            # A review-directed correction re-enters the implementation boundary
+            # without a new human direction or handoff approval. Only the recorded
+            # failed review authorizes it, and its own budget bounds the loop.
+            if packet is not None:
+                problems.extend(failed_review_problems(state, packet))
+            problems.extend(preflight_problems(state))
+            problems.extend(evidence_requirement_problems(evidence_requirements(state, target, project=project)))
+            return problems
         problems.extend(preflight_problems(state))
         problems.extend(g2_problems(state, project))
         problems.extend(evidence_requirement_problems(evidence_requirements(state, target, project=project)))

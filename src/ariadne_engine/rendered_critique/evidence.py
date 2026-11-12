@@ -267,14 +267,71 @@ def accessibility_report(report: Mapping) -> dict:
             ),
             "samples": [],
         })
+    accessibility = report.get("accessibility") if isinstance(report.get("accessibility"), Mapping) else {}
+    contrast = accessibility.get("contrast") if isinstance(accessibility.get("contrast"), Mapping) else {}
+    contrast_failures = [
+        dict(item) for item in (contrast.get("failures") or []) if isinstance(item, Mapping)
+    ]
+    if contrast_failures:
+        findings.append({
+            "check": "contrast",
+            "determinate": True,
+            "severity": "serious",
+            "detail": (
+                f"{len(contrast_failures)} visible text element(s) fall below the WCAG 2.2 AA "
+                "contrast threshold computed from their rendered foreground and effective background"
+            ),
+            "samples": contrast_failures[:8],
+            "method": "computed colours from getComputedStyle and an ancestor background composite",
+        })
+    dialogs = [dict(item) for item in (accessibility.get("dialogs") or []) if isinstance(item, Mapping)]
+    bad_focus = [item for item in dialogs if item.get("visible") and not item.get("focus_inside")]
+    if bad_focus:
+        findings.append({
+            "check": "dialog-focus",
+            "determinate": True,
+            "severity": "serious",
+            "detail": (
+                f"{len(bad_focus)} open dialog(s) do not contain the focused element; focus is "
+                "outside the modal the user is expected to be in"
+            ),
+            "samples": bad_focus[:6],
+        })
+    controls = [dict(item) for item in (accessibility.get("form_controls") or []) if isinstance(item, Mapping)]
+    invalid_without_message = [
+        item for item in controls if item.get("invalid") and not str(item.get("described_by", "")).strip()
+    ]
+    if invalid_without_message:
+        findings.append({
+            "check": "form-errors",
+            "determinate": True,
+            "severity": "serious",
+            "detail": (
+                f"{len(invalid_without_message)} control(s) are marked aria-invalid but name no "
+                "error message element; the error is invisible to a screen reader"
+            ),
+            "samples": invalid_without_message[:6],
+        })
     return {
         "findings": findings,
+        "contrast": {
+            "checks": int(contrast.get("checks", 0) or 0),
+            "failures": len(contrast_failures),
+            "minimum_ratio": contrast.get("minimum_ratio"),
+            "unverified": int(contrast.get("unverified", 0) or 0),
+        },
+        "focus_order": list(accessibility.get("focus_order") or []),
+        "dialogs": dialogs,
+        "status_messages": list(accessibility.get("status_messages") or []),
+        "landmarks": list(accessibility.get("landmarks") or []),
         "not_established": [
             "WCAG conformance",
             "screen-reader announcement order",
-            "colour contrast as perceived (no deterministic tool ran here)",
+            "colour contrast as perceived",
+            "contrast over images, gradients and canvas (counted as unverified, not as a pass)",
             "keyboard path completeness beyond the elements present at this viewport",
             "behaviour at viewports and input devices not captured",
+            "manual review of meaning, error wording and focus order appropriateness",
         ],
         "method": (
             "deterministic DOM inspection of one render at one viewport; every finding names the "
@@ -374,6 +431,7 @@ def execute(
     captures: list[dict] = []
     runtime_rows: list[dict] = []
     accessibility_rows: list[dict] = []
+    interaction_rows: list[dict] = []
     skipped: list[dict] = []
     failures: list[dict] = []
     probe = adapter.probe()
@@ -432,6 +490,16 @@ def execute(
         captures.append(row)
         runtime_rows.append({"capture_id": capture_id, "route": route, "state": state, **row["runtime_checks"]})
         accessibility_rows.append({"capture_id": capture_id, "route": route, "state": state, **row["accessibility_checks"]})
+        interaction_rows.append({
+            "capture_id": capture_id,
+            "route": route,
+            "state": state,
+            "checks": list(row.get("interaction_checks") or []),
+            "failures": [
+                item for item in (row.get("interaction_checks") or [])
+                if str(item.get("state", "")) == "FAILED"
+            ],
+        })
     manifest = {
         "schema_version": contracts.SCHEMA_DESIGN,
         "evidence_set_id": contracts.new_record_id("res"),
@@ -448,11 +516,23 @@ def execute(
         "captures": captures,
         "runtime_checks": runtime_rows,
         "accessibility_checks": accessibility_rows,
+        "interaction_checks": interaction_rows,
+        "interaction_failures": [
+            failure
+            for row in interaction_rows
+            for failure in (row.get("failures") or [])
+        ],
         "skipped": skipped,
         "failures": failures,
         "started_at": started,
         "completed_at": contracts.utc_now(),
         "status": "COMPLETE" if captures and not skipped else ("PARTIAL" if captures else "FAILED"),
+        "verification_status": (
+            "INTERACTION_FAILED"
+            if any(str(item.get("state", "")) == "FAILED"
+                   for row in interaction_rows for item in (row.get("checks") or []))
+            else ("PASSED" if interaction_rows else "NO_INTERACTION_CHECKS")
+        ),
         "duration_seconds": round(time.monotonic() - clock, 3),
         "capture_bytes": sum(int(row.get("bytes", 0)) for row in captures),
         "capture_execution": str(capture_execution),
@@ -510,6 +590,7 @@ def _capture_one(
                 ],
             }
         }
+    assertion_checks = _evaluate_assertions(adapter, target.get("assertions") or ())
     path = safety.capture_path(directory, capture_id, suffix=".png")
     safety.assert_no_collision(path)
     # Capture BEFORE inspecting. The inspection pass focuses every focusable element in
@@ -520,6 +601,7 @@ def _capture_one(
     report = adapter.inspect(selectors=required_regions)
     runtime = runtime_checks(report, route=route, state=state)
     runtime["interaction_steps"] = steps
+    runtime["interaction_checks"] = assertion_checks
     runtime["required_regions"] = [str(item) for item in required_regions]
     artifact = validate_artifact(Path(captured["path"]), expected_route=route, expected_state=state)
     page = validate_runtime(
@@ -547,9 +629,89 @@ def _capture_one(
         "artifact": artifact,
         "runtime_checks": runtime,
         "accessibility_checks": accessibility_report(report),
+        "interaction_checks": assertion_checks,
         "observation": f"{route} at {viewport.get('width')}x{viewport.get('height')} in state {state}",
         "url": url,
     }
+
+
+def _evaluate_assertions(
+    adapter: adapter_module.RenderAdapter,
+    rows: Sequence[Mapping],
+) -> list[dict]:
+    """Evaluate the declared post-interaction assertions in the live page.
+
+    A failed assertion is a durable observation about the state, not a reason to
+    omit the capture. An adapter that cannot evaluate returns ``UNVERIFIED`` and
+    the evidence set says so; it never invents a pass.
+    """
+    checks: list[dict] = []
+    for row in rows or ():
+        if not isinstance(row, Mapping):
+            continue
+        kind = str(row.get("kind", ""))
+        selector = str(row.get("selector", ""))
+        expression = ""
+        if kind == "visible":
+            expression = (
+                "(() => {const e=document.querySelector(" + json.dumps(selector) + ");"
+                " if (!e) return false; const r=e.getBoundingClientRect();"
+                " return r.width > 0 && r.height > 0;})()"
+            )
+        elif kind == "absent":
+            expression = "!document.querySelector(" + json.dumps(selector) + ")"
+        elif kind == "text":
+            expression = (
+                "((document.body && document.body.innerText) || '').includes("
+                + json.dumps(str(row.get("text", ""))) + ")"
+            )
+        elif kind == "value":
+            expression = (
+                "(document.querySelector(" + json.dumps(selector) + ") || {}).value === "
+                + json.dumps(str(row.get("value", "")))
+            )
+        elif kind == "focus":
+            expression = (
+                "document.activeElement === document.querySelector(" + json.dumps(selector) + ")"
+            )
+        elif kind == "aria":
+            expression = (
+                "(document.querySelector(" + json.dumps(selector) + ") || {})"
+                ".getAttribute(" + json.dumps(str(row.get("attribute", ""))) + ") === "
+                + json.dumps(str(row.get("equals", "")))
+            )
+        elif kind == "count":
+            expression = (
+                "document.querySelectorAll(" + json.dumps(selector) + ").length >= "
+                + str(int(row.get("minimum", 1) or 1))
+            )
+        if not expression:
+            checks.append({
+                "kind": kind, "selector": selector, "passed": None,
+                "state": "UNVERIFIED", "detail": "the assertion kind has no evaluator",
+            })
+            continue
+        try:
+            value = adapter.evaluate(expression)
+        except Exception as exc:  # noqa: BLE001 - an unavailable evaluator is not a pass
+            checks.append({
+                "kind": kind, "selector": selector, "passed": None,
+                "state": "UNVERIFIED", "detail": f"the page could not be evaluated: {exc}",
+            })
+            continue
+        passed = bool(value)
+        checks.append({
+            "kind": kind,
+            "selector": selector,
+            "description": str(row.get("description", "")),
+            "passed": passed,
+            "state": "PASSED" if passed else "FAILED",
+            "detail": (
+                "the declared state assertion held in the live page"
+                if passed else "the declared state assertion did not hold in the live page"
+            ),
+        })
+    return checks
 
 
 def _apply_reduced_motion(adapter: adapter_module.RenderAdapter) -> None:

@@ -8,6 +8,7 @@ the project Ariadne produced, and the run record you kept while producing it.
   python scripts/validate.py --run validation/runs/A1.md
   python scripts/validate.py --run validation/runs/A1.md --project ../my-project
   python scripts/validate.py --benchmark
+  python scripts/validate.py --benchmark --runs-dir <directory>
   python scripts/validate.py --self-test
 
 Deliberately absent: any design-quality score, any composite number, anything
@@ -26,6 +27,7 @@ import shutil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNS_DIR = os.path.join(ROOT, "validation", "runs")
+RUN_TEMPLATE = os.path.join(ROOT, "validation", "run-template.md")
 
 # Canonical source: ROUTER.md section 6. Duplicated here because a script
 # cannot read prose. check_mode_drift() below fails if these diverge from modes/.
@@ -447,9 +449,18 @@ def run_check(run_path, project, expected_stage):
     return 0
 
 
-def benchmark():
-    files = sorted(glob.glob(os.path.join(RUNS_DIR, "*.md")))
-    files += sorted(glob.glob(os.path.join(RUNS_DIR, "*", "run.md")))
+def benchmark(runs_dir=None):
+    """Read recorded run records and print the measurement table.
+
+    ``runs_dir`` exists so a caller can point the same reader at a disposable
+    directory. The default is the operator's local ``validation/runs`` tree,
+    which is deliberately not version-controlled: a benchmark that needed one
+    machine's private evidence would fail on every clean checkout instead of
+    testing the reader.
+    """
+    directory = runs_dir or RUNS_DIR
+    files = sorted(glob.glob(os.path.join(directory, "*.md")))
+    files += sorted(glob.glob(os.path.join(directory, "*", "run.md")))
     files = [f for f in files if not os.path.basename(f).startswith("_")]
     if not files:
         print("No runs yet. Copy validation/run-template.md into validation/runs/ "
@@ -497,7 +508,11 @@ def self_test():
     """
     cases = []
 
-    base = read(os.path.join(ROOT, "validation", "run-template.md"))
+    if not os.path.isfile(RUN_TEMPLATE):
+        print("FAILED  the validation run template is missing: "
+              f"{os.path.relpath(RUN_TEMPLATE, ROOT)}")
+        return 1
+    base = read(RUN_TEMPLATE)
 
     def expect(name, text, needle):
         probs, _ = check_run_file(text, "probe.md")
@@ -578,7 +593,7 @@ def self_test():
                       check_run_links(read(probe), probe) == []))
 
     # the shipped template's own links must resolve from where the template sits
-    tpl = os.path.join(ROOT, "validation", "run-template.md")
+    tpl = RUN_TEMPLATE
     cases.append(("template's own links resolve (positive control)",
                   check_run_links(read(tpl), tpl) == []))
 
@@ -621,7 +636,14 @@ def main():
     if "--self-test" in args:
         return self_test()
     if "--benchmark" in args:
-        return benchmark()
+        runs_dir = None
+        if "--runs-dir" in args:
+            position = args.index("--runs-dir")
+            if position + 1 >= len(args) or args[position + 1].startswith("-"):
+                print("--runs-dir needs a directory path", file=sys.stderr)
+                return 2
+            runs_dir = args[position + 1]
+        return benchmark(runs_dir)
     if "--run" in args:
         run_path = args[args.index("--run") + 1]
         project = args[args.index("--project") + 1] if "--project" in args else None
