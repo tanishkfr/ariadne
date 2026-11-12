@@ -65,7 +65,7 @@ What apply does not do:
 - it does not raise the evidence level of anything;
 - it does not change the run-state file schema or delete a key.
 
-A migrated run therefore starts with the approvals it already had â€” and with any
+A migrated run therefore starts with the approvals it already had — and with any
 old gate it still needs to be re-granted by a human.
 
 ## Rollback
@@ -106,7 +106,7 @@ unrecorded validation is not a validation.
 ## Decision Plane and economics after migration
 
 The deterministic decision provider works offline immediately; no migration
-step is needed for it. Economic records that did not exist in v1 stay unknown â€”
+step is needed for it. Economic records that did not exist in v1 stay unknown —
 migration does not backfill invented usage or cost.
 
 The seven behavior-sensitive optimizations from AR-204 are not turned on for a
