@@ -64,7 +64,7 @@ def workspace():
 def make_bundle(output: Path, version: str, minimum_bootstrap: str = "1.4.0") -> Path:
     output.mkdir(parents=True, exist_ok=True)
     file_bytes = {
-        relative: path.read_bytes()
+        relative: RELEASE.runtime_bytes(path)
         for relative, path in RELEASE.runtime_sources()
     }
     file_bytes["VERSION"] = (version + "\n").encode("utf-8")

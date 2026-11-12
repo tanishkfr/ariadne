@@ -1,6 +1,6 @@
 # Hosts, platforms, and known limitations
 
-> Ariadne 2.4C. This file states only what has been verified, and where. It is
+> Ariadne 2.4.0. This file states only what has been verified, and where. It is
 > deliberately conservative: a host it lists as "declared" has an adapter and a
 > discovery probe but no recorded live execution here.
 
@@ -151,9 +151,11 @@ declared observer still exists and is still capped at RENDERED by design.
    fresh session passed the corrected revision. The engine records
    `DISTINCT_RUNTIME` rather than `DISTINCT_PROVIDER` because it did not certify
    a provider-observed difference; the harnesses were Command Code/DeepSeek and
-   OpenCode/GitHub Copilot. The creative final gate remains the human G3; the
-   `verify` VP receipt binds the corrected validation but not the S5 review.
-   Stale validation, cross-attempt evidence, forged reviewer identity, stale or
+   OpenCode/GitHub Copilot. The creative final gate remains the human G3. At
+   the 2.4A-R boundary the `verify` VP receipt bound the corrected validation
+   but not the S5 review; 2.4C binds the current review into the receipt and
+   refuses a stale, failed, substituted or non-independent one. Stale
+   validation, cross-attempt evidence, forged reviewer identity, stale or
    forged proof receipts, out-of-scope corrections and exhausted budgets are
    refused by name.
 

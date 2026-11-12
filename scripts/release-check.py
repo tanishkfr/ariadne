@@ -135,6 +135,19 @@ def check_engine_suites() -> dict:
         ("universal entry (2.3A)", "test-ar225.py", 1800),
         ("task execution (2.3B)", "test-ar23b.py", 3600),
         ("2.3C capabilities", "test-ar23c.py", 3600),
+        ("revision binding (2.3D)", "test-ar23d.py", 1800),
+        # 2.4 is the release this gate is deciding. Its own suites and mutation
+        # harnesses have to run here, or a green gate would say nothing about
+        # the safeguards the release adds. The mutation harnesses restore the
+        # tree transactionally and verify restoration by digest; they run after
+        # the functional suite that owns each boundary.
+        ("2.4A execution reliability", "test-ar24a.py", 3600),
+        ("2.4A adapter conformance", "test-ar24a-adapters.py", 1800),
+        ("2.4A lifecycle mutations", "test-ar24a-mutations.py", 7200),
+        ("2.4B intelligence and efficiency", "test-ar24b.py", 1800),
+        ("2.4B intelligence mutations", "test-ar24b-mutations.py", 3600),
+        ("2.4C design, proof and host", "test-ar24c.py", 1800),
+        ("2.4C design/proof/host mutations", "test-ar24c-mutations.py", 3600),
         # AR-221 grounded design execution. The suite runs the real vertical slice -
         # a real tsc, a real build, a real test suite on a real fixture - so it is
         # slower than the others and gets a longer allowance rather than being

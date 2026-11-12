@@ -1,4 +1,16 @@
-# Ariadne 2.4.0rc1
+# Ariadne 2.4.0
+
+Ariadne 2.4.0 is the stable release of Ariadne 2.4 — execution reliability,
+intelligence and efficiency, design verification, creative proof and host
+integration. It is promoted from the fully verified 2.4.0 candidate without a
+behavior change after the complete release gate passed on the release commit
+and the built artifacts were checked against their manifest. Install from the
+immutable stable wheel below, run `python -m ariadne doctor`, and verify work
+with `ariadne verify` from the installed release.
+
+This release adds no dependency and no second workflow engine. Adaptive routing
+remains shadow-only, human gates remain explicit, and every new surface reports
+what it did not establish.
 
 ## Design Verification & Integration (Phase C)
 
@@ -38,12 +50,13 @@ What remains unproven:
 - Static screenshots do not establish WCAG conformance, screen-reader order or
   keyboard traversal over time.
 - The host contract is qualified by a fixture, not by an external host product.
-- No tag, push, package publication or deployment is implied.
+- Publication is an immutable GitHub release; Ariadne performs no deployment.
 
 ## Intelligence & Efficiency (Phase B)
 
-> **Release candidate. Not published.** No tag, push, artifact publication or
-> deployment is implied by this note.
+> **Included in 2.4.0.** Phase B was qualified as a release candidate and is
+> included in the stable release unchanged. Its evidence and limitations are
+> recorded below.
 
 2.4B adds evidence to the execution system without replacing its deterministic
 policy. A completed attempt now produces a versioned measurement row with
@@ -52,7 +65,7 @@ context decisions are revision-bound and byte-measured; a resumed task gets a
 structured continuation instead of conversation history; and skill selection is
 reported as association, never as proof of usefulness.
 
-What is proven in this candidate:
+What this phase proved:
 
 - **Measurement separates facts from claims.** `OBSERVED`, `REPORTED`,
   `DECLARED` and `UNKNOWN` are distinct; a pending human decision is not
@@ -103,9 +116,9 @@ Detailed evidence:
 
 ## Execution Reliability (Phase A)
 
-> **Release candidate. Not published.** This phase is a prerelease reliability
-> milestone. Tagging, pushing, creating a release or publishing artifacts needs
-> a separate explicit human authorization.
+> **Included in 2.4.0.** Phase A was qualified as a release candidate and is
+> included in the stable release unchanged. The gates, budgets and recovery
+> boundaries below remain in force.
 
 2.4A makes the existing execution system survive real work: a failed review can
 now become a linked, bounded correction that is freshly validated and freshly
@@ -113,7 +126,7 @@ reviewed; an interrupted task can report what is durable, what was interrupted,
 what is safe to resume and what still needs a human; and the CLI adapters are
 measured against one conformance contract instead of declared by name.
 
-What is proven in this candidate:
+What this phase proved:
 
 - A T1 task completed the full
   `implement -> validate -> review -> repair -> revalidate -> re-review -> proof`
@@ -151,12 +164,13 @@ What is proven in this candidate:
   at the human gate. See
   [docs/v2/2.4/RELEASE-HARDENING.md](docs/v2/2.4/RELEASE-HARDENING.md).
 
-What this candidate still refuses to claim:
+What this phase still refuses to claim:
 
 - no bug-free, perfectly secure or sandboxed guarantee;
 - the creative S5 gate is the G3 approval plus the passed independent review;
-  `verify` does not bind the S5 review into the VP receipt, so the receipt is
-  evidence of the corrected work and validation, not of the review;
+  the 2.4A-R receipt did not bind the S5 review, and the 2.4C binding closes
+  that gap for current receipts while version 1 receipts remain readable as
+  history;
 - Codex and OpenAI direct were quota-blocked during the live hardening review;
   the review used the strongest available authenticated distinct provider;
 - Claude Code is installed but unauthenticated here; Cursor is absent;

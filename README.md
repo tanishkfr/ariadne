@@ -112,7 +112,7 @@ Ariadne installs from immutable GitHub release artifacts. It is not published to
 Ariadne needs Python 3.10 or newer. For the `$ariadne` workflow it also uses Codex, or an adapter you configure.
 
 ```bash
-python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.4.0rc1/ariadne-2.4.0rc1-py3-none-any.whl"
+python -m pip install --user "https://github.com/tanishkfr/ariadne/releases/download/v2.4.0/ariadne-2.4.0-py3-none-any.whl"
 python -m ariadne install
 python -m ariadne doctor
 (or py -m ariadne install)
@@ -287,29 +287,32 @@ No particular paid provider is required by the core engine, and the deterministi
 ## Benchmarks
 
 The deterministic suite runs offline with no model calls and no network. The
-2.4A candidate was evaluated as follows:
+2.4.0 release was evaluated as follows:
 
 ```text
-Full benchmark: 345 registered cases
-Pass: 331   Fail: 4   Error: 3   Observed: 5   Skip: 2
+Full benchmark: 353 registered cases
+Pass: 346   Fail: 0   Error: 0   Observed: 5   Skip: 2
 
 Engine checks: 586/586
 AR-230 task execution: 27/29 (2 live opt-in skips)
 AR-23C portable intelligence: 22/22
 AR-23D revision binding: 25/25
 AR-225 universal entry: 51/51
-Reliability suite: 19/19
-Release tests: 97/97
+AR-24A execution reliability: 21/21
+AR-24A adapter conformance: 2/6 (4 live opt-in skips)
+AR-24B intelligence and efficiency: 27/27
+AR-24C design, proof and host: 33/33
+Rendered critique: 92/92
+Release tests: 98/98
 Wheel install: 14/14
 Distribution lifecycle: 55/55
-Release benchmark subset: 90/90
+Release benchmark subset: 97/97
 ```
 
-The seven fail/error cases are pre-existing documentation/path drift
-(`WRITING-POLICY.md`, `DESIGN-MOTION.md`, `QUICKSTART.md`,
-`validation/run-template.md`, and the basename label of
-`docs/policies/EVALUATION-RUBRICS.md`); a clean baseline worktree reproduces
-all seven. They are not counted as passes.
+The seven documentation/path-drift cases that were red in the 2.4A baseline
+were closed at their causes in 2.4A-R and remain green; they are not counted as
+passes. The five observed cases and two declared skips are accounted for in the
+benchmark results.
 
 `OBSERVED` and `DECLARED_SKIP` are deliberate categories, separate from failure:
 an observation records a measurement without a judgement, and a skip means a case

@@ -9,6 +9,52 @@ How this system has changed, and why.
 Write the lesson, not the client ([PRIVACY-POLICY.md](docs/policies/PRIVACY-POLICY.md)).
 
 ---
+## 2.4.0 - 2026-11-12 - PUBLIC RELEASE
+
+Ariadne 2.4.0 promotes the fully verified 2.4.0 candidate to the stable release.
+No feature was added and no behavior changed during qualification: the release
+commit differs from the candidate in version metadata, release documents, and
+two release-engineering corrections. The gate now runs the 2.4 suites and
+mutation harnesses themselves, and the release builder normalises checkout line
+endings before hashing and packing, so an LF tree and a CRLF Windows checkout
+produce byte-for-byte identical artifacts.
+
+What the release contains:
+
+- **Execution reliability.** Linked review corrections with fresh validation and
+  a new independent review, durable recovery that refuses to guess, revision
+  fingerprints, and qualified CLI adapters (2.4A/2.4A-R).
+- **Intelligence and efficiency.** Versioned measurement with per-field
+  provenance, an evidence registry with human-only promotion, shadow routing,
+  context reduction, continuation compaction and skill telemetry (2.4B).
+- **Design verification.** Declared viewport matrices, real Chromium capture,
+  interaction assertions, deterministic accessibility checks, honest pixel
+  comparison and independent rendered review (2.4C).
+- **Creative proof.** Proof schema 2 binds the current S5 review, reviewer
+  execution, independence, reviewed revision and evidence digest; stale,
+  failed, substituted or non-independent reviews are refused; G3 remains human
+  (2.4C).
+- **Host integration.** `ariadne-host-1` exposes one read-only projection through
+  CLI, API, MCP and consumer protocol 2, with durable event cursors and protocol
+  1 compatibility (2.4C).
+
+Qualification on the release commit: engine core 586/586; full benchmark 346
+pass, 0 fail, 0 error, 5 observed, 2 skip; release benchmark 97/97; release
+tests 98/98; 2.4A reliability 21/21; 2.4A adapters 2/6 with four declared live
+opt-in skips; 2.4B 27/27; 2.4C 33/33; rendered critique 92/92; distribution
+55/55; wheel installation 14/14; the 2.4A, 2.4B and 2.4C mutation harnesses
+killed every valid mutant; repository checks pass. The gate now runs those
+suites and mutation harnesses rather than only the pre-2.4 engine suites.
+Artifacts build identically from a clean LF tree and a clean CRLF checkout.
+
+Known limits are unchanged from the candidate: adaptive routing is shadow-only
+and no model ranking, token saving or cost reduction is claimed; static checks
+do not establish WCAG conformance; the host contract is fixture-qualified, not
+Juno integration; macOS and Linux were not natively executed; local run state
+is not cryptographically attested; human approvals remain explicit and no
+general-purpose OS sandbox is claimed.
+
+---
 ## 2.4.0rc1 - 2026-11-12 - PHASE C DESIGN VERIFICATION & INTEGRATION (NOT PUBLISHED)
 
 **Close the evidence gaps; do not widen the feature surface.** 2.4C qualifies

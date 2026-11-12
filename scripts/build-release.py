@@ -59,6 +59,31 @@ def digest(path: Path) -> str:
     return digest_bytes(path.read_bytes())
 
 
+BINARY_SUFFIXES = (
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".bmp", ".tif", ".tiff",
+    ".woff", ".woff2", ".ttf", ".otf", ".eot", ".zip", ".gz", ".tgz", ".bz2", ".xz",
+    ".7z", ".pdf", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".wasm", ".pyc",
+    ".pyo", ".so", ".dll", ".dylib", ".exe", ".bin", ".dat", ".db", ".sqlite",
+)
+"""Payloads whose bytes are never line-ending-normalised."""
+
+
+def runtime_bytes(path: Path) -> bytes:
+    """A runtime file's bytes, independent of the checkout's line-ending policy.
+
+    Git can check the same committed blob out as LF or CRLF. The release
+    contract is byte-for-byte reproducibility from the committed source, so a
+    build on a Windows checkout with ``core.autocrlf=true`` must not produce a
+    different artifact than a build from an LF checkout. Text payloads are
+    therefore packed with LF on every platform; binary payloads are untouched.
+    """
+    path = Path(path)
+    data = path.read_bytes()
+    if path.suffix.lower() in BINARY_SUFFIXES:
+        return data
+    return data.replace(b"\r\n", b"\n")
+
+
 def version() -> str:
     value = VERSION_PATH.read_text(encoding="utf-8").strip()
     if not value or not __import__("re").fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc)\d+)?", value):
@@ -117,14 +142,6 @@ RUNTIME_SOURCE_OVERRIDES: dict[str, str] = {
 }
 
 
-def runtime_sources() -> list[tuple[str, Path]]:
-    rows: list[tuple[str, Path]] = []
-    for relative in RUNTIME_TOP_LEVEL + RUNTIME_SCRIPTS:
-        source = RUNTIME_SOURCE_OVERRIDES.get(relative, relative)
-        path = ROOT / source
-        if not path.is_file():
-            raise ReleaseError(f"runtime source is missing: {relative}")
-        rows.append((PurePosixPath(relative).as_posix(), path))
 IGNORED_TOOLCHAIN_PARTS = ("node_modules", ".next", "dist", "build")
 """Local toolchain output that is never a release input.
 
@@ -173,7 +190,7 @@ def runtime_sources() -> list[tuple[str, Path]]:
 
 
 def runtime_manifest(source_commit: str | None = None) -> dict:
-    files = {relative: digest(path) for relative, path in runtime_sources()}
+    files = {relative: digest_bytes(runtime_bytes(path)) for relative, path in runtime_sources()}
     return {
         "schema_version": 1,
         "product": "Ariadne",
@@ -214,7 +231,7 @@ def build(output: Path, allow_dirty: bool = False, source_commit: str | None = N
     manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
     with zipfile.ZipFile(artifact, "w") as archive:
         for relative, path in runtime_sources():
-            zip_entry(archive, relative, path.read_bytes())
+            zip_entry(archive, relative, runtime_bytes(path))
         zip_entry(archive, "RELEASE-MANIFEST.json", manifest_bytes)
     artifact_sha = digest(artifact)
     launcher = build_launcher(output)
@@ -326,7 +343,7 @@ def self_test() -> int:
         with zipfile.ZipFile(one["artifact"]) as archive:
             names = set(archive.namelist())
             embedded = json.loads(archive.read("RELEASE-MANIFEST.json"))
-            runtime_bytes = b"\n".join(
+            runtime_content = b"\n".join(
                 archive.read(name) for name in sorted(names) if not name.endswith("/")
             ).lower()
         case("release carries its internal file manifest", embedded["source_commit"] == "fixture-commit")
@@ -370,7 +387,7 @@ def self_test() -> int:
         case("runtime excludes maintainer machine paths", all("snprasad" not in archive_name.lower() and "testbed" not in archive_name.lower() for archive_name in names))
         case(
             "runtime content excludes maintainer-specific paths and private test data",
-            not any(token in runtime_bytes for token in (
+            not any(token in runtime_content for token in (
                 b"snprasad", b"c:\\testbed", b"builder os tests", b"ariadne tests",
             ))
             and not any(
@@ -384,6 +401,14 @@ def self_test() -> int:
             "release notes name the authoritative version",
             f"Ariadne {descriptor['version']}" in one["release_notes"].read_text(encoding="utf-8"),
         )
+
+    with self_test_workspace() as endings:
+        text = endings / "checkout.md"
+        text.write_bytes(b"one\r\ntwo\r\n")
+        binary = endings / "image.png"
+        binary.write_bytes(b"\x89PNG\r\n\x1a\n")
+        case("runtime bytes normalise a CRLF checkout", runtime_bytes(text) == b"one\ntwo\n")
+        case("runtime bytes preserve binary payloads", runtime_bytes(binary) == b"\x89PNG\r\n\x1a\n")
 
     print("ARIADNE RELEASE SELF-TEST\n")
     for name, passed in cases:
