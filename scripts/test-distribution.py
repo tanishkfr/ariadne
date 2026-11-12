@@ -515,6 +515,23 @@ def self_test() -> int:
             unmanaged_blocked = True
         case("installer refuses to overwrite an unmanaged skill", unmanaged_blocked and (unmanaged_target / "SKILL.md").read_text(encoding="utf-8") == "person-owned\n")
 
+        skills_sh_home = root / "skills-sh-home"
+        skills_sh_target = root / "skills-sh-target" / "ariadne"
+        skills_sh_target.mkdir(parents=True)
+        public_skill = (ROOT / ".agents" / "skills" / "ariadne" / "SKILL.md").read_text(encoding="utf-8")
+        (skills_sh_target / "SKILL.md").write_text(public_skill, encoding="utf-8")
+        try:
+            cli.install_bundle(bundle_140, skills_sh_home, skills_sh_target)
+            skills_sh_blocked = False
+        except cli.ProductError:
+            skills_sh_blocked = True
+        case(
+            "installer refuses a skills.sh copy and preserves it byte-for-byte",
+            skills_sh_blocked
+            and (skills_sh_target / "SKILL.md").read_text(encoding="utf-8") == public_skill
+            and not (skills_sh_target / ".ariadne-managed.json").exists(),
+        )
+
     print("ARIADNE DISTRIBUTION SELF-TEST\n")
     for name, passed in cases:
         print(("ok    " if passed else "FAIL  ") + name)

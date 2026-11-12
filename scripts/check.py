@@ -507,6 +507,8 @@ DISTRIBUTION_FILES = (
     "src/ariadne/cli.py",
     "scripts/build-release.py",
     ".agents/skills/ariadne/references/installation.example.json",
+    ".agents/skills/ariadne/SKILL.md",
+    ".agents/skills/ariadne-verify/SKILL.md",
     "adapters/codex-baseline.md",
     "RELEASE-NOTES.md",
 )
@@ -623,6 +625,29 @@ def check_distribution_texts(texts):
             str(example.get("ariadne_root", "")),
         ):
             problems.append("installation example root does not match VERSION")
+    skill = texts[".agents/skills/ariadne/SKILL.md"]
+    if not skill.startswith("---\n") or "\nname: ariadne\n" not in skill:
+        problems.append("public skill frontmatter is missing or names a different skill")
+    elif "description:" not in skill.split("---", 2)[1]:
+        problems.append("public skill has no discovery description")
+    for token in (
+        "python -m ariadne doctor",
+        "python -m ariadne paths",
+        install_url,
+        "~/.agents/skills/ariadne",
+        "not the Python engine",
+        "without `-g`",
+    ):
+        if token not in skill:
+            problems.append(f"public skill omits its runtime bootstrap: {token}")
+    for path in ("README.md", "QUICKSTART.md", "INSTALL.md"):
+        if "npx skills add tanishkfr/ariadne --skill ariadne" not in texts[path]:
+            problems.append(f"{path} does not document the tested skills.sh install")
+    legacy = texts[".agents/skills/ariadne-verify/SKILL.md"]
+    if legacy.startswith("---"):
+        problems.append("legacy ariadne-verify must not become a skills.sh skill")
+    if "Legacy, not distributed" not in legacy:
+        problems.append("legacy ariadne-verify has no disposition note")
     return problems
 
 

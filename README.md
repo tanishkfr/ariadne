@@ -128,6 +128,16 @@ python -m ariadne doctor
 
 If `python -m pip show ariadne` describes a GraphQL library, stop and use a separate Python environment. The two distributions cannot coexist in one environment. More detail is in [Installation](docs/guides/INSTALL.md).
 
+### Install the agent skill through skills.sh
+
+The skills CLI installs agent instructions only; it does not install the Python engine. Install the runtime first, then run this inside a project:
+
+```bash
+npx skills add tanishkfr/ariadne --skill ariadne
+```
+
+Project-local installation writes `.agents/skills/ariadne` in that project and leaves the user-global managed skill alone. Do not add `-g` for Codex or OpenCode while a managed Ariadne installation exists: both use `~/.agents/skills/ariadne`, the path Ariadne manages, and a global install can replace it. Recovery and the tested combinations are in [Installation](docs/guides/INSTALL.md#install-the-agent-skill-through-skillssh).
+
 ## Quick start
 
 1. Run `python -m ariadne doctor` and confirm the runtime, the managed skill and compatible project state.

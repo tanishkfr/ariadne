@@ -16,6 +16,16 @@ python -m ariadne install
 python -m ariadne doctor
 ```
 
+## Optional skills.sh instructions
+
+The skills CLI installs agent instructions only. Once `python -m ariadne doctor` is healthy, run this from a project directory:
+
+```bash
+npx skills add tanishkfr/ariadne --skill ariadne
+```
+
+Do not add `-g` for Codex or OpenCode while a managed Ariadne runtime exists. [INSTALL.md](INSTALL.md) covers the tested combinations and recovery.
+
 ## Start
 
 Open Codex in your project and type:
