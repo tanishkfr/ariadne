@@ -48,6 +48,31 @@ def load_script(name: str, filename: str):
     return load_path(name, ROOT / "scripts" / filename)
 
 
+def repeated_verify_supersedes_the_existing_contract() -> bool:
+    """A second verify on one run must retire the old contract, not fail.
+
+    This is the upgrade path: a run written by 2.3 carries an active
+    ``proof-task`` contract. Verifying a new request has to create the next
+    revision and name the new contract as the old one's successor; naming a
+    producer string as the successor raises "no contract is recorded" and made
+    ``ariadne verify`` unusable on an upgraded project.
+    """
+    from ariadne_engine import proof
+    from ariadne_engine.acceptance import contract as contract_module
+
+    state: dict = {}
+    first = contract_module.create(state, text="Fix the off-by-one bug in total().", task_id="proof-task")
+    second = proof.ensure_contract(state, task_text="Add a printable schedule table.", task_id="proof-task")
+    retired = contract_module.contract(state, first["contract_id"]) or {}
+    return (
+        second.get("contract_id") != first.get("contract_id")
+        and int(second.get("revision", 0)) == 2
+        and str(second.get("supersedes", "")) == str(first.get("contract_id", ""))
+        and retired.get("status") == "SUPERSEDED"
+        and retired.get("superseded_by") == second.get("contract_id")
+    )
+
+
 @contextlib.contextmanager
 def workspace():
     path = ROOT / "validation" / f"release-self-test-{uuid.uuid4().hex}"
@@ -350,6 +375,11 @@ def self_test() -> int:
             "rollback refuses after v2 work and changes nothing",
             blocked.returncode == 1 and "refused" in blocked.stdout and state_digest(run_root) == after_work,
         )
+
+    case(
+        "a repeated verify supersedes the existing contract by its successor id",
+        repeated_verify_supersedes_the_existing_contract(),
+    )
 
     with workspace() as sandbox:
         _, run_root = make_legacy_run(sandbox, name="unreadable")

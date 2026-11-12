@@ -303,7 +303,7 @@ AR-24A adapter conformance: 2/6 (4 live opt-in skips)
 AR-24B intelligence and efficiency: 27/27
 AR-24C design, proof and host: 33/33
 Rendered critique: 92/92
-Release tests: 98/98
+Release tests: 99/99
 Wheel install: 14/14
 Distribution lifecycle: 55/55
 Release benchmark subset: 97/97

@@ -451,12 +451,31 @@ def ensure_contract(state: dict, *, task_text: str, task_id: str = "") -> dict:
     for row in existing:
         if str(row.get("status", "")) == "ACTIVE" and str(row.get("source_digest", "")) == digest:
             return row
-    # supersede stale active contracts for the same task before creating
-    if task_id:
-        for row in contract_module.for_task(state, task_id):
-            if str(row.get("status", "")) == "ACTIVE":
-                contract_module.supersede(state, str(row.get("contract_id", "")), by="ar-224-verify")
-    return contract_module.create(state, text=task_text, task_id=task_id)
+    # Supersede stale active contracts for the same task. The successor has to
+    # exist before it can be named: supersede() validates the ``by`` contract, so
+    # naming a producer string here raised "no contract is recorded" and made a
+    # second verify on an upgraded run fail. Create first, then retire the old
+    # records against the new contract id.
+    stale = [
+        str(row.get("contract_id", ""))
+        for row in (contract_module.for_task(state, task_id) if task_id else [])
+        if str(row.get("status", "")) == "ACTIVE"
+    ]
+    created = contract_module.create(
+        state,
+        text=task_text,
+        task_id=task_id,
+        material_change_reason=(
+            "the verification request differs from the active contract this run recorded"
+            if stale else ""
+        ),
+    )
+    for contract_id in stale:
+        if contract_id and contract_id != str(created.get("contract_id", "")):
+            current = contract_module.contract(state, contract_id) or {}
+            if str(current.get("status", "")) == "ACTIVE":
+                contract_module.supersede(state, contract_id, by=str(created.get("contract_id", "")))
+    return created
 
 
 def ensure_requirements(state: dict, *, contract_record: Mapping[str, Any], task_text: str) -> list[dict]:

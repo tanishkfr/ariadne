@@ -40,12 +40,18 @@ What the release contains:
 
 Qualification on the release commit: engine core 586/586; full benchmark 346
 pass, 0 fail, 0 error, 5 observed, 2 skip; release benchmark 97/97; release
-tests 98/98; 2.4A reliability 21/21; 2.4A adapters 2/6 with four declared live
+tests 99/99; 2.4A reliability 21/21; 2.4A adapters 2/6 with four declared live
 opt-in skips; 2.4B 27/27; 2.4C 33/33; rendered critique 92/92; distribution
 55/55; wheel installation 14/14; the 2.4A, 2.4B and 2.4C mutation harnesses
 killed every valid mutant; repository checks pass. The gate now runs those
 suites and mutation harnesses rather than only the pre-2.4 engine suites.
 Artifacts build identically from a clean LF tree and a clean CRLF checkout.
+
+Qualification also found and closed one upgrade regression: a second `verify`
+on a run that already carried an active contract named a producer string as the
+retired contract's successor, so the operation failed on a project written by
+2.3. The next contract is now created first and named as the successor, and a
+release test covers that path.
 
 Known limits are unchanged from the candidate: adaptive routing is shadow-only
 and no model ranking, token saving or cost reduction is claimed; static checks
